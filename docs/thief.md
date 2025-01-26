@@ -4,7 +4,7 @@
 
 ### Synopsis
 
-Snatch is a CLI tool that helps you to manage AWS resources.
+thief is a CLI tool that helps you to manage AWS resources.
 
 Features:
 - EC2インスタンスの一覧表示
@@ -20,19 +20,19 @@ Features:
 
 ```
   # EC2インスタンスの一覧表示（タブ区切り）
-  snatch ec2
-  snatch ec2 ls
+  thief ec2
+  thief ec2 ls
 
   # EC2インスタンスの一覧表示（CSV形式）
-  snatch ec2 --output csv
-  snatch ec2 -o csv
+  thief ec2 --output csv
+  thief ec2 -o csv
 
   # タグでフィルタリング
-  snatch ec2 --tag Environment:Production
+  thief ec2 --tag Environment:Production
 
   # RDSインスタンスの一覧表示
-  snatch rds
-  snatch rds ls
+  thief rds
+  thief rds ls
 ```
 
 ### Options
