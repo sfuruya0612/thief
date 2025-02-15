@@ -54,6 +54,18 @@ func init() {
 	// CloudFormation
 
 	// Route53
+
+	// Datadog
+	rootCmd.AddCommand(datadogCmd)
+
+	datadogCmd.AddCommand(datadogEstimatedCmd)
+
+	datadogCmd.PersistentFlags().StringP("site", "", "datadoghq.com", "Datadog Site")
+	datadogCmd.PersistentFlags().StringP("api-key", "", "", "Datadog API Key")
+	datadogCmd.PersistentFlags().StringP("app-key", "", "", "Datadog APP Key")
+	datadogCmd.PersistentFlags().StringP("view", "", "summary", "String to specify whether cost is broken down at a parent-org level or at the sub-org level. Available views are summary and sub-org")
+	datadogCmd.PersistentFlags().StringP("start-month", "", "", "[YYYY-MM] for cost beginning this month")
+	datadogCmd.PersistentFlags().StringP("end-month", "", "", "[YYYY-MM] for cost ending this month")
 }
 
 func Execute() {

@@ -10,6 +10,8 @@ import (
 )
 
 func main() {
+	fmt.Println("Generating documentation...")
+
 	outputDir := "./docs"
 
 	root := cmd.GetRootCmd()
@@ -21,6 +23,8 @@ func main() {
 		fmt.Printf("Error generating documentation: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Printf("Documentation generated at %s\n", outputDir)
 }
 
 func updateCommandDocs(root *cobra.Command) {
