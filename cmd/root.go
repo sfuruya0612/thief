@@ -58,7 +58,7 @@ func init() {
 	// Datadog
 	rootCmd.AddCommand(datadogCmd)
 
-	datadogCmd.AddCommand(datadogEstimatedCmd)
+	datadogCmd.AddCommand(datadogHistoricalCostCmd, datadogEstimatedCostCmd)
 
 	datadogCmd.PersistentFlags().StringP("site", "", "datadoghq.com", "Datadog Site")
 	datadogCmd.PersistentFlags().StringP("api-key", "", "", "Datadog API Key")
