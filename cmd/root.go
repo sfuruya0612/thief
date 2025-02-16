@@ -21,15 +21,27 @@ func init() {
 	rootCmd.PersistentFlags().StringP("output", "o", "tab", "Output format (tab/csv)")
 	rootCmd.PersistentFlags().BoolP("no-header", "", false, "Hide the header in output")
 
-	rootCmd.AddCommand(ssoCmd, ec2Cmd, rdsCmd, elasticacheCmd)
+	rootCmd.AddCommand(
+		ssoCmd,
+		ec2Cmd,
+		ecsCmd,
+		rdsCmd,
+		elasticacheCmd,
+	)
 
 	// SSO
-	ssoCmd.AddCommand(ssoLoginCmd, ssoLogoutCmd)
+	ssoCmd.AddCommand(
+		ssoLoginCmd,
+		ssoLogoutCmd,
+	)
 
 	ssoLoginCmd.Flags().StringP("url", "", "", "AWS access portal URL")
 
 	// EC2
-	ec2Cmd.AddCommand(ec2ListCmd, ec2StartSessionCmd)
+	ec2Cmd.AddCommand(
+		ec2ListCmd,
+		ec2StartSessionCmd,
+	)
 
 	ec2ListCmd.Flags().BoolP("running", "", false, "Show only running instances")
 	ec2ListCmd.Flags().BoolP("global", "", false, "Show instances in all regions")
@@ -37,11 +49,28 @@ func init() {
 	ec2StartSessionCmd.Flags().StringP("instance-id", "i", "", "Instance ID")
 
 	// ECS
+	ecsCmd.AddCommand(
+		ecsClustersCmd,
+		ecsServicesCmd,
+		ecsTasksCmd,
+		ecsExecCmd,
+	)
+
+	ecsExecCmd.Flags().StringP("cluster", "", "", "Cluster name")
+	ecsExecCmd.Flags().StringP("task", "", "", "Task name")
+	ecsExecCmd.Flags().StringP("container", "", "", "Container name")
+	ecsExecCmd.Flags().StringP("command", "", "/bin/sh", "Command")
+	// If specified false, the command return error.
+	// InvalidParameterException: Interactive is the only mode supported currently.
+	// ecsExecCmd.Flags().BoolP("interactive", "", true, "Interactive mode")
 
 	// ECR
 
 	// RDS
-	rdsCmd.AddCommand(rdsInstanceCmd, rdsClusterCmd)
+	rdsCmd.AddCommand(
+		rdsInstanceCmd,
+		rdsClusterCmd,
+	)
 
 	// Elasticache
 	elasticacheCmd.AddCommand(elasticacheListCmd)
