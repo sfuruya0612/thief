@@ -22,6 +22,18 @@ type EcsOpts struct {
 	Interactive bool
 }
 
+type Ecs struct {
+	Name string
+}
+
+func (i Ecs) Title() string {
+	return fmt.Sprintf("%s", i.Name)
+}
+
+func (i Ecs) ID() string {
+	return i.Name
+}
+
 type ecsApi interface {
 	ListClusters(ctx context.Context, input *ecs.ListClustersInput, opts ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
 	DescribeClusters(ctx context.Context, input *ecs.DescribeClustersInput, opts ...func(*ecs.Options)) (*ecs.DescribeClustersOutput, error)
@@ -168,27 +180,28 @@ func DescribeTasks(client ecsApi, input *ecs.DescribeTasksInput) ([][]string, er
 			startedAt = t.StartedAt.Format(time.RFC3339)
 		}
 
-		stoppedAt := "None"
-		if t.StoppedAt != nil {
-			stoppedAt = t.StoppedAt.Format(time.RFC3339)
+		// stoppedAt := "None"
+		// if t.StoppedAt != nil {
+		// 	stoppedAt = t.StoppedAt.Format(time.RFC3339)
+		// }
+
+		for _, c := range t.Containers {
+			task := []string{
+				strings.Split(*t.TaskDefinitionArn, "/")[1],
+				strings.Split(*t.TaskArn, "/")[2],
+				*c.Name,
+				*t.LastStatus,
+				*t.DesiredStatus,
+				string(c.HealthStatus),
+				string(t.LaunchType),
+				platformFamily,
+				platformVersion,
+				startedAt,
+				// stoppedAt,
+			}
+			tasks = append(tasks, task)
 		}
 
-		task := []string{
-			strings.Split(*t.ClusterArn, "/")[1],
-			strings.Split(*t.TaskDefinitionArn, "/")[1],
-			strings.Split(*t.TaskArn, "/")[2],
-			*t.LastStatus,
-			*t.DesiredStatus,
-			string(t.HealthStatus),
-			string(t.LaunchType),
-			*t.Cpu,
-			*t.Memory,
-			platformFamily,
-			platformVersion,
-			startedAt,
-			stoppedAt,
-		}
-		tasks = append(tasks, task)
 	}
 
 	return tasks, nil
