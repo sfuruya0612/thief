@@ -19,8 +19,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("profile", "p", viper.GetString("AWS_PROFILE"), "AWS profile (default $AWS_PROFILE)")
 	rootCmd.PersistentFlags().StringP("region", "r", "ap-northeast-1", "AWS region")
 	rootCmd.PersistentFlags().StringP("output", "o", "tab", "Output format (tab/csv)")
-	// TODO: ヘッダーの出し分け
-	// rootCmd.PersistentFlags().BoolP("header", "h", false, "Show header (true/false)")
+	rootCmd.PersistentFlags().BoolP("no-header", "", false, "Hide the header in output")
 
 	rootCmd.AddCommand(ssoCmd, ec2Cmd, rdsCmd, elasticacheCmd)
 

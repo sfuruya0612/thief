@@ -45,6 +45,10 @@ func listElastiCacheClusters(cmd *cobra.Command, args []string) {
 	}
 
 	formatter := util.NewTableFormatter(elasticacheColumns, cmd.Flag("output").Value.String())
-	formatter.PrintHeader()
+
+	if cmd.Flag("no-header").Value.String() == "false" {
+		formatter.PrintHeader()
+	}
+
 	formatter.PrintRows(clusters)
 }

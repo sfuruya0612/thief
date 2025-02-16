@@ -11,7 +11,7 @@ import (
 
 var datadogCmd = &cobra.Command{
 	Use:   "datadog",
-	Short: "Show Datadog Cost",
+	Short: "Show Datadog Usage",
 }
 
 var datadogHistoricalCostCmd = &cobra.Command{
@@ -72,7 +72,11 @@ func showDatadogHistoricalCost(cmd *cobra.Command, args []string) {
 	}
 
 	formatter := util.NewTableFormatter(datadogCostColumns, cmd.Flag("output").Value.String())
-	formatter.PrintHeader()
+
+	if cmd.Flag("no-header").Value.String() == "false" {
+		formatter.PrintHeader()
+	}
+
 	formatter.PrintRows(resp)
 }
 
@@ -113,7 +117,11 @@ func showDatadogEstimatedCost(cmd *cobra.Command, args []string) {
 	}
 
 	formatter := util.NewTableFormatter(datadogCostColumns, cmd.Flag("output").Value.String())
-	formatter.PrintHeader()
+
+	if cmd.Flag("no-header").Value.String() == "false" {
+		formatter.PrintHeader()
+	}
+
 	formatter.PrintRows(resp)
 }
 
