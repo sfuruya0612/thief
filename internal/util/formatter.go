@@ -33,7 +33,6 @@ func (f *TableFormatter) PrintHeader() {
 		}
 		if err := writer.Write(headers); err != nil {
 			fmt.Printf("Unable to write CSV header: %v\n", err)
-			// TODO; エラーハンドリングちゃんとする
 			os.Exit(1)
 		}
 		writer.Flush()

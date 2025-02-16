@@ -56,6 +56,8 @@ func init() {
 		ecsExecCmd,
 	)
 
+	ecsTasksCmd.Flags().StringP("cluster", "", "", "Cluster name")
+
 	ecsExecCmd.Flags().StringP("cluster", "", "", "Cluster name")
 	ecsExecCmd.Flags().StringP("task", "", "", "Task name")
 	ecsExecCmd.Flags().StringP("container", "", "", "Container name")

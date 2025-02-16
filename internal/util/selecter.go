@@ -6,11 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Item は選択可能なアイテムを表す汎用インターフェース
 type Item interface {
-	// Title はリストに表示される文字列を返す
 	Title() string
-	// ID は選択時に識別に使用される一意の値を返す
 	ID() string
 }
 
@@ -62,7 +59,6 @@ func (m model) View() string {
 	return s
 }
 
-// Select は選択UIを表示し、選択されたアイテムを返す
 func Select(items []Item, prompt string) (Item, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("no items to select")
