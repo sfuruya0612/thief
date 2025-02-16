@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -42,14 +43,20 @@ func GenerateDescribeInstanceInformationInput(opts *SsmOpts) *ssm.DescribeInstan
 }
 
 func DescribeInstanceInformation(client ssmApi, input *ssm.DescribeInstanceInformationInput) ([]string, error) {
-	o, err := client.DescribeInstanceInformation(context.Background(), input)
-	if err != nil {
-		return nil, err
-	}
+	var ids []string
+	paginator := ssm.NewDescribeInstanceInformationPaginator(client, input)
 
-	ids := []string{}
-	for _, i := range o.InstanceInformationList {
-		ids = append(ids, *i.InstanceId)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get next page: %w", err)
+		}
+
+		for _, instance := range output.InstanceInformationList {
+			if instance.InstanceId != nil {
+				ids = append(ids, *instance.InstanceId)
+			}
+		}
 	}
 
 	return ids, nil
