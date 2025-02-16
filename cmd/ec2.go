@@ -40,7 +40,7 @@ var ec2Columns = []util.Column{
 	{Header: "PrivateIP", Width: 12},
 	{Header: "PublicIP", Width: 14},
 	{Header: "State", Width: 10},
-	{Header: "KeyName", Width: 20},
+	{Header: "KeyName", Width: 35},
 	{Header: "AZ", Width: 10},
 	{Header: "LaunchTime", Width: 30},
 }
@@ -88,7 +88,11 @@ func displayEC2Instances(cmd *cobra.Command, args []string) {
 	}
 
 	formatter := util.NewTableFormatter(ec2Columns, cmd.Flag("output").Value.String())
-	formatter.PrintHeader()
+
+	if cmd.Flag("no-header").Value.String() == "false" {
+		formatter.PrintHeader()
+	}
+
 	formatter.PrintRows(list)
 }
 
