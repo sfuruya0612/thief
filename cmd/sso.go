@@ -159,10 +159,12 @@ func logout(cmd *cobra.Command, args []string) {
 }
 
 func loginDisplay(startUrl, userCode string) {
+	url := fmt.Sprintf("%s#/device", startUrl)
+
 	fmt.Println("Attempting to automatically open the SSO authorization page in your default browser.")
 	fmt.Println("If the browser does not open or you wish to use a different device to authorize this request, open the following URL:")
 	fmt.Println()
-	fmt.Println(fmt.Sprintf("%s#/device", startUrl))
+	fmt.Println(url)
 	fmt.Println()
 	fmt.Println("Then enter the code:")
 	fmt.Println()

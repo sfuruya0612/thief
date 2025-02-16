@@ -1,12 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -156,13 +152,13 @@ func startSession(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	sessJson, err := parser(session)
+	sessJson, err := util.Parser(session)
 	if err != nil {
 		fmt.Printf("Unable to marshal session: %v\n", err)
 		return
 	}
 
-	paramsJson, err := parser(startSessionInput)
+	paramsJson, err := util.Parser(startSessionInput)
 	if err != nil {
 		fmt.Printf("Unable to marshal start session input: %v\n", err)
 		return
@@ -178,7 +174,7 @@ func startSession(cmd *cobra.Command, args []string) {
 
 	terminateSessionInput := aws.GenerateTerminateSessionInput(ssmOpts)
 
-	if err = execCommand(plug, string(sessJson), region, "StartSession", profile, string(paramsJson), fmt.Sprintf("https://ssm.%s.amazonaws.com", region)); err != nil {
+	if err = util.ExecCommand(plug, string(sessJson), region, "StartSession", profile, string(paramsJson), fmt.Sprintf("https://ssm.%s.amazonaws.com", region)); err != nil {
 		fmt.Println(err)
 		_, err := aws.TerminateSession(ssmClient, terminateSessionInput)
 		if err != nil {
@@ -224,40 +220,4 @@ func ssmTargetInstance(profile, region string, instanceIds []string) ([]util.Ite
 	}
 
 	return instances, nil
-}
-
-func parser(i interface{}) ([]byte, error) {
-	bytes, err := json.Marshal(i)
-	if err != nil {
-		return nil, fmt.Errorf("json Marshal error: %v", err)
-	}
-
-	return bytes, nil
-}
-
-func execCommand(process string, args ...string) error {
-	call := exec.Command(process, args...)
-	call.Stderr = os.Stderr
-	call.Stdout = os.Stdout
-	call.Stdin = os.Stdin
-
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT)
-	done := make(chan bool, 1)
-	go func() {
-		for {
-			select {
-			case <-sigs:
-			case <-done:
-				// break
-			}
-		}
-	}()
-	defer close(done)
-
-	if err := call.Run(); err != nil {
-		return fmt.Errorf("%v", err)
-	}
-
-	return nil
 }
