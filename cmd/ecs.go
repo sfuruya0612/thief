@@ -157,10 +157,8 @@ func displayECSServices(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		list = append(list, list...)
+		formatter.PrintRows(list)
 	}
-
-	formatter.PrintRows(list)
 }
 
 func displayECSTasks(cmd *cobra.Command, args []string) {
