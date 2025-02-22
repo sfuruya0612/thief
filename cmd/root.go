@@ -96,6 +96,17 @@ func init() {
 	datadogCmd.PersistentFlags().StringP("view", "", "summary", "String to specify whether cost is broken down at a parent-org level or at the sub-org level. Available views are summary and sub-org")
 	datadogCmd.PersistentFlags().StringP("start-month", "", "", "[YYYY-MM] for cost beginning this month")
 	datadogCmd.PersistentFlags().StringP("end-month", "", "", "[YYYY-MM] for cost ending this month")
+
+	// TiDB
+	rootCmd.AddCommand(tidbCmd)
+
+	tidbCmd.AddCommand(tidbProjectCmd, tidbClusterCmd, tidbCostCmd)
+
+	tidbCmd.PersistentFlags().StringP("public-key", "", "", "Public Key")
+	tidbCmd.PersistentFlags().StringP("private-key", "", "", "Private Key")
+
+	tidbCostCmd.Flags().StringP("billed-month", "", "", "The month of this bill happens for the specified organization. The format is YYYY-MM, for example '2024-05'")
+	// tidbCmd.PersistentFlags().StringP("region", "", "", "Region")
 }
 
 func Execute() {
