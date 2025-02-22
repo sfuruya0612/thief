@@ -27,7 +27,7 @@ type Ecs struct {
 }
 
 func (i Ecs) Title() string {
-	return fmt.Sprintf("%s", i.Name)
+	return i.Name
 }
 
 func (i Ecs) ID() string {

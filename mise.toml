@@ -45,4 +45,7 @@ run = "go install"
 
 [tasks.docs]
 description = "Generate documentation"
-run = "go run docs/main.go"
+run = '''
+go run docs/main.go
+mv docs/thief.md docs/index.md
+'''

@@ -134,7 +134,6 @@ func displayECSServices(cmd *cobra.Command, args []string) {
 		formatter.PrintHeader()
 	}
 
-	list := [][]string{}
 	for _, c := range clusterArns {
 		input := aws.GenerateListServicesInput(&aws.EcsOpts{
 			Cluster: &c,
@@ -151,7 +150,7 @@ func displayECSServices(cmd *cobra.Command, args []string) {
 			Services: output,
 		})
 
-		list, err = aws.DescribeServices(client, i)
+		list, err := aws.DescribeServices(client, i)
 		if err != nil {
 			fmt.Printf("Unable to describe ECS services: %v\n", err)
 			return
