@@ -23,6 +23,7 @@ go.work.sum
 
 # env file
 .env
+.envrc
 
 # Mac OS X Finder directory files
 .DS_Store
