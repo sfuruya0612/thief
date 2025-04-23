@@ -87,7 +87,7 @@ func CreateToken(api ssoOidcApi, input *ssooidc.CreateTokenInput) (*ssooidc.Crea
 }
 
 func WaitForToken(ctx context.Context, api ssoOidcApi, input *ssooidc.CreateTokenInput) (*ssooidc.CreateTokenOutput, error) {
-	maxAttempts := 10
+	maxAttempts := 60
 	interval := 1 * time.Second
 
 	for i := 0; i < maxAttempts; i++ {
