@@ -100,8 +100,8 @@ func WaitForToken(ctx context.Context, api ssoOidcApi, input *ssooidc.CreateToke
 			return nil, fmt.Errorf("token creation failed: %v", err)
 		}
 
-		// SlowDownExceptionの場合は待機時間を増やす
 		if errors.Is(err, &types.SlowDownException{}) {
+			fmt.Println("Rate limited, waiting...")
 			interval *= 2
 		}
 
