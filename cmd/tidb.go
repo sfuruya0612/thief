@@ -11,6 +11,7 @@ import (
 	"github.com/sfuruya0612/thief/internal/tidb"
 	"github.com/sfuruya0612/thief/internal/util"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -24,21 +25,24 @@ var tidbCmd = &cobra.Command{
 }
 
 var tidbProjectCmd = &cobra.Command{
-	Use:   "cluster",
-	Short: "TiDB cluster",
-	Run:   listTidbProjects,
+	Use:   "project",
+	Short: "List TiDB projects",
+	Long:  "Retrieves and displays TiDB Cloud projects.",
+	RunE:  listTidbProjects,
 }
 
 var tidbClusterCmd = &cobra.Command{
 	Use:   "cluster",
-	Short: "TiDB cluster",
-	Run:   listTidbProjects,
+	Short: "List TiDB clusters",
+	Long:  "Retrieves and displays TiDB Cloud clusters in all projects.",
+	RunE:  listTidbClusters,
 }
 
 var tidbCostCmd = &cobra.Command{
 	Use:   "cost",
-	Short: "TiDB cost",
-	Run:   showTidbCost,
+	Short: "Show TiDB costs",
+	Long:  "Retrieves and displays cost information for TiDB Cloud resources.",
+	RunE:  showTidbCost,
 }
 
 type Cluster struct {
@@ -100,9 +104,13 @@ var tidbCostColumns = []util.Column{
 	{Header: "TotalCost", Width: 9},
 }
 
-func listTidbProjects(cmd *cobra.Command, args []string) {
-	publicKey := cmd.Flag("public-key").Value.String()
-	privateKey := cmd.Flag("private-key").Value.String()
+func listTidbProjects(cmd *cobra.Command, args []string) error {
+	publicKey := viper.GetString("tidb.public-key")
+	privateKey := viper.GetString("tidb.private-key")
+
+	if publicKey == "" || privateKey == "" {
+		return fmt.Errorf("TiDB public key and private key are required. Set them via flags, environment variables (THIEF_TIDB_PUBLIC_KEY, THIEF_TIDB_PRIVATE_KEY), or config file")
+	}
 
 	d := tidb.NewDigestClient(publicKey, privateKey)
 
@@ -111,35 +119,30 @@ func listTidbProjects(cmd *cobra.Command, args []string) {
 
 	resp, err := d.Get(HOST, endpoint)
 	if err != nil {
-		fmt.Printf("Failed to get response: %v", err)
-		return
+		return fmt.Errorf("failed to get response: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("API error: code=%d, message=%s", resp.StatusCode, string(body))
-		return
+		return fmt.Errorf("API error: code=%d, message=%s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Failed to read response: %v", err)
-		return
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var project TidbProject
 	if err := json.Unmarshal(body, &project); err != nil {
-		fmt.Printf("Failed to parse JSON: %v", err)
-		return
+		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	var items [][]string
 	for _, i := range project.Items {
 		timestamp, err := strconv.ParseInt(i.CreateTimestamp, 10, 64)
 		if err != nil {
-			fmt.Printf("Failed to parse timestamp: %v", err)
-			return
+			return fmt.Errorf("failed to parse timestamp: %w", err)
 		}
 
 		items = append(items, []string{
@@ -152,23 +155,127 @@ func listTidbProjects(cmd *cobra.Command, args []string) {
 		})
 	}
 
-	formatter := util.NewTableFormatter(tidbProjectColumns, cmd.Flag("output").Value.String())
+	formatter := util.NewTableFormatter(tidbProjectColumns, viper.GetString("output"))
 
-	if cmd.Flag("no-header").Value.String() == "false" {
+	if !viper.GetBool("no-header") {
 		formatter.PrintHeader()
 	}
 
 	formatter.PrintRows(items)
+
+	return nil
 }
 
-func showTidbCost(cmd *cobra.Command, args []string) {
-	publicKey := cmd.Flag("public-key").Value.String()
-	privateKey := cmd.Flag("private-key").Value.String()
+func listTidbClusters(cmd *cobra.Command, args []string) error {
+	publicKey := viper.GetString("tidb.public-key")
+	privateKey := viper.GetString("tidb.private-key")
 
-	bliiedMonth := cmd.Flag("billed-month").Value.String()
+	if publicKey == "" || privateKey == "" {
+		return fmt.Errorf("TiDB public key and private key are required. Set them via flags, environment variables (THIEF_TIDB_PUBLIC_KEY, THIEF_TIDB_PRIVATE_KEY), or config file")
+	}
+
+	d := tidb.NewDigestClient(publicKey, privateKey)
+
+	// First get all projects
+	endpoint := "/api/v1beta/projects?page=1&page_size=100"
+
+	resp, err := d.Get(HOST, endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to get projects: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error when fetching projects: code=%d, message=%s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read projects response: %w", err)
+	}
+
+	var project TidbProject
+	if err := json.Unmarshal(body, &project); err != nil {
+		return fmt.Errorf("failed to parse projects JSON: %w", err)
+	}
+
+	// Now fetch clusters for each project
+	var allClusters []Cluster
+
+	for _, p := range project.Items {
+		clusterEndpoint := fmt.Sprintf("/api/v1beta/projects/%s/clusters?page=1&page_size=100", p.ID)
+		clusterResp, err := d.Get(HOST, clusterEndpoint)
+		if err != nil {
+			return fmt.Errorf("failed to get clusters for project %s: %w", p.ID, err)
+		}
+		defer clusterResp.Body.Close()
+
+		if clusterResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(clusterResp.Body)
+			return fmt.Errorf("API error when fetching clusters: code=%d, message=%s", clusterResp.StatusCode, string(body))
+		}
+
+		body, err := io.ReadAll(clusterResp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read clusters response: %w", err)
+		}
+
+		var resp ClusterResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return fmt.Errorf("failed to parse clusters JSON: %w", err)
+		}
+
+		allClusters = append(allClusters, resp.Items...)
+	}
+
+	// Define columns for clusters
+	tidbClusterColumns := []util.Column{
+		{Header: "Id", Width: 19},
+		{Header: "Name", Width: 25},
+		{Header: "Status", Width: 12},
+		{Header: "Region", Width: 15},
+		{Header: "CloudProvider", Width: 15},
+		{Header: "ClusterType", Width: 15},
+		{Header: "CreatedAt", Width: 25},
+	}
+
+	// Format data for output
+	var items [][]string
+	for _, cluster := range allClusters {
+		items = append(items, []string{
+			cluster.ID,
+			cluster.Name,
+			cluster.Status,
+			cluster.Region,
+			cluster.CloudProvider,
+			cluster.ClusterType,
+			cluster.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	formatter := util.NewTableFormatter(tidbClusterColumns, viper.GetString("output"))
+
+	if !viper.GetBool("no-header") {
+		formatter.PrintHeader()
+	}
+
+	formatter.PrintRows(items)
+
+	return nil
+}
+
+func showTidbCost(cmd *cobra.Command, args []string) error {
+	publicKey := viper.GetString("tidb.public-key")
+	privateKey := viper.GetString("tidb.private-key")
+
+	if publicKey == "" || privateKey == "" {
+		return fmt.Errorf("TiDB public key and private key are required. Set them via flags, environment variables (THIEF_TIDB_PUBLIC_KEY, THIEF_TIDB_PRIVATE_KEY), or config file")
+	}
+
+	bliiedMonth := viper.GetString("tidb.billed-month")
 	if bliiedMonth == "" {
-		fmt.Println("--billed-month is required")
-		return
+		return fmt.Errorf("billed-month is required")
 	}
 
 	d := tidb.NewDigestClient(publicKey, privateKey)
@@ -177,27 +284,23 @@ func showTidbCost(cmd *cobra.Command, args []string) {
 
 	resp, err := d.Get(BillingHost, endpoint)
 	if err != nil {
-		fmt.Printf("Failed to get response: %v", err)
-		return
+		return fmt.Errorf("failed to get response: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("API error: code=%d, message=%s", resp.StatusCode, string(body))
-		return
+		return fmt.Errorf("API error: code=%d, message=%s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Failed to read response: %v", err)
-		return
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
 	var cost TidbCost
 	if err := json.Unmarshal(body, &cost); err != nil {
-		fmt.Printf("Failed to parse JSON: %v", err)
-		return
+		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	var items [][]string
@@ -214,61 +317,13 @@ func showTidbCost(cmd *cobra.Command, args []string) {
 		})
 	}
 
-	formatter := util.NewTableFormatter(tidbCostColumns, cmd.Flag("output").Value.String())
+	formatter := util.NewTableFormatter(tidbCostColumns, viper.GetString("output"))
 
-	if cmd.Flag("no-header").Value.String() == "false" {
+	if !viper.GetBool("no-header") {
 		formatter.PrintHeader()
 	}
 
 	formatter.PrintRows(items)
+
+	return nil
 }
-
-// func getTiDBCluster(cmd *cobra.Command, args []string) {
-// 	apiKey := cmd.Flag("api-key").Value.String()
-// 	// region := cmd.Flag("region").Value.String()
-
-// 	endpoint := fmt.Sprintf("%s/projects", baseURL)
-
-// 	client := &http.Client{
-// 		Timeout: time.Second * 10,
-// 	}
-
-// 	req, err := http.NewRequest("GET", endpoint, nil)
-// 	if err != nil {
-// 		fmt.Printf("リクエストの作成に失敗: %v", err)
-// 		return
-// 	}
-
-// 	req.SetBasicAuth(strings.Split(apiKey, ":")[0], strings.Split(apiKey, ":")[1])
-
-// 	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-// 	// req.Header.Set("Content-Type", "application/json")
-// 	// req.Header.Set("Accept", "application/json")
-
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		fmt.Printf("API リクエストに失敗: %v", err)
-// 		return
-// 	}
-// 	defer resp.Body.Close()
-
-// 	if resp.StatusCode != http.StatusOK {
-// 		body, _ := io.ReadAll(resp.Body)
-// 		fmt.Printf("API エラー: %s (status: %d)", string(body), resp.StatusCode)
-// 		return
-// 	}
-
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		fmt.Printf("レスポンスの読み取りに失敗: %v", err)
-// 		return
-// 	}
-
-// 	var clusters ClusterResponse
-// 	if err := json.Unmarshal(body, &clusters); err != nil {
-// 		fmt.Printf("JSONの解析に失敗: %v", err)
-// 		return
-// 	}
-
-// 	fmt.Println(clusters)
-// }

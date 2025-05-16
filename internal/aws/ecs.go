@@ -1,3 +1,4 @@
+// Package aws provides AWS service clients and utilities for interacting with AWS services.
 package aws
 
 import (
@@ -9,31 +10,37 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 )
 
+// EcsOpts defines options for ECS API operations.
 type EcsOpts struct {
-	Clusters    []string
-	Cluster     *string
-	Services    []string
-	Service     *string
-	Tasks       []string
-	Task        *string
-	Status      string
-	Container   *string
-	Command     *string
-	Interactive bool
+	Clusters    []string // List of cluster ARNs or names
+	Cluster     *string  // Single cluster ARN or name
+	Services    []string // List of service ARNs or names
+	Service     *string  // Single service ARN or name
+	Tasks       []string // List of task ARNs
+	Task        *string  // Single task ARN
+	Status      string   // Task status filter
+	Container   *string  // Container name for execute-command
+	Command     *string  // Command to execute in container
+	Interactive bool     // Whether to execute command in interactive mode
 }
 
+// Ecs represents an ECS resource for selection UI.
 type Ecs struct {
 	Name string
 }
 
+// Title returns the display name of the ECS resource.
 func (i Ecs) Title() string {
 	return i.Name
 }
 
+// ID returns the identifier of the ECS resource.
 func (i Ecs) ID() string {
 	return i.Name
 }
 
+// ecsApi defines the interface for ECS API operations.
+// This interface helps with testing by allowing mock implementations.
 type ecsApi interface {
 	ListClusters(ctx context.Context, input *ecs.ListClustersInput, opts ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
 	DescribeClusters(ctx context.Context, input *ecs.DescribeClustersInput, opts ...func(*ecs.Options)) (*ecs.DescribeClustersOutput, error)
@@ -44,14 +51,22 @@ type ecsApi interface {
 	ExecuteCommand(ctx context.Context, input *ecs.ExecuteCommandInput, opts ...func(*ecs.Options)) (*ecs.ExecuteCommandOutput, error)
 }
 
-func NewECSClient(profile, region string) ecsApi {
-	return ecs.NewFromConfig(GetSession(profile, region))
+// NewECSClient creates a new ECS client using the specified AWS profile and region.
+func NewECSClient(profile, region string) (ecsApi, error) {
+	cfg, err := GetSession(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create ECS client: %w", err)
+	}
+	return ecs.NewFromConfig(cfg), nil
 }
 
+// GenerateListClustersInput creates the input for the ListClusters API call.
+// Returns an empty input to fetch all clusters.
 func GenerateListClustersInput(opts *EcsOpts) *ecs.ListClustersInput {
 	return &ecs.ListClustersInput{}
 }
 
+// ListClusters calls the ECS ListClusters API and returns the list of cluster ARNs.
 func ListClusters(client ecsApi, input *ecs.ListClustersInput) ([]string, error) {
 	output, err := client.ListClusters(context.Background(), input)
 	if err != nil {
@@ -61,12 +76,18 @@ func ListClusters(client ecsApi, input *ecs.ListClustersInput) ([]string, error)
 	return output.ClusterArns, nil
 }
 
+// GenerateDescribeClustersInput creates the input for the DescribeClusters API call
+// with the specified clusters from options.
 func GenerateDescribeClustersInput(opts *EcsOpts) *ecs.DescribeClustersInput {
 	return &ecs.DescribeClustersInput{
 		Clusters: opts.Clusters,
 	}
 }
 
+// DescribeClusters calls the ECS DescribeClusters API and formats the results
+// as string arrays suitable for table display.
+// Each cluster is represented as a string array containing name, status, service count,
+// running task count, pending task count, and registered container instance count.
 func DescribeClusters(client ecsApi, input *ecs.DescribeClustersInput) ([][]string, error) {
 	output, err := client.DescribeClusters(context.Background(), input)
 	if err != nil {
@@ -89,12 +110,16 @@ func DescribeClusters(client ecsApi, input *ecs.DescribeClustersInput) ([][]stri
 	return clusters, nil
 }
 
+// GenerateListServicesInput creates the input for the ListServices API call
+// with the specified cluster from options.
 func GenerateListServicesInput(opts *EcsOpts) *ecs.ListServicesInput {
 	return &ecs.ListServicesInput{
 		Cluster: opts.Cluster,
 	}
 }
 
+// ListServices calls the ECS ListServices API and returns the list of service ARNs
+// for the specified cluster.
 func ListServices(client ecsApi, input *ecs.ListServicesInput) ([]string, error) {
 	output, err := client.ListServices(context.Background(), input)
 	if err != nil {
@@ -104,6 +129,8 @@ func ListServices(client ecsApi, input *ecs.ListServicesInput) ([]string, error)
 	return output.ServiceArns, nil
 }
 
+// GenerateDescribeServicesInput creates the input for the DescribeServices API call
+// with the specified cluster and services from options.
 func GenerateDescribeServicesInput(opts *EcsOpts) *ecs.DescribeServicesInput {
 	return &ecs.DescribeServicesInput{
 		Cluster:  opts.Cluster,
@@ -111,6 +138,10 @@ func GenerateDescribeServicesInput(opts *EcsOpts) *ecs.DescribeServicesInput {
 	}
 }
 
+// DescribeServices calls the ECS DescribeServices API and formats the results
+// as string arrays suitable for table display.
+// Each service is represented as a string array containing cluster name, service name,
+// task definition, status, desired count, running count, and pending count.
 func DescribeServices(client ecsApi, input *ecs.DescribeServicesInput) ([][]string, error) {
 	output, err := client.DescribeServices(context.Background(), input)
 	if err != nil {

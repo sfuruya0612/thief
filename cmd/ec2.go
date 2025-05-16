@@ -1,144 +1,164 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/sfuruya0612/thief/internal/aws"
 	"github.com/sfuruya0612/thief/internal/util"
 )
 
+// ec2Cmd represents the base command for EC2 operations.
 var ec2Cmd = &cobra.Command{
 	Use:   "ec2",
-	Short: "Manage EC2",
+	Short: "Manage EC2 instances",
+	Long:  `Provides commands to list and manage AWS EC2 instances, including starting SSM sessions.`,
 }
 
+// ec2ListCmd represents the command to list EC2 instances.
 var ec2ListCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List EC2 instances",
-	Run:   displayEC2Instances,
+	Long:  `Retrieves and displays a list of EC2 instances based on specified filters like region, running state, etc.`,
+	RunE:  displayEC2Instances,
 }
 
+// ec2StartSessionCmd represents the command to start an SSM session to an EC2 instance.
 var ec2StartSessionCmd = &cobra.Command{
 	Use:     "session",
 	Aliases: []string{"s"},
 	Short:   "Start a session to an EC2 instance",
-	Run:     startSession,
+	Long: `Starts an AWS Systems Manager (SSM) session to a specified EC2 instance.
+If no instance ID is provided, it will prompt for selection from available instances.`,
+	RunE: startSession,
 }
 
 var ec2Columns = []util.Column{
-	{Header: "Name", Width: 50},
+	{Header: "Name", Width: 48},
 	{Header: "InstanceID", Width: 20},
 	{Header: "InstanceType", Width: 12},
 	{Header: "Lifecycle", Width: 9},
 	{Header: "PrivateIP", Width: 12},
 	{Header: "PublicIP", Width: 14},
 	{Header: "State", Width: 10},
-	{Header: "KeyName", Width: 35},
+	{Header: "KeyName", Width: 16},
 	{Header: "AZ", Width: 10},
 	{Header: "LaunchTime", Width: 30},
 }
 
-func displayEC2Instances(cmd *cobra.Command, args []string) {
-	profile := cmd.Flag("profile").Value.String()
-	region := cmd.Flag("region").Value.String()
+// displayEC2Instances retrieves and displays EC2 instances.
+func displayEC2Instances(cmd *cobra.Command, args []string) error {
+	profile := viper.GetString("profile")
+	region := viper.GetString("region")
 
 	opts := &aws.Ec2Opts{
-		Running: cmd.Flag("running").Value.String() == "true",
+		Running: viper.GetBool("running"),
 	}
 
 	list := [][]string{}
-	if cmd.Flag("global").Value.String() == "true" {
-		client := aws.NewEC2Client(profile, region)
+	if viper.GetBool("global") {
+		client, err := aws.NewEC2Client(profile, region)
+		if err != nil {
+			return fmt.Errorf("create EC2 client: %w", err)
+		}
 
 		regions, err := aws.DescribeRegions(client, aws.GenerateDescribeRegionsInput())
 		if err != nil {
-			fmt.Printf("Unable to describe regions: %v\n", err)
-			return
+			return fmt.Errorf("describe regions: %w", err)
 		}
 
 		for _, r := range regions {
 			instances, err := listEC2Instances(profile, r, opts)
 			if err != nil {
-				fmt.Printf("Unable to list EC2 instances: %v\n", err)
-				return
+				// Log or collect errors for each region instead of returning immediately
+				cmd.PrintErrf("list EC2 instances in region %s: %v\n", r, err)
+				continue // Continue to the next region
 			}
-
 			list = append(list, instances...)
 		}
-
 	} else {
 		var err error
 		list, err = listEC2Instances(profile, region, opts)
 		if err != nil {
-			fmt.Printf("Unable to list EC2 instances: %v\n", err)
-			return
+			return fmt.Errorf("list EC2 instances: %w", err)
 		}
 	}
 
 	if len(list) == 0 {
-		fmt.Println("No EC2 instances found")
-		return
+		cmd.Println("No EC2 instances found")
+		return nil
 	}
 
-	formatter := util.NewTableFormatter(ec2Columns, cmd.Flag("output").Value.String())
+	formatter := util.NewTableFormatter(ec2Columns, viper.GetString("output"))
 
-	if cmd.Flag("no-header").Value.String() == "false" {
+	if !viper.GetBool("no-header") {
 		formatter.PrintHeader()
 	}
 
 	formatter.PrintRows(list)
+	return nil
 }
 
+// listEC2Instances lists EC2 instances for a given profile, region, and options.
 func listEC2Instances(profile, region string, opts *aws.Ec2Opts) ([][]string, error) {
-	client := aws.NewEC2Client(profile, region)
+	client, err := aws.NewEC2Client(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create EC2 client: %w", err)
+	}
 
 	input, err := aws.GenerateDescribeInstancesInput(opts)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to generate describe instances input: %v\n", err)
+		return nil, fmt.Errorf("generate describe instances input: %w", err)
 	}
 
 	instances, err := aws.DescribeInstances(client, input)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to describe instances: %v\n", err)
+		return nil, fmt.Errorf("describe instances: %w", err)
 	}
 
 	return instances, nil
 }
 
-func startSession(cmd *cobra.Command, args []string) {
-	profile := cmd.Flag("profile").Value.String()
-	region := cmd.Flag("region").Value.String()
+// startSession starts an SSM session to an EC2 instance.
+func startSession(cmd *cobra.Command, args []string) error {
+	profile := viper.GetString("profile")
+	region := viper.GetString("region")
 
-	ssmClient := aws.NewSsmClient(profile, region)
+	ssmClient, err := aws.NewSsmClient(profile, region)
+	if err != nil {
+		return fmt.Errorf("create SSM client: %w", err)
+	}
 
 	ssmOpts := &aws.SsmOpts{
 		PingStatus:   "Online",
 		ResourceType: "EC2Instance",
-		InstanceId:   cmd.Flag("instance-id").Value.String(),
+		InstanceId:   viper.GetString("instance-id"),
 	}
 
-	if cmd.Flag("instance-id").Value.String() == "" {
+	if viper.GetString("instance-id") == "" {
 		ssmInput := aws.GenerateDescribeInstanceInformationInput(ssmOpts)
 
 		instanceIds, err := aws.DescribeInstanceInformation(ssmClient, ssmInput)
 		if err != nil {
-			fmt.Printf("Unable to describe instance information: %v\n", err)
-			return
+			return fmt.Errorf("describe instance information: %w", err)
+		}
+
+		if len(instanceIds) == 0 {
+			return errors.New("no online EC2 instances found for SSM session")
 		}
 
 		instances, err := ssmTargetInstance(profile, region, instanceIds)
 		if err != nil {
-			fmt.Printf("Unable to get target instance: %v\n", err)
-			return
+			return fmt.Errorf("get target instance: %w", err)
 		}
 
 		selected, err := util.Select(instances, "Select an EC2 instance:")
 		if err != nil {
-			fmt.Printf("Error selecting instance: %v\n", err)
-			return
+			return fmt.Errorf("select instance: %w", err)
 		}
 
 		ssmOpts.InstanceId = selected.ID()
@@ -148,76 +168,93 @@ func startSession(cmd *cobra.Command, args []string) {
 
 	session, err := aws.StartSession(ssmClient, startSessionInput)
 	if err != nil {
-		fmt.Printf("Unable to start session: %v\n", err)
-		return
+		return fmt.Errorf("start session: %w", err)
 	}
 
-	sessJson, err := util.Parser(session)
+	sessJSON, err := util.Parser(session)
 	if err != nil {
-		fmt.Printf("Unable to marshal session: %v\n", err)
-		return
+		return fmt.Errorf("marshal session: %w", err)
 	}
 
-	paramsJson, err := util.Parser(startSessionInput)
+	paramsJSON, err := util.Parser(startSessionInput)
 	if err != nil {
-		fmt.Printf("Unable to marshal start session input: %v\n", err)
-		return
+		return fmt.Errorf("marshal start session input: %w", err)
 	}
 
 	plug, err := exec.LookPath("session-manager-plugin")
 	if err != nil {
-		fmt.Println("Unable to find session-manager-plugin")
-		return
+		return errors.New("session-manager-plugin not found in PATH")
 	}
 
 	ssmOpts.SessionId = *session.SessionId
-
 	terminateSessionInput := aws.GenerateTerminateSessionInput(ssmOpts)
 
-	if err = util.ExecCommand(plug, string(sessJson), region, "StartSession", profile, string(paramsJson), fmt.Sprintf("https://ssm.%s.amazonaws.com", region)); err != nil {
-		fmt.Println(err)
-		_, err := aws.TerminateSession(ssmClient, terminateSessionInput)
-		if err != nil {
-			fmt.Printf("Unable to terminate session: %v\n", err)
-			return
+	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", region)
+	execErr := util.ExecCommand(plug, string(sessJSON), region, "StartSession", profile, string(paramsJSON), ssmEndpoint)
+
+	if execErr != nil {
+		cmd.PrintErrf("execute command: %v\n", execErr)
+		// Attempt to terminate the session even if ExecCommand failed
+		if _, termErr := aws.TerminateSession(ssmClient, terminateSessionInput); termErr != nil {
+			return fmt.Errorf("terminate session after exec error: %w (original exec error: %v)", termErr, execErr)
 		}
+		return fmt.Errorf("execute command: %w", execErr)
 	}
+
+	// Terminate session after successful execution or if ExecCommand is interrupted (though interruption handling is basic here)
+	if _, err := aws.TerminateSession(ssmClient, terminateSessionInput); err != nil {
+		return fmt.Errorf("terminate session: %w", err)
+	}
+
+	return nil
 }
 
+// ssmTargetInstance retrieves EC2 instance details for SSM target selection.
 func ssmTargetInstance(profile, region string, instanceIds []string) ([]util.Item, error) {
-	ec2Client := aws.NewEC2Client(profile, region)
+	ec2Client, err := aws.NewEC2Client(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create EC2 client: %w", err)
+	}
 
-	list := [][]string{}
-	for _, i := range instanceIds {
+	var items [][]string
+	for _, id := range instanceIds {
 		ec2Opts := &aws.Ec2Opts{
-			Running:    true,
-			InstanceId: i,
+			// Running:    true, // Already filtered by PingStatus="Online" in SSM
+			InstanceId: id,
 		}
 
 		ec2Input, err := aws.GenerateDescribeInstancesInput(ec2Opts)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to generate describe instances input: %v", err)
+			return nil, fmt.Errorf("generate describe instances input for %s: %w", id, err)
 		}
 
 		instances, err := aws.DescribeInstances(ec2Client, ec2Input)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to describe instances: %v", err)
+			return nil, fmt.Errorf("describe instances for %s: %w", id, err)
 		}
-
-		list = append(list, instances[0])
+		if len(instances) > 0 {
+			items = append(items, instances[0]) // Assuming DescribeInstances returns at most one for a specific ID
+		}
 	}
 
-	if len(list) == 0 {
-		return nil, fmt.Errorf("No EC2 instances found")
+	if len(items) == 0 {
+		return nil, errors.New("no matching EC2 instances found for SSM selection")
 	}
 
-	var instances []util.Item
-	for _, inst := range list {
-		instances = append(instances, aws.EC2Instance{
-			Name:       inst[0],
-			InstanceID: inst[1],
-		})
+	var utilItems []util.Item
+	for _, inst := range items {
+		// Ensure inst has enough elements to avoid panic
+		if len(inst) > 1 {
+			utilItems = append(utilItems, aws.EC2Instance{
+				Name:       inst[0],
+				InstanceID: inst[1],
+			})
+		}
 	}
 
-	return instances, nil
+	if len(utilItems) == 0 {
+		return nil, errors.New("no instances could be processed for selection")
+	}
+
+	return utilItems, nil
 }

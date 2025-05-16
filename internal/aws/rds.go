@@ -16,8 +16,13 @@ type rdsApi interface {
 	DescribeDBClusters(ctx context.Context, prams *rds.DescribeDBClustersInput, optFns ...func(*rds.Options)) (*rds.DescribeDBClustersOutput, error)
 }
 
-func NewRdsClient(profile, region string) rdsApi {
-	return rds.NewFromConfig(GetSession(profile, region))
+// NewRdsClient creates a new RDS client using the specified AWS profile and region.
+func NewRdsClient(profile, region string) (rdsApi, error) {
+	cfg, err := GetSession(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create RDS client: %w", err)
+	}
+	return rds.NewFromConfig(cfg), nil
 }
 
 func GenerateDescribeDBInstancesInput(opts *RdsOpts) *rds.DescribeDBInstancesInput {

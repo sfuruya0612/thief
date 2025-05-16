@@ -17,14 +17,16 @@ var rdsCmd = &cobra.Command{
 var rdsInstanceCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List RDS instances",
-	Run:   listRDSInstances,
+	Long:  "Retrieves and displays a list of RDS DB instances in the current region.",
+	RunE:  listRDSInstances,
 }
 
 var rdsClusterCmd = &cobra.Command{
 	Use:     "cluster",
 	Aliases: []string{"c"},
 	Short:   "List RDS clusters",
-	Run:     listRDSClusters,
+	Long:    "Retrieves and displays a list of RDS DB clusters in the current region.",
+	RunE:    listRDSClusters,
 }
 
 var rdsInstanceColumns = []util.Column{
@@ -45,20 +47,23 @@ var rdsClusterColumns = []util.Column{
 	{Header: "Status", Width: 15},
 }
 
-func listRDSInstances(cmd *cobra.Command, args []string) {
-	client := aws.NewRdsClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
+// listRDSInstances retrieves and displays RDS DB instances.
+func listRDSInstances(cmd *cobra.Command, args []string) error {
+	client, err := aws.NewRdsClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
+	if err != nil {
+		return fmt.Errorf("create RDS client: %w", err)
+	}
 
 	input := aws.GenerateDescribeDBInstancesInput(&aws.RdsOpts{})
 
 	instances, err := aws.DescribeDBInstances(client, input)
 	if err != nil {
-		fmt.Printf("Unable to describe DB instances: %v\n", err)
-		return
+		return fmt.Errorf("describe DB instances: %w", err)
 	}
 
 	if len(instances) == 0 {
-		fmt.Println("No DB instances found")
-		return
+		cmd.Println("No DB instances found")
+		return nil
 	}
 
 	formatter := util.NewTableFormatter(rdsInstanceColumns, cmd.Flag("output").Value.String())
@@ -68,22 +73,26 @@ func listRDSInstances(cmd *cobra.Command, args []string) {
 	}
 
 	formatter.PrintRows(instances)
+	return nil
 }
 
-func listRDSClusters(cmd *cobra.Command, args []string) {
-	client := aws.NewRdsClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
+// listRDSClusters retrieves and displays RDS DB clusters.
+func listRDSClusters(cmd *cobra.Command, args []string) error {
+	client, err := aws.NewRdsClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
+	if err != nil {
+		return fmt.Errorf("create RDS client: %w", err)
+	}
 
 	input := aws.GenerateDescribeDBClustersInput(&aws.RdsOpts{})
 
 	clusters, err := aws.DescribeDBClusters(client, input)
 	if err != nil {
-		fmt.Printf("Unable to describe DB clusters: %v\n", err)
-		return
+		return fmt.Errorf("describe DB clusters: %w", err)
 	}
 
 	if len(clusters) == 0 {
-		fmt.Println("No DB clusters found")
-		return
+		cmd.Println("No DB clusters found")
+		return nil
 	}
 
 	formatter := util.NewTableFormatter(rdsClusterColumns, cmd.Flag("output").Value.String())
@@ -93,4 +102,5 @@ func listRDSClusters(cmd *cobra.Command, args []string) {
 	}
 
 	formatter.PrintRows(clusters)
+	return nil
 }

@@ -16,7 +16,8 @@ var elasticacheCmd = &cobra.Command{
 var elasticacheListCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List ElastiCache clusters",
-	Run:   listElastiCacheClusters,
+	Long:  "Retrieves and displays a list of ElastiCache clusters in the current region.",
+	RunE:  listElastiCacheClusters,
 }
 
 var elasticacheColumns = []util.Column{
@@ -28,20 +29,23 @@ var elasticacheColumns = []util.Column{
 	{Header: "CacheClusterStatus", Width: 20},
 }
 
-func listElastiCacheClusters(cmd *cobra.Command, args []string) {
-	client := aws.NewElasticacheClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
+// listElastiCacheClusters retrieves and displays ElastiCache clusters.
+func listElastiCacheClusters(cmd *cobra.Command, args []string) error {
+	client, err := aws.NewElasticacheClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
+	if err != nil {
+		return fmt.Errorf("create ElastiCache client: %w", err)
+	}
 
 	input := aws.GenerateDescribeCacheClustersInput(&aws.ElasticacheOpts{})
 
 	clusters, err := aws.DescribeCacheClusters(client, input)
 	if err != nil {
-		fmt.Printf("Unable to describe cache clusters: %v\n", err)
-		return
+		return fmt.Errorf("describe cache clusters: %w", err)
 	}
 
 	if len(clusters) == 0 {
-		fmt.Println("No cache clusters found")
-		return
+		cmd.Println("No cache clusters found")
+		return nil
 	}
 
 	formatter := util.NewTableFormatter(elasticacheColumns, cmd.Flag("output").Value.String())
@@ -51,4 +55,5 @@ func listElastiCacheClusters(cmd *cobra.Command, args []string) {
 	}
 
 	formatter.PrintRows(clusters)
+	return nil
 }

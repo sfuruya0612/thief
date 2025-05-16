@@ -30,13 +30,15 @@ var ssoCmd = &cobra.Command{
 var ssoLoginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Login to SSO",
-	Run:   login,
+	Long:  "Authenticate with AWS SSO to obtain access credentials for AWS services.",
+	RunE:  login,
 }
 
 var ssoLogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Logout from SSO. Remove all cache files.",
-	Run:   logout,
+	Long:  "Sign out of AWS SSO by removing all cached credentials and tokens.",
+	RunE:  logout,
 }
 
 type SSOTokenCache struct {
@@ -49,17 +51,20 @@ type SSOTokenCache struct {
 	RegistrationExpiresAt string `json:"registrationExpiresAt"`
 }
 
-func login(cmd *cobra.Command, args []string) {
+// login authenticates with AWS SSO and caches the credentials.
+func login(cmd *cobra.Command, args []string) error {
 	profile := cmd.Flag("profile").Value.String()
 	region := cmd.Flag("region").Value.String()
 	url := cmd.Flag("url").Value.String()
 
 	if url == "" {
-		fmt.Println("Please specify the AWS SSO access portal URL.")
-		return
+		return fmt.Errorf("please specify the AWS SSO access portal URL with --url flag")
 	}
 
-	oidcClient := aws.NewSSOOidcClient(profile, region)
+	oidcClient, err := aws.NewSSOOidcClient(profile, region)
+	if err != nil {
+		return fmt.Errorf("create SSO OIDC client: %w", err)
+	}
 
 	ssoOidcOpts := aws.SSOOidcOpts{
 		ClientName: clientName,
@@ -68,8 +73,7 @@ func login(cmd *cobra.Command, args []string) {
 
 	registerOutput, err := aws.RegisterClient(oidcClient, aws.GenerateRegisterClientInput(ssoOidcOpts))
 	if err != nil {
-		fmt.Printf("failed to register client: %v\n", err)
-		return
+		return fmt.Errorf("register client: %w", err)
 	}
 
 	startUrl := fmt.Sprintf("https://%s.awsapps.com/start/", url)
@@ -80,13 +84,11 @@ func login(cmd *cobra.Command, args []string) {
 
 	deviceAuth, err := aws.StartDeviceAuthorization(oidcClient, aws.GenerateStartDeviceAuthorizationInput(ssoOidcOpts))
 	if err != nil {
-		fmt.Printf("failed to start device authorization: %v\n", err)
-		return
+		return fmt.Errorf("start device authorization: %w", err)
 	}
 
 	if err := openBrowser(*deviceAuth.VerificationUriComplete); err != nil {
-		fmt.Printf("Failed to open browser: %v\n", err)
-		return
+		return fmt.Errorf("open browser: %w", err)
 	}
 
 	ssoOidcOpts.DeviceCode = *deviceAuth.DeviceCode
@@ -97,8 +99,7 @@ func login(cmd *cobra.Command, args []string) {
 
 	tokenOutput, err := aws.WaitForToken(context.Background(), oidcClient, aws.GenerateCreateTokenInput(ssoOidcOpts))
 	if err != nil {
-		fmt.Printf("failed to get token: %v", err)
-		return
+		return fmt.Errorf("get token: %w", err)
 	}
 
 	expireAt := time.Now().UTC().Add(time.Duration(tokenOutput.ExpiresIn) * time.Second)
@@ -115,29 +116,28 @@ func login(cmd *cobra.Command, args []string) {
 
 	// Create cache files in ~/.aws/sso/cache directory.
 	if err = saveCacheFile(cache); err != nil {
-		fmt.Printf("failed to save cache file: %v\n", err)
-		return
+		return fmt.Errorf("save cache file: %w", err)
 	}
 
 	// Same output as aws sso login command.
-	fmt.Printf("Successfully logged into Start URL: %s\n", startUrl)
+	cmd.Printf("Successfully logged into Start URL: %s\n", startUrl)
+	return nil
 }
 
-func logout(cmd *cobra.Command, args []string) {
+// logout removes all SSO credential cache files.
+func logout(cmd *cobra.Command, args []string) error {
 	cacheDir, err := getCacheDir()
 	if err != nil {
-		fmt.Printf("failed to get cache directory: %v", err)
-		return
+		return fmt.Errorf("get cache directory: %w", err)
 	}
 
 	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
-		fmt.Printf("directory does not exist: %s", cacheDir)
-		return
+		return fmt.Errorf("directory does not exist: %s", cacheDir)
 	}
 
 	err = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("failed to walk directory: %v", err)
+			return fmt.Errorf("walk directory: %w", err)
 		}
 
 		if info.IsDir() {
@@ -145,17 +145,17 @@ func logout(cmd *cobra.Command, args []string) {
 		}
 
 		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("failed to delete file %s: %v", path, err)
+			return fmt.Errorf("delete file %s: %w", path, err)
 		}
 
 		return nil
 	})
 	if err != nil {
-		fmt.Printf("error walking directory: %v", err)
-		return
+		return fmt.Errorf("error walking directory: %w", err)
 	}
 
-	fmt.Println("Successfully signed out of all SSO profiles.")
+	cmd.Println("Successfully signed out of all SSO profiles.")
+	return nil
 }
 
 func loginDisplay(startUrl, userCode string) {
