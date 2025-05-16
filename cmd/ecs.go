@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -18,29 +19,33 @@ var ecsCmd = &cobra.Command{
 var ecsClustersCmd = &cobra.Command{
 	Use:     "clusters",
 	Short:   "List ECS clusters",
+	Long:    "Retrieves and displays a list of ECS clusters in the current region.",
 	Aliases: []string{"c"},
-	Run:     displayECSClusters,
+	RunE:    displayECSClusters,
 }
 
 var ecsServicesCmd = &cobra.Command{
 	Use:     "services",
 	Short:   "List ECS services",
+	Long:    "Retrieves and displays a list of ECS services in the specified cluster.",
 	Aliases: []string{"s"},
-	Run:     displayECSServices,
+	RunE:    displayECSServices,
 }
 
 var ecsTasksCmd = &cobra.Command{
 	Use:     "tasks",
 	Short:   "List ECS tasks",
+	Long:    "Retrieves and displays a list of ECS tasks in the specified cluster.",
 	Aliases: []string{"t"},
-	Run:     displayECSTasks,
+	RunE:    displayECSTasks,
 }
 
 var ecsExecCmd = &cobra.Command{
 	Use:     "exec",
 	Short:   "Execute a command in a container",
+	Long:    "Executes a command in a container running in an ECS task using AWS SSM Session Manager.",
 	Aliases: []string{"e"},
-	Run:     ecsExecuteCommand,
+	RunE:    ecsExecuteCommand,
 }
 
 var ecsClusterColumns = []util.Column{
@@ -80,16 +85,18 @@ type TargetJSON struct {
 	Target string `json:"Target"`
 }
 
-func displayECSClusters(cmd *cobra.Command, args []string) {
+func displayECSClusters(cmd *cobra.Command, args []string) error {
 	profile := cmd.Flag("profile").Value.String()
 	region := cmd.Flag("region").Value.String()
 
-	client := aws.NewECSClient(profile, region)
+	client, err := aws.NewECSClient(profile, region)
+	if err != nil {
+		return fmt.Errorf("create ECS client: %w", err)
+	}
 
 	clustersArns, err := aws.ListClusters(client, aws.GenerateListClustersInput(&aws.EcsOpts{}))
 	if err != nil {
-		fmt.Printf("Unable to list ECS clusters: %v\n", err)
-		return
+		return fmt.Errorf("list ECS clusters: %w", err)
 	}
 
 	input := aws.GenerateDescribeClustersInput(&aws.EcsOpts{
@@ -98,13 +105,12 @@ func displayECSClusters(cmd *cobra.Command, args []string) {
 
 	list, err := aws.DescribeClusters(client, input)
 	if err != nil {
-		fmt.Printf("Unable to describe ECS clusters: %v\n", err)
-		return
+		return fmt.Errorf("describe ECS clusters: %w", err)
 	}
 
 	if len(list) == 0 {
-		fmt.Println("No ECS clusters found")
-		return
+		cmd.Println("No ECS clusters found")
+		return nil
 	}
 
 	formatter := util.NewTableFormatter(ecsClusterColumns, cmd.Flag("output").Value.String())
@@ -114,18 +120,21 @@ func displayECSClusters(cmd *cobra.Command, args []string) {
 	}
 
 	formatter.PrintRows(list)
+	return nil
 }
 
-func displayECSServices(cmd *cobra.Command, args []string) {
+func displayECSServices(cmd *cobra.Command, args []string) error {
 	profile := cmd.Flag("profile").Value.String()
 	region := cmd.Flag("region").Value.String()
 
-	client := aws.NewECSClient(profile, region)
+	client, err := aws.NewECSClient(profile, region)
+	if err != nil {
+		return fmt.Errorf("create ECS client: %w", err)
+	}
 
 	clusterArns, err := aws.ListClusters(client, aws.GenerateListClustersInput(&aws.EcsOpts{}))
 	if err != nil {
-		fmt.Printf("Unable to list ECS clusters: %v\n", err)
-		return
+		return fmt.Errorf("list ECS clusters: %w", err)
 	}
 
 	formatter := util.NewTableFormatter(ecsServiceColumns, cmd.Flag("output").Value.String())
@@ -141,8 +150,7 @@ func displayECSServices(cmd *cobra.Command, args []string) {
 
 		output, err := aws.ListServices(client, input)
 		if err != nil {
-			fmt.Printf("Unable to list ECS services: %v\n", err)
-			return
+			return fmt.Errorf("list ECS services for cluster %s: %w", c, err)
 		}
 
 		i := aws.GenerateDescribeServicesInput(&aws.EcsOpts{
@@ -152,36 +160,38 @@ func displayECSServices(cmd *cobra.Command, args []string) {
 
 		list, err := aws.DescribeServices(client, i)
 		if err != nil {
-			fmt.Printf("Unable to describe ECS services: %v\n", err)
-			return
+			return fmt.Errorf("describe ECS services for cluster %s: %w", c, err)
 		}
 
 		formatter.PrintRows(list)
 	}
+
+	return nil
 }
 
-func displayECSTasks(cmd *cobra.Command, args []string) {
+func displayECSTasks(cmd *cobra.Command, args []string) error {
 	profile := cmd.Flag("profile").Value.String()
 	region := cmd.Flag("region").Value.String()
 
-	client := aws.NewECSClient(profile, region)
+	client, err := aws.NewECSClient(profile, region)
+	if err != nil {
+		return fmt.Errorf("create ECS client: %w", err)
+	}
 
 	cluster := cmd.Flag("cluster").Value.String()
 	if cluster == "" {
 		output, err := aws.ListClusters(client, aws.GenerateListClustersInput(&aws.EcsOpts{}))
 		if err != nil {
-			fmt.Printf("Unable to list ECS clusters: %v\n", err)
-			return
+			return fmt.Errorf("list ECS clusters: %w", err)
 		}
 
 		selected, err := util.Select(selecterEcs(output, 1), "Select an ECS cluster:")
 		if err != nil {
-			fmt.Printf("Unable to select cluster: %v\n", err)
-			return
+			return fmt.Errorf("select cluster: %w", err)
 		}
 
 		cluster = selected.ID()
-		fmt.Printf("Selected cluster: %s\n", cluster)
+		cmd.Printf("Selected cluster: %s\n", cluster)
 	}
 
 	input := aws.GenerateListTasksInput(&aws.EcsOpts{
@@ -190,13 +200,12 @@ func displayECSTasks(cmd *cobra.Command, args []string) {
 
 	output, err := aws.ListTasks(client, input)
 	if err != nil {
-		fmt.Printf("Unable to list ECS tasks: %v\n", err)
-		return
+		return fmt.Errorf("list ECS tasks: %w", err)
 	}
 
 	if len(output) == 0 {
-		fmt.Println("No ECS tasks found")
-		return
+		cmd.Println("No ECS tasks found")
+		return nil
 	}
 
 	i := aws.GenerateDescribeTasksInput(&aws.EcsOpts{
@@ -206,8 +215,7 @@ func displayECSTasks(cmd *cobra.Command, args []string) {
 
 	list, err := aws.DescribeTasks(client, i)
 	if err != nil {
-		fmt.Printf("Unable to describe ECS tasks: %v\n", err)
-		return
+		return fmt.Errorf("describe ECS tasks: %w", err)
 	}
 
 	formatter := util.NewTableFormatter(ecsTaskColumns, cmd.Flag("output").Value.String())
@@ -217,9 +225,10 @@ func displayECSTasks(cmd *cobra.Command, args []string) {
 	}
 
 	formatter.PrintRows(list)
+	return nil
 }
 
-func ecsExecuteCommand(cmd *cobra.Command, args []string) {
+func ecsExecuteCommand(cmd *cobra.Command, args []string) error {
 	profile := cmd.Flag("profile").Value.String()
 	region := cmd.Flag("region").Value.String()
 
@@ -229,14 +238,12 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) {
 	command := cmd.Flag("command").Value.String()
 
 	if cluster == "" || task == "" || container == "" {
-		fmt.Println("--cluster, --task, and --container flags are required")
-		return
+		return errors.New("--cluster, --task, and --container flags are required")
 	}
 
 	// interactive, err := strconv.ParseBool(cmd.Flag("interactive").Value.String())
 	// if err != nil {
-	// 	fmt.Printf("Unable to parse interactive flag: %v\n", err)
-	// 	return
+	// 	return fmt.Errorf("parse interactive flag: %w", err)
 	// }
 
 	opts := &aws.EcsOpts{
@@ -247,20 +254,21 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) {
 		Interactive: true,
 	}
 
-	client := aws.NewECSClient(profile, region)
+	client, err := aws.NewECSClient(profile, region)
+	if err != nil {
+		return fmt.Errorf("create ECS client: %w", err)
+	}
 
 	input := aws.GenerateExecuteCommandInput(opts)
 
 	output, err := aws.ExecuteCommand(client, input)
 	if err != nil {
-		fmt.Printf("Unable to execute command: %v\n", err)
-		return
+		return fmt.Errorf("execute command: %w", err)
 	}
 
 	sessJson, err := util.Parser(output.Session)
 	if err != nil {
-		fmt.Printf("Unable to marshal session: %v\n", err)
-		return
+		return fmt.Errorf("marshal session: %w", err)
 	}
 
 	target := fmt.Sprintf("ecs:%s_%s_%s",
@@ -271,19 +279,19 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) {
 
 	targetJson, err := util.Parser(TargetJSON{Target: target})
 	if err != nil {
-		fmt.Printf("Unable to marshal target: %v\n", err)
-		return
+		return fmt.Errorf("marshal target: %w", err)
 	}
 
 	plug, err := exec.LookPath("session-manager-plugin")
 	if err != nil {
-		fmt.Println("Unable to find session-manager-plugin")
-		return
+		return errors.New("session-manager-plugin not found in PATH")
 	}
 
 	if err = util.ExecCommand(plug, string(sessJson), region, "StartSession", profile, string(targetJson), fmt.Sprintf("https://ecs.%s.amazonaws.com", region)); err != nil {
-		fmt.Printf("Unable to execute command: %v\n", err)
+		return fmt.Errorf("execute session-manager-plugin command: %w", err)
 	}
+
+	return nil
 }
 
 func selecterEcs(Arns []string, num int) []util.Item {

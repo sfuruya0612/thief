@@ -22,8 +22,13 @@ type ssmApi interface {
 	TerminateSession(ctx context.Context, params *ssm.TerminateSessionInput, optFns ...func(*ssm.Options)) (*ssm.TerminateSessionOutput, error)
 }
 
-func NewSsmClient(profile, region string) ssmApi {
-	return ssm.NewFromConfig(GetSession(profile, region))
+// NewSsmClient creates a new SSM client using the specified AWS profile and region.
+func NewSsmClient(profile, region string) (ssmApi, error) {
+	cfg, err := GetSession(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create SSM client: %w", err)
+	}
+	return ssm.NewFromConfig(cfg), nil
 }
 
 func GenerateDescribeInstanceInformationInput(opts *SsmOpts) *ssm.DescribeInstanceInformationInput {

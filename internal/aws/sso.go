@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
@@ -25,8 +26,13 @@ type ssoApi interface {
 	ListAccountRoles(ctx context.Context, input *sso.ListAccountRolesInput, opts ...func(*sso.Options)) (*sso.ListAccountRolesOutput, error)
 }
 
-func NewSSOClient(profile, region string) ssoApi {
-	return sso.NewFromConfig(GetSession(profile, region))
+// NewSSOClient creates a new SSO client using the specified AWS profile and region.
+func NewSSOClient(profile, region string) (ssoApi, error) {
+	cfg, err := GetSession(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create SSO client: %w", err)
+	}
+	return sso.NewFromConfig(cfg), nil
 }
 
 // func GenerateGetCallerIdentityInput() *sts.GetCallerIdentityInput {

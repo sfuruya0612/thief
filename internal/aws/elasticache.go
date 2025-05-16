@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
@@ -14,8 +15,13 @@ type elasticacheApi interface {
 	DescribeCacheClusters(ctx context.Context, params *elasticache.DescribeCacheClustersInput, optFns ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error)
 }
 
-func NewElasticacheClient(profile, region string) elasticacheApi {
-	return elasticache.NewFromConfig(GetSession(profile, region))
+// NewElasticacheClient creates a new ElastiCache client using the specified AWS profile and region.
+func NewElasticacheClient(profile, region string) (elasticacheApi, error) {
+	cfg, err := GetSession(profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("create ElastiCache client: %w", err)
+	}
+	return elasticache.NewFromConfig(cfg), nil
 }
 
 func GenerateDescribeCacheClustersInput(opts *ElasticacheOpts) *elasticache.DescribeCacheClustersInput {
