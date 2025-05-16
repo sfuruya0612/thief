@@ -257,7 +257,7 @@ func init() {
 	// tidbCmd.PersistentFlags().StringP("region", "", "", "Region")
 
 	// Cost Explorer
-	costexplorerCmd.AddCommand(costByServiceCmd, costByAccountCmd, costOverviewCmd)
+	costexplorerCmd.AddCommand(costByServiceCmd, costByAccountCmd, costByUsageTypeCmd, costOverviewCmd)
 
 	costexplorerCmd.PersistentFlags().StringP("start-date", "", "", "Start date (YYYY-MM-DD)")
 	costexplorerCmd.PersistentFlags().StringP("end-date", "", "", "End date (YYYY-MM-DD)")
