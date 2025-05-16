@@ -73,7 +73,7 @@ func (c *CostExplorerClient) GetCostAndUsage(startDate, endDate string, granular
 	for _, result := range resp.ResultsByTime {
 		for _, group := range result.Groups {
 			detail := CostDetail{
-				TimePeriod: *result.TimePeriod.Start + " to " + *result.TimePeriod.End,
+				TimePeriod: *result.TimePeriod.Start,
 				Amount:     *group.Metrics[metricStr].Amount,
 				Unit:       *group.Metrics[metricStr].Unit,
 			}

@@ -112,9 +112,11 @@ func init() {
 	ssoCmd.AddCommand(
 		ssoLoginCmd,
 		ssoLogoutCmd,
+		ssoGenerateConfigCmd,
 	)
 
 	ssoLoginCmd.Flags().StringP("url", "", "", "AWS access portal URL")
+	ssoGenerateConfigCmd.Flags().StringP("url", "", "", "AWS access portal URL")
 
 	// EC2
 	ec2Cmd.AddCommand(
