@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
+	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 )
 
 type SSOOpts struct {
@@ -55,12 +56,28 @@ func GenerateListAccountsInput(opts SSOOpts) *sso.ListAccountsInput {
 }
 
 func ListAccounts(api ssoApi, input *sso.ListAccountsInput) (*sso.ListAccountsOutput, error) {
-	o, err := api.ListAccounts(context.Background(), input)
-	if err != nil {
-		return nil, err
+	var accounts []types.AccountInfo
+	var nextToken *string
+
+	for {
+		o, err := api.ListAccounts(context.Background(), input)
+		if err != nil {
+			return nil, err
+		}
+
+		accounts = append(accounts, o.AccountList...)
+		nextToken = o.NextToken
+
+		if nextToken == nil {
+			break
+		}
+
+		input.NextToken = nextToken
 	}
 
-	return o, nil
+	return &sso.ListAccountsOutput{
+		AccountList: accounts,
+	}, nil
 }
 
 func GenerateListAccountRolesInput(opts SSOOpts) *sso.ListAccountRolesInput {

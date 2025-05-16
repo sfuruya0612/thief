@@ -39,9 +39,6 @@ depends = ["prepare"]
 description = "Install binary"
 shell = 'bash -c'
 run = "go install"
-# run = '''
-# COMMIT_HASH=$(git rev-parse --short HEAD) go install -ldflags "-X 'main.commit=$COMMIT_HASH'"
-# '''
 
 [tasks.docs]
 description = "Generate documentation"
@@ -49,3 +46,10 @@ run = '''
 go run docs/main.go
 mv docs/thief.md docs/index.md
 '''
+
+[tasks.demo]
+description = "Generate demo animation"
+run = '''
+vhs docs/demo.tape
+'''
+
