@@ -116,6 +116,17 @@ func (c *CostExplorerClient) GetCostByAccount(startDate, endDate string, metric 
 	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, groupBy, metric)
 }
 
+func (c *CostExplorerClient) GetCostByUsageType(startDate, endDate string, metric CostMetric) ([]CostDetail, error) {
+	groupBy := []types.GroupDefinition{
+		{
+			Key:  aws.String("USAGE_TYPE"),
+			Type: types.GroupDefinitionTypeDimension,
+		},
+	}
+
+	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, groupBy, metric)
+}
+
 func (c *CostExplorerClient) GetCostForPeriod(startDate, endDate string, metric CostMetric) ([]CostDetail, error) {
 	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, nil, metric)
 }
