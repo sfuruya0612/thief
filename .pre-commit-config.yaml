@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: mise-test
+        name: Run tests (mise run test)
+        language: system
+        entry: mise run test
+        pass_filenames: false
+        always_run: true
