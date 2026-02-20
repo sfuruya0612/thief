@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 )
 
 // Row is implemented by types that can be serialised to a string slice for
@@ -16,18 +17,19 @@ type Row interface {
 	ToRow() []string
 }
 
-// Column represents a table column with a header and its display width.
+// Column represents a table column with a header label.
 // Used for formatting tabular output in the CLI.
 type Column struct {
 	Header string
-	Width  int
 }
 
 // TableFormatter provides functionality for formatting and printing tabular data.
 // It supports multiple output formats including formatted tables and CSV.
+// For table output it uses text/tabwriter to dynamically size columns based on content.
 type TableFormatter struct {
 	columns []Column
 	format  string
+	writer  *tabwriter.Writer
 }
 
 // NewTableFormatter creates a new TableFormatter with the specified columns and output format.
@@ -36,12 +38,14 @@ func NewTableFormatter(columns []Column, format string) *TableFormatter {
 	return &TableFormatter{
 		columns: columns,
 		format:  format,
+		writer:  tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0),
 	}
 }
 
 // PrintHeader prints the table headers based on the configured format.
 // For CSV format, it writes a CSV header row to stdout.
-// For tabular format, it prints a formatted header row with appropriate column widths.
+// For tabular format, it writes a tab-separated header row to the internal
+// tabwriter. The caller must invoke PrintRows afterwards so that Flush is called.
 func (f *TableFormatter) PrintHeader() {
 	if f.format == "csv" {
 		writer := csv.NewWriter(os.Stdout)
@@ -57,17 +61,20 @@ func (f *TableFormatter) PrintHeader() {
 		return
 	}
 
-	format := f.createFormatString()
-	headers := make([]interface{}, len(f.columns))
+	headers := make([]string, len(f.columns))
 	for i, col := range f.columns {
 		headers[i] = col.Header
 	}
-	fmt.Printf(format, headers...)
+	if _, err := fmt.Fprintln(f.writer, strings.Join(headers, "\t")); err != nil {
+		fmt.Printf("Unable to write table header: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // PrintRows prints the data rows based on the configured format.
 // For CSV format, it writes CSV rows to stdout.
-// For tabular format, it prints formatted rows with appropriate column widths.
+// For tabular format, it writes tab-separated rows to the internal tabwriter
+// and calls Flush to compute dynamic column widths and produce the final output.
 func (f *TableFormatter) PrintRows(rows [][]string) {
 	if f.format == "csv" {
 		writer := csv.NewWriter(os.Stdout)
@@ -81,13 +88,15 @@ func (f *TableFormatter) PrintRows(rows [][]string) {
 		return
 	}
 
-	format := f.createFormatString()
 	for _, row := range rows {
-		rowValues := make([]interface{}, len(row))
-		for i, v := range row {
-			rowValues[i] = v
+		if _, err := fmt.Fprintln(f.writer, strings.Join(row, "\t")); err != nil {
+			fmt.Printf("Unable to write table row: %v\n", err)
+			os.Exit(1)
 		}
-		fmt.Printf(format, rowValues...)
+	}
+	if err := f.writer.Flush(); err != nil {
+		fmt.Printf("Unable to flush table output: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -147,20 +156,9 @@ func GroupByColumns(columns []Column, rows [][]string, columnNames string) ([]Co
 
 	outCols := make([]Column, 0, len(names)+1)
 	for _, name := range names {
-		outCols = append(outCols, Column{Header: name, Width: 30})
+		outCols = append(outCols, Column{Header: name})
 	}
-	outCols = append(outCols, Column{Header: "Count", Width: 10})
+	outCols = append(outCols, Column{Header: "Count"})
 
 	return outCols, outRows, nil
-}
-
-// createFormatString generates a format string for printing tabular data.
-// It creates a format string with the appropriate width for each column,
-// separated by tabs and ending with a newline.
-func (f *TableFormatter) createFormatString() string {
-	formats := make([]string, len(f.columns))
-	for i, col := range f.columns {
-		formats[i] = fmt.Sprintf("%%-%ds", col.Width)
-	}
-	return strings.Join(formats, "\t") + "\n"
 }

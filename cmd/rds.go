@@ -31,21 +31,21 @@ var rdsClusterCmd = &cobra.Command{
 }
 
 var rdsInstanceColumns = []util.Column{
-	{Header: "Name", Width: 40},
-	{Header: "DBInstanceClass", Width: 15},
-	{Header: "Engine", Width: 16},
-	{Header: "EngineVersion", Width: 22},
-	{Header: "Storage", Width: 8},
-	{Header: "StorageType", Width: 10},
-	{Header: "DBInstanceStatus", Width: 15},
+	{Header: "Name"},
+	{Header: "DBInstanceClass"},
+	{Header: "Engine"},
+	{Header: "EngineVersion"},
+	{Header: "Storage"},
+	{Header: "StorageType"},
+	{Header: "DBInstanceStatus"},
 }
 
 var rdsClusterColumns = []util.Column{
-	{Header: "Name", Width: 65},
-	{Header: "Engine", Width: 16},
-	{Header: "EngineVersion", Width: 22},
-	{Header: "EngineMode", Width: 12},
-	{Header: "Status", Width: 15},
+	{Header: "Name"},
+	{Header: "Engine"},
+	{Header: "EngineVersion"},
+	{Header: "EngineMode"},
+	{Header: "Status"},
 }
 
 func listRDSInstances(cmd *cobra.Command, args []string) error {

@@ -38,16 +38,16 @@ If no instance ID is provided, it will prompt for selection from available insta
 }
 
 var ec2Columns = []util.Column{
-	{Header: "Name", Width: 48},
-	{Header: "InstanceID", Width: 20},
-	{Header: "InstanceType", Width: 12},
-	{Header: "Lifecycle", Width: 9},
-	{Header: "PrivateIP", Width: 12},
-	{Header: "PublicIP", Width: 14},
-	{Header: "State", Width: 10},
-	{Header: "KeyName", Width: 16},
-	{Header: "AZ", Width: 10},
-	{Header: "LaunchTime", Width: 30},
+	{Header: "Name"},
+	{Header: "InstanceID"},
+	{Header: "InstanceType"},
+	{Header: "Lifecycle"},
+	{Header: "PrivateIP"},
+	{Header: "PublicIP"},
+	{Header: "State"},
+	{Header: "KeyName"},
+	{Header: "AZ"},
+	{Header: "LaunchTime"},
 }
 
 // displayEC2Instances retrieves and displays EC2 instances.

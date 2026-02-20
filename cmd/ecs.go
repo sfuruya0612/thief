@@ -51,35 +51,35 @@ var ecsExecCmd = &cobra.Command{
 }
 
 var ecsClusterColumns = []util.Column{
-	{Header: "ClusterName", Width: 70},
-	{Header: "Status", Width: 7},
-	{Header: "ActiveServices", Width: 14},
-	{Header: "RunningTasks", Width: 12},
-	{Header: "PendingTasks", Width: 12},
-	{Header: "RegisteredContainerInstances", Width: 28},
+	{Header: "ClusterName"},
+	{Header: "Status"},
+	{Header: "ActiveServices"},
+	{Header: "RunningTasks"},
+	{Header: "PendingTasks"},
+	{Header: "RegisteredContainerInstances"},
 }
 
 var ecsServiceColumns = []util.Column{
-	{Header: "ClusterName", Width: 65},
-	{Header: "ServiceName", Width: 65},
-	{Header: "TaskDefinition", Width: 65},
-	{Header: "Status", Width: 7},
-	{Header: "DesiredTasks", Width: 12},
-	{Header: "RunningTasks", Width: 12},
-	{Header: "PendingTasks", Width: 12},
+	{Header: "ClusterName"},
+	{Header: "ServiceName"},
+	{Header: "TaskDefinition"},
+	{Header: "Status"},
+	{Header: "DesiredTasks"},
+	{Header: "RunningTasks"},
+	{Header: "PendingTasks"},
 }
 
 var ecsTaskColumns = []util.Column{
-	{Header: "TaskDefinition", Width: 65},
-	{Header: "Task", Width: 32},
-	{Header: "Container", Width: 24},
-	{Header: "LastStatus", Width: 10},
-	{Header: "DesiredStatus", Width: 13},
-	{Header: "HealthStatus", Width: 12},
-	{Header: "LaunchType", Width: 12},
-	{Header: "PlatformFamily", Width: 14},
-	{Header: "PlatformVersion", Width: 15},
-	{Header: "StartedAt", Width: 20},
+	{Header: "TaskDefinition"},
+	{Header: "Task"},
+	{Header: "Container"},
+	{Header: "LastStatus"},
+	{Header: "DesiredStatus"},
+	{Header: "HealthStatus"},
+	{Header: "LaunchType"},
+	{Header: "PlatformFamily"},
+	{Header: "PlatformVersion"},
+	{Header: "StartedAt"},
 }
 
 type TargetJSON struct {

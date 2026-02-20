@@ -29,8 +29,8 @@ var s3ListCmd = &cobra.Command{
 }
 
 var s3Columns = []util.Column{
-	{Header: "BucketName", Width: 50},
-	{Header: "CreationDate", Width: 20},
+	{Header: "BucketName"},
+	{Header: "CreationDate"},
 }
 
 func displayS3Buckets(cmd *cobra.Command, args []string) error {
