@@ -44,6 +44,11 @@ description = "Install binary"
 shell = 'bash -c'
 run = "go install"
 
+[tasks.build]
+description = "Build binary"
+shell = 'bash -c'
+run = "go build ./..."
+
 [tasks.docs]
 description = "Generate documentation"
 run = '''
