@@ -46,14 +46,21 @@ var tidbCostCmd = &cobra.Command{
 	RunE:  showTidbCost,
 }
 
+// ClusterStatus represents the status object returned by the TiDB Cloud API v1beta.
+type ClusterStatus struct {
+	TiDBVersion   string `json:"tidb_version"`
+	ClusterStatus string `json:"cluster_status"`
+}
+
+// Cluster represents a TiDB Cloud cluster returned by the API v1beta.
 type Cluster struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Status        string    `json:"status"`
-	Region        string    `json:"region"`
-	CreatedAt     time.Time `json:"created_at"`
-	ClusterType   string    `json:"cluster_type"`
-	CloudProvider string    `json:"cloud_provider"`
+	ID            string        `json:"id"`
+	Name          string        `json:"name"`
+	Status        ClusterStatus `json:"status"`
+	Region        string        `json:"region"`
+	CreatedAt     time.Time     `json:"created_at"`
+	ClusterType   string        `json:"cluster_type"`
+	CloudProvider string        `json:"cloud_provider"`
 }
 
 type ClusterResponse struct {
@@ -237,7 +244,7 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 		items = append(items, []string{
 			cluster.ID,
 			cluster.Name,
-			cluster.Status,
+			cluster.Status.ClusterStatus,
 			cluster.Region,
 			cluster.CloudProvider,
 			cluster.ClusterType,
