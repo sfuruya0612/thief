@@ -23,12 +23,12 @@ var elasticacheListCmd = &cobra.Command{
 }
 
 var elasticacheColumns = []util.Column{
-	{Header: "ReplicationGroupId", Width: 30},
-	{Header: "CacheClusterId", Width: 30},
-	{Header: "CacheNodeType", Width: 20},
-	{Header: "Engine", Width: 10},
-	{Header: "EngineVersion", Width: 15},
-	{Header: "CacheClusterStatus", Width: 20},
+	{Header: "ReplicationGroupId"},
+	{Header: "CacheClusterId"},
+	{Header: "CacheNodeType"},
+	{Header: "Engine"},
+	{Header: "EngineVersion"},
+	{Header: "CacheClusterStatus"},
 }
 
 func listElastiCacheClusters(cmd *cobra.Command, args []string) error {

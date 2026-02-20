@@ -5,12 +5,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"text/tabwriter"
 )
 
 func TestNewTableFormatter(t *testing.T) {
 	columns := []Column{
-		{Header: "ID", Width: 10},
-		{Header: "Name", Width: 20},
+		{Header: "ID"},
+		{Header: "Name"},
 	}
 	format := "table"
 
@@ -25,9 +26,12 @@ func TestNewTableFormatter(t *testing.T) {
 	if formatter.format != format {
 		t.Errorf("expected format %q, got %q", format, formatter.format)
 	}
+	if formatter.writer == nil {
+		t.Error("expected non-nil tabwriter, got nil")
+	}
 }
 
-func TestTableFormatter_PrintHeader_Table(t *testing.T) {
+func TestTableFormatter_PrintHeader_And_PrintRows_Table(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -37,44 +41,18 @@ func TestTableFormatter_PrintHeader_Table(t *testing.T) {
 	}()
 
 	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
+		{Header: "ID"},
+		{Header: "Name"},
 	}
 	formatter := NewTableFormatter(columns, "table")
+	// Point the internal tabwriter at our pipe so we can capture output.
+	formatter.writer = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 
 	formatter.PrintHeader()
-
-	_ = w.Close()
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
-	output := buf.String()
-
-	expected := "ID   \tName      \n"
-	if output != expected {
-		t.Errorf("expected %q, got %q", expected, output)
-	}
-}
-
-func TestTableFormatter_PrintRows_Table(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	defer func() {
-		os.Stdout = oldStdout
-	}()
-
-	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
-	}
-	formatter := NewTableFormatter(columns, "table")
-
 	rows := [][]string{
 		{"1", "Test 1"},
 		{"2", "Test 2"},
 	}
-
 	formatter.PrintRows(rows)
 
 	_ = w.Close()
@@ -82,9 +60,24 @@ func TestTableFormatter_PrintRows_Table(t *testing.T) {
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	expected := "1    \tTest 1    \n2    \tTest 2    \n"
-	if output != expected {
-		t.Errorf("expected %q, got %q", expected, output)
+	// tabwriter with padding=2 aligns columns dynamically.
+	// Columns: "ID" (len 2), "Name" (len 6 for "Test 1"/"Test 2") → ID padded to match widths.
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines (header + 2 rows), got %d: %q", len(lines), output)
+	}
+
+	// Verify header contains both column names.
+	if !strings.Contains(lines[0], "ID") || !strings.Contains(lines[0], "Name") {
+		t.Errorf("header should contain ID and Name, got %q", lines[0])
+	}
+
+	// Verify rows contain data.
+	if !strings.Contains(lines[1], "1") || !strings.Contains(lines[1], "Test 1") {
+		t.Errorf("row 1 should contain '1' and 'Test 1', got %q", lines[1])
+	}
+	if !strings.Contains(lines[2], "2") || !strings.Contains(lines[2], "Test 2") {
+		t.Errorf("row 2 should contain '2' and 'Test 2', got %q", lines[2])
 	}
 }
 
@@ -98,8 +91,8 @@ func TestTableFormatter_PrintHeader_CSV(t *testing.T) {
 	}()
 
 	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
+		{Header: "ID"},
+		{Header: "Name"},
 	}
 	formatter := NewTableFormatter(columns, "csv")
 
@@ -126,8 +119,8 @@ func TestTableFormatter_PrintRows_CSV(t *testing.T) {
 	}()
 
 	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
+		{Header: "ID"},
+		{Header: "Name"},
 	}
 	formatter := NewTableFormatter(columns, "csv")
 
@@ -149,34 +142,6 @@ func TestTableFormatter_PrintRows_CSV(t *testing.T) {
 	}
 }
 
-func TestTableFormatter_CreateFormatString(t *testing.T) {
-	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
-		{Header: "Description", Width: 20},
-	}
-	formatter := NewTableFormatter(columns, "table")
-
-	format := formatter.createFormatString()
-
-	expectedFormat := "%-5s\t%-10s\t%-20s\n"
-	if format != expectedFormat {
-		t.Errorf("expected format %q, got %q", expectedFormat, format)
-	}
-}
-
-func TestTableFormatter_CreateFormatString_EmptyColumns(t *testing.T) {
-	columns := []Column{}
-	formatter := NewTableFormatter(columns, "table")
-
-	format := formatter.createFormatString()
-
-	expectedFormat := "\n"
-	if format != expectedFormat {
-		t.Errorf("expected format %q, got %q", expectedFormat, format)
-	}
-}
-
 func TestTableFormatter_PrintHeader_UnexpectedFormat(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -187,28 +152,30 @@ func TestTableFormatter_PrintHeader_UnexpectedFormat(t *testing.T) {
 	}()
 
 	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
+		{Header: "ID"},
+		{Header: "Name"},
 	}
 	formatter := NewTableFormatter(columns, "custom_format")
+	formatter.writer = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 
 	formatter.PrintHeader()
+	// Flush via PrintRows with empty rows to trigger output.
+	formatter.PrintRows([][]string{})
 
 	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	expected := "ID   \tName      \n"
-	if output != expected {
-		t.Errorf("expected %q, got %q", expected, output)
+	if !strings.Contains(output, "ID") || !strings.Contains(output, "Name") {
+		t.Errorf("expected output to contain ID and Name, got %q", output)
 	}
 }
 
 func TestTableFormatter_PrintRows_EmptyRows(t *testing.T) {
 	columns := []Column{
-		{Header: "ID", Width: 5},
-		{Header: "Name", Width: 10},
+		{Header: "ID"},
+		{Header: "Name"},
 	}
 	formatter := NewTableFormatter(columns, "table")
 
@@ -220,6 +187,7 @@ func TestTableFormatter_PrintRows_EmptyRows(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
+	formatter.writer = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	formatter.PrintRows([][]string{})
 
 	_ = w.Close()
@@ -232,6 +200,51 @@ func TestTableFormatter_PrintRows_EmptyRows(t *testing.T) {
 	}
 }
 
+func TestTableFormatter_DynamicColumnWidth(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	columns := []Column{
+		{Header: "ID"},
+		{Header: "Name"},
+	}
+	formatter := NewTableFormatter(columns, "table")
+	formatter.writer = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+
+	formatter.PrintHeader()
+	rows := [][]string{
+		{"1", "short"},
+		{"2", "a very long name value here"},
+	}
+	formatter.PrintRows(rows)
+
+	_ = w.Close()
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %q", len(lines), output)
+	}
+
+	// All lines should have the same column alignment (the Name column should
+	// be wide enough for the longest value).
+	// Find the position of the second column in each line — they should match.
+	headerNameIdx := strings.Index(lines[0], "Name")
+	row1NameIdx := strings.Index(lines[1], "short")
+	row2NameIdx := strings.Index(lines[2], "a very long name value here")
+	if headerNameIdx != row1NameIdx || headerNameIdx != row2NameIdx {
+		t.Errorf("columns not aligned: header=%d, row1=%d, row2=%d\noutput:\n%s",
+			headerNameIdx, row1NameIdx, row2NameIdx, output)
+	}
+}
+
 func TestTableFormatter_CSV_WriteError(t *testing.T) {
 	// Test error handling for CSV writer would be beneficial, but it's difficult
 	// to test directly without modifying the original code to make it more testable.
@@ -240,9 +253,9 @@ func TestTableFormatter_CSV_WriteError(t *testing.T) {
 
 func TestGroupByColumns_Single(t *testing.T) {
 	columns := []Column{
-		{Header: "Name", Width: 20},
-		{Header: "State", Width: 10},
-		{Header: "Type", Width: 10},
+		{Header: "Name"},
+		{Header: "State"},
+		{Header: "Type"},
 	}
 	rows := [][]string{
 		{"a", "running", "t3.micro"},
@@ -278,8 +291,8 @@ func TestGroupByColumns_Single(t *testing.T) {
 
 func TestGroupByColumns_Multiple(t *testing.T) {
 	columns := []Column{
-		{Header: "State", Width: 10},
-		{Header: "Type", Width: 10},
+		{Header: "State"},
+		{Header: "Type"},
 	}
 	rows := [][]string{
 		{"running", "t3.micro"},
@@ -312,7 +325,7 @@ func TestGroupByColumns_Multiple(t *testing.T) {
 
 func TestGroupByColumns_InvalidColumn(t *testing.T) {
 	columns := []Column{
-		{Header: "State", Width: 10},
+		{Header: "State"},
 	}
 	rows := [][]string{{"running"}}
 
@@ -330,7 +343,7 @@ func TestGroupByColumns_InvalidColumn(t *testing.T) {
 
 func TestGroupByColumns_EmptyRows(t *testing.T) {
 	columns := []Column{
-		{Header: "State", Width: 10},
+		{Header: "State"},
 	}
 
 	outCols, outRows, err := GroupByColumns(columns, [][]string{}, "State")

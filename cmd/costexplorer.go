@@ -59,10 +59,10 @@ var costOverviewCmd = &cobra.Command{
 }
 
 var costColumns = []util.Column{
-	{Header: "Period", Width: 10},
-	{Header: "Service/Account", Width: 50},
-	{Header: "Amount", Width: 15},
-	{Header: "Unit", Width: 5},
+	{Header: "Period"},
+	{Header: "Service/Account"},
+	{Header: "Amount"},
+	{Header: "Unit"},
 }
 
 // resolveDates returns start/end dates, defaulting to current month if empty.

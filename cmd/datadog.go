@@ -42,12 +42,12 @@ var datadogEstimatedCostCmd = &cobra.Command{
 }
 
 var datadogCostColumns = []util.Column{
-	{Header: "Month", Width: 8},
-	{Header: "AccountName", Width: 8},
-	{Header: "OrgName", Width: 25},
-	{Header: "ProductName", Width: 30},
-	{Header: "ChangeType", Width: 10},
-	{Header: "Cost", Width: 10},
+	{Header: "Month"},
+	{Header: "AccountName"},
+	{Header: "OrgName"},
+	{Header: "ProductName"},
+	{Header: "ChangeType"},
+	{Header: "Cost"},
 }
 
 // showDatadogHistoricalCost retrieves and displays historical cost data from Datadog.

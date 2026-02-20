@@ -73,12 +73,12 @@ type TidbProject struct {
 }
 
 var tidbProjectColumns = []util.Column{
-	{Header: "Id", Width: 19},
-	{Header: "OrgId", Width: 19},
-	{Header: "ProjectName", Width: 25},
-	{Header: "ClusterCount", Width: 12},
-	{Header: "UserCount", Width: 9},
-	{Header: "CreatedAt", Width: 25},
+	{Header: "Id"},
+	{Header: "OrgId"},
+	{Header: "ProjectName"},
+	{Header: "ClusterCount"},
+	{Header: "UserCount"},
+	{Header: "CreatedAt"},
 }
 
 type TidbCost struct {
@@ -95,14 +95,14 @@ type TidbCost struct {
 }
 
 var tidbCostColumns = []util.Column{
-	{Header: "BilledDate", Width: 10},
-	{Header: "ProjectName", Width: 25},
-	{Header: "ClusterName", Width: 19},
-	{Header: "ServicePathName", Width: 50},
-	{Header: "Credits", Width: 9},
-	{Header: "Discounts", Width: 9},
-	{Header: "RunningTotal", Width: 9},
-	{Header: "TotalCost", Width: 9},
+	{Header: "BilledDate"},
+	{Header: "ProjectName"},
+	{Header: "ClusterName"},
+	{Header: "ServicePathName"},
+	{Header: "Credits"},
+	{Header: "Discounts"},
+	{Header: "RunningTotal"},
+	{Header: "TotalCost"},
 }
 
 func listTidbProjects(cmd *cobra.Command, args []string) error {
@@ -222,13 +222,13 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 
 	// Define columns for clusters
 	tidbClusterColumns := []util.Column{
-		{Header: "Id", Width: 19},
-		{Header: "Name", Width: 25},
-		{Header: "Status", Width: 12},
-		{Header: "Region", Width: 15},
-		{Header: "CloudProvider", Width: 15},
-		{Header: "ClusterType", Width: 15},
-		{Header: "CreatedAt", Width: 25},
+		{Header: "Id"},
+		{Header: "Name"},
+		{Header: "Status"},
+		{Header: "Region"},
+		{Header: "CloudProvider"},
+		{Header: "ClusterType"},
+		{Header: "CreatedAt"},
 	}
 
 	// Format data for output
