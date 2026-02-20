@@ -8,7 +8,40 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 )
 
-type RdsOpts struct {
+// RdsOpts defines options for RDS API operations.
+type RdsOpts struct{}
+
+// RDSInstanceInfo holds display fields for an RDS DB instance.
+type RDSInstanceInfo struct {
+	Name            string
+	DBInstanceClass string
+	Engine          string
+	EngineVersion   string
+	Storage         string
+	StorageType     string
+	Status          string
+}
+
+// ToRow converts RDSInstanceInfo to a string slice suitable for table formatting.
+func (i RDSInstanceInfo) ToRow() []string {
+	return []string{
+		i.Name, i.DBInstanceClass, i.Engine, i.EngineVersion,
+		i.Storage, i.StorageType, i.Status,
+	}
+}
+
+// RDSClusterInfo holds display fields for an RDS DB cluster.
+type RDSClusterInfo struct {
+	Name          string
+	Engine        string
+	EngineVersion string
+	EngineMode    string
+	Status        string
+}
+
+// ToRow converts RDSClusterInfo to a string slice suitable for table formatting.
+func (c RDSClusterInfo) ToRow() []string {
+	return []string{c.Name, c.Engine, c.EngineVersion, c.EngineMode, c.Status}
 }
 
 type rdsApi interface {
@@ -20,58 +53,62 @@ type rdsApi interface {
 func NewRdsClient(profile, region string) (rdsApi, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create RDS client: %w", err)
+		return nil, fmt.Errorf("create rds client: %w", err)
 	}
 	return rds.NewFromConfig(cfg), nil
 }
 
+// GenerateDescribeDBInstancesInput creates the input for the DescribeDBInstances API call.
 func GenerateDescribeDBInstancesInput(opts *RdsOpts) *rds.DescribeDBInstancesInput {
 	return &rds.DescribeDBInstancesInput{}
 }
 
-func DescribeDBInstances(client rdsApi, input *rds.DescribeDBInstancesInput) ([][]string, error) {
+// DescribeDBInstances calls the RDS DescribeDBInstances API and returns the results
+// as a typed slice of RDSInstanceInfo.
+func DescribeDBInstances(client rdsApi, input *rds.DescribeDBInstancesInput) ([]RDSInstanceInfo, error) {
 	o, err := client.DescribeDBInstances(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var instances [][]string
+	var instances []RDSInstanceInfo
 	for _, i := range o.DBInstances {
-		instance := []string{
-			aws.ToString(i.DBInstanceIdentifier),
-			aws.ToString(i.DBInstanceClass),
-			aws.ToString(i.Engine),
-			aws.ToString(i.EngineVersion),
-			fmt.Sprintf("%dGB", *i.AllocatedStorage),
-			aws.ToString(i.StorageType),
-			aws.ToString(i.DBInstanceStatus),
-		}
-		instances = append(instances, instance)
+		instances = append(instances, RDSInstanceInfo{
+			Name:            aws.ToString(i.DBInstanceIdentifier),
+			DBInstanceClass: aws.ToString(i.DBInstanceClass),
+			Engine:          aws.ToString(i.Engine),
+			EngineVersion:   aws.ToString(i.EngineVersion),
+			Storage:         fmt.Sprintf("%dGB", *i.AllocatedStorage),
+			StorageType:     aws.ToString(i.StorageType),
+			Status:          aws.ToString(i.DBInstanceStatus),
+		})
 	}
 
 	return instances, nil
 }
 
+// GenerateDescribeDBClustersInput creates the input for the DescribeDBClusters API call.
 func GenerateDescribeDBClustersInput(opts *RdsOpts) *rds.DescribeDBClustersInput {
 	return &rds.DescribeDBClustersInput{}
 }
 
-func DescribeDBClusters(client rdsApi, input *rds.DescribeDBClustersInput) ([][]string, error) {
+// DescribeDBClusters calls the RDS DescribeDBClusters API and returns the results
+// as a typed slice of RDSClusterInfo.
+func DescribeDBClusters(client rdsApi, input *rds.DescribeDBClustersInput) ([]RDSClusterInfo, error) {
 	o, err := client.DescribeDBClusters(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var clusters [][]string
+	var clusters []RDSClusterInfo
 	for _, c := range o.DBClusters {
-		cluster := []string{
-			aws.ToString(c.DBClusterIdentifier),
-			aws.ToString(c.Engine),
-			aws.ToString(c.EngineVersion),
-			aws.ToString(c.EngineMode),
-			aws.ToString(c.Status),
-		}
-		clusters = append(clusters, cluster)
+		clusters = append(clusters, RDSClusterInfo{
+			Name:          aws.ToString(c.DBClusterIdentifier),
+			Engine:        aws.ToString(c.Engine),
+			EngineVersion: aws.ToString(c.EngineVersion),
+			EngineMode:    aws.ToString(c.EngineMode),
+			Status:        aws.ToString(c.Status),
+		})
 	}
 
 	return clusters, nil

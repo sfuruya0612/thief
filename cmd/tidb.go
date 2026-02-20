@@ -8,10 +8,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/spf13/cobra"
+
+	"github.com/sfuruya0612/thief/internal/config"
 	"github.com/sfuruya0612/thief/internal/tidb"
 	"github.com/sfuruya0612/thief/internal/util"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -105,14 +106,13 @@ var tidbCostColumns = []util.Column{
 }
 
 func listTidbProjects(cmd *cobra.Command, args []string) error {
-	publicKey := viper.GetString("tidb.public-key")
-	privateKey := viper.GetString("tidb.private-key")
+	cfg := config.FromContext(cmd.Context())
 
-	if publicKey == "" || privateKey == "" {
-		return fmt.Errorf("TiDB public key and private key are required. Set them via flags, environment variables (THIEF_TIDB_PUBLIC_KEY, THIEF_TIDB_PRIVATE_KEY), or config file")
+	if cfg.TiDB.PublicKey == "" || cfg.TiDB.PrivateKey == "" {
+		return fmt.Errorf("TiDB public key and private key are required. Set them via flags (--public-key, --private-key), environment variables (TIDB_PUBLIC_KEY, TIDB_PRIVATE_KEY), or config file")
 	}
 
-	d := tidb.NewDigestClient(publicKey, privateKey)
+	d := tidb.NewDigestClient(cfg.TiDB.PublicKey, cfg.TiDB.PrivateKey)
 
 	// TODO: Pagination
 	endpoint := "/api/v1beta/projects?page=1&page_size=100"
@@ -121,7 +121,7 @@ func listTidbProjects(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get response: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -155,26 +155,17 @@ func listTidbProjects(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	formatter := util.NewTableFormatter(tidbProjectColumns, viper.GetString("output"))
-
-	if !viper.GetBool("no-header") {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-
-	return nil
+	return printRowsOrGroupBy(cfg, tidbProjectColumns, items)
 }
 
 func listTidbClusters(cmd *cobra.Command, args []string) error {
-	publicKey := viper.GetString("tidb.public-key")
-	privateKey := viper.GetString("tidb.private-key")
+	cfg := config.FromContext(cmd.Context())
 
-	if publicKey == "" || privateKey == "" {
-		return fmt.Errorf("TiDB public key and private key are required. Set them via flags, environment variables (THIEF_TIDB_PUBLIC_KEY, THIEF_TIDB_PRIVATE_KEY), or config file")
+	if cfg.TiDB.PublicKey == "" || cfg.TiDB.PrivateKey == "" {
+		return fmt.Errorf("TiDB public key and private key are required. Set them via flags (--public-key, --private-key), environment variables (TIDB_PUBLIC_KEY, TIDB_PRIVATE_KEY), or config file")
 	}
 
-	d := tidb.NewDigestClient(publicKey, privateKey)
+	d := tidb.NewDigestClient(cfg.TiDB.PublicKey, cfg.TiDB.PrivateKey)
 
 	// First get all projects
 	endpoint := "/api/v1beta/projects?page=1&page_size=100"
@@ -183,7 +174,7 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get projects: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -209,7 +200,7 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get clusters for project %s: %w", p.ID, err)
 		}
-		defer clusterResp.Body.Close()
+		defer func() { _ = clusterResp.Body.Close() }()
 
 		if clusterResp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(clusterResp.Body)
@@ -254,39 +245,29 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	formatter := util.NewTableFormatter(tidbClusterColumns, viper.GetString("output"))
-
-	if !viper.GetBool("no-header") {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-
-	return nil
+	return printRowsOrGroupBy(cfg, tidbClusterColumns, items)
 }
 
 func showTidbCost(cmd *cobra.Command, args []string) error {
-	publicKey := viper.GetString("tidb.public-key")
-	privateKey := viper.GetString("tidb.private-key")
+	cfg := config.FromContext(cmd.Context())
 
-	if publicKey == "" || privateKey == "" {
-		return fmt.Errorf("TiDB public key and private key are required. Set them via flags, environment variables (THIEF_TIDB_PUBLIC_KEY, THIEF_TIDB_PRIVATE_KEY), or config file")
+	if cfg.TiDB.PublicKey == "" || cfg.TiDB.PrivateKey == "" {
+		return fmt.Errorf("TiDB public key and private key are required. Set them via flags (--public-key, --private-key), environment variables (TIDB_PUBLIC_KEY, TIDB_PRIVATE_KEY), or config file")
 	}
 
-	bliiedMonth := viper.GetString("tidb.billed-month")
-	if bliiedMonth == "" {
+	if cfg.TiDB.BilledMonth == "" {
 		return fmt.Errorf("billed-month is required")
 	}
 
-	d := tidb.NewDigestClient(publicKey, privateKey)
+	d := tidb.NewDigestClient(cfg.TiDB.PublicKey, cfg.TiDB.PrivateKey)
 
-	endpoint := fmt.Sprintf("/v1beta1/billsDetails/%s", bliiedMonth)
+	endpoint := fmt.Sprintf("/v1beta1/billsDetails/%s", cfg.TiDB.BilledMonth)
 
 	resp, err := d.Get(BillingHost, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to get response: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -317,13 +298,5 @@ func showTidbCost(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	formatter := util.NewTableFormatter(tidbCostColumns, viper.GetString("output"))
-
-	if !viper.GetBool("no-header") {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-
-	return nil
+	return printRowsOrGroupBy(cfg, tidbCostColumns, items)
 }

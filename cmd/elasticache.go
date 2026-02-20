@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/sfuruya0612/thief/internal/aws"
-	"github.com/sfuruya0612/thief/internal/util"
 	"github.com/spf13/cobra"
+
+	"github.com/sfuruya0612/thief/internal/aws"
+	"github.com/sfuruya0612/thief/internal/config"
+	"github.com/sfuruya0612/thief/internal/util"
 )
 
 var elasticacheCmd = &cobra.Command{
@@ -29,31 +31,16 @@ var elasticacheColumns = []util.Column{
 	{Header: "CacheClusterStatus", Width: 20},
 }
 
-// listElastiCacheClusters retrieves and displays ElastiCache clusters.
 func listElastiCacheClusters(cmd *cobra.Command, args []string) error {
-	client, err := aws.NewElasticacheClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
-	if err != nil {
-		return fmt.Errorf("create ElastiCache client: %w", err)
-	}
-
-	input := aws.GenerateDescribeCacheClustersInput(&aws.ElasticacheOpts{})
-
-	clusters, err := aws.DescribeCacheClusters(client, input)
-	if err != nil {
-		return fmt.Errorf("describe cache clusters: %w", err)
-	}
-
-	if len(clusters) == 0 {
-		cmd.Println("No cache clusters found")
-		return nil
-	}
-
-	formatter := util.NewTableFormatter(elasticacheColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(clusters)
-	return nil
+	return runList(cmd, ListConfig[aws.ElastiCacheClusterInfo]{
+		Columns:  elasticacheColumns,
+		EmptyMsg: "No cache clusters found",
+		Fetch: func(cfg *config.Config) ([]aws.ElastiCacheClusterInfo, error) {
+			client, err := aws.NewElasticacheClient(cfg.Profile, cfg.Region)
+			if err != nil {
+				return nil, fmt.Errorf("create ElastiCache client: %w", err)
+			}
+			return aws.DescribeCacheClusters(client, aws.GenerateDescribeCacheClustersInput(&aws.ElasticacheOpts{}))
+		},
+	})
 }

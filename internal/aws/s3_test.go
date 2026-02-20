@@ -48,11 +48,11 @@ func TestListBuckets(t *testing.T) {
 		t.Fatalf("Expected 2 buckets, got %d", len(buckets))
 	}
 
-	if buckets[0][0] != "test-bucket1" {
-		t.Errorf("Expected bucket name 'test-bucket1', got '%s'", buckets[0][0])
+	if buckets[0].Name != "test-bucket1" {
+		t.Errorf("Expected bucket name 'test-bucket1', got '%s'", buckets[0].Name)
 	}
 
-	if buckets[1][0] != "test-bucket2" {
-		t.Errorf("Expected bucket name 'test-bucket2', got '%s'", buckets[1][0])
+	if buckets[1].Name != "test-bucket2" {
+		t.Errorf("Expected bucket name 'test-bucket2', got '%s'", buckets[1].Name)
 	}
 }

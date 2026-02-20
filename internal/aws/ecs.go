@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
 // EcsOpts defines options for ECS API operations.
@@ -24,7 +25,7 @@ type EcsOpts struct {
 	Interactive bool     // Whether to execute command in interactive mode
 }
 
-// Ecs represents an ECS resource for selection UI.
+// Ecs represents an ECS resource for the interactive selection UI.
 type Ecs struct {
 	Name string
 }
@@ -37,6 +38,82 @@ func (i Ecs) Title() string {
 // ID returns the identifier of the ECS resource.
 func (i Ecs) ID() string {
 	return i.Name
+}
+
+// ECSClusterInfo holds display fields for an ECS cluster.
+type ECSClusterInfo struct {
+	Name                         string
+	Status                       string
+	ActiveServicesCount          int32
+	RunningTasksCount            int32
+	PendingTasksCount            int32
+	RegisteredContainerInstances int32
+}
+
+// ToRow converts ECSClusterInfo to a string slice suitable for table formatting.
+func (c ECSClusterInfo) ToRow() []string {
+	return []string{
+		c.Name,
+		c.Status,
+		fmt.Sprintf("%d", c.ActiveServicesCount),
+		fmt.Sprintf("%d", c.RunningTasksCount),
+		fmt.Sprintf("%d", c.PendingTasksCount),
+		fmt.Sprintf("%d", c.RegisteredContainerInstances),
+	}
+}
+
+// ECSServiceInfo holds display fields for an ECS service.
+type ECSServiceInfo struct {
+	ClusterName    string
+	ServiceName    string
+	TaskDefinition string
+	Status         string
+	DesiredCount   int32
+	RunningCount   int32
+	PendingCount   int32
+}
+
+// ToRow converts ECSServiceInfo to a string slice suitable for table formatting.
+func (s ECSServiceInfo) ToRow() []string {
+	return []string{
+		s.ClusterName,
+		s.ServiceName,
+		s.TaskDefinition,
+		s.Status,
+		fmt.Sprintf("%d", s.DesiredCount),
+		fmt.Sprintf("%d", s.RunningCount),
+		fmt.Sprintf("%d", s.PendingCount),
+	}
+}
+
+// ECSTaskInfo holds display fields for an ECS task container.
+type ECSTaskInfo struct {
+	TaskDefinition  string
+	TaskID          string
+	ContainerName   string
+	LastStatus      string
+	DesiredStatus   string
+	HealthStatus    string
+	LaunchType      string
+	PlatformFamily  string
+	PlatformVersion string
+	StartedAt       string
+}
+
+// ToRow converts ECSTaskInfo to a string slice suitable for table formatting.
+func (t ECSTaskInfo) ToRow() []string {
+	return []string{
+		t.TaskDefinition,
+		t.TaskID,
+		t.ContainerName,
+		t.LastStatus,
+		t.DesiredStatus,
+		t.HealthStatus,
+		t.LaunchType,
+		t.PlatformFamily,
+		t.PlatformVersion,
+		t.StartedAt,
+	}
 }
 
 // ecsApi defines the interface for ECS API operations.
@@ -55,7 +132,7 @@ type ecsApi interface {
 func NewECSClient(profile, region string) (ecsApi, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create ECS client: %w", err)
+		return nil, fmt.Errorf("create ecs client: %w", err)
 	}
 	return ecs.NewFromConfig(cfg), nil
 }
@@ -84,27 +161,24 @@ func GenerateDescribeClustersInput(opts *EcsOpts) *ecs.DescribeClustersInput {
 	}
 }
 
-// DescribeClusters calls the ECS DescribeClusters API and formats the results
-// as string arrays suitable for table display.
-// Each cluster is represented as a string array containing name, status, service count,
-// running task count, pending task count, and registered container instance count.
-func DescribeClusters(client ecsApi, input *ecs.DescribeClustersInput) ([][]string, error) {
+// DescribeClusters calls the ECS DescribeClusters API and returns the results
+// as a typed slice of ECSClusterInfo.
+func DescribeClusters(client ecsApi, input *ecs.DescribeClustersInput) ([]ECSClusterInfo, error) {
 	output, err := client.DescribeClusters(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var clusters [][]string
+	var clusters []ECSClusterInfo
 	for _, c := range output.Clusters {
-		cluster := []string{
-			*c.ClusterName,
-			*c.Status,
-			fmt.Sprintf("%d", c.ActiveServicesCount),
-			fmt.Sprintf("%d", c.RunningTasksCount),
-			fmt.Sprintf("%d", c.PendingTasksCount),
-			fmt.Sprintf("%d", c.RegisteredContainerInstancesCount),
-		}
-		clusters = append(clusters, cluster)
+		clusters = append(clusters, ECSClusterInfo{
+			Name:                         *c.ClusterName,
+			Status:                       *c.Status,
+			ActiveServicesCount:          c.ActiveServicesCount,
+			RunningTasksCount:            c.RunningTasksCount,
+			PendingTasksCount:            c.PendingTasksCount,
+			RegisteredContainerInstances: c.RegisteredContainerInstancesCount,
+		})
 	}
 
 	return clusters, nil
@@ -138,40 +212,46 @@ func GenerateDescribeServicesInput(opts *EcsOpts) *ecs.DescribeServicesInput {
 	}
 }
 
-// DescribeServices calls the ECS DescribeServices API and formats the results
-// as string arrays suitable for table display.
-// Each service is represented as a string array containing cluster name, service name,
-// task definition, status, desired count, running count, and pending count.
-func DescribeServices(client ecsApi, input *ecs.DescribeServicesInput) ([][]string, error) {
+// DescribeServices calls the ECS DescribeServices API and returns the results
+// as a typed slice of ECSServiceInfo.
+func DescribeServices(client ecsApi, input *ecs.DescribeServicesInput) ([]ECSServiceInfo, error) {
 	output, err := client.DescribeServices(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var services [][]string
+	var services []ECSServiceInfo
 	for _, s := range output.Services {
-		service := []string{
-			strings.Split(*s.ClusterArn, "/")[1],
-			*s.ServiceName,
-			strings.Split(*s.TaskDefinition, "/")[1],
-			*s.Status,
-			fmt.Sprintf("%d", s.DesiredCount),
-			fmt.Sprintf("%d", s.RunningCount),
-			fmt.Sprintf("%d", s.PendingCount),
-		}
-		services = append(services, service)
+		services = append(services, ECSServiceInfo{
+			ClusterName:    strings.Split(*s.ClusterArn, "/")[1],
+			ServiceName:    *s.ServiceName,
+			TaskDefinition: strings.Split(*s.TaskDefinition, "/")[1],
+			Status:         *s.Status,
+			DesiredCount:   s.DesiredCount,
+			RunningCount:   s.RunningCount,
+			PendingCount:   s.PendingCount,
+		})
 	}
 
 	return services, nil
 }
 
+// GenerateListTasksInput creates the input for the ListTasks API call.
+// If opts.Status is set (e.g., "RUNNING" or "STOPPED"), it filters tasks by desired status.
 func GenerateListTasksInput(opts *EcsOpts) *ecs.ListTasksInput {
-	return &ecs.ListTasksInput{
+	input := &ecs.ListTasksInput{
 		Cluster:     opts.Cluster,
 		ServiceName: opts.Service,
 	}
+
+	if opts.Status != "" {
+		input.DesiredStatus = types.DesiredStatus(opts.Status)
+	}
+
+	return input
 }
 
+// ListTasks calls the ECS ListTasks API and returns the list of task ARNs.
 func ListTasks(client ecsApi, input *ecs.ListTasksInput) ([]string, error) {
 	output, err := client.ListTasks(context.Background(), input)
 	if err != nil {
@@ -181,6 +261,7 @@ func ListTasks(client ecsApi, input *ecs.ListTasksInput) ([]string, error) {
 	return output.TaskArns, nil
 }
 
+// GenerateDescribeTasksInput creates the input for the DescribeTasks API call.
 func GenerateDescribeTasksInput(opts *EcsOpts) *ecs.DescribeTasksInput {
 	return &ecs.DescribeTasksInput{
 		Cluster: opts.Cluster,
@@ -188,13 +269,15 @@ func GenerateDescribeTasksInput(opts *EcsOpts) *ecs.DescribeTasksInput {
 	}
 }
 
-func DescribeTasks(client ecsApi, input *ecs.DescribeTasksInput) ([][]string, error) {
+// DescribeTasks calls the ECS DescribeTasks API and returns the results
+// as a typed slice of ECSTaskInfo (one entry per container per task).
+func DescribeTasks(client ecsApi, input *ecs.DescribeTasksInput) ([]ECSTaskInfo, error) {
 	output, err := client.DescribeTasks(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var tasks [][]string
+	var tasks []ECSTaskInfo
 	for _, t := range output.Tasks {
 		platformFamily := "None"
 		if t.PlatformFamily != nil {
@@ -211,33 +294,26 @@ func DescribeTasks(client ecsApi, input *ecs.DescribeTasksInput) ([][]string, er
 			startedAt = t.StartedAt.Format(time.RFC3339)
 		}
 
-		// stoppedAt := "None"
-		// if t.StoppedAt != nil {
-		// 	stoppedAt = t.StoppedAt.Format(time.RFC3339)
-		// }
-
 		for _, c := range t.Containers {
-			task := []string{
-				strings.Split(*t.TaskDefinitionArn, "/")[1],
-				strings.Split(*t.TaskArn, "/")[2],
-				*c.Name,
-				*t.LastStatus,
-				*t.DesiredStatus,
-				string(c.HealthStatus),
-				string(t.LaunchType),
-				platformFamily,
-				platformVersion,
-				startedAt,
-				// stoppedAt,
-			}
-			tasks = append(tasks, task)
+			tasks = append(tasks, ECSTaskInfo{
+				TaskDefinition:  strings.Split(*t.TaskDefinitionArn, "/")[1],
+				TaskID:          strings.Split(*t.TaskArn, "/")[2],
+				ContainerName:   *c.Name,
+				LastStatus:      *t.LastStatus,
+				DesiredStatus:   *t.DesiredStatus,
+				HealthStatus:    string(c.HealthStatus),
+				LaunchType:      string(t.LaunchType),
+				PlatformFamily:  platformFamily,
+				PlatformVersion: platformVersion,
+				StartedAt:       startedAt,
+			})
 		}
-
 	}
 
 	return tasks, nil
 }
 
+// GenerateExecuteCommandInput creates the input for the ExecuteCommand API call.
 func GenerateExecuteCommandInput(opts *EcsOpts) *ecs.ExecuteCommandInput {
 	return &ecs.ExecuteCommandInput{
 		Cluster:     opts.Cluster,
@@ -248,6 +324,7 @@ func GenerateExecuteCommandInput(opts *EcsOpts) *ecs.ExecuteCommandInput {
 	}
 }
 
+// ExecuteCommand executes a command in an ECS container.
 func ExecuteCommand(client ecsApi, input *ecs.ExecuteCommandInput) (*ecs.ExecuteCommandOutput, error) {
 	output, err := client.ExecuteCommand(context.Background(), input)
 	if err != nil {

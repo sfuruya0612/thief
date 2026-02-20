@@ -16,7 +16,7 @@ type Ec2Opts struct {
 	InstanceId string // If specified, filter by this instance ID
 }
 
-// EC2Instance represents an EC2 instance for selection UI.
+// EC2Instance represents an EC2 instance for the interactive selection UI.
 type EC2Instance struct {
 	Name       string
 	InstanceID string
@@ -32,6 +32,28 @@ func (i EC2Instance) ID() string {
 	return i.InstanceID
 }
 
+// EC2InstanceInfo holds the display fields for an EC2 instance.
+type EC2InstanceInfo struct {
+	Name         string
+	InstanceID   string
+	InstanceType string
+	Lifecycle    string
+	PrivateIP    string
+	PublicIP     string
+	State        string
+	KeyName      string
+	AZ           string
+	LaunchTime   string
+}
+
+// ToRow converts EC2InstanceInfo to a string slice suitable for table formatting.
+func (i EC2InstanceInfo) ToRow() []string {
+	return []string{
+		i.Name, i.InstanceID, i.InstanceType, i.Lifecycle,
+		i.PrivateIP, i.PublicIP, i.State, i.KeyName, i.AZ, i.LaunchTime,
+	}
+}
+
 // ec2Api defines the interface for EC2 API operations.
 // This interface helps with testing by allowing mock implementations.
 type ec2Api interface {
@@ -43,7 +65,7 @@ type ec2Api interface {
 func NewEC2Client(profile, region string) (ec2Api, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create EC2 client: %w", err)
+		return nil, fmt.Errorf("create ec2 client: %w", err)
 	}
 	return ec2.NewFromConfig(cfg), nil
 }
@@ -81,17 +103,15 @@ func GenerateDescribeInstancesInput(opts *Ec2Opts) (*ec2.DescribeInstancesInput,
 	return i, nil
 }
 
-// DescribeInstances calls the EC2 DescribeInstances API and formats the results
-// as string arrays suitable for table display.
-// Each instance is represented as a string array containing name, ID, type, lifecycle,
-// private IP, public IP, state, key name, availability zone, and launch time.
-func DescribeInstances(api ec2Api, input *ec2.DescribeInstancesInput) ([][]string, error) {
+// DescribeInstances calls the EC2 DescribeInstances API and returns the results
+// as a typed slice of EC2InstanceInfo.
+func DescribeInstances(api ec2Api, input *ec2.DescribeInstancesInput) ([]EC2InstanceInfo, error) {
 	o, err := api.DescribeInstances(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var instances [][]string
+	var instances []EC2InstanceInfo
 	for _, r := range o.Reservations {
 		for _, i := range r.Instances {
 			name := getEc2TagValue(i.Tags, "Name")
@@ -116,19 +136,18 @@ func DescribeInstances(api ec2Api, input *ec2.DescribeInstancesInput) ([][]strin
 				keyName = *i.KeyName
 			}
 
-			instance := []string{
-				name,
-				aws.ToString(i.InstanceId),
-				string(i.InstanceType),
-				lifecycle,
-				privateIP,
-				publicIP,
-				string(i.State.Name),
-				keyName,
-				string(*i.Placement.AvailabilityZone),
-				i.LaunchTime.String(),
-			}
-			instances = append(instances, instance)
+			instances = append(instances, EC2InstanceInfo{
+				Name:         name,
+				InstanceID:   aws.ToString(i.InstanceId),
+				InstanceType: string(i.InstanceType),
+				Lifecycle:    lifecycle,
+				PrivateIP:    privateIP,
+				PublicIP:     publicIP,
+				State:        string(i.State.Name),
+				KeyName:      keyName,
+				AZ:           string(*i.Placement.AvailabilityZone),
+				LaunchTime:   i.LaunchTime.String(),
+			})
 		}
 	}
 

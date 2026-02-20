@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/sfuruya0612/thief/internal/aws"
+	"github.com/sfuruya0612/thief/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -80,7 +81,8 @@ type ProfileConfig struct {
 
 // login authenticates with AWS SSO and caches the credentials.
 func login(cmd *cobra.Command, args []string) error {
-	region := cmd.Flag("region").Value.String()
+	cfg := config.FromContext(cmd.Context())
+	region := cfg.Region
 	url := cmd.Flag("url").Value.String()
 
 	if url == "" {
@@ -139,7 +141,8 @@ func logout(cmd *cobra.Command, args []string) error {
 }
 
 func generateConfig(cmd *cobra.Command, args []string) error {
-	region := cmd.Flag("region").Value.String()
+	cfg := config.FromContext(cmd.Context())
+	region := cfg.Region
 	url := cmd.Flag("url").Value.String()
 
 	if url == "" {

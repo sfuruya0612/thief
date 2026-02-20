@@ -26,7 +26,7 @@ type ssmApi interface {
 func NewSsmClient(profile, region string) (ssmApi, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create SSM client: %w", err)
+		return nil, fmt.Errorf("create ssm client: %w", err)
 	}
 	return ssm.NewFromConfig(cfg), nil
 }

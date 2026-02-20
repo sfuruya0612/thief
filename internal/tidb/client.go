@@ -70,7 +70,7 @@ func ParseDigestHeader(header string) map[string]string {
 func (d *DigestClient) CreateDigestHeader(method, uri string, digestParams map[string]string) (string, error) {
 	cnonce, err := generateCnonce()
 	if err != nil {
-		return "", fmt.Errorf("Failed to generate cnonce: %v", err)
+		return "", fmt.Errorf("failed to generate cnonce: %v", err)
 	}
 
 	realm := digestParams["realm"]
@@ -115,12 +115,12 @@ func (d *DigestClient) Get(host, endpoint string) (*http.Response, error) {
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
 	resp, err := d.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to send request: %v", err)
+		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
 
 	authHeader := resp.Header.Get("WWW-Authenticate")
@@ -132,12 +132,12 @@ func (d *DigestClient) Get(host, endpoint string) (*http.Response, error) {
 
 	req, err = http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
 	authStr, err := d.CreateDigestHeader("GET", endpoint, digestParams)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create auth header: %v", err)
+		return nil, fmt.Errorf("failed to create auth header: %v", err)
 	}
 
 	req.Header.Set("Authorization", authStr)
@@ -145,7 +145,7 @@ func (d *DigestClient) Get(host, endpoint string) (*http.Response, error) {
 
 	resp, err = d.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to send request: %v", err)
+		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
 
 	return resp, nil

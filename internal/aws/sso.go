@@ -31,7 +31,7 @@ type ssoApi interface {
 func NewSSOClient(profile, region string) (ssoApi, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create SSO client: %w", err)
+		return nil, fmt.Errorf("create sso client: %w", err)
 	}
 	return sso.NewFromConfig(cfg), nil
 }

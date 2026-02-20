@@ -3,9 +3,8 @@ package util
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNewTableFormatter(t *testing.T) {
@@ -17,13 +16,18 @@ func TestNewTableFormatter(t *testing.T) {
 
 	formatter := NewTableFormatter(columns, format)
 
-	assert.NotNil(t, formatter)
-	assert.Equal(t, columns, formatter.columns)
-	assert.Equal(t, format, formatter.format)
+	if formatter == nil {
+		t.Fatal("expected non-nil formatter, got nil")
+	}
+	if len(formatter.columns) != len(columns) {
+		t.Errorf("expected %d columns, got %d", len(columns), len(formatter.columns))
+	}
+	if formatter.format != format {
+		t.Errorf("expected format %q, got %q", format, formatter.format)
+	}
 }
 
 func TestTableFormatter_PrintHeader_Table(t *testing.T) {
-	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -32,29 +36,26 @@ func TestTableFormatter_PrintHeader_Table(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Create formatter
 	columns := []Column{
 		{Header: "ID", Width: 5},
 		{Header: "Name", Width: 10},
 	}
 	formatter := NewTableFormatter(columns, "table")
 
-	// Call function to test
 	formatter.PrintHeader()
 
-	// Get output
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// Verify output
 	expected := "ID   \tName      \n"
-	assert.Equal(t, expected, output)
+	if output != expected {
+		t.Errorf("expected %q, got %q", expected, output)
+	}
 }
 
 func TestTableFormatter_PrintRows_Table(t *testing.T) {
-	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -63,35 +64,31 @@ func TestTableFormatter_PrintRows_Table(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Create formatter
 	columns := []Column{
 		{Header: "ID", Width: 5},
 		{Header: "Name", Width: 10},
 	}
 	formatter := NewTableFormatter(columns, "table")
 
-	// Test data
 	rows := [][]string{
 		{"1", "Test 1"},
 		{"2", "Test 2"},
 	}
 
-	// Call function to test
 	formatter.PrintRows(rows)
 
-	// Get output
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// Verify output
 	expected := "1    \tTest 1    \n2    \tTest 2    \n"
-	assert.Equal(t, expected, output)
+	if output != expected {
+		t.Errorf("expected %q, got %q", expected, output)
+	}
 }
 
 func TestTableFormatter_PrintHeader_CSV(t *testing.T) {
-	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -100,29 +97,26 @@ func TestTableFormatter_PrintHeader_CSV(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Create formatter
 	columns := []Column{
 		{Header: "ID", Width: 5},
 		{Header: "Name", Width: 10},
 	}
 	formatter := NewTableFormatter(columns, "csv")
 
-	// Call function to test
 	formatter.PrintHeader()
 
-	// Get output
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// Verify output - note that CSV adds newline at the end
 	expected := "ID,Name\n"
-	assert.Equal(t, expected, output)
+	if output != expected {
+		t.Errorf("expected %q, got %q", expected, output)
+	}
 }
 
 func TestTableFormatter_PrintRows_CSV(t *testing.T) {
-	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -131,31 +125,28 @@ func TestTableFormatter_PrintRows_CSV(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Create formatter
 	columns := []Column{
 		{Header: "ID", Width: 5},
 		{Header: "Name", Width: 10},
 	}
 	formatter := NewTableFormatter(columns, "csv")
 
-	// Test data
 	rows := [][]string{
 		{"1", "Test 1"},
 		{"2", "Test 2"},
 	}
 
-	// Call function to test
 	formatter.PrintRows(rows)
 
-	// Get output
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// Verify output
 	expected := "1,Test 1\n2,Test 2\n"
-	assert.Equal(t, expected, output)
+	if output != expected {
+		t.Errorf("expected %q, got %q", expected, output)
+	}
 }
 
 func TestTableFormatter_CreateFormatString(t *testing.T) {
@@ -169,23 +160,24 @@ func TestTableFormatter_CreateFormatString(t *testing.T) {
 	format := formatter.createFormatString()
 
 	expectedFormat := "%-5s\t%-10s\t%-20s\n"
-	assert.Equal(t, expectedFormat, format)
+	if format != expectedFormat {
+		t.Errorf("expected format %q, got %q", expectedFormat, format)
+	}
 }
 
 func TestTableFormatter_CreateFormatString_EmptyColumns(t *testing.T) {
-	// Test with empty columns
 	columns := []Column{}
 	formatter := NewTableFormatter(columns, "table")
 
 	format := formatter.createFormatString()
 
-	expectedFormat := "\n" // Just a newline with no format specifiers
-	assert.Equal(t, expectedFormat, format)
+	expectedFormat := "\n"
+	if format != expectedFormat {
+		t.Errorf("expected format %q, got %q", expectedFormat, format)
+	}
 }
 
 func TestTableFormatter_PrintHeader_UnexpectedFormat(t *testing.T) {
-	// Test with an unexpected format (not "csv")
-	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -194,37 +186,32 @@ func TestTableFormatter_PrintHeader_UnexpectedFormat(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Create formatter with custom format
 	columns := []Column{
 		{Header: "ID", Width: 5},
 		{Header: "Name", Width: 10},
 	}
 	formatter := NewTableFormatter(columns, "custom_format")
 
-	// Call function to test
 	formatter.PrintHeader()
 
-	// Get output
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// Verify output - should use table format as default
 	expected := "ID   \tName      \n"
-	assert.Equal(t, expected, output)
+	if output != expected {
+		t.Errorf("expected %q, got %q", expected, output)
+	}
 }
 
 func TestTableFormatter_PrintRows_EmptyRows(t *testing.T) {
-	// Test with empty rows array
-	// Create formatter
 	columns := []Column{
 		{Header: "ID", Width: 5},
 		{Header: "Name", Width: 10},
 	}
 	formatter := NewTableFormatter(columns, "table")
 
-	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -233,28 +220,127 @@ func TestTableFormatter_PrintRows_EmptyRows(t *testing.T) {
 		os.Stdout = oldStdout
 	}()
 
-	// Call with empty rows
 	formatter.PrintRows([][]string{})
 
-	// Get output
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// Output should be empty as there are no rows
-	assert.Equal(t, "", output)
+	if output != "" {
+		t.Errorf("expected empty output, got %q", output)
+	}
 }
 
 func TestTableFormatter_CSV_WriteError(t *testing.T) {
 	// Test error handling for CSV writer would be beneficial, but it's difficult
 	// to test directly without modifying the original code to make it more testable.
-	// Potential approaches include:
-	// 1. Refactor formatter.go to accept an io.Writer interface
-	// 2. Use a function variable for os.Exit that can be mocked
-	// 3. Use a wrapper around the csv.Writer
-
-	// This is a placeholder comment explaining that this edge case should be tested,
-	// but requires code refactoring to make it properly testable.
 	t.Skip("Skipping CSV writer error test as it requires code refactoring")
+}
+
+func TestGroupByColumns_Single(t *testing.T) {
+	columns := []Column{
+		{Header: "Name", Width: 20},
+		{Header: "State", Width: 10},
+		{Header: "Type", Width: 10},
+	}
+	rows := [][]string{
+		{"a", "running", "t3.micro"},
+		{"b", "stopped", "t3.small"},
+		{"c", "running", "t3.micro"},
+		{"d", "running", "t3.small"},
+	}
+
+	outCols, outRows, err := GroupByColumns(columns, rows, "State")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(outCols) != 2 {
+		t.Fatalf("expected 2 output columns, got %d", len(outCols))
+	}
+	if outCols[0].Header != "State" {
+		t.Errorf("expected first column 'State', got %q", outCols[0].Header)
+	}
+	if outCols[1].Header != "Count" {
+		t.Errorf("expected second column 'Count', got %q", outCols[1].Header)
+	}
+	if len(outRows) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(outRows))
+	}
+	// sorted: running=3, stopped=1
+	if outRows[0][0] != "running" || outRows[0][1] != "3" {
+		t.Errorf("expected running=3, got %v", outRows[0])
+	}
+	if outRows[1][0] != "stopped" || outRows[1][1] != "1" {
+		t.Errorf("expected stopped=1, got %v", outRows[1])
+	}
+}
+
+func TestGroupByColumns_Multiple(t *testing.T) {
+	columns := []Column{
+		{Header: "State", Width: 10},
+		{Header: "Type", Width: 10},
+	}
+	rows := [][]string{
+		{"running", "t3.micro"},
+		{"running", "t3.micro"},
+		{"running", "t3.small"},
+		{"stopped", "t3.small"},
+	}
+
+	outCols, outRows, err := GroupByColumns(columns, rows, "State,Type")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(outCols) != 3 {
+		t.Fatalf("expected 3 output columns, got %d", len(outCols))
+	}
+	if len(outRows) != 3 {
+		t.Fatalf("expected 3 groups, got %d", len(outRows))
+	}
+	// sorted: running/t3.micro=2, running/t3.small=1, stopped/t3.small=1
+	if outRows[0][0] != "running" || outRows[0][1] != "t3.micro" || outRows[0][2] != "2" {
+		t.Errorf("unexpected row[0]: %v", outRows[0])
+	}
+	if outRows[1][0] != "running" || outRows[1][1] != "t3.small" || outRows[1][2] != "1" {
+		t.Errorf("unexpected row[1]: %v", outRows[1])
+	}
+	if outRows[2][0] != "stopped" || outRows[2][1] != "t3.small" || outRows[2][2] != "1" {
+		t.Errorf("unexpected row[2]: %v", outRows[2])
+	}
+}
+
+func TestGroupByColumns_InvalidColumn(t *testing.T) {
+	columns := []Column{
+		{Header: "State", Width: 10},
+	}
+	rows := [][]string{{"running"}}
+
+	_, _, err := GroupByColumns(columns, rows, "NoSuchColumn")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "NoSuchColumn") {
+		t.Errorf("expected error to mention 'NoSuchColumn', got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "State") {
+		t.Errorf("expected error to list available column 'State', got %q", err.Error())
+	}
+}
+
+func TestGroupByColumns_EmptyRows(t *testing.T) {
+	columns := []Column{
+		{Header: "State", Width: 10},
+	}
+
+	outCols, outRows, err := GroupByColumns(columns, [][]string{}, "State")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(outCols) != 2 {
+		t.Errorf("expected 2 output columns, got %d", len(outCols))
+	}
+	if len(outRows) != 0 {
+		t.Errorf("expected 0 rows, got %d", len(outRows))
+	}
 }
