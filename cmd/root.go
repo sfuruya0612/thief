@@ -118,6 +118,7 @@ func init() {
 	costexplorerCmd.PersistentFlags().StringP("start-date", "", "", "Start date (YYYY-MM-DD)")
 	costexplorerCmd.PersistentFlags().StringP("end-date", "", "", "End date (YYYY-MM-DD)")
 	costexplorerCmd.PersistentFlags().StringVarP(&costMetric, "metric", "m", "UnblendedCost", "Cost metric (UnblendedCost, BlendedCost, NetUnblendedCost, NetAmortizedCost, AmortizedCost, UsageQuantity, NormalizedUsageAmount)")
+	costexplorerCmd.PersistentFlags().StringVarP(&costGranularity, "granularity", "G", "MONTHLY", "Cost granularity (MONTHLY, DAILY)")
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -92,7 +92,7 @@ func (c *CostExplorerClient) GetCostAndUsage(startDate, endDate string, granular
 	return details, nil
 }
 
-func (c *CostExplorerClient) GetCostByService(startDate, endDate string, metric CostMetric) ([]CostDetail, error) {
+func (c *CostExplorerClient) GetCostByService(startDate, endDate string, granularity types.Granularity, metric CostMetric) ([]CostDetail, error) {
 	groupBy := []types.GroupDefinition{
 		{
 			Key:  aws.String("SERVICE"),
@@ -100,10 +100,10 @@ func (c *CostExplorerClient) GetCostByService(startDate, endDate string, metric 
 		},
 	}
 
-	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, groupBy, metric)
+	return c.GetCostAndUsage(startDate, endDate, granularity, groupBy, metric)
 }
 
-func (c *CostExplorerClient) GetCostByAccount(startDate, endDate string, metric CostMetric) ([]CostDetail, error) {
+func (c *CostExplorerClient) GetCostByAccount(startDate, endDate string, granularity types.Granularity, metric CostMetric) ([]CostDetail, error) {
 	groupBy := []types.GroupDefinition{
 		{
 			Key:  aws.String("LINKED_ACCOUNT"),
@@ -111,10 +111,10 @@ func (c *CostExplorerClient) GetCostByAccount(startDate, endDate string, metric 
 		},
 	}
 
-	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, groupBy, metric)
+	return c.GetCostAndUsage(startDate, endDate, granularity, groupBy, metric)
 }
 
-func (c *CostExplorerClient) GetCostByUsageType(startDate, endDate string, metric CostMetric) ([]CostDetail, error) {
+func (c *CostExplorerClient) GetCostByUsageType(startDate, endDate string, granularity types.Granularity, metric CostMetric) ([]CostDetail, error) {
 	groupBy := []types.GroupDefinition{
 		{
 			Key:  aws.String("USAGE_TYPE"),
@@ -122,9 +122,9 @@ func (c *CostExplorerClient) GetCostByUsageType(startDate, endDate string, metri
 		},
 	}
 
-	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, groupBy, metric)
+	return c.GetCostAndUsage(startDate, endDate, granularity, groupBy, metric)
 }
 
-func (c *CostExplorerClient) GetCostForPeriod(startDate, endDate string, metric CostMetric) ([]CostDetail, error) {
-	return c.GetCostAndUsage(startDate, endDate, types.GranularityMonthly, nil, metric)
+func (c *CostExplorerClient) GetCostForPeriod(startDate, endDate string, granularity types.Granularity, metric CostMetric) ([]CostDetail, error) {
+	return c.GetCostAndUsage(startDate, endDate, granularity, nil, metric)
 }
