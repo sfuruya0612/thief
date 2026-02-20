@@ -5,8 +5,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNewDigestClient(t *testing.T) {
@@ -15,11 +13,21 @@ func TestNewDigestClient(t *testing.T) {
 
 	client := NewDigestClient(publicKey, privateKey)
 
-	assert.NotNil(t, client)
-	assert.Equal(t, publicKey, client.publicKey)
-	assert.Equal(t, privateKey, client.privateKey)
-	assert.NotNil(t, client.Client)
-	assert.Equal(t, 1, client.nc)
+	if client == nil {
+		t.Fatal("expected non-nil client, got nil")
+	}
+	if client.publicKey != publicKey {
+		t.Errorf("expected publicKey %q, got %q", publicKey, client.publicKey)
+	}
+	if client.privateKey != privateKey {
+		t.Errorf("expected privateKey %q, got %q", privateKey, client.privateKey)
+	}
+	if client.Client == nil {
+		t.Error("expected non-nil Client, got nil")
+	}
+	if client.nc != 1 {
+		t.Errorf("expected nc 1, got %d", client.nc)
+	}
 }
 
 func TestParseDigestHeader(t *testing.T) {
@@ -27,9 +35,15 @@ func TestParseDigestHeader(t *testing.T) {
 
 	params := ParseDigestHeader(header)
 
-	assert.Equal(t, "test-realm", params["realm"])
-	assert.Equal(t, "1234567890", params["nonce"])
-	assert.Equal(t, "auth", params["qop"])
+	if params["realm"] != "test-realm" {
+		t.Errorf("expected realm 'test-realm', got %q", params["realm"])
+	}
+	if params["nonce"] != "1234567890" {
+		t.Errorf("expected nonce '1234567890', got %q", params["nonce"])
+	}
+	if params["qop"] != "auth" {
+		t.Errorf("expected qop 'auth', got %q", params["qop"])
+	}
 }
 
 func TestCreateDigestHeader(t *testing.T) {
@@ -45,37 +59,55 @@ func TestCreateDigestHeader(t *testing.T) {
 
 	header, err := client.CreateDigestHeader(method, uri, digestParams)
 
-	assert.NoError(t, err)
-	assert.Contains(t, header, `Digest username="testuser"`)
-	assert.Contains(t, header, `realm="test-realm"`)
-	assert.Contains(t, header, `nonce="1234567890"`)
-	assert.Contains(t, header, `uri="/api/v1/clusters"`)
-	assert.Contains(t, header, `qop=auth`)
-	assert.Contains(t, header, `nc=00000001`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(header, `Digest username="testuser"`) {
+		t.Errorf("expected header to contain 'Digest username=\"testuser\"', got %q", header)
+	}
+	if !strings.Contains(header, `realm="test-realm"`) {
+		t.Errorf("expected header to contain 'realm=\"test-realm\"', got %q", header)
+	}
+	if !strings.Contains(header, `nonce="1234567890"`) {
+		t.Errorf("expected header to contain 'nonce=\"1234567890\"', got %q", header)
+	}
+	if !strings.Contains(header, `uri="/api/v1/clusters"`) {
+		t.Errorf("expected header to contain 'uri=\"/api/v1/clusters\"', got %q", header)
+	}
+	if !strings.Contains(header, `qop=auth`) {
+		t.Errorf("expected header to contain 'qop=auth', got %q", header)
+	}
+	if !strings.Contains(header, `nc=00000001`) {
+		t.Errorf("expected header to contain 'nc=00000001', got %q", header)
+	}
 
-	// Verify that the nonce count increments
-	assert.Equal(t, 2, client.nc)
+	if client.nc != 2 {
+		t.Errorf("expected nc 2 after first call, got %d", client.nc)
+	}
 
 	header2, err := client.CreateDigestHeader(method, uri, digestParams)
-	assert.NoError(t, err)
-	assert.Contains(t, header2, `nc=00000002`)
-	assert.Equal(t, 3, client.nc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(header2, `nc=00000002`) {
+		t.Errorf("expected header2 to contain 'nc=00000002', got %q", header2)
+	}
+	if client.nc != 3 {
+		t.Errorf("expected nc 3 after second call, got %d", client.nc)
+	}
 }
 
 func TestGet(t *testing.T) {
-	// Setup test server
 	firstCallDone := false
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !firstCallDone {
-			// First call - return 401 with auth challenge
 			w.Header().Set("WWW-Authenticate", `Digest realm="test-realm", nonce="1234567890", qop="auth", algorithm=MD5`)
 			w.WriteHeader(http.StatusUnauthorized)
 			firstCallDone = true
 			return
 		}
 
-		// Second call - validate auth header and return success
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			t.Error("Authorization header missing in second request")
@@ -83,7 +115,6 @@ func TestGet(t *testing.T) {
 			return
 		}
 
-		// Very basic validation
 		if !strings.HasPrefix(authHeader, "Digest username=\"testuser\"") {
 			t.Error("Invalid Authorization header")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -101,18 +132,22 @@ func TestGet(t *testing.T) {
 	client := NewDigestClient("testuser", "testpass")
 	resp, err := client.Get(testServer.URL, "/api/v1/clusters")
 
-	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Verify that Accept header was set
-	assert.Equal(t, "application/json", resp.Request.Header.Get("Accept"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response, got nil")
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+	if resp.Request.Header.Get("Accept") != "application/json" {
+		t.Errorf("expected Accept header 'application/json', got %q", resp.Request.Header.Get("Accept"))
+	}
 }
 
 func TestGet_MissingWWWAuthenticate(t *testing.T) {
-	// Setup test server that doesn't return WWW-Authenticate header
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return 200 but no auth challenge
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte(`{"status":"success"}`))
 		if err != nil {
@@ -124,63 +159,92 @@ func TestGet_MissingWWWAuthenticate(t *testing.T) {
 	client := NewDigestClient("testuser", "testpass")
 	resp, err := client.Get(testServer.URL, "/api/v1/clusters")
 
-	// Should fail because WWW-Authenticate header is missing
-	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "WWW-Authenticate header not found")
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if resp != nil {
+		t.Errorf("expected nil response, got %v", resp)
+	}
+	if !strings.Contains(err.Error(), "WWW-Authenticate header not found") {
+		t.Errorf("expected error to contain 'WWW-Authenticate header not found', got %q", err.Error())
+	}
 }
 
 func TestGet_FailedFirstRequest(t *testing.T) {
-	// Setup a server that's going to be immediately closed
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	testServer.Close() // Close immediately to force connection failure
+	testServer.Close()
 
 	client := NewDigestClient("testuser", "testpass")
 	resp, err := client.Get(testServer.URL, "/api/v1/clusters")
 
-	// Should fail because server is not available
-	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "Failed to send request")
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if resp != nil {
+		t.Errorf("expected nil response, got %v", resp)
+	}
+	if !strings.Contains(err.Error(), "failed to send request") {
+		t.Errorf("expected error to contain 'failed to send request', got %q", err.Error())
+	}
 }
 
 func TestGenerateCnonce(t *testing.T) {
-	// Test that cnonce generation works and returns a non-empty string
 	cnonce, err := generateCnonce()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, cnonce)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cnonce == "" {
+		t.Error("expected non-empty cnonce, got empty string")
+	}
 
-	// Generate another one and verify it's different (randomness check)
 	cnonce2, err := generateCnonce()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, cnonce2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cnonce2 == "" {
+		t.Error("expected non-empty cnonce2, got empty string")
+	}
 
-	// There's a tiny chance these could be equal, but it's very unlikely
-	assert.NotEqual(t, cnonce, cnonce2, "Generated cnonces should be random and different")
+	if cnonce == cnonce2 {
+		t.Error("Generated cnonces should be random and different")
+	}
 }
 
 func TestParseDigestHeader_ComplexHeader(t *testing.T) {
-	// Test with a more complex header
 	header := `Digest realm="TiDB Cloud API", domain="tidbcloud.com", nonce="abcdef123456", opaque="mystery_value", stale=false, algorithm=MD5, qop="auth,auth-int"`
 
 	params := ParseDigestHeader(header)
 
-	assert.Equal(t, "TiDB Cloud API", params["realm"])
-	assert.Equal(t, "tidbcloud.com", params["domain"])
-	assert.Equal(t, "abcdef123456", params["nonce"])
-	assert.Equal(t, "mystery_value", params["opaque"])
-	assert.Equal(t, "auth,auth-int", params["qop"])
-	assert.Equal(t, "MD5", params["algorithm"])
+	if params["realm"] != "TiDB Cloud API" {
+		t.Errorf("expected realm 'TiDB Cloud API', got %q", params["realm"])
+	}
+	if params["domain"] != "tidbcloud.com" {
+		t.Errorf("expected domain 'tidbcloud.com', got %q", params["domain"])
+	}
+	if params["nonce"] != "abcdef123456" {
+		t.Errorf("expected nonce 'abcdef123456', got %q", params["nonce"])
+	}
+	if params["opaque"] != "mystery_value" {
+		t.Errorf("expected opaque 'mystery_value', got %q", params["opaque"])
+	}
+	if params["qop"] != "auth,auth-int" {
+		t.Errorf("expected qop 'auth,auth-int', got %q", params["qop"])
+	}
+	if params["algorithm"] != "MD5" {
+		t.Errorf("expected algorithm 'MD5', got %q", params["algorithm"])
+	}
 }
 
 func TestParseDigestHeader_EmptyHeader(t *testing.T) {
-	// Test with empty header
 	header := ""
 	params := ParseDigestHeader(header)
 
-	// Should return empty map, not nil
-	assert.NotNil(t, params)
-	assert.Empty(t, params)
+	if params == nil {
+		t.Error("expected non-nil map, got nil")
+	}
+	if len(params) != 0 {
+		t.Errorf("expected empty map, got %v", params)
+	}
 }
 
 func TestCreateDigestHeader_HeaderComponents(t *testing.T) {
@@ -194,52 +258,60 @@ func TestCreateDigestHeader_HeaderComponents(t *testing.T) {
 		"qop":   "auth",
 	}
 
-	// Initial nonce count should be 1
-	assert.Equal(t, 1, client.nc)
+	if client.nc != 1 {
+		t.Errorf("expected initial nc 1, got %d", client.nc)
+	}
 
 	header, err := client.CreateDigestHeader(method, uri, digestParams)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	// Check all required components are present
-	assert.Contains(t, header, `Digest username="test_user"`)
-	assert.Contains(t, header, `realm="test-realm"`)
-	assert.Contains(t, header, `nonce="nonce123"`)
-	assert.Contains(t, header, `uri="/api/v1/projects"`)
-	assert.Contains(t, header, `algorithm=MD5`)
-	assert.Contains(t, header, `qop=auth`)
-	assert.Contains(t, header, `nc=00000001`)
-	assert.Contains(t, header, `response="`)
-	assert.Contains(t, header, `cnonce="`)
+	for _, want := range []string{
+		`Digest username="test_user"`,
+		`realm="test-realm"`,
+		`nonce="nonce123"`,
+		`uri="/api/v1/projects"`,
+		`algorithm=MD5`,
+		`qop=auth`,
+		`nc=00000001`,
+		`response="`,
+		`cnonce="`,
+	} {
+		if !strings.Contains(header, want) {
+			t.Errorf("expected header to contain %q, got %q", want, header)
+		}
+	}
 
-	// Nonce count should be incremented
-	assert.Equal(t, 2, client.nc)
+	if client.nc != 2 {
+		t.Errorf("expected nc 2 after call, got %d", client.nc)
+	}
 }
 
 func TestGet_SecondRequestFails(t *testing.T) {
-	// Setup test server where second request fails
 	firstCallDone := false
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !firstCallDone {
-			// First call - return 401 with auth challenge
 			w.Header().Set("WWW-Authenticate", `Digest realm="test-realm", nonce="1234567890", qop="auth", algorithm=MD5`)
 			w.WriteHeader(http.StatusUnauthorized)
 			firstCallDone = true
 			return
 		}
 
-		// Second call - return 500 error
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer testServer.Close()
 
-	// Create a client with a custom http.Client that has a very short timeout
 	client := NewDigestClient("testuser", "testpass")
-
-	// Make the request
 	resp, err := client.Get(testServer.URL, "/api/v1/clusters")
 
-	// Should not error (HTTP errors don't return Go errors)
-	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response, got nil")
+	}
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, resp.StatusCode)
+	}
 }

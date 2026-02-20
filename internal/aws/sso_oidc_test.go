@@ -8,8 +8,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 var (
@@ -37,22 +35,24 @@ var (
 )
 
 type mockSsoOidcApi struct {
-	mock.Mock
+	registerClientOutput           *ssooidc.RegisterClientOutput
+	registerClientErr              error
+	startDeviceAuthorizationOutput *ssooidc.StartDeviceAuthorizationOutput
+	startDeviceAuthorizationErr    error
+	createTokenOutput              *ssooidc.CreateTokenOutput
+	createTokenErr                 error
 }
 
 func (m *mockSsoOidcApi) RegisterClient(ctx context.Context, input *ssooidc.RegisterClientInput, opts ...func(*ssooidc.Options)) (*ssooidc.RegisterClientOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*ssooidc.RegisterClientOutput), args.Error(1)
+	return m.registerClientOutput, m.registerClientErr
 }
 
 func (m *mockSsoOidcApi) StartDeviceAuthorization(ctx context.Context, input *ssooidc.StartDeviceAuthorizationInput, opts ...func(*ssooidc.Options)) (*ssooidc.StartDeviceAuthorizationOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*ssooidc.StartDeviceAuthorizationOutput), args.Error(1)
+	return m.startDeviceAuthorizationOutput, m.startDeviceAuthorizationErr
 }
 
 func (m *mockSsoOidcApi) CreateToken(ctx context.Context, input *ssooidc.CreateTokenInput, opts ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*ssooidc.CreateTokenOutput), args.Error(1)
+	return m.createTokenOutput, m.createTokenErr
 }
 
 func TestGenerateRegisterClientInput(t *testing.T) {
@@ -60,41 +60,59 @@ func TestGenerateRegisterClientInput(t *testing.T) {
 	clientType := "public"
 	opts := SSOOidcOpts{ClientName: clientName, ClientType: clientType}
 	input := GenerateRegisterClientInput(opts)
-	assert.NotNil(t, input)
-	assert.Equal(t, clientName, *input.ClientName)
-	assert.Equal(t, clientType, *input.ClientType)
+	if input == nil {
+		t.Fatal("expected non-nil input, got nil")
+	}
+	if *input.ClientName != clientName {
+		t.Errorf("expected ClientName %q, got %q", clientName, *input.ClientName)
+	}
+	if *input.ClientType != clientType {
+		t.Errorf("expected ClientType %q, got %q", clientType, *input.ClientType)
+	}
 }
 
 func TestRegisterClient(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("RegisterClient", mock.Anything, mock.Anything, mock.Anything).Return(mockRegisterClientOutput, nil)
+	mockApi := &mockSsoOidcApi{
+		registerClientOutput: mockRegisterClientOutput,
+		registerClientErr:    nil,
+	}
 
 	input := &ssooidc.RegisterClientInput{
 		ClientName: aws.String("thief-app"),
 		ClientType: aws.String("public"),
 	}
 	result, err := RegisterClient(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "client-abcdef1234567890", *result.ClientId)
-	assert.Equal(t, "client-secret-abcdef1234567890", *result.ClientSecret)
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result.ClientId != "client-abcdef1234567890" {
+		t.Errorf("expected ClientId 'client-abcdef1234567890', got '%s'", *result.ClientId)
+	}
+	if *result.ClientSecret != "client-secret-abcdef1234567890" {
+		t.Errorf("expected ClientSecret 'client-secret-abcdef1234567890', got '%s'", *result.ClientSecret)
+	}
 }
 
 func TestRegisterClient_Error(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("RegisterClient", mock.Anything, mock.Anything, mock.Anything).Return(mockRegisterClientOutput, errors.New("error"))
+	mockApi := &mockSsoOidcApi{
+		registerClientOutput: mockRegisterClientOutput,
+		registerClientErr:    errors.New("error"),
+	}
 
 	input := &ssooidc.RegisterClientInput{
 		ClientName: aws.String("thief-app"),
 		ClientType: aws.String("public"),
 	}
 	result, err := RegisterClient(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }
 
 func TestGenerateStartDeviceAuthorizationInput(t *testing.T) {
@@ -107,15 +125,25 @@ func TestGenerateStartDeviceAuthorizationInput(t *testing.T) {
 		StartUrl:     startUrl,
 	}
 	input := GenerateStartDeviceAuthorizationInput(opts)
-	assert.NotNil(t, input)
-	assert.Equal(t, clientId, *input.ClientId)
-	assert.Equal(t, clientSecret, *input.ClientSecret)
-	assert.Equal(t, startUrl, *input.StartUrl)
+	if input == nil {
+		t.Fatal("expected non-nil input, got nil")
+	}
+	if *input.ClientId != clientId {
+		t.Errorf("expected ClientId %q, got %q", clientId, *input.ClientId)
+	}
+	if *input.ClientSecret != clientSecret {
+		t.Errorf("expected ClientSecret %q, got %q", clientSecret, *input.ClientSecret)
+	}
+	if *input.StartUrl != startUrl {
+		t.Errorf("expected StartUrl %q, got %q", startUrl, *input.StartUrl)
+	}
 }
 
 func TestStartDeviceAuthorization(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("StartDeviceAuthorization", mock.Anything, mock.Anything, mock.Anything).Return(mockStartDeviceAuthorizationOutput, nil)
+	mockApi := &mockSsoOidcApi{
+		startDeviceAuthorizationOutput: mockStartDeviceAuthorizationOutput,
+		startDeviceAuthorizationErr:    nil,
+	}
 
 	input := &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     aws.String("client-abcdef1234567890"),
@@ -123,20 +151,34 @@ func TestStartDeviceAuthorization(t *testing.T) {
 		StartUrl:     aws.String("https://start.url.aws/start"),
 	}
 	result, err := StartDeviceAuthorization(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "device-code-abcdef1234567890", *result.DeviceCode)
-	assert.Equal(t, "USER-CODE", *result.UserCode)
-	assert.Equal(t, "https://device.sso.region.amazonaws.com/", *result.VerificationUri)
-	assert.Equal(t, int32(900), result.ExpiresIn)
-	assert.Equal(t, int32(5), result.Interval)
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result.DeviceCode != "device-code-abcdef1234567890" {
+		t.Errorf("expected DeviceCode 'device-code-abcdef1234567890', got '%s'", *result.DeviceCode)
+	}
+	if *result.UserCode != "USER-CODE" {
+		t.Errorf("expected UserCode 'USER-CODE', got '%s'", *result.UserCode)
+	}
+	if *result.VerificationUri != "https://device.sso.region.amazonaws.com/" {
+		t.Errorf("expected VerificationUri 'https://device.sso.region.amazonaws.com/', got '%s'", *result.VerificationUri)
+	}
+	if result.ExpiresIn != int32(900) {
+		t.Errorf("expected ExpiresIn 900, got %d", result.ExpiresIn)
+	}
+	if result.Interval != int32(5) {
+		t.Errorf("expected Interval 5, got %d", result.Interval)
+	}
 }
 
 func TestStartDeviceAuthorization_Error(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("StartDeviceAuthorization", mock.Anything, mock.Anything, mock.Anything).Return(mockStartDeviceAuthorizationOutput, errors.New("error"))
+	mockApi := &mockSsoOidcApi{
+		startDeviceAuthorizationOutput: mockStartDeviceAuthorizationOutput,
+		startDeviceAuthorizationErr:    errors.New("error"),
+	}
 
 	input := &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     aws.String("client-abcdef1234567890"),
@@ -144,10 +186,12 @@ func TestStartDeviceAuthorization_Error(t *testing.T) {
 		StartUrl:     aws.String("https://start.url.aws/start"),
 	}
 	result, err := StartDeviceAuthorization(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }
 
 func TestGenerateCreateTokenInput(t *testing.T) {
@@ -162,16 +206,28 @@ func TestGenerateCreateTokenInput(t *testing.T) {
 		GrantType:    grantType,
 	}
 	input := GenerateCreateTokenInput(opts)
-	assert.NotNil(t, input)
-	assert.Equal(t, clientId, *input.ClientId)
-	assert.Equal(t, clientSecret, *input.ClientSecret)
-	assert.Equal(t, deviceCode, *input.DeviceCode)
-	assert.Equal(t, grantType, *input.GrantType)
+	if input == nil {
+		t.Fatal("expected non-nil input, got nil")
+	}
+	if *input.ClientId != clientId {
+		t.Errorf("expected ClientId %q, got %q", clientId, *input.ClientId)
+	}
+	if *input.ClientSecret != clientSecret {
+		t.Errorf("expected ClientSecret %q, got %q", clientSecret, *input.ClientSecret)
+	}
+	if *input.DeviceCode != deviceCode {
+		t.Errorf("expected DeviceCode %q, got %q", deviceCode, *input.DeviceCode)
+	}
+	if *input.GrantType != grantType {
+		t.Errorf("expected GrantType %q, got %q", grantType, *input.GrantType)
+	}
 }
 
 func TestCreateToken(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("CreateToken", mock.Anything, mock.Anything, mock.Anything).Return(mockCreateTokenOutput, nil)
+	mockApi := &mockSsoOidcApi{
+		createTokenOutput: mockCreateTokenOutput,
+		createTokenErr:    nil,
+	}
 
 	input := &ssooidc.CreateTokenInput{
 		ClientId:     aws.String("client-abcdef1234567890"),
@@ -180,20 +236,34 @@ func TestCreateToken(t *testing.T) {
 		GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 	}
 	result, err := CreateToken(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "access-token-abcdef1234567890", *result.AccessToken)
-	assert.Equal(t, "refresh-token-abcdef1234567890", *result.RefreshToken)
-	assert.Equal(t, "id-token-abcdef1234567890", *result.IdToken)
-	assert.Equal(t, "Bearer", *result.TokenType)
-	assert.Equal(t, int32(8*3600), result.ExpiresIn)
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result.AccessToken != "access-token-abcdef1234567890" {
+		t.Errorf("expected AccessToken 'access-token-abcdef1234567890', got '%s'", *result.AccessToken)
+	}
+	if *result.RefreshToken != "refresh-token-abcdef1234567890" {
+		t.Errorf("expected RefreshToken 'refresh-token-abcdef1234567890', got '%s'", *result.RefreshToken)
+	}
+	if *result.IdToken != "id-token-abcdef1234567890" {
+		t.Errorf("expected IdToken 'id-token-abcdef1234567890', got '%s'", *result.IdToken)
+	}
+	if *result.TokenType != "Bearer" {
+		t.Errorf("expected TokenType 'Bearer', got '%s'", *result.TokenType)
+	}
+	if result.ExpiresIn != int32(8*3600) {
+		t.Errorf("expected ExpiresIn %d, got %d", int32(8*3600), result.ExpiresIn)
+	}
 }
 
 func TestCreateToken_Error(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("CreateToken", mock.Anything, mock.Anything, mock.Anything).Return(mockCreateTokenOutput, errors.New("error"))
+	mockApi := &mockSsoOidcApi{
+		createTokenOutput: mockCreateTokenOutput,
+		createTokenErr:    errors.New("error"),
+	}
 
 	input := &ssooidc.CreateTokenInput{
 		ClientId:     aws.String("client-abcdef1234567890"),
@@ -202,15 +272,19 @@ func TestCreateToken_Error(t *testing.T) {
 		GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
 	}
 	result, err := CreateToken(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }
 
 func TestWaitForToken_Success(t *testing.T) {
-	mockApi := new(mockSsoOidcApi)
-	mockApi.On("CreateToken", mock.Anything, mock.Anything, mock.Anything).Return(mockCreateTokenOutput, nil)
+	mockApi := &mockSsoOidcApi{
+		createTokenOutput: mockCreateTokenOutput,
+		createTokenErr:    nil,
+	}
 
 	input := &ssooidc.CreateTokenInput{
 		ClientId:     aws.String("client-abcdef1234567890"),
@@ -223,9 +297,13 @@ func TestWaitForToken_Success(t *testing.T) {
 	defer cancel()
 
 	result, err := WaitForToken(ctx, mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "access-token-abcdef1234567890", *result.AccessToken)
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if *result.AccessToken != "access-token-abcdef1234567890" {
+		t.Errorf("expected AccessToken 'access-token-abcdef1234567890', got '%s'", *result.AccessToken)
+	}
 }

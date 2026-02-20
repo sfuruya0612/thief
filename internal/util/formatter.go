@@ -4,8 +4,17 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 )
+
+// Row is implemented by types that can be serialised to a string slice for
+// table or CSV output. Implementing Row enables use of the generic runList
+// helper in the cmd package.
+type Row interface {
+	ToRow() []string
+}
 
 // Column represents a table column with a header and its display width.
 // Used for formatting tabular output in the CLI.
@@ -80,6 +89,69 @@ func (f *TableFormatter) PrintRows(rows [][]string) {
 		}
 		fmt.Printf(format, rowValues...)
 	}
+}
+
+// GroupByColumns groups rows by the values at the columns matching columnNames.
+// columnNames is a comma-separated string (e.g. "State" or "State,InstanceType").
+// It returns the output columns and sorted (key1, key2, ..., count) rows.
+// Returns an error listing available columns if any name is not found.
+func GroupByColumns(columns []Column, rows [][]string, columnNames string) ([]Column, [][]string, error) {
+	names := strings.Split(columnNames, ",")
+	indices := make([]int, len(names))
+	for i, name := range names {
+		name = strings.TrimSpace(name)
+		names[i] = name
+		found := false
+		for j, col := range columns {
+			if col.Header == name {
+				indices[i] = j
+				found = true
+				break
+			}
+		}
+		if !found {
+			headers := make([]string, len(columns))
+			for j, col := range columns {
+				headers[j] = col.Header
+			}
+			return nil, nil, fmt.Errorf("column %q not found. available: %s", name, strings.Join(headers, ", "))
+		}
+	}
+
+	counts := make(map[string]int)
+	keys := make(map[string][]string) // composite key → individual values
+	for _, row := range rows {
+		vals := make([]string, len(indices))
+		for i, idx := range indices {
+			vals[i] = row[idx]
+		}
+		composite := strings.Join(vals, "\x00")
+		counts[composite]++
+		keys[composite] = vals
+	}
+
+	// Sort composite keys for deterministic output.
+	composites := make([]string, 0, len(counts))
+	for k := range counts {
+		composites = append(composites, k)
+	}
+	sort.Strings(composites)
+
+	outRows := make([][]string, 0, len(composites))
+	for _, composite := range composites {
+		row := make([]string, len(keys[composite])+1)
+		copy(row, keys[composite])
+		row[len(keys[composite])] = strconv.Itoa(counts[composite])
+		outRows = append(outRows, row)
+	}
+
+	outCols := make([]Column, 0, len(names)+1)
+	for _, name := range names {
+		outCols = append(outCols, Column{Header: name, Width: 30})
+	}
+	outCols = append(outCols, Column{Header: "Count", Width: 10})
+
+	return outCols, outRows, nil
 }
 
 // createFormatString generates a format string for printing tabular data.

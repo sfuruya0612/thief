@@ -8,7 +8,25 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 )
 
-type ElasticacheOpts struct {
+// ElasticacheOpts defines options for ElastiCache API operations.
+type ElasticacheOpts struct{}
+
+// ElastiCacheClusterInfo holds display fields for an ElastiCache cluster.
+type ElastiCacheClusterInfo struct {
+	ReplicationGroupID string
+	CacheClusterID     string
+	CacheNodeType      string
+	Engine             string
+	EngineVersion      string
+	Status             string
+}
+
+// ToRow converts ElastiCacheClusterInfo to a string slice suitable for table formatting.
+func (c ElastiCacheClusterInfo) ToRow() []string {
+	return []string{
+		c.ReplicationGroupID, c.CacheClusterID, c.CacheNodeType,
+		c.Engine, c.EngineVersion, c.Status,
+	}
 }
 
 type elasticacheApi interface {
@@ -19,32 +37,34 @@ type elasticacheApi interface {
 func NewElasticacheClient(profile, region string) (elasticacheApi, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create ElastiCache client: %w", err)
+		return nil, fmt.Errorf("create elasticache client: %w", err)
 	}
 	return elasticache.NewFromConfig(cfg), nil
 }
 
+// GenerateDescribeCacheClustersInput creates the input for the DescribeCacheClusters API call.
 func GenerateDescribeCacheClustersInput(opts *ElasticacheOpts) *elasticache.DescribeCacheClustersInput {
 	return &elasticache.DescribeCacheClustersInput{}
 }
 
-func DescribeCacheClusters(client elasticacheApi, input *elasticache.DescribeCacheClustersInput) ([][]string, error) {
+// DescribeCacheClusters calls the ElastiCache DescribeCacheClusters API and returns
+// the results as a typed slice of ElastiCacheClusterInfo.
+func DescribeCacheClusters(client elasticacheApi, input *elasticache.DescribeCacheClustersInput) ([]ElastiCacheClusterInfo, error) {
 	o, err := client.DescribeCacheClusters(context.Background(), input)
 	if err != nil {
 		return nil, err
 	}
 
-	var clusters [][]string
+	var clusters []ElastiCacheClusterInfo
 	for _, c := range o.CacheClusters {
-		cluster := []string{
-			aws.ToString(c.ReplicationGroupId),
-			aws.ToString(c.CacheClusterId),
-			aws.ToString(c.CacheNodeType),
-			aws.ToString(c.Engine),
-			aws.ToString(c.EngineVersion),
-			aws.ToString(c.CacheClusterStatus),
-		}
-		clusters = append(clusters, cluster)
+		clusters = append(clusters, ElastiCacheClusterInfo{
+			ReplicationGroupID: aws.ToString(c.ReplicationGroupId),
+			CacheClusterID:     aws.ToString(c.CacheClusterId),
+			CacheNodeType:      aws.ToString(c.CacheNodeType),
+			Engine:             aws.ToString(c.Engine),
+			EngineVersion:      aws.ToString(c.EngineVersion),
+			Status:             aws.ToString(c.CacheClusterStatus),
+		})
 	}
 
 	return clusters, nil

@@ -5,50 +5,48 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestExecCommand_Simple(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// Skip on Windows as 'echo' command is different
 		t.Skip("Skipping test on Windows")
 	}
 
-	// Execute a simple command that should succeed
 	err := ExecCommand("echo", "test")
 
-	// Verify no error is returned
-	assert.NoError(t, err)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
 }
 
 func TestExecCommand_Error(t *testing.T) {
-	// Execute a command that should fail (non-existent command)
 	err := ExecCommand("nonexistentcommand123456789")
 
-	// Verify error is returned
-	assert.Error(t, err)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
 }
 
 func TestExecCommand_WithArgs(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// Skip on Windows as file system commands are different
 		t.Skip("Skipping test on Windows")
 	}
 
-	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "executer-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	if err != nil {
+		t.Fatalf("unexpected error creating temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
 
-	// Create a simple test file
 	testFile := filepath.Join(tempDir, "test.txt")
 	err = os.WriteFile(testFile, []byte("test content"), 0644)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error writing test file: %v", err)
+	}
 
-	// Execute command with arguments to list the file
 	err = ExecCommand("ls", "-l", tempDir)
 
-	// Verify no error is returned
-	assert.NoError(t, err)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
 }

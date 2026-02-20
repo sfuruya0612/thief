@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/spf13/cobra"
+
+	"github.com/sfuruya0612/thief/internal/config"
 	"github.com/sfuruya0612/thief/internal/datadog"
 	"github.com/sfuruya0612/thief/internal/util"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -51,80 +52,60 @@ var datadogCostColumns = []util.Column{
 
 // showDatadogHistoricalCost retrieves and displays historical cost data from Datadog.
 func showDatadogHistoricalCost(cmd *cobra.Command, args []string) error {
-	site := viper.GetString("datadog.site")
-	apiKey := viper.GetString("datadog.api-key")
-	appKey := viper.GetString("datadog.app-key")
+	cfg := config.FromContext(cmd.Context())
 
-	if apiKey == "" || appKey == "" {
-		return errors.New("Datadog API key and APP key are required. Set them via flags, environment variables (THIEF_DATADOG_API_KEY, THIEF_DATADOG_APP_KEY), or config file")
+	if cfg.Datadog.APIKey == "" || cfg.Datadog.AppKey == "" {
+		return errors.New("datadog API key and APP key are required. Set them via flags (--api-key, --app-key), environment variables (DATADOG_API_KEY, DATADOG_APP_KEY), or config file")
 	}
 
-	view := viper.GetString("datadog.view")
-	if !isValidView(view) {
+	if !isValidView(cfg.Datadog.View) {
 		return errors.New("view must be 'summary' or 'sub-org'")
 	}
 
-	start, end, err := parseDate(viper.GetString("datadog.start-month"), viper.GetString("datadog.end-month"))
+	start, end, err := parseDate(cfg.Datadog.StartMonth, cfg.Datadog.EndMonth)
 	if err != nil {
 		return fmt.Errorf("parse date: %w", err)
 	}
 
-	ctx := datadog.GenerateDatadogContext(apiKey, appKey)
-	api := datadog.NewDatadogUsageMeteringApi(datadog.NewDatadogClient(site))
-	params := datadog.GenerateGetHistoricalCostByOrgOptionalParameters(view, end)
+	ctx := datadog.GenerateDatadogContext(cfg.Datadog.APIKey, cfg.Datadog.AppKey)
+	api := datadog.NewDatadogUsageMeteringApi(datadog.NewDatadogClient(cfg.Datadog.Site))
+	params := datadog.GenerateGetHistoricalCostByOrgOptionalParameters(cfg.Datadog.View, end)
 
 	resp, err := datadog.GetHistoricalCostByOrg(ctx, api, start, *params)
 	if err != nil {
 		return fmt.Errorf("get historical cost by org: %w", err)
 	}
 
-	formatter := util.NewTableFormatter(datadogCostColumns, viper.GetString("output"))
-
-	if !viper.GetBool("no-header") {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(resp)
-	return nil
+	return printRowsOrGroupBy(cfg, datadogCostColumns, toRows(resp))
 }
 
 // showDatadogEstimatedCost retrieves and displays estimated cost data from Datadog.
 func showDatadogEstimatedCost(cmd *cobra.Command, args []string) error {
-	site := viper.GetString("datadog.site")
-	apiKey := viper.GetString("datadog.api-key")
-	appKey := viper.GetString("datadog.app-key")
+	cfg := config.FromContext(cmd.Context())
 
-	if apiKey == "" || appKey == "" {
-		return errors.New("Datadog API key and APP key are required. Set them via flags, environment variables (THIEF_DATADOG_API_KEY, THIEF_DATADOG_APP_KEY), or config file")
+	if cfg.Datadog.APIKey == "" || cfg.Datadog.AppKey == "" {
+		return errors.New("datadog API key and APP key are required. Set them via flags (--api-key, --app-key), environment variables (DATADOG_API_KEY, DATADOG_APP_KEY), or config file")
 	}
 
-	view := viper.GetString("datadog.view")
-	if !isValidView(view) {
+	if !isValidView(cfg.Datadog.View) {
 		return errors.New("view must be 'summary' or 'sub-org'")
 	}
 
-	start, end, err := parseDate(viper.GetString("datadog.start-month"), viper.GetString("datadog.end-month"))
+	start, end, err := parseDate(cfg.Datadog.StartMonth, cfg.Datadog.EndMonth)
 	if err != nil {
 		return fmt.Errorf("parse date: %w", err)
 	}
 
-	ctx := datadog.GenerateDatadogContext(apiKey, appKey)
-	api := datadog.NewDatadogUsageMeteringApi(datadog.NewDatadogClient(site))
-	params := datadog.GenerateGetEstimatedCostByOrgOptionalParameters(view, start, end)
+	ctx := datadog.GenerateDatadogContext(cfg.Datadog.APIKey, cfg.Datadog.AppKey)
+	api := datadog.NewDatadogUsageMeteringApi(datadog.NewDatadogClient(cfg.Datadog.Site))
+	params := datadog.GenerateGetEstimatedCostByOrgOptionalParameters(cfg.Datadog.View, start, end)
 
 	resp, err := datadog.GetEstimatedCostByOrg(ctx, api, *params)
 	if err != nil {
 		return fmt.Errorf("get estimated cost by org: %w", err)
 	}
 
-	formatter := util.NewTableFormatter(datadogCostColumns, viper.GetString("output"))
-
-	if !viper.GetBool("no-header") {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(resp)
-	return nil
+	return printRowsOrGroupBy(cfg, datadogCostColumns, toRows(resp))
 }
 
 // isValidView checks if the provided view string is valid.

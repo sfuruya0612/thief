@@ -8,8 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 var (
@@ -35,57 +33,78 @@ var (
 )
 
 type mockSsoApi struct {
-	mock.Mock
+	listAccountsOutput     *sso.ListAccountsOutput
+	listAccountsErr        error
+	listAccountRolesOutput *sso.ListAccountRolesOutput
+	listAccountRolesErr    error
 }
 
 func (m *mockSsoApi) ListAccounts(ctx context.Context, input *sso.ListAccountsInput, opts ...func(*sso.Options)) (*sso.ListAccountsOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*sso.ListAccountsOutput), args.Error(1)
+	return m.listAccountsOutput, m.listAccountsErr
 }
 
 func (m *mockSsoApi) ListAccountRoles(ctx context.Context, input *sso.ListAccountRolesInput, opts ...func(*sso.Options)) (*sso.ListAccountRolesOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*sso.ListAccountRolesOutput), args.Error(1)
+	return m.listAccountRolesOutput, m.listAccountRolesErr
 }
 
 func TestGenerateListAccountsInput(t *testing.T) {
 	accessToken := "test-access-token"
 	opts := SSOOpts{AccessToken: accessToken}
 	input := GenerateListAccountsInput(opts)
-	assert.NotNil(t, input)
-	assert.Equal(t, accessToken, *input.AccessToken)
+	if input == nil {
+		t.Fatal("expected non-nil input, got nil")
+	}
+	if *input.AccessToken != accessToken {
+		t.Errorf("expected AccessToken %q, got %q", accessToken, *input.AccessToken)
+	}
 }
 
 func TestListAccounts(t *testing.T) {
-	mockApi := new(mockSsoApi)
-	mockApi.On("ListAccounts", mock.Anything, mock.Anything, mock.Anything).Return(mockListAccountsOutput, nil)
+	mockApi := &mockSsoApi{
+		listAccountsOutput: mockListAccountsOutput,
+		listAccountsErr:    nil,
+	}
 
 	input := &sso.ListAccountsInput{
 		AccessToken: aws.String("test-access-token"),
 	}
 	result, err := ListAccounts(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, 1, len(result.AccountList))
-	assert.Equal(t, "123456789012", *result.AccountList[0].AccountId)
-	assert.Equal(t, "MyTestAccount", *result.AccountList[0].AccountName)
-	assert.Equal(t, "test@example.com", *result.AccountList[0].EmailAddress)
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.AccountList) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(result.AccountList))
+	}
+	if *result.AccountList[0].AccountId != "123456789012" {
+		t.Errorf("expected AccountId '123456789012', got '%s'", *result.AccountList[0].AccountId)
+	}
+	if *result.AccountList[0].AccountName != "MyTestAccount" {
+		t.Errorf("expected AccountName 'MyTestAccount', got '%s'", *result.AccountList[0].AccountName)
+	}
+	if *result.AccountList[0].EmailAddress != "test@example.com" {
+		t.Errorf("expected EmailAddress 'test@example.com', got '%s'", *result.AccountList[0].EmailAddress)
+	}
 }
 
 func TestListAccounts_Error(t *testing.T) {
-	mockApi := new(mockSsoApi)
-	mockApi.On("ListAccounts", mock.Anything, mock.Anything, mock.Anything).Return(mockListAccountsOutput, errors.New("error"))
+	mockApi := &mockSsoApi{
+		listAccountsOutput: mockListAccountsOutput,
+		listAccountsErr:    errors.New("error"),
+	}
 
 	input := &sso.ListAccountsInput{
 		AccessToken: aws.String("test-access-token"),
 	}
 	result, err := ListAccounts(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }
 
 func TestGenerateListAccountRolesInput(t *testing.T) {
@@ -93,69 +112,83 @@ func TestGenerateListAccountRolesInput(t *testing.T) {
 	accountId := "123456789012"
 	opts := SSOOpts{AccessToken: accessToken, AccountId: accountId}
 	input := GenerateListAccountRolesInput(opts)
-	assert.NotNil(t, input)
-	assert.Equal(t, accessToken, *input.AccessToken)
-	assert.Equal(t, accountId, *input.AccountId)
+	if input == nil {
+		t.Fatal("expected non-nil input, got nil")
+	}
+	if *input.AccessToken != accessToken {
+		t.Errorf("expected AccessToken %q, got %q", accessToken, *input.AccessToken)
+	}
+	if *input.AccountId != accountId {
+		t.Errorf("expected AccountId %q, got %q", accountId, *input.AccountId)
+	}
 }
 
 func TestListAccountRoles(t *testing.T) {
-	mockApi := new(mockSsoApi)
-	mockApi.On("ListAccountRoles", mock.Anything, mock.Anything, mock.Anything).Return(mockListAccountRolesOutput, nil)
+	mockApi := &mockSsoApi{
+		listAccountRolesOutput: mockListAccountRolesOutput,
+		listAccountRolesErr:    nil,
+	}
 
 	input := &sso.ListAccountRolesInput{
 		AccessToken: aws.String("test-access-token"),
 		AccountId:   aws.String("123456789012"),
 	}
 	result, err := ListAccountRoles(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, 1, len(result.RoleList))
-	assert.Equal(t, "123456789012", *result.RoleList[0].AccountId)
-	assert.Equal(t, "AdminRole", *result.RoleList[0].RoleName)
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.RoleList) != 1 {
+		t.Fatalf("expected 1 role, got %d", len(result.RoleList))
+	}
+	if *result.RoleList[0].AccountId != "123456789012" {
+		t.Errorf("expected AccountId '123456789012', got '%s'", *result.RoleList[0].AccountId)
+	}
+	if *result.RoleList[0].RoleName != "AdminRole" {
+		t.Errorf("expected RoleName 'AdminRole', got '%s'", *result.RoleList[0].RoleName)
+	}
 }
 
 func TestListAccountRoles_Error(t *testing.T) {
-	mockApi := new(mockSsoApi)
-	mockApi.On("ListAccountRoles", mock.Anything, mock.Anything, mock.Anything).Return(mockListAccountRolesOutput, errors.New("error"))
+	mockApi := &mockSsoApi{
+		listAccountRolesOutput: mockListAccountRolesOutput,
+		listAccountRolesErr:    errors.New("error"),
+	}
 
 	input := &sso.ListAccountRolesInput{
 		AccessToken: aws.String("test-access-token"),
 		AccountId:   aws.String("123456789012"),
 	}
 	result, err := ListAccountRoles(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }
 
 func TestNewSSOClient_NewMethod(t *testing.T) {
-	// We use a simple mock approach for testing NewSSOClient
-
-	// Skip test if not possible to run due to credentials issues
-	// You could use t.SkipNow() if needed
-
-	// For NewSSOClient, we'll use a simple test that it returns a non-nil result
-	// with valid inputs
-	// This test may fail in CI environments without AWS credentials
 	t.Skip("Skipping NewSSOClient test as it requires AWS credentials")
 
 	client, err := NewSSOClient("default", "us-west-2")
-	if err == nil {
-		// Only check if there was no error
-		assert.NotNil(t, client)
+	if err == nil && client == nil {
+		t.Error("expected non-nil client")
 	}
 }
 
 func TestSSOOpts_Structure(t *testing.T) {
-	// Test that SSOOpts can properly store and retrieve values
 	opts := SSOOpts{
 		AccessToken: "test-token-123",
 		AccountId:   "987654321098",
 	}
 
-	assert.Equal(t, "test-token-123", opts.AccessToken)
-	assert.Equal(t, "987654321098", opts.AccountId)
+	if opts.AccessToken != "test-token-123" {
+		t.Errorf("expected AccessToken 'test-token-123', got '%s'", opts.AccessToken)
+	}
+	if opts.AccountId != "987654321098" {
+		t.Errorf("expected AccountId '987654321098', got '%s'", opts.AccountId)
+	}
 }

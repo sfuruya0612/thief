@@ -51,28 +51,31 @@ func TestDescribeDBInstances(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	expected := [][]string{
-		{
-			"test-instance",
-			"db.t2.micro",
-			"mysql",
-			"5.7.22",
-			"20GB",
-			"gp2",
-			"available",
-		},
+	if len(result) != 1 {
+		t.Fatalf("expected 1 instance, got %d", len(result))
 	}
 
-	if len(result) != len(expected) {
-		t.Fatalf("expected %d instances, got %d", len(expected), len(result))
+	i := result[0]
+	if i.Name != "test-instance" {
+		t.Errorf("expected Name 'test-instance', got '%s'", i.Name)
 	}
-
-	for i, instance := range result {
-		for j, field := range instance {
-			if field != expected[i][j] {
-				t.Errorf("expected %s, got %s", expected[i][j], field)
-			}
-		}
+	if i.DBInstanceClass != "db.t2.micro" {
+		t.Errorf("expected DBInstanceClass 'db.t2.micro', got '%s'", i.DBInstanceClass)
+	}
+	if i.Engine != "mysql" {
+		t.Errorf("expected Engine 'mysql', got '%s'", i.Engine)
+	}
+	if i.EngineVersion != "5.7.22" {
+		t.Errorf("expected EngineVersion '5.7.22', got '%s'", i.EngineVersion)
+	}
+	if i.Storage != "20GB" {
+		t.Errorf("expected Storage '20GB', got '%s'", i.Storage)
+	}
+	if i.StorageType != "gp2" {
+		t.Errorf("expected StorageType 'gp2', got '%s'", i.StorageType)
+	}
+	if i.Status != "available" {
+		t.Errorf("expected Status 'available', got '%s'", i.Status)
 	}
 }
 
@@ -85,25 +88,24 @@ func TestDescribeDBClusters(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	expected := [][]string{
-		{
-			"test-cluster",
-			"aurora",
-			"5.6.10a",
-			"provisioned",
-			"available",
-		},
+	if len(result) != 1 {
+		t.Fatalf("expected 1 cluster, got %d", len(result))
 	}
 
-	if len(result) != len(expected) {
-		t.Fatalf("expected %d clusters, got %d", len(expected), len(result))
+	c := result[0]
+	if c.Name != "test-cluster" {
+		t.Errorf("expected Name 'test-cluster', got '%s'", c.Name)
 	}
-
-	for i, cluster := range result {
-		for j, field := range cluster {
-			if field != expected[i][j] {
-				t.Errorf("expected %s, got %s", expected[i][j], field)
-			}
-		}
+	if c.Engine != "aurora" {
+		t.Errorf("expected Engine 'aurora', got '%s'", c.Engine)
+	}
+	if c.EngineVersion != "5.6.10a" {
+		t.Errorf("expected EngineVersion '5.6.10a', got '%s'", c.EngineVersion)
+	}
+	if c.EngineMode != "provisioned" {
+		t.Errorf("expected EngineMode 'provisioned', got '%s'", c.EngineMode)
+	}
+	if c.Status != "available" {
+		t.Errorf("expected Status 'available', got '%s'", c.Status)
 	}
 }

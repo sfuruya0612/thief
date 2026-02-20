@@ -2,13 +2,11 @@ package util
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestParser(t *testing.T) {
-	// Test struct to JSON
 	type TestStruct struct {
 		Name  string `json:"name"`
 		Value int    `json:"value"`
@@ -19,84 +17,105 @@ func TestParser(t *testing.T) {
 		Value: 123,
 	}
 
-	// Parse struct to JSON bytes
-	bytes, err := Parser(testData)
+	b, err := Parser(testData)
 
-	// Verify results
-	assert.NoError(t, err)
-	assert.NotNil(t, bytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b == nil {
+		t.Fatal("expected non-nil bytes, got nil")
+	}
 
-	// Verify the JSON content is correct
 	var result TestStruct
-	err = json.Unmarshal(bytes, &result)
-	assert.NoError(t, err)
-	assert.Equal(t, testData.Name, result.Name)
-	assert.Equal(t, testData.Value, result.Value)
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+	if result.Name != testData.Name {
+		t.Errorf("expected Name %q, got %q", testData.Name, result.Name)
+	}
+	if result.Value != testData.Value {
+		t.Errorf("expected Value %d, got %d", testData.Value, result.Value)
+	}
 }
 
 func TestParser_Map(t *testing.T) {
-	// Test map to JSON
 	testMap := map[string]interface{}{
 		"name":    "test",
 		"value":   123.45,
 		"enabled": true,
 	}
 
-	// Parse map to JSON bytes
-	bytes, err := Parser(testMap)
+	b, err := Parser(testMap)
 
-	// Verify results
-	assert.NoError(t, err)
-	assert.NotNil(t, bytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b == nil {
+		t.Fatal("expected non-nil bytes, got nil")
+	}
 
-	// Verify the JSON content is correct
 	var result map[string]interface{}
-	err = json.Unmarshal(bytes, &result)
-	assert.NoError(t, err)
-	assert.Equal(t, testMap["name"], result["name"])
-	assert.Equal(t, testMap["value"], result["value"])
-	assert.Equal(t, testMap["enabled"], result["enabled"])
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+	if result["name"] != testMap["name"] {
+		t.Errorf("expected name %v, got %v", testMap["name"], result["name"])
+	}
+	if result["value"] != testMap["value"] {
+		t.Errorf("expected value %v, got %v", testMap["value"], result["value"])
+	}
+	if result["enabled"] != testMap["enabled"] {
+		t.Errorf("expected enabled %v, got %v", testMap["enabled"], result["enabled"])
+	}
 }
 
 func TestParser_Invalid(t *testing.T) {
-	// Test with a value that can't be marshaled to JSON
 	// Create a circular reference which will cause json.Marshal to fail
 	m1 := make(map[string]interface{})
 	m2 := make(map[string]interface{})
 	m1["child"] = m2
 	m2["parent"] = m1
 
-	// Attempt to parse invalid data
 	_, err := Parser(m1)
 
-	// Verify error is returned
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "json Marshal error")
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "json Marshal error") {
+		t.Errorf("expected error to contain 'json Marshal error', got %q", err.Error())
+	}
 }
 
 func TestParser_Array(t *testing.T) {
-	// Test array to JSON
 	testArray := []int{1, 2, 3, 4, 5}
 
-	// Parse array to JSON bytes
-	bytes, err := Parser(testArray)
+	b, err := Parser(testArray)
 
-	// Verify results
-	assert.NoError(t, err)
-	assert.NotNil(t, bytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b == nil {
+		t.Fatal("expected non-nil bytes, got nil")
+	}
 
-	// Verify the JSON content is correct
 	var result []int
-	err = json.Unmarshal(bytes, &result)
-	assert.NoError(t, err)
-	assert.Equal(t, len(testArray), len(result))
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+	if len(result) != len(testArray) {
+		t.Fatalf("expected length %d, got %d", len(testArray), len(result))
+	}
 	for i, v := range testArray {
-		assert.Equal(t, v, result[i])
+		if result[i] != v {
+			t.Errorf("expected result[%d] = %d, got %d", i, v, result[i])
+		}
 	}
 }
 
 func TestParser_NestedStructs(t *testing.T) {
-	// Test complex nested structs
 	type Address struct {
 		Street  string `json:"street"`
 		City    string `json:"city"`
@@ -126,29 +145,43 @@ func TestParser_NestedStructs(t *testing.T) {
 		},
 	}
 
-	// Parse nested struct to JSON bytes
-	bytes, err := Parser(testData)
+	b, err := Parser(testData)
 
-	// Verify results
-	assert.NoError(t, err)
-	assert.NotNil(t, bytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b == nil {
+		t.Fatal("expected non-nil bytes, got nil")
+	}
 
-	// Verify the JSON content is correct
 	var result Person
-	err = json.Unmarshal(bytes, &result)
-	assert.NoError(t, err)
-	assert.Equal(t, testData.Name, result.Name)
-	assert.Equal(t, testData.Age, result.Age)
-	assert.Equal(t, len(testData.Addresses), len(result.Addresses))
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+	if result.Name != testData.Name {
+		t.Errorf("expected Name %q, got %q", testData.Name, result.Name)
+	}
+	if result.Age != testData.Age {
+		t.Errorf("expected Age %d, got %d", testData.Age, result.Age)
+	}
+	if len(result.Addresses) != len(testData.Addresses) {
+		t.Fatalf("expected %d addresses, got %d", len(testData.Addresses), len(result.Addresses))
+	}
 	for i, addr := range testData.Addresses {
-		assert.Equal(t, addr.Street, result.Addresses[i].Street)
-		assert.Equal(t, addr.City, result.Addresses[i].City)
-		assert.Equal(t, addr.Country, result.Addresses[i].Country)
+		if result.Addresses[i].Street != addr.Street {
+			t.Errorf("expected Addresses[%d].Street %q, got %q", i, addr.Street, result.Addresses[i].Street)
+		}
+		if result.Addresses[i].City != addr.City {
+			t.Errorf("expected Addresses[%d].City %q, got %q", i, addr.City, result.Addresses[i].City)
+		}
+		if result.Addresses[i].Country != addr.Country {
+			t.Errorf("expected Addresses[%d].Country %q, got %q", i, addr.Country, result.Addresses[i].Country)
+		}
 	}
 }
 
 func TestParser_Primitives(t *testing.T) {
-	// Test various primitive types
 	testCases := []struct {
 		name     string
 		input    interface{}
@@ -164,13 +197,17 @@ func TestParser_Primitives(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Parse to JSON bytes
-			bytes, err := Parser(tc.input)
+			b, err := Parser(tc.input)
 
-			// Verify results
-			assert.NoError(t, err)
-			assert.NotNil(t, bytes)
-			assert.Equal(t, tc.expected, string(bytes))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if b == nil {
+				t.Fatal("expected non-nil bytes, got nil")
+			}
+			if string(b) != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, string(b))
+			}
 		})
 	}
 }

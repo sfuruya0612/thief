@@ -9,8 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 var mockOutput = &ec2.DescribeInstancesOutput{
@@ -37,17 +35,18 @@ var mockOutput = &ec2.DescribeInstancesOutput{
 }
 
 type mockEc2Api struct {
-	mock.Mock
+	describeInstancesOutput *ec2.DescribeInstancesOutput
+	describeInstancesErr    error
+	describeRegionsOutput   *ec2.DescribeRegionsOutput
+	describeRegionsErr      error
 }
 
 func (m *mockEc2Api) DescribeInstances(ctx context.Context, input *ec2.DescribeInstancesInput, opts ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*ec2.DescribeInstancesOutput), args.Error(1)
+	return m.describeInstancesOutput, m.describeInstancesErr
 }
 
 func (m *mockEc2Api) DescribeRegions(ctx context.Context, input *ec2.DescribeRegionsInput, opts ...func(*ec2.Options)) (*ec2.DescribeRegionsOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*ec2.DescribeRegionsOutput), args.Error(1)
+	return m.describeRegionsOutput, m.describeRegionsErr
 }
 
 func TestGenerateDescribeInstancesInput(t *testing.T) {
@@ -66,46 +65,79 @@ func TestGenerateDescribeInstancesInput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			input, err := GenerateDescribeInstancesInput(tt.opts)
 			if tt.wantErr {
-				assert.Error(t, err)
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
 			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, input)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if input == nil {
+					t.Fatal("expected non-nil input, got nil")
+				}
 			}
 		})
 	}
 }
 
 func TestDescribeInstances(t *testing.T) {
-	mockApi := new(mockEc2Api)
-
-	mockApi.On("DescribeInstances", mock.Anything, mock.Anything, mock.Anything).Return(mockOutput, nil)
+	mockApi := &mockEc2Api{
+		describeInstancesOutput: mockOutput,
+		describeInstancesErr:    nil,
+	}
 
 	input := &ec2.DescribeInstancesInput{}
 	result, err := DescribeInstances(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "MyInstance", result[0][0])
-	assert.Equal(t, "i-1234567890abcdef0", result[0][1])
-	assert.Equal(t, "t2.micro", result[0][2])
-	assert.Equal(t, "OnDemand", result[0][3])
-	assert.Equal(t, "192.168.1.1", result[0][4])
-	assert.Equal(t, "203.0.113.1", result[0][5])
-	assert.Equal(t, "running", result[0][6])
-	assert.Equal(t, "my-key", result[0][7])
-	assert.Equal(t, "ap-northeast-1a", result[0][8])
-	assert.NotEmpty(t, result[0][9])
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result[0].Name != "MyInstance" {
+		t.Errorf("expected Name 'MyInstance', got '%s'", result[0].Name)
+	}
+	if result[0].InstanceID != "i-1234567890abcdef0" {
+		t.Errorf("expected InstanceID 'i-1234567890abcdef0', got '%s'", result[0].InstanceID)
+	}
+	if result[0].InstanceType != "t2.micro" {
+		t.Errorf("expected InstanceType 't2.micro', got '%s'", result[0].InstanceType)
+	}
+	if result[0].Lifecycle != "OnDemand" {
+		t.Errorf("expected Lifecycle 'OnDemand', got '%s'", result[0].Lifecycle)
+	}
+	if result[0].PrivateIP != "192.168.1.1" {
+		t.Errorf("expected PrivateIP '192.168.1.1', got '%s'", result[0].PrivateIP)
+	}
+	if result[0].PublicIP != "203.0.113.1" {
+		t.Errorf("expected PublicIP '203.0.113.1', got '%s'", result[0].PublicIP)
+	}
+	if result[0].State != "running" {
+		t.Errorf("expected State 'running', got '%s'", result[0].State)
+	}
+	if result[0].KeyName != "my-key" {
+		t.Errorf("expected KeyName 'my-key', got '%s'", result[0].KeyName)
+	}
+	if result[0].AZ != "ap-northeast-1a" {
+		t.Errorf("expected AZ 'ap-northeast-1a', got '%s'", result[0].AZ)
+	}
+	if result[0].LaunchTime == "" {
+		t.Error("expected non-empty LaunchTime")
+	}
 }
 
 func TestDescribeInstances_Error(t *testing.T) {
-	mockApi := new(mockEc2Api)
-	mockApi.On("DescribeInstances", mock.Anything, mock.Anything, mock.Anything).Return(mockOutput, errors.New("error"))
+	mockApi := &mockEc2Api{
+		describeInstancesOutput: mockOutput,
+		describeInstancesErr:    errors.New("error"),
+	}
 
 	input := &ec2.DescribeInstancesInput{}
 	result, err := DescribeInstances(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }

@@ -2,32 +2,33 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 type mockSsmClient struct {
-	mock.Mock
+	describeInstanceInformationOutput *ssm.DescribeInstanceInformationOutput
+	describeInstanceInformationErr    error
+	startSessionOutput                *ssm.StartSessionOutput
+	startSessionErr                   error
+	terminateSessionOutput            *ssm.TerminateSessionOutput
+	terminateSessionErr               error
 }
 
 func (m *mockSsmClient) DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error) {
-	args := m.Called(ctx, params, optFns)
-	return args.Get(0).(*ssm.DescribeInstanceInformationOutput), args.Error(1)
+	return m.describeInstanceInformationOutput, m.describeInstanceInformationErr
 }
 
 func (m *mockSsmClient) StartSession(ctx context.Context, params *ssm.StartSessionInput, optFns ...func(*ssm.Options)) (*ssm.StartSessionOutput, error) {
-	args := m.Called(ctx, params, optFns)
-	return args.Get(0).(*ssm.StartSessionOutput), args.Error(1)
+	return m.startSessionOutput, m.startSessionErr
 }
 
 func (m *mockSsmClient) TerminateSession(ctx context.Context, params *ssm.TerminateSessionInput, optFns ...func(*ssm.Options)) (*ssm.TerminateSessionOutput, error) {
-	args := m.Called(ctx, params, optFns)
-	return args.Get(0).(*ssm.TerminateSessionOutput), args.Error(1)
+	return m.terminateSessionOutput, m.terminateSessionErr
 }
 
 func TestGenerateDescribeInstanceInformationInput(t *testing.T) {
@@ -38,15 +39,24 @@ func TestGenerateDescribeInstanceInformationInput(t *testing.T) {
 
 	input := GenerateDescribeInstanceInformationInput(opts)
 
-	assert.Equal(t, 2, len(input.Filters))
-	assert.Equal(t, "PingStatus", *input.Filters[0].Key)
-	assert.Equal(t, []string{"Online"}, input.Filters[0].Values)
-	assert.Equal(t, "ResourceType", *input.Filters[1].Key)
-	assert.Equal(t, []string{"EC2Instance"}, input.Filters[1].Values)
+	if len(input.Filters) != 2 {
+		t.Fatalf("expected 2 filters, got %d", len(input.Filters))
+	}
+	if *input.Filters[0].Key != "PingStatus" {
+		t.Errorf("expected filter key 'PingStatus', got '%s'", *input.Filters[0].Key)
+	}
+	if len(input.Filters[0].Values) != 1 || input.Filters[0].Values[0] != "Online" {
+		t.Errorf("expected filter values ['Online'], got %v", input.Filters[0].Values)
+	}
+	if *input.Filters[1].Key != "ResourceType" {
+		t.Errorf("expected filter key 'ResourceType', got '%s'", *input.Filters[1].Key)
+	}
+	if len(input.Filters[1].Values) != 1 || input.Filters[1].Values[0] != "EC2Instance" {
+		t.Errorf("expected filter values ['EC2Instance'], got %v", input.Filters[1].Values)
+	}
 }
 
 func TestDescribeInstanceInformation(t *testing.T) {
-	mockClient := new(mockSsmClient)
 	instanceID := "i-1234567890abcdef0"
 
 	mockOutput := &ssm.DescribeInstanceInformationOutput{
@@ -57,19 +67,23 @@ func TestDescribeInstanceInformation(t *testing.T) {
 		},
 	}
 
-	mockClient.On("DescribeInstanceInformation",
-		context.Background(),
-		mock.AnythingOfType("*ssm.DescribeInstanceInformationInput"),
-		mock.Anything).
-		Return(mockOutput, nil)
+	mockClient := &mockSsmClient{
+		describeInstanceInformationOutput: mockOutput,
+		describeInstanceInformationErr:    nil,
+	}
 
 	input := &ssm.DescribeInstanceInformationInput{}
 	ids, err := DescribeInstanceInformation(mockClient, input)
 
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(ids))
-	assert.Equal(t, instanceID, ids[0])
-	mockClient.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("expected 1 id, got %d", len(ids))
+	}
+	if ids[0] != instanceID {
+		t.Errorf("expected id '%s', got '%s'", instanceID, ids[0])
+	}
 }
 
 func TestGenerateStartSessionInput(t *testing.T) {
@@ -79,22 +93,20 @@ func TestGenerateStartSessionInput(t *testing.T) {
 
 	input := GenerateStartSessionInput(opts)
 
-	assert.Equal(t, opts.InstanceId, *input.Target)
+	if *input.Target != opts.InstanceId {
+		t.Errorf("expected Target '%s', got '%s'", opts.InstanceId, *input.Target)
+	}
 }
 
 func TestStartSession(t *testing.T) {
-	mockClient := new(mockSsmClient)
 	sessionID := "session-1234567890"
 
-	mockOutput := &ssm.StartSessionOutput{
-		SessionId: aws.String(sessionID),
+	mockClient := &mockSsmClient{
+		startSessionOutput: &ssm.StartSessionOutput{
+			SessionId: aws.String(sessionID),
+		},
+		startSessionErr: nil,
 	}
-
-	mockClient.On("StartSession",
-		context.Background(),
-		mock.AnythingOfType("*ssm.StartSessionInput"),
-		mock.Anything).
-		Return(mockOutput, nil)
 
 	input := &ssm.StartSessionInput{
 		Target: aws.String("i-1234567890abcdef0"),
@@ -102,9 +114,12 @@ func TestStartSession(t *testing.T) {
 
 	output, err := StartSession(mockClient, input)
 
-	assert.NoError(t, err)
-	assert.Equal(t, sessionID, *output.SessionId)
-	mockClient.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *output.SessionId != sessionID {
+		t.Errorf("expected SessionId '%s', got '%s'", sessionID, *output.SessionId)
+	}
 }
 
 func TestGenerateTerminateSessionInput(t *testing.T) {
@@ -114,22 +129,20 @@ func TestGenerateTerminateSessionInput(t *testing.T) {
 
 	input := GenerateTerminateSessionInput(opts)
 
-	assert.Equal(t, opts.SessionId, *input.SessionId)
+	if *input.SessionId != opts.SessionId {
+		t.Errorf("expected SessionId '%s', got '%s'", opts.SessionId, *input.SessionId)
+	}
 }
 
 func TestTerminateSession(t *testing.T) {
-	mockClient := new(mockSsmClient)
 	sessionID := "session-1234567890"
 
-	mockOutput := &ssm.TerminateSessionOutput{
-		SessionId: aws.String(sessionID),
+	mockClient := &mockSsmClient{
+		terminateSessionOutput: &ssm.TerminateSessionOutput{
+			SessionId: aws.String(sessionID),
+		},
+		terminateSessionErr: nil,
 	}
-
-	mockClient.On("TerminateSession",
-		context.Background(),
-		mock.AnythingOfType("*ssm.TerminateSessionInput"),
-		mock.Anything).
-		Return(mockOutput, nil)
 
 	input := &ssm.TerminateSessionInput{
 		SessionId: aws.String(sessionID),
@@ -137,7 +150,27 @@ func TestTerminateSession(t *testing.T) {
 
 	output, err := TerminateSession(mockClient, input)
 
-	assert.NoError(t, err)
-	assert.Equal(t, sessionID, *output.SessionId)
-	mockClient.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *output.SessionId != sessionID {
+		t.Errorf("expected SessionId '%s', got '%s'", sessionID, *output.SessionId)
+	}
+}
+
+func TestDescribeInstanceInformation_Error(t *testing.T) {
+	mockClient := &mockSsmClient{
+		describeInstanceInformationOutput: &ssm.DescribeInstanceInformationOutput{},
+		describeInstanceInformationErr:    errors.New("api error"),
+	}
+
+	input := &ssm.DescribeInstanceInformationInput{}
+	ids, err := DescribeInstanceInformation(mockClient, input)
+
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if ids != nil {
+		t.Errorf("expected nil ids, got %v", ids)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sfuruya0612/thief/internal/aws"
+	"github.com/sfuruya0612/thief/internal/config"
 	"github.com/sfuruya0612/thief/internal/util"
 )
 
@@ -47,60 +48,30 @@ var rdsClusterColumns = []util.Column{
 	{Header: "Status", Width: 15},
 }
 
-// listRDSInstances retrieves and displays RDS DB instances.
 func listRDSInstances(cmd *cobra.Command, args []string) error {
-	client, err := aws.NewRdsClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
-	if err != nil {
-		return fmt.Errorf("create RDS client: %w", err)
-	}
-
-	input := aws.GenerateDescribeDBInstancesInput(&aws.RdsOpts{})
-
-	instances, err := aws.DescribeDBInstances(client, input)
-	if err != nil {
-		return fmt.Errorf("describe DB instances: %w", err)
-	}
-
-	if len(instances) == 0 {
-		cmd.Println("No DB instances found")
-		return nil
-	}
-
-	formatter := util.NewTableFormatter(rdsInstanceColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(instances)
-	return nil
+	return runList(cmd, ListConfig[aws.RDSInstanceInfo]{
+		Columns:  rdsInstanceColumns,
+		EmptyMsg: "No DB instances found",
+		Fetch: func(cfg *config.Config) ([]aws.RDSInstanceInfo, error) {
+			client, err := aws.NewRdsClient(cfg.Profile, cfg.Region)
+			if err != nil {
+				return nil, fmt.Errorf("create RDS client: %w", err)
+			}
+			return aws.DescribeDBInstances(client, aws.GenerateDescribeDBInstancesInput(&aws.RdsOpts{}))
+		},
+	})
 }
 
-// listRDSClusters retrieves and displays RDS DB clusters.
 func listRDSClusters(cmd *cobra.Command, args []string) error {
-	client, err := aws.NewRdsClient(cmd.Flag("profile").Value.String(), cmd.Flag("region").Value.String())
-	if err != nil {
-		return fmt.Errorf("create RDS client: %w", err)
-	}
-
-	input := aws.GenerateDescribeDBClustersInput(&aws.RdsOpts{})
-
-	clusters, err := aws.DescribeDBClusters(client, input)
-	if err != nil {
-		return fmt.Errorf("describe DB clusters: %w", err)
-	}
-
-	if len(clusters) == 0 {
-		cmd.Println("No DB clusters found")
-		return nil
-	}
-
-	formatter := util.NewTableFormatter(rdsClusterColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(clusters)
-	return nil
+	return runList(cmd, ListConfig[aws.RDSClusterInfo]{
+		Columns:  rdsClusterColumns,
+		EmptyMsg: "No DB clusters found",
+		Fetch: func(cfg *config.Config) ([]aws.RDSClusterInfo, error) {
+			client, err := aws.NewRdsClient(cfg.Profile, cfg.Region)
+			if err != nil {
+				return nil, fmt.Errorf("create RDS client: %w", err)
+			}
+			return aws.DescribeDBClusters(client, aws.GenerateDescribeDBClustersInput(&aws.RdsOpts{}))
+		},
+	})
 }

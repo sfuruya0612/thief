@@ -8,8 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 var mockElasticacheOutput = &elasticache.DescribeCacheClustersOutput{
@@ -26,12 +24,12 @@ var mockElasticacheOutput = &elasticache.DescribeCacheClustersOutput{
 }
 
 type mockElasticacheApi struct {
-	mock.Mock
+	output *elasticache.DescribeCacheClustersOutput
+	err    error
 }
 
 func (m *mockElasticacheApi) DescribeCacheClusters(ctx context.Context, input *elasticache.DescribeCacheClustersInput, opts ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error) {
-	args := m.Called(ctx, input, opts)
-	return args.Get(0).(*elasticache.DescribeCacheClustersOutput), args.Error(1)
+	return m.output, m.err
 }
 
 func TestGenerateDescribeCacheClustersInput(t *testing.T) {
@@ -48,37 +46,59 @@ func TestGenerateDescribeCacheClustersInput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			input := GenerateDescribeCacheClustersInput(tt.opts)
-			assert.NotNil(t, input)
+			if input == nil {
+				t.Fatal("expected non-nil input, got nil")
+			}
 		})
 	}
 }
 
 func TestDescribeCacheClusters(t *testing.T) {
-	mockApi := new(mockElasticacheApi)
-	mockApi.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(mockElasticacheOutput, nil)
+	mockApi := &mockElasticacheApi{
+		output: mockElasticacheOutput,
+		err:    nil,
+	}
 
 	input := &elasticache.DescribeCacheClustersInput{}
 	result, err := DescribeCacheClusters(mockApi, input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, "repl-group-1", result[0][0])
-	assert.Equal(t, "my-cache-cluster", result[0][1])
-	assert.Equal(t, "cache.t3.micro", result[0][2])
-	assert.Equal(t, "redis", result[0][3])
-	assert.Equal(t, "6.2", result[0][4])
-	assert.Equal(t, "available", result[0][5])
-
-	mockApi.AssertExpectations(t)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result[0].ReplicationGroupID != "repl-group-1" {
+		t.Errorf("expected ReplicationGroupID 'repl-group-1', got '%s'", result[0].ReplicationGroupID)
+	}
+	if result[0].CacheClusterID != "my-cache-cluster" {
+		t.Errorf("expected CacheClusterID 'my-cache-cluster', got '%s'", result[0].CacheClusterID)
+	}
+	if result[0].CacheNodeType != "cache.t3.micro" {
+		t.Errorf("expected CacheNodeType 'cache.t3.micro', got '%s'", result[0].CacheNodeType)
+	}
+	if result[0].Engine != "redis" {
+		t.Errorf("expected Engine 'redis', got '%s'", result[0].Engine)
+	}
+	if result[0].EngineVersion != "6.2" {
+		t.Errorf("expected EngineVersion '6.2', got '%s'", result[0].EngineVersion)
+	}
+	if result[0].Status != "available" {
+		t.Errorf("expected Status 'available', got '%s'", result[0].Status)
+	}
 }
 
 func TestDescribeCacheClusters_Error(t *testing.T) {
-	mockApi := new(mockElasticacheApi)
-	mockApi.On("DescribeCacheClusters", mock.Anything, mock.Anything, mock.Anything).Return(mockElasticacheOutput, errors.New("error"))
+	mockApi := &mockElasticacheApi{
+		output: mockElasticacheOutput,
+		err:    errors.New("error"),
+	}
 
 	input := &elasticache.DescribeCacheClustersInput{}
 	result, err := DescribeCacheClusters(mockApi, input)
-	assert.Error(t, err)
-	assert.Nil(t, result)
-
-	mockApi.AssertExpectations(t)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
 }

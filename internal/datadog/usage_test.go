@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/stretchr/testify/assert"
 )
 
 // This is a simpler approach to testing since we can't easily mock the DataDog API client
@@ -14,7 +13,9 @@ import (
 func TestNewDatadogUsageMeteringApi(t *testing.T) {
 	client := &datadog.APIClient{}
 	api := NewDatadogUsageMeteringApi(client)
-	assert.NotNil(t, api)
+	if api == nil {
+		t.Error("expected non-nil api, got nil")
+	}
 }
 
 func TestGenerateGetHistoricalCostByOrgOptionalParameters(t *testing.T) {
@@ -24,15 +25,27 @@ func TestGenerateGetHistoricalCostByOrgOptionalParameters(t *testing.T) {
 
 	// Test with endMonth
 	params := GenerateGetHistoricalCostByOrgOptionalParameters(view, endMonth)
-	assert.NotNil(t, params)
-	assert.Equal(t, view, *params.View)
-	assert.Equal(t, endMonth, *params.EndMonth)
+	if params == nil {
+		t.Fatal("expected non-nil params, got nil")
+	}
+	if *params.View != view {
+		t.Errorf("expected View %q, got %q", view, *params.View)
+	}
+	if *params.EndMonth != endMonth {
+		t.Errorf("expected EndMonth %v, got %v", endMonth, *params.EndMonth)
+	}
 
 	// Test without endMonth
 	params = GenerateGetHistoricalCostByOrgOptionalParameters(view, time.Time{})
-	assert.NotNil(t, params)
-	assert.Equal(t, view, *params.View)
-	assert.Nil(t, params.EndMonth)
+	if params == nil {
+		t.Fatal("expected non-nil params, got nil")
+	}
+	if *params.View != view {
+		t.Errorf("expected View %q, got %q", view, *params.View)
+	}
+	if params.EndMonth != nil {
+		t.Errorf("expected nil EndMonth, got %v", params.EndMonth)
+	}
 }
 
 func TestGenerateGetEstimatedCostByOrgOptionalParameters(t *testing.T) {
@@ -43,17 +56,33 @@ func TestGenerateGetEstimatedCostByOrgOptionalParameters(t *testing.T) {
 
 	// Test with endMonth
 	params := GenerateGetEstimatedCostByOrgOptionalParameters(view, startMonth, endMonth)
-	assert.NotNil(t, params)
-	assert.Equal(t, view, *params.View)
-	assert.Equal(t, startMonth, *params.StartMonth)
-	assert.Equal(t, endMonth, *params.EndMonth)
+	if params == nil {
+		t.Fatal("expected non-nil params, got nil")
+	}
+	if *params.View != view {
+		t.Errorf("expected View %q, got %q", view, *params.View)
+	}
+	if *params.StartMonth != startMonth {
+		t.Errorf("expected StartMonth %v, got %v", startMonth, *params.StartMonth)
+	}
+	if *params.EndMonth != endMonth {
+		t.Errorf("expected EndMonth %v, got %v", endMonth, *params.EndMonth)
+	}
 
 	// Test without endMonth
 	params = GenerateGetEstimatedCostByOrgOptionalParameters(view, startMonth, time.Time{})
-	assert.NotNil(t, params)
-	assert.Equal(t, view, *params.View)
-	assert.Equal(t, startMonth, *params.StartMonth)
-	assert.Nil(t, params.EndMonth)
+	if params == nil {
+		t.Fatal("expected non-nil params, got nil")
+	}
+	if *params.View != view {
+		t.Errorf("expected View %q, got %q", view, *params.View)
+	}
+	if *params.StartMonth != startMonth {
+		t.Errorf("expected StartMonth %v, got %v", startMonth, *params.StartMonth)
+	}
+	if params.EndMonth != nil {
+		t.Errorf("expected nil EndMonth, got %v", params.EndMonth)
+	}
 }
 
 // Note: We can't easily test GetHistoricalCostByOrg and GetEstimatedCostByOrg

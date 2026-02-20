@@ -17,11 +17,9 @@ type CostExplorerClient struct {
 func NewCostExplorerClient(profile, region string) (*CostExplorerClient, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create CostExplorer client: %w", err)
+		return nil, fmt.Errorf("create costexplorer client: %w", err)
 	}
-	return &CostExplorerClient{
-		client: costexplorer.NewFromConfig(cfg),
-	}, nil
+	return &CostExplorerClient{client: costexplorer.NewFromConfig(cfg)}, nil
 }
 
 type CostDetail struct {

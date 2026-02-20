@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sfuruya0612/thief/internal/aws"
-	"github.com/sfuruya0612/thief/internal/util"
 	"github.com/spf13/cobra"
+
+	"github.com/sfuruya0612/thief/internal/aws"
+	"github.com/sfuruya0612/thief/internal/config"
+	"github.com/sfuruya0612/thief/internal/util"
 )
 
 const (
@@ -63,202 +65,105 @@ var costColumns = []util.Column{
 	{Header: "Unit", Width: 5},
 }
 
-// showCostByService retrieves and displays cost data aggregated by service.
-func showCostByService(cmd *cobra.Command, args []string) error {
-	profile := cmd.Flag("profile").Value.String()
-	region := cmd.Flag("region").Value.String()
+// resolveDates returns start/end dates, defaulting to current month if empty.
+func resolveDates(cmd *cobra.Command) (string, string) {
 	startDate := cmd.Flag("start-date").Value.String()
 	endDate := cmd.Flag("end-date").Value.String()
 
-	// Default to the first day of the current month to today
 	if startDate == "" {
 		now := time.Now()
 		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format(dateFormat)
 	}
-
 	if endDate == "" {
 		endDate = time.Now().Format(dateFormat)
 	}
+	return startDate, endDate
+}
 
-	client, err := aws.NewCostExplorerClient(profile, region)
+// printCostRows formats and prints a slice of CostDetail.
+func printCostRows(cmd *cobra.Command, costs []aws.CostDetail, keyFn func(aws.CostDetail) string) error {
+	cfg := config.FromContext(cmd.Context())
+
+	var items [][]string
+	for _, cost := range costs {
+		items = append(items, []string{
+			cost.TimePeriod,
+			keyFn(cost),
+			cost.Amount,
+			cost.Unit,
+		})
+	}
+	return printRowsOrGroupBy(cfg, costColumns, items)
+}
+
+// showCostByService retrieves and displays cost data aggregated by service.
+func showCostByService(cmd *cobra.Command, args []string) error {
+	cfg := config.FromContext(cmd.Context())
+	startDate, endDate := resolveDates(cmd)
+
+	client, err := aws.NewCostExplorerClient(cfg.Profile, cfg.Region)
 	if err != nil {
 		return fmt.Errorf("create CostExplorer client: %w", err)
 	}
 
-	// Get the metric type from the flag
-	metric := aws.CostMetric(costMetric)
-
-	costs, err := client.GetCostByService(startDate, endDate, metric)
+	costs, err := client.GetCostByService(startDate, endDate, aws.CostMetric(costMetric))
 	if err != nil {
 		return fmt.Errorf("get costs by service: %w", err)
 	}
 
-	var items [][]string
-	for _, cost := range costs {
-		items = append(items, []string{
-			cost.TimePeriod,
-			cost.ServiceName,
-			cost.Amount,
-			cost.Unit,
-		})
-	}
-
-	formatter := util.NewTableFormatter(costColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-	return nil
+	return printCostRows(cmd, costs, func(c aws.CostDetail) string { return c.ServiceName })
 }
 
 // showCostByAccount retrieves and displays cost data aggregated by account.
 func showCostByAccount(cmd *cobra.Command, args []string) error {
-	profile := cmd.Flag("profile").Value.String()
-	region := cmd.Flag("region").Value.String()
-	startDate := cmd.Flag("start-date").Value.String()
-	endDate := cmd.Flag("end-date").Value.String()
+	cfg := config.FromContext(cmd.Context())
+	startDate, endDate := resolveDates(cmd)
 
-	// Default to the first day of the current month to today
-	if startDate == "" {
-		now := time.Now()
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format(dateFormat)
-	}
-
-	if endDate == "" {
-		endDate = time.Now().Format(dateFormat)
-	}
-
-	client, err := aws.NewCostExplorerClient(profile, region)
+	client, err := aws.NewCostExplorerClient(cfg.Profile, cfg.Region)
 	if err != nil {
 		return fmt.Errorf("create CostExplorer client: %w", err)
 	}
 
-	// Get the metric type from the flag
-	metric := aws.CostMetric(costMetric)
-
-	costs, err := client.GetCostByAccount(startDate, endDate, metric)
+	costs, err := client.GetCostByAccount(startDate, endDate, aws.CostMetric(costMetric))
 	if err != nil {
 		return fmt.Errorf("get costs by account: %w", err)
 	}
 
-	var items [][]string
-	for _, cost := range costs {
-		items = append(items, []string{
-			cost.TimePeriod,
-			cost.GroupKey,
-			cost.Amount,
-			cost.Unit,
-		})
-	}
-
-	formatter := util.NewTableFormatter(costColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-	return nil
+	return printCostRows(cmd, costs, func(c aws.CostDetail) string { return c.GroupKey })
 }
 
 // showCostByUsageType retrieves and displays cost data aggregated by usage type.
 func showCostByUsageType(cmd *cobra.Command, args []string) error {
-	profile := cmd.Flag("profile").Value.String()
-	region := cmd.Flag("region").Value.String()
-	startDate := cmd.Flag("start-date").Value.String()
-	endDate := cmd.Flag("end-date").Value.String()
+	cfg := config.FromContext(cmd.Context())
+	startDate, endDate := resolveDates(cmd)
 
-	// Default to the first day of the current month to today
-	if startDate == "" {
-		now := time.Now()
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format(dateFormat)
-	}
-
-	if endDate == "" {
-		endDate = time.Now().Format(dateFormat)
-	}
-
-	client, err := aws.NewCostExplorerClient(profile, region)
+	client, err := aws.NewCostExplorerClient(cfg.Profile, cfg.Region)
 	if err != nil {
 		return fmt.Errorf("create CostExplorer client: %w", err)
 	}
 
-	// Get the metric type from the flag
-	metric := aws.CostMetric(costMetric)
-
-	costs, err := client.GetCostByUsageType(startDate, endDate, metric)
+	costs, err := client.GetCostByUsageType(startDate, endDate, aws.CostMetric(costMetric))
 	if err != nil {
 		return fmt.Errorf("get costs by usage type: %w", err)
 	}
 
-	var items [][]string
-	for _, cost := range costs {
-		items = append(items, []string{
-			cost.TimePeriod,
-			cost.GroupKey,
-			cost.Amount,
-			cost.Unit,
-		})
-	}
-
-	formatter := util.NewTableFormatter(costColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-	return nil
+	return printCostRows(cmd, costs, func(c aws.CostDetail) string { return c.GroupKey })
 }
 
 // showCostOverview retrieves and displays an overview of costs.
 func showCostOverview(cmd *cobra.Command, args []string) error {
-	profile := cmd.Flag("profile").Value.String()
-	region := cmd.Flag("region").Value.String()
-	startDate := cmd.Flag("start-date").Value.String()
-	endDate := cmd.Flag("end-date").Value.String()
+	cfg := config.FromContext(cmd.Context())
+	startDate, endDate := resolveDates(cmd)
 
-	// Default to the first day of the current month to today
-	if startDate == "" {
-		now := time.Now()
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format(dateFormat)
-	}
-
-	if endDate == "" {
-		endDate = time.Now().Format(dateFormat)
-	}
-
-	client, err := aws.NewCostExplorerClient(profile, region)
+	client, err := aws.NewCostExplorerClient(cfg.Profile, cfg.Region)
 	if err != nil {
 		return fmt.Errorf("create CostExplorer client: %w", err)
 	}
 
-	// Get the metric type from the flag
-	metric := aws.CostMetric(costMetric)
-
-	costs, err := client.GetCostForPeriod(startDate, endDate, metric)
+	costs, err := client.GetCostForPeriod(startDate, endDate, aws.CostMetric(costMetric))
 	if err != nil {
 		return fmt.Errorf("get cost for period: %w", err)
 	}
 
-	var items [][]string
-	for _, cost := range costs {
-		items = append(items, []string{
-			cost.TimePeriod,
-			"Total",
-			cost.Amount,
-			cost.Unit,
-		})
-	}
-
-	formatter := util.NewTableFormatter(costColumns, cmd.Flag("output").Value.String())
-
-	if cmd.Flag("no-header").Value.String() == "false" {
-		formatter.PrintHeader()
-	}
-
-	formatter.PrintRows(items)
-	return nil
+	return printCostRows(cmd, costs, func(c aws.CostDetail) string { return "Total" })
 }

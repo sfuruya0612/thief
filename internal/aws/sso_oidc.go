@@ -41,7 +41,7 @@ type ssoOidcApi interface {
 func NewSSOOidcClient(profile, region string) (ssoOidcApi, error) {
 	cfg, err := GetSession(profile, region)
 	if err != nil {
-		return nil, fmt.Errorf("create SSO OIDC client: %w", err)
+		return nil, fmt.Errorf("create ssooidc client: %w", err)
 	}
 	return ssooidc.NewFromConfig(cfg), nil
 }
