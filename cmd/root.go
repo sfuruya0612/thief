@@ -14,10 +14,10 @@ import (
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:   "thief",
-	Short: "CLI for AWS, Datadog, and TiDB services.",
+	Short: "CLI for AWS, BigQuery, Datadog, and TiDB services.",
 	Long: `Thief is a command-line interface tool designed to interact with
 and manage resources across various cloud platforms and services,
-including AWS, Datadog, and TiDB.`,
+including AWS, BigQuery, Datadog, and TiDB.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load(cmd)
 		if err != nil {

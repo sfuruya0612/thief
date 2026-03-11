@@ -24,8 +24,14 @@ type Config struct {
 	NoHeader bool   `yaml:"no-header"`
 	GroupBy  string `yaml:"group-by"`
 
-	Datadog DatadogConfig `yaml:"datadog"`
-	TiDB    TiDBConfig    `yaml:"tidb"`
+	Datadog  DatadogConfig  `yaml:"datadog"`
+	TiDB     TiDBConfig     `yaml:"tidb"`
+	BigQuery BigQueryConfig // not loaded from YAML; set via flag or env only
+}
+
+// BigQueryConfig holds BigQuery-specific configuration.
+type BigQueryConfig struct {
+	ProjectID string
 }
 
 // DatadogConfig holds Datadog-specific configuration.
@@ -138,6 +144,9 @@ func Load(cmd *cobra.Command) (*Config, error) {
 	if v := os.Getenv("TIDB_PRIVATE_KEY"); v != "" {
 		cfg.TiDB.PrivateKey = v
 	}
+	if v := os.Getenv("GOOGLE_CLOUD_PROJECT"); v != "" {
+		cfg.BigQuery.ProjectID = v
+	}
 
 	// Apply Cobra flags (override everything).
 	if f := cmd.Flag("profile"); f != nil && f.Changed {
@@ -183,6 +192,10 @@ func Load(cmd *cobra.Command) (*Config, error) {
 	}
 	if f := cmd.Flag("billed-month"); f != nil && f.Changed {
 		cfg.TiDB.BilledMonth = f.Value.String()
+	}
+	// BigQuery flag overrides (inherited persistent flags on bqCmd).
+	if f := cmd.Flag("project"); f != nil && f.Changed {
+		cfg.BigQuery.ProjectID = f.Value.String()
 	}
 
 	return cfg, nil
