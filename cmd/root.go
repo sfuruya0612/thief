@@ -43,6 +43,7 @@ func init() {
 		rdsCmd,
 		elasticacheCmd,
 		costexplorerCmd,
+		cfnCmd,
 	)
 
 	// SSO
@@ -111,6 +112,9 @@ func init() {
 	tidbCmd.PersistentFlags().StringP("private-key", "", "", "Private Key")
 
 	tidbCostCmd.Flags().StringP("billed-month", "", "", "The month of this bill happens for the specified organization. The format is YYYY-MM, for example '2024-05'")
+
+	// CloudFormation
+	cfnCmd.AddCommand(cfnListCmd, cfnDescribeCmd, cfnChangesetCmd)
 
 	// Cost Explorer
 	costexplorerCmd.AddCommand(costByServiceCmd, costByAccountCmd, costByUsageTypeCmd, costOverviewCmd)
