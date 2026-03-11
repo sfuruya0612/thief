@@ -44,6 +44,7 @@ func init() {
 		elasticacheCmd,
 		costexplorerCmd,
 		cfnCmd,
+		iamCmd,
 	)
 
 	// SSO
@@ -115,6 +116,9 @@ func init() {
 
 	// CloudFormation
 	cfnCmd.AddCommand(cfnListCmd, cfnDescribeCmd, cfnChangesetCmd)
+
+	// IAM
+	iamCmd.AddCommand(iamListCmd)
 
 	// Cost Explorer
 	costexplorerCmd.AddCommand(costByServiceCmd, costByAccountCmd, costByUsageTypeCmd, costOverviewCmd)
