@@ -516,12 +516,6 @@ textarea {
 .stat .delta.neg {
   color: var(--err);
 }
-.stat .spark {
-  height: 20px;
-  margin-top: 2px;
-  opacity: 0.85;
-}
-
 /* ============================================================
    Facet filter row
    ============================================================ */

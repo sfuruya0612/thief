@@ -41,7 +41,6 @@ export interface Tweaks {
   accent: Accent;
   layout: Layout;
   drawerPos: DrawerPos;
-  showMiniCharts: boolean;
 }
 
 export interface Profile {

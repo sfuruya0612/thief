@@ -110,7 +110,6 @@ export function App() {
           onRegionChange={setRegion}
           activeService={activeService}
           onServiceChange={setActiveService}
-          showMiniCharts={tweaks.showMiniCharts}
           drawerPos={tweaks.drawerPos}
           onSidebarWidthChange={setSidebarWidth}
         />
