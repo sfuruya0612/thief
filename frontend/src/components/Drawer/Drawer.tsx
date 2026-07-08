@@ -206,9 +206,6 @@ export function Drawer({
                     <Icons.terminal size={12} /> Open CLI
                   </button>
                 )}
-                <button className="btn sm">
-                  <Icons.external size={12} /> Console
-                </button>
                 <button className="btn sm ghost" style={{ marginLeft: 'auto' }}>
                   <Icons.more size={14} />
                 </button>
