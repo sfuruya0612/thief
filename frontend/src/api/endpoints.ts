@@ -6,6 +6,7 @@ import type {
   ECSTaskRaw,
   ForecastRaw,
   RegionRaw,
+  S3ObjectRaw,
 } from '../types/aws';
 import type { Profile } from '../types/common';
 import type {
@@ -19,7 +20,7 @@ import type {
   TiDBProjectRaw,
 } from '../types/nonaws';
 import { SERVICE_TO_PATH } from '../lib/serviceMeta';
-import { apiGet, apiPost } from './client';
+import { apiBaseUrl, apiGet, apiPost, apiPostForm } from './client';
 
 export function getProfiles(): Promise<Profile[]> {
   // バックエンドは users がない場合 null を返しうるので配列に正規化する
@@ -72,6 +73,52 @@ export function getRegions(profile: string): Promise<RegionRaw[]> {
   return apiGet<RegionRaw[] | null>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/regions`,
   ).then((v) => v ?? []);
+}
+
+// ============================================================
+// S3 Objects (Drawer の Objects タブ)
+// ============================================================
+export function getS3Objects(
+  profile: string,
+  region: string,
+  bucket: string,
+  prefix?: string,
+): Promise<S3ObjectRaw[]> {
+  return apiGet<S3ObjectRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects`,
+    { region, prefix },
+  ).then((v) => v ?? []);
+}
+
+export function uploadS3Object(
+  profile: string,
+  region: string,
+  bucket: string,
+  key: string,
+  file: File,
+): Promise<{ status: string; key: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiPostForm<{ status: string; key: string }>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects/upload`,
+    formData,
+    { region, key },
+  );
+}
+
+export function s3DownloadUrl(
+  profile: string,
+  region: string,
+  bucket: string,
+  key: string,
+): string {
+  const url = new URL(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects/download`,
+    apiBaseUrl(),
+  );
+  url.searchParams.set('region', region);
+  url.searchParams.set('key', key);
+  return url.toString();
 }
 
 // ============================================================

@@ -18,6 +18,8 @@
   - @sfuruya0612
 - [ADD] ECS クラスタの Drawer に Services / Tasks タブを追加し、稼働数・state を一覧できるようにする
   - @sfuruya0612
+- [ADD] S3 バケットの Drawer にオブジェクト一覧・アップロード・ダウンロード機能を追加する
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] フッターを全ビュー共通で画面最下部に固定し、ウィジェットをブラウザ幅に追従させる
