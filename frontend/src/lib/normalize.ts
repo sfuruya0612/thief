@@ -35,6 +35,8 @@ import type {
   NATGWRow,
   RDSRaw,
   RDSRow,
+  S3ObjectRaw,
+  S3ObjectRow,
   S3Raw,
   S3Row,
   SecretRaw,
@@ -249,6 +251,16 @@ export function s3FromRaw(raw: S3Raw, _region: string): S3Row {
     createdAt: raw.created_at,
     public: raw.public,
     encryption: raw.encryption,
+  };
+}
+
+export function s3ObjectFromRaw(raw: S3ObjectRaw): S3ObjectRow {
+  return {
+    key: raw.key,
+    size: raw.size,
+    lastModified: raw.last_modified,
+    storageClass: raw.storage_class,
+    etag: raw.etag,
   };
 }
 

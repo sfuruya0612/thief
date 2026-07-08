@@ -8,6 +8,7 @@ import { StatusBadge } from '../primitives';
 import { DrawerECRImages } from './DrawerECRImages';
 import { DrawerECSServices } from './DrawerECSServices';
 import { DrawerECSTasks } from './DrawerECSTasks';
+import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerTags } from './DrawerTags';
 import { DrawerTerminal } from './DrawerTerminal';
 import type { OverviewEntry } from './overviewRows';
@@ -19,7 +20,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   cache: ['Overview', 'Tags'],
   lambda: ['Overview', 'Tags'],
   ecs: ['Overview', 'Terminal', 'Services', 'Tasks', 'Tags'],
-  s3: ['Overview', 'Tags'],
+  s3: ['Overview', 'Objects', 'Tags'],
   iam: ['Overview', 'Tags'],
   elb: ['Overview', 'Tags'],
   cloudfront: ['Overview', 'Tags'],
@@ -245,6 +246,9 @@ export function Drawer({
               )}
               {tab === 'Tasks' && service === 'ecs' && (
                 <DrawerECSTasks profile={profile} region={region} cluster={resource.name} />
+              )}
+              {tab === 'Objects' && service === 's3' && (
+                <DrawerS3Objects profile={profile} region={region} bucket={resource.name} />
               )}
             </div>
           </>

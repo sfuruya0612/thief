@@ -20,6 +20,7 @@ import type {
   LambdaRow,
   NATGWRow,
   RDSRow,
+  S3ObjectRow,
   S3Row,
   SecretRow,
   SQSRow,
@@ -583,6 +584,34 @@ export const s3Columns: ColumnDef<S3Row>[] = [
     header: 'Encryption',
     width: '16%',
     cell: (r) => <span style={mutedMono}>{r.encryption}</span>,
+  },
+];
+
+export const s3ObjectColumns: ColumnDef<S3ObjectRow>[] = [
+  {
+    key: 'key',
+    header: 'Key',
+    width: '40%',
+    cell: (r) => <span className="primary truncate">{r.key}</span>,
+  },
+  {
+    key: 'size',
+    header: 'Size',
+    width: '14%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{formatBytes(r.size)}</span>,
+  },
+  {
+    key: 'lastModified',
+    header: 'Last modified',
+    width: '18%',
+    cell: (r) => (r.lastModified ? <span style={dimMono}>{r.lastModified}</span> : <Dash />),
+  },
+  {
+    key: 'storageClass',
+    header: 'Storage class',
+    width: '18%',
+    cell: (r) => <span style={mutedMono}>{r.storageClass}</span>,
   },
 ];
 

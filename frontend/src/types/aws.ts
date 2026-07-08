@@ -307,6 +307,25 @@ export interface S3Row {
 }
 
 // ============================================================
+// S3 Objects (Drawer の Objects タブ)
+// ============================================================
+export interface S3ObjectRaw {
+  key: string;
+  size: number;
+  last_modified: string;
+  storage_class: string;
+  etag: string;
+}
+
+export interface S3ObjectRow {
+  key: string;
+  size: number;
+  lastModified: string;
+  storageClass: string;
+  etag: string;
+}
+
+// ============================================================
 // IAM (グローバルサービス: region は 'global' 固定)
 // ============================================================
 export interface IAMRaw {

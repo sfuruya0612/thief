@@ -14,6 +14,7 @@ import {
   ecsContainerFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
+  s3ObjectFromRaw,
 } from '../lib/normalize';
 import {
   getBQDatasets,
@@ -30,11 +31,13 @@ import {
   getProfiles,
   getRegions,
   getResources,
+  getS3Objects,
   getTiDBClusters,
   getTiDBCost,
   getTiDBProjects,
   postBQQuery,
   postSSOLogin,
+  uploadS3Object,
 } from './endpoints';
 
 export function useProfiles() {
@@ -110,6 +113,31 @@ export function useRegions(profile: string) {
     },
     staleTime: Infinity,
     enabled: !!profile,
+  });
+}
+
+// ============================================================
+// S3 Objects (Drawer の Objects タブ)
+// ============================================================
+export function useS3Objects(profile: string, region: string, bucket: string, prefix?: string) {
+  return useQuery({
+    queryKey: ['aws', 's3-objects', profile, region, bucket, prefix],
+    queryFn: async () => (await getS3Objects(profile, region, bucket, prefix)).map(s3ObjectFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!bucket,
+  });
+}
+
+export function useS3Upload(profile: string, region: string, bucket: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, file }: { key: string; file: File }) =>
+      uploadS3Object(profile, region, bucket, key, file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['aws', 's3-objects', profile, region, bucket],
+      });
+    },
   });
 }
 
