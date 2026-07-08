@@ -1,4 +1,11 @@
-import type { CostRaw, ECRImageRaw, ECSContainerRaw, ECSTaskRaw, ForecastRaw } from '../types/aws';
+import type {
+  CostRaw,
+  ECRImageRaw,
+  ECSContainerRaw,
+  ECSTaskRaw,
+  ForecastRaw,
+  RegionRaw,
+} from '../types/aws';
 import type { Profile } from '../types/common';
 import type {
   BQDatasetRaw,
@@ -55,6 +62,15 @@ export function getCostForecast(profile: string, region: string): Promise<Foreca
 // SSO ログインを開始する (バックエンドが `aws sso login` を起動する)
 export function postSSOLogin(profile: string): Promise<void> {
   return apiPost<void>(`/api/aws/profiles/${encodeURIComponent(profile)}/sso/login`);
+}
+
+// ============================================================
+// Region (DescribeRegions からの動的取得)
+// ============================================================
+export function getRegions(profile: string): Promise<RegionRaw[]> {
+  return apiGet<RegionRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/regions`,
+  ).then((v) => v ?? []);
 }
 
 // ============================================================

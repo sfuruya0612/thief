@@ -16,6 +16,10 @@ import (
 
 const cacheTTL = time.Hour
 
+// regionsCacheTTL はリージョン一覧の長期キャッシュ TTL。
+// 有効化済みリージョンは頻繁に変わらないため 24 時間保持する。
+const regionsCacheTTL = 24 * time.Hour
+
 // Server holds all shared state for the HTTP API server.
 type Server struct {
 	cfg           *config.Config

@@ -22,6 +22,7 @@ import {
   getECSContainers,
   getECSTasks,
   getProfiles,
+  getRegions,
   getResources,
   getTiDBClusters,
   getTiDBCost,
@@ -86,6 +87,22 @@ export function useCostForecast(profile: string, region: string) {
       }));
     },
     staleTime: 60_000,
+    enabled: !!profile,
+  });
+}
+
+// ============================================================
+// Region (DescribeRegions からの動的取得)
+// リージョン一覧は一度取得したら保持する (staleTime: Infinity)
+// ============================================================
+export function useRegions(profile: string) {
+  return useQuery({
+    queryKey: ['aws', 'regions', profile],
+    queryFn: async () => {
+      const raws = await getRegions(profile);
+      return raws.map((r) => ({ code: r.code, name: r.name }));
+    },
+    staleTime: Infinity,
     enabled: !!profile,
   });
 }
