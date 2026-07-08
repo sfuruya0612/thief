@@ -64,7 +64,7 @@ func natgwFromGateway(ng ec2types.NatGateway) NATGatewayResource {
 	return NATGatewayResource{
 		ID:         ptrStr(ng.NatGatewayId),
 		Name:       tags["Name"],
-		State:      string(ng.State),
+		State:      DisplayState(string(ng.State)),
 		VpcID:      ptrStr(ng.VpcId),
 		SubnetID:   ptrStr(ng.SubnetId),
 		ElasticIP:  eip,

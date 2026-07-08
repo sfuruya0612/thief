@@ -90,7 +90,7 @@ func dynamoFromDescription(t *dynamodbtypes.TableDescription) DynamoResource {
 	return DynamoResource{
 		ID:        ptrStr(t.TableArn),
 		Name:      ptrStr(t.TableName),
-		State:     string(t.TableStatus),
+		State:     DisplayState(string(t.TableStatus)),
 		Mode:      mode,
 		ItemCount: ptrInt64(t.ItemCount),
 		SizeBytes: ptrInt64(t.TableSizeBytes),

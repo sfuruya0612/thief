@@ -53,7 +53,7 @@ func ListELBResources(ctx context.Context, profile, region string) ([]ELBResourc
 func elbFromLB(lb elbv2types.LoadBalancer) ELBResource {
 	state := "unknown"
 	if lb.State != nil {
-		state = string(lb.State.Code)
+		state = DisplayState(string(lb.State.Code))
 	}
 	var azs []string
 	for _, az := range lb.AvailabilityZones {

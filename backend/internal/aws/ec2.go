@@ -68,7 +68,7 @@ func ec2FromInstance(inst ec2types.Instance) EC2Resource {
 	r := EC2Resource{
 		ID:           ptrStr(inst.InstanceId),
 		Name:         tags["Name"],
-		State:        string(inst.State.Name),
+		State:        DisplayState(string(inst.State.Name)),
 		InstanceType: string(inst.InstanceType),
 		AZ:           ptrStr(inst.Placement.AvailabilityZone),
 		PrivateIP:    ptrStr(inst.PrivateIpAddress),

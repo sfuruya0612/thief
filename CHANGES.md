@@ -22,6 +22,20 @@
   - @sfuruya0612
 - [CHANGE] 機能していないトップバーのサーチバーを削除する
   - @sfuruya0612
+- [CHANGE] ECR / Parameter Store / Secrets Manager の統計を Resources のみに簡素化し、state カウントと Monthly Cost を削除する
+  - @sfuruya0612
+- [CHANGE] ELB の統計を Resources と Monthly Cost のみにする
+  - @sfuruya0612
+- [CHANGE] ElastiCache に存在しない Stopped カウントを統計から削除する
+  - @sfuruya0612
+- [CHANGE] ECS の常に 0 となる Stopped カウントを統計から削除する
+  - @sfuruya0612
+- [CHANGE] backend が返す各 AWS サービスの state を小文字・ハイフン表記に統一する
+  - @sfuruya0612
+- [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
+  - @sfuruya0612
+- [FIX] Lambda の state を AWS 実 state (pending / active / inactive / failed) に統一し、統計を Resources / Active / Inactive / Other に適正化する
+  - @sfuruya0612
 - [FIX] SSM/ECS データチャネルの AgentMessage デシリアライズで payload digest mismatch が発生する不具合を修正する
   - @sfuruya0612
 - [FIX] SSM/ECS データチャネルで送信する AgentMessage の CreatedDate が未設定のため agent 側の Validate に拒否され、シーケンス番号が不整合になる不具合を修正する

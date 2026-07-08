@@ -76,7 +76,7 @@ func ecsFromCluster(c ecstypes.Cluster) ECSResource {
 	return ECSResource{
 		ID:             ptrStr(c.ClusterArn),
 		Name:           ptrStr(c.ClusterName),
-		State:          ptrStr(c.Status),
+		State:          DisplayState(ptrStr(c.Status)),
 		ActiveServices: c.ActiveServicesCount,
 		RunningTasks:   c.RunningTasksCount,
 		PendingTasks:   c.PendingTasksCount,

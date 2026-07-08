@@ -38,7 +38,7 @@ func TestDynamoFromDescription(t *testing.T) {
 			want: DynamoResource{
 				ID:        arn,
 				Name:      "foo",
-				State:     "ACTIVE",
+				State:     "active",
 				Mode:      "on-demand",
 				ItemCount: 10,
 				SizeBytes: 1024,

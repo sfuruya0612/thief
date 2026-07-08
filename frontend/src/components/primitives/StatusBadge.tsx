@@ -22,6 +22,14 @@ const MAP: Record<string, Entry> = {
   errors: { cls: 'err', label: 'errors' },
   'policy-warning': { cls: 'warn', label: 'policy' },
   stale: { cls: 'warn', label: 'stale' },
+  creating: { cls: 'info', label: 'creating' },
+  deleting: { cls: 'warn', label: 'deleting' },
+  stopping: { cls: 'warn', label: 'stopping' },
+  'shutting-down': { cls: 'warn', label: 'shutting-down' },
+  inactive: { cls: 'muted', label: 'inactive' },
+  failed: { cls: 'err', label: 'failed' },
+  archived: { cls: 'muted', label: 'archived' },
+  'active-impaired': { cls: 'warn', label: 'active-impaired' },
 };
 
 export interface StatusBadgeProps {

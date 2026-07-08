@@ -1,5 +1,7 @@
 package aws
 
+import "strings"
+
 // Resource is the common interface for all AWS resource types.
 type Resource interface {
 	ResourceID() string
@@ -28,4 +30,16 @@ func NormalizeState(raw string) string {
 	default:
 		return raw
 	}
+}
+
+// DisplayState は SDK 由来の state 文字列を JSON/UI 表示用に小文字・ハイフン正規化する。
+// 意味は丸めない (available と running は別値のまま保持する)。
+func DisplayState(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	s = strings.ReplaceAll(s, "_", "-")
+	switch s {
+	case "inprogress": // CloudFront "InProgress" は区切り無しパスカルのため明示変換する
+		return "in-progress"
+	}
+	return s
 }
