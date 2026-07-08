@@ -545,6 +545,19 @@ export interface SecretRow {
 }
 
 // ============================================================
+// Region (DescribeRegions からの動的取得結果)
+// ============================================================
+export interface RegionRaw {
+  code: string;
+  name: string;
+}
+
+export interface RegionRow {
+  code: string;
+  name: string;
+}
+
+// ============================================================
 // Cost / Forecast
 // ============================================================
 export interface CostRaw {

@@ -3,6 +3,7 @@ package api
 func (s *Server) registerRoutes() {
 	// AWS profiles
 	s.mux.HandleFunc("GET /api/aws/profiles", s.handleListProfiles)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/regions", s.handleRegions)
 
 	// AWS per-profile resources
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2", s.handleEC2)

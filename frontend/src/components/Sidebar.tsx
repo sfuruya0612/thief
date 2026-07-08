@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AwsIcons } from './icons/AwsIcons';
 import { Icons } from './icons/Icons';
 import { SERVICES } from '../lib/serviceMeta';
+import { useRegions } from '../api/queries';
 import type { Profile } from '../types/common';
 
 interface SidebarSection {
@@ -20,18 +21,6 @@ const SECTIONS: SidebarSection[] = [
   { label: 'Network', services: ['elb', 'cloudfront', 'apigw', 'natgw'] },
   { label: 'Messaging', services: ['sqs', 'kinesis'] },
   { label: 'Security', services: ['waf', 'iam', 'ssm', 'secrets'] },
-];
-
-// よく使う AWS リージョン一覧 (プレーンな select で十分)
-const REGIONS = [
-  'us-east-1',
-  'us-west-2',
-  'ap-northeast-1',
-  'ap-northeast-3',
-  'ap-southeast-1',
-  'ap-southeast-2',
-  'eu-west-1',
-  'eu-central-1',
 ];
 
 const SIDEBAR_MIN_WIDTH = 160;
@@ -58,6 +47,11 @@ export function Sidebar({
   onService,
   onWidthChange,
 }: SidebarProps) {
+  // リージョン一覧は DescribeRegions から動的に取得する
+  // 取得前は現在選択中の region のみを単一オプションとして表示するフォールバックにする
+  const { data: regions } = useRegions(profile);
+  const regionOptions = regions && regions.length > 0 ? regions : [{ code: region, name: region }];
+
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     const move = (ev: PointerEvent) => {
@@ -100,9 +94,9 @@ export function Sidebar({
           onChange={(e) => onRegionChange(e.target.value)}
           title="Region"
         >
-          {REGIONS.map((r) => (
-            <option key={r} value={r}>
-              {r}
+          {regionOptions.map((r) => (
+            <option key={r.code} value={r.code}>
+              {r.name === r.code ? r.code : `${r.name} (${r.code})`}
             </option>
           ))}
         </select>

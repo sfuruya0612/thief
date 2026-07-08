@@ -14,6 +14,8 @@
   - @sfuruya0612
 - [ADD] サイドバー幅をドラッグで変更できるようにする
   - @sfuruya0612
+- [ADD] AWS リージョン一覧を DescribeRegions から動的に取得し、サイドバーの Region セレクターに反映する
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] フッターを全ビュー共通で画面最下部に固定し、ウィジェットをブラウザ幅に追従させる
