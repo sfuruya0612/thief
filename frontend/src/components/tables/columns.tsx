@@ -345,38 +345,44 @@ export const ecsTaskColumns: ColumnDef<ECSTaskRow>[] = [
   {
     key: 'group',
     header: 'Group',
-    width: '24%',
+    width: '18%',
     cell: (r) => <span className="primary truncate">{r.group}</span>,
+  },
+  {
+    key: 'containerNames',
+    header: 'Containers',
+    width: '18%',
+    cell: (r) => <span className="truncate">{r.containerNames.join(', ')}</span>,
   },
   {
     key: 'lastStatus',
     header: 'Last status',
-    width: '14%',
+    width: '12%',
     cell: (r) => <StatusBadge state={r.lastStatus} />,
   },
   {
     key: 'desiredStatus',
     header: 'Desired status',
-    width: '14%',
+    width: '12%',
     cell: (r) => <span style={mutedMono}>{r.desiredStatus}</span>,
   },
   {
     key: 'launchType',
     header: 'Launch type',
-    width: '14%',
+    width: '12%',
     cell: (r) => <span style={mutedMono}>{r.launchType}</span>,
   },
   {
     key: 'enableExecuteCommand',
     header: 'Exec enabled',
-    width: '14%',
+    width: '12%',
     cell: (r) =>
       r.enableExecuteCommand ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />,
   },
   {
     key: 'arn',
     header: 'ARN',
-    width: '20%',
+    width: '16%',
     cell: (r) => (
       <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
         {r.arn}

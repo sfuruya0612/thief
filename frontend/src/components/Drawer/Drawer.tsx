@@ -19,7 +19,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   rds: ['Overview', 'Tags'],
   cache: ['Overview', 'Tags'],
   lambda: ['Overview', 'Tags'],
-  ecs: ['Overview', 'Terminal', 'Services', 'Tasks', 'Tags'],
+  ecs: ['Overview', 'Services', 'Tasks', 'Terminal', 'Tags'],
   s3: ['Overview', 'Objects', 'Tags'],
   iam: ['Overview', 'Tags'],
   elb: ['Overview', 'Tags'],

@@ -23,12 +23,13 @@ type ECSServiceResource struct {
 
 // ECSTaskResource represents a single ECS task.
 type ECSTaskResource struct {
-	ARN                  string `json:"arn"`
-	Group                string `json:"group"`
-	LastStatus           string `json:"last_status"`
-	DesiredStatus        string `json:"desired_status"`
-	LaunchType           string `json:"launch_type"`
-	EnableExecuteCommand bool   `json:"enable_execute_command"`
+	ARN                  string   `json:"arn"`
+	Group                string   `json:"group"`
+	LastStatus           string   `json:"last_status"`
+	DesiredStatus        string   `json:"desired_status"`
+	LaunchType           string   `json:"launch_type"`
+	EnableExecuteCommand bool     `json:"enable_execute_command"`
+	ContainerNames       []string `json:"container_names"`
 }
 
 // ECSContainerResource represents a single container within an ECS task.
@@ -144,6 +145,10 @@ func ListECSTasks(ctx context.Context, profile, region, cluster, service string)
 }
 
 func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
+	names := make([]string, 0, len(t.Containers))
+	for _, c := range t.Containers {
+		names = append(names, ptrStr(c.Name))
+	}
 	return ECSTaskResource{
 		ARN:                  ptrStr(t.TaskArn),
 		Group:                ptrStr(t.Group),
@@ -151,6 +156,7 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 		DesiredStatus:        DisplayState(ptrStr(t.DesiredStatus)),
 		LaunchType:           string(t.LaunchType),
 		EnableExecuteCommand: t.EnableExecuteCommand,
+		ContainerNames:       names,
 	}
 }
 
