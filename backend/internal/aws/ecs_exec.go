@@ -87,7 +87,7 @@ func ecsServiceFromSDK(s ecstypes.Service) ECSServiceResource {
 	return ECSServiceResource{
 		ARN:            ptrStr(s.ServiceArn),
 		Name:           ptrStr(s.ServiceName),
-		Status:         ptrStr(s.Status),
+		Status:         DisplayState(ptrStr(s.Status)),
 		DesiredCount:   s.DesiredCount,
 		RunningCount:   s.RunningCount,
 		PendingCount:   s.PendingCount,
@@ -147,8 +147,8 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 	return ECSTaskResource{
 		ARN:                  ptrStr(t.TaskArn),
 		Group:                ptrStr(t.Group),
-		LastStatus:           ptrStr(t.LastStatus),
-		DesiredStatus:        ptrStr(t.DesiredStatus),
+		LastStatus:           DisplayState(ptrStr(t.LastStatus)),
+		DesiredStatus:        DisplayState(ptrStr(t.DesiredStatus)),
 		LaunchType:           string(t.LaunchType),
 		EnableExecuteCommand: t.EnableExecuteCommand,
 	}
@@ -181,7 +181,7 @@ func ListECSContainers(ctx context.Context, profile, region, cluster, task strin
 		resources = append(resources, ECSContainerResource{
 			Name:        ptrStr(c.Name),
 			RuntimeID:   runtimeID,
-			LastStatus:  ptrStr(c.LastStatus),
+			LastStatus:  DisplayState(ptrStr(c.LastStatus)),
 			ExecEnabled: t.EnableExecuteCommand && runtimeID != "",
 		})
 	}

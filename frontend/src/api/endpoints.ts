@@ -2,6 +2,7 @@ import type {
   CostRaw,
   ECRImageRaw,
   ECSContainerRaw,
+  ECSServiceRaw,
   ECSTaskRaw,
   ForecastRaw,
   RegionRaw,
@@ -76,6 +77,17 @@ export function getRegions(profile: string): Promise<RegionRaw[]> {
 // ============================================================
 // ECS Services / Tasks / Containers (Terminal タブの Exec 対象選択に使う)
 // ============================================================
+export function getECSServices(
+  profile: string,
+  region: string,
+  cluster: string,
+): Promise<ECSServiceRaw[]> {
+  return apiGet<ECSServiceRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/services`,
+    { region },
+  ).then((v) => v ?? []);
+}
+
 export function getECSTasks(
   profile: string,
   region: string,

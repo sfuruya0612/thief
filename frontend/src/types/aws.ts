@@ -185,6 +185,28 @@ export interface ECSRow {
 // ============================================================
 // ECS Services / Tasks / Containers (Terminal タブの Exec 対象選択に使う一覧)
 // ============================================================
+export interface ECSServiceRaw {
+  arn: string;
+  name: string;
+  status: string;
+  desired_count: number;
+  running_count: number;
+  pending_count: number;
+  task_definition: string;
+  launch_type: string;
+}
+
+export interface ECSServiceRow {
+  arn: string;
+  name: string;
+  status: string;
+  desiredCount: number;
+  runningCount: number;
+  pendingCount: number;
+  taskDefinition: string;
+  launchType: string;
+}
+
 export interface ECSTaskRaw {
   arn: string;
   group: string;

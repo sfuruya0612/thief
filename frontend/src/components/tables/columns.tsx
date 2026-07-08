@@ -12,6 +12,8 @@ import type {
   ECRImageRow,
   ECRRepoRow,
   ECSRow,
+  ECSServiceRow,
+  ECSTaskRow,
   ELBRow,
   IAMRow,
   KinesisRow,
@@ -289,6 +291,96 @@ export const ecsColumns: ColumnDef<ECSRow>[] = [
     header: 'Region',
     width: '14%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
+  },
+];
+
+// ============================================================
+// ECS Services / Tasks (Drawer の Services / Tasks タブ)
+// ============================================================
+export const ecsServiceColumns: ColumnDef<ECSServiceRow>[] = [
+  {
+    key: 'name',
+    header: 'Service',
+    width: '24%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  { key: 'status', header: 'State', width: '10%', cell: (r) => <StatusBadge state={r.status} /> },
+  {
+    key: 'desiredCount',
+    header: 'Desired',
+    width: '12%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.desiredCount}</span>,
+  },
+  {
+    key: 'runningCount',
+    header: 'Running',
+    width: '12%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.runningCount}</span>,
+  },
+  {
+    key: 'pendingCount',
+    header: 'Pending',
+    width: '12%',
+    align: 'right',
+    cell: (r) => <span style={mutedMono}>{r.pendingCount}</span>,
+  },
+  {
+    key: 'launchType',
+    header: 'Launch type',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.launchType}</span>,
+  },
+  {
+    key: 'taskDefinition',
+    header: 'Task definition',
+    width: '16%',
+    cell: (r) => <span style={dimMono}>{r.taskDefinition}</span>,
+  },
+];
+
+export const ecsTaskColumns: ColumnDef<ECSTaskRow>[] = [
+  {
+    key: 'group',
+    header: 'Group',
+    width: '24%',
+    cell: (r) => <span className="primary truncate">{r.group}</span>,
+  },
+  {
+    key: 'lastStatus',
+    header: 'Last status',
+    width: '14%',
+    cell: (r) => <StatusBadge state={r.lastStatus} />,
+  },
+  {
+    key: 'desiredStatus',
+    header: 'Desired status',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.desiredStatus}</span>,
+  },
+  {
+    key: 'launchType',
+    header: 'Launch type',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.launchType}</span>,
+  },
+  {
+    key: 'enableExecuteCommand',
+    header: 'Exec enabled',
+    width: '14%',
+    cell: (r) =>
+      r.enableExecuteCommand ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />,
+  },
+  {
+    key: 'arn',
+    header: 'ARN',
+    width: '20%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.arn}
+      </span>
+    ),
   },
 ];
 
