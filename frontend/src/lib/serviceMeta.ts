@@ -1,0 +1,75 @@
+import type { ServiceMeta } from '../types/common';
+
+// data.jsx SERVICES を移植。色は app.css の --svc-* CSS 変数を参照する
+export const SERVICES: ServiceMeta[] = [
+  { key: 'ec2', name: 'EC2', sub: 'Instances', color: 'var(--svc-ec2)', group: 'compute' },
+  { key: 'ecr', name: 'ECR', sub: 'Repositories', color: 'var(--svc-ecr)', group: 'compute' },
+  { key: 'rds', name: 'RDS', sub: 'Databases', color: 'var(--svc-rds)', group: 'data' },
+  { key: 'dynamo', name: 'DynamoDB', sub: 'Tables', color: 'var(--svc-dynamo)', group: 'data' },
+  { key: 'cache', name: 'ElastiCache', sub: 'Clusters', color: 'var(--svc-cache)', group: 'data' },
+  { key: 'lambda', name: 'Lambda', sub: 'Functions', color: 'var(--svc-lambda)', group: 'compute' },
+  { key: 'ecs', name: 'ECS', sub: 'Tasks', color: 'var(--svc-ecs)', group: 'compute' },
+  { key: 's3', name: 'S3', sub: 'Buckets', color: 'var(--svc-s3)', group: 'data' },
+  { key: 'iam', name: 'IAM', sub: 'Users&Roles', color: 'var(--svc-iam)', group: 'security' },
+  { key: 'elb', name: 'ELB', sub: 'Load balancers', color: 'var(--svc-elb)', group: 'network' },
+  {
+    key: 'cloudfront',
+    name: 'CloudFront',
+    sub: 'Distributions',
+    color: 'var(--svc-cf)',
+    group: 'network',
+  },
+  { key: 'apigw', name: 'API Gateway', sub: 'APIs', color: 'var(--svc-apigw)', group: 'network' },
+  {
+    key: 'natgw',
+    name: 'NAT Gateway',
+    sub: 'Gateways',
+    color: 'var(--svc-natgw)',
+    group: 'network',
+  },
+  { key: 'sqs', name: 'SQS', sub: 'Queues', color: 'var(--svc-sqs)', group: 'messaging' },
+  {
+    key: 'kinesis',
+    name: 'Kinesis',
+    sub: 'Streams',
+    color: 'var(--svc-kinesis)',
+    group: 'messaging',
+  },
+  { key: 'waf', name: 'WAF', sub: 'Web ACLs', color: 'var(--svc-waf)', group: 'security' },
+  {
+    key: 'ssm',
+    name: 'Parameter Store',
+    sub: 'Parameters',
+    color: 'var(--svc-ssm)',
+    group: 'security',
+  },
+  {
+    key: 'secrets',
+    name: 'Secrets Manager',
+    sub: 'Secrets',
+    color: 'var(--svc-secrets)',
+    group: 'security',
+  },
+];
+
+// サービスキー → バックエンド URL パスセグメント
+export const SERVICE_TO_PATH: Record<string, string> = {
+  ec2: 'ec2',
+  ecr: 'ecr',
+  rds: 'rds',
+  dynamo: 'dynamo',
+  cache: 'elasticache',
+  lambda: 'lambda',
+  ecs: 'ecs',
+  s3: 's3',
+  iam: 'iam',
+  elb: 'elb',
+  cloudfront: 'cloudfront',
+  apigw: 'apigw',
+  natgw: 'natgw',
+  sqs: 'sqs',
+  kinesis: 'kinesis',
+  waf: 'waf',
+  ssm: 'ssm/parameters',
+  secrets: 'secretsmanager',
+};

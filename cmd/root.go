@@ -45,6 +45,7 @@ func init() {
 		costexplorerCmd,
 		cfnCmd,
 		iamCmd,
+		ecrCmd,
 	)
 
 	// SSO
@@ -119,6 +120,11 @@ func init() {
 
 	// IAM
 	iamCmd.AddCommand(iamListCmd)
+
+	// ECR
+	ecrCmd.AddCommand(ecrListCmd, ecrImagesCmd)
+	ecrImagesCmd.Flags().StringP("repo", "", "", "Repository name")
+	ecrImagesCmd.Flags().BoolP("all", "", false, "Fetch all images across all pages")
 
 	// Cost Explorer
 	costexplorerCmd.AddCommand(costByServiceCmd, costByAccountCmd, costByUsageTypeCmd, costOverviewCmd)

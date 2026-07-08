@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.vite/
+*.tsbuildinfo
+
+# AWS 公式アイコン (ライセンス上リポジトリに含めない、scripts/fetch-aws-icons.mjs で取得する)
+/public/assets/aws-icons/

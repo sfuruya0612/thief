@@ -1,6 +1,20 @@
 repos:
   - repo: local
     hooks:
+      - id: mise-fmt
+        name: Format (mise run fmt)
+        language: system
+        entry: mise run fmt
+        pass_filenames: false
+        always_run: true
+
+      - id: mise-lint
+        name: Lint (mise run lint)
+        language: system
+        entry: mise run lint
+        pass_filenames: false
+        always_run: true
+
       - id: mise-test
         name: Run tests (mise run test)
         language: system
