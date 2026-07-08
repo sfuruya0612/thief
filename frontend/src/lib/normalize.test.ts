@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ecsServiceFromRaw, s3ObjectFromRaw } from './normalize';
+import { ecsServiceFromRaw, ecsTaskFromRaw, s3ObjectFromRaw } from './normalize';
 
 describe('ecsServiceFromRaw', () => {
   it('snake_case を camelCase に変換する', () => {
@@ -23,6 +23,42 @@ describe('ecsServiceFromRaw', () => {
       taskDefinition: 'my-td:12',
       launchType: 'FARGATE',
     });
+  });
+});
+
+describe('ecsTaskFromRaw', () => {
+  it('snake_case を camelCase に変換し container_names を保持する', () => {
+    const row = ecsTaskFromRaw({
+      arn: 'arn:aws:ecs:ap-northeast-1:123:task/my-cluster/abc',
+      group: 'service:my-svc',
+      last_status: 'running',
+      desired_status: 'running',
+      launch_type: 'FARGATE',
+      enable_execute_command: true,
+      container_names: ['app', 'sidecar'],
+    });
+    expect(row).toEqual({
+      arn: 'arn:aws:ecs:ap-northeast-1:123:task/my-cluster/abc',
+      group: 'service:my-svc',
+      lastStatus: 'running',
+      desiredStatus: 'running',
+      launchType: 'FARGATE',
+      enableExecuteCommand: true,
+      containerNames: ['app', 'sidecar'],
+    });
+  });
+
+  it('container_names が未指定の場合は空配列にフォールバックする', () => {
+    const row = ecsTaskFromRaw({
+      arn: 'arn:task/b',
+      group: '',
+      last_status: 'stopped',
+      desired_status: 'stopped',
+      launch_type: '',
+      enable_execute_command: false,
+      container_names: undefined as unknown as string[],
+    });
+    expect(row.containerNames).toEqual([]);
   });
 });
 

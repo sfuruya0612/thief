@@ -214,6 +214,7 @@ export interface ECSTaskRaw {
   desired_status: string;
   launch_type: string;
   enable_execute_command: boolean;
+  container_names: string[];
 }
 
 export interface ECSTaskRow {
@@ -223,6 +224,7 @@ export interface ECSTaskRow {
   desiredStatus: string;
   launchType: string;
   enableExecuteCommand: boolean;
+  containerNames: string[];
 }
 
 export interface ECSContainerRaw {

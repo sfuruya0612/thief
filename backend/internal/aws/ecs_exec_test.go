@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestECSServiceFromSDK(t *testing.T) {
@@ -70,7 +71,7 @@ func TestECSTaskFromSDK(t *testing.T) {
 		want ECSTaskResource
 	}{
 		{
-			name: "running uppercase",
+			name: "running uppercase with containers",
 			in: ecstypes.Task{
 				TaskArn:              aws.String("arn:task/a"),
 				Group:                aws.String("service:svc-a"),
@@ -78,6 +79,10 @@ func TestECSTaskFromSDK(t *testing.T) {
 				DesiredStatus:        aws.String("RUNNING"),
 				LaunchType:           ecstypes.LaunchTypeFargate,
 				EnableExecuteCommand: true,
+				Containers: []ecstypes.Container{
+					{Name: aws.String("app")},
+					{Name: aws.String("sidecar")},
+				},
 			},
 			want: ECSTaskResource{
 				ARN:                  "arn:task/a",
@@ -86,6 +91,7 @@ func TestECSTaskFromSDK(t *testing.T) {
 				DesiredStatus:        "running",
 				LaunchType:           "FARGATE",
 				EnableExecuteCommand: true,
+				ContainerNames:       []string{"app", "sidecar"},
 			},
 		},
 		{
@@ -96,22 +102,23 @@ func TestECSTaskFromSDK(t *testing.T) {
 				DesiredStatus: aws.String("STOPPED"),
 			},
 			want: ECSTaskResource{
-				ARN:           "arn:task/b",
-				LastStatus:    "stopped",
-				DesiredStatus: "stopped",
+				ARN:            "arn:task/b",
+				LastStatus:     "stopped",
+				DesiredStatus:  "stopped",
+				ContainerNames: []string{},
 			},
 		},
 		{
 			name: "empty statuses",
 			in:   ecstypes.Task{},
-			want: ECSTaskResource{},
+			want: ECSTaskResource{ContainerNames: []string{}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ecsTaskFromSDK(tt.in)
-			if got != tt.want {
-				t.Errorf("got %+v, want %+v", got, tt.want)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

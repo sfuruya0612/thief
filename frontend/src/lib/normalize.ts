@@ -178,6 +178,7 @@ export function ecsTaskFromRaw(raw: ECSTaskRaw): ECSTaskRow {
     desiredStatus: raw.desired_status,
     launchType: raw.launch_type,
     enableExecuteCommand: raw.enable_execute_command,
+    containerNames: raw.container_names ?? [],
   };
 }
 

@@ -20,7 +20,13 @@
   - @sfuruya0612
 - [ADD] S3 バケットの Drawer にオブジェクト一覧・アップロード・ダウンロード機能を追加する
   - @sfuruya0612
+- [ADD] ECS タスク一覧にコンテナ名を表示する
+  - @sfuruya0612
+- [ADD] ECS クラスタの Drawer の Services / Tasks タブにフィルター機能を追加する
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
+  - @sfuruya0612
+- [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
 - [CHANGE] フッターを全ビュー共通で画面最下部に固定し、ウィジェットをブラウザ幅に追従させる
   - @sfuruya0612
