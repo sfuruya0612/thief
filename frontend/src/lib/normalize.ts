@@ -19,6 +19,8 @@ import type {
   ECSContainerRow,
   ECSRaw,
   ECSRow,
+  ECSServiceRaw,
+  ECSServiceRow,
   ECSTaskRaw,
   ECSTaskRow,
   ELBRaw,
@@ -150,6 +152,19 @@ export function ecsFromRaw(raw: ECSRaw, region: string): ECSRow {
     pendingTasks: raw.pending_tasks,
     registeredEc2: raw.registered_ec2,
     tags: raw.tags ?? {},
+  };
+}
+
+export function ecsServiceFromRaw(raw: ECSServiceRaw): ECSServiceRow {
+  return {
+    arn: raw.arn,
+    name: raw.name,
+    status: raw.status,
+    desiredCount: raw.desired_count,
+    runningCount: raw.running_count,
+    pendingCount: raw.pending_count,
+    taskDefinition: raw.task_definition,
+    launchType: raw.launch_type,
   };
 }
 

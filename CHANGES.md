@@ -16,6 +16,8 @@
   - @sfuruya0612
 - [ADD] AWS リージョン一覧を DescribeRegions から動的に取得し、サイドバーの Region セレクターに反映する
   - @sfuruya0612
+- [ADD] ECS クラスタの Drawer に Services / Tasks タブを追加し、稼働数・state を一覧できるようにする
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] フッターを全ビュー共通で画面最下部に固定し、ウィジェットをブラウザ幅に追従させる
@@ -35,6 +37,8 @@
 - [CHANGE] backend が返す各 AWS サービスの state を小文字・ハイフン表記に統一する
   - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
+  - @sfuruya0612
+- [FIX] ECS Service / Task / Container の state が SDK 生値の大文字表記のままで StatusBadge が未知 state 扱いになる不具合を修正する
   - @sfuruya0612
 - [FIX] Lambda の state を AWS 実 state (pending / active / inactive / failed) に統一し、統計を Resources / Active / Inactive / Other に適正化する
   - @sfuruya0612

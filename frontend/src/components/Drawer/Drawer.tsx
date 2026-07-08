@@ -6,6 +6,8 @@ import { Icons } from '../icons/Icons';
 import { SERVICES } from '../../lib/serviceMeta';
 import { StatusBadge } from '../primitives';
 import { DrawerECRImages } from './DrawerECRImages';
+import { DrawerECSServices } from './DrawerECSServices';
+import { DrawerECSTasks } from './DrawerECSTasks';
 import { DrawerTags } from './DrawerTags';
 import { DrawerTerminal } from './DrawerTerminal';
 import type { OverviewEntry } from './overviewRows';
@@ -16,7 +18,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   rds: ['Overview', 'Tags'],
   cache: ['Overview', 'Tags'],
   lambda: ['Overview', 'Tags'],
-  ecs: ['Overview', 'Terminal', 'Tags'],
+  ecs: ['Overview', 'Terminal', 'Services', 'Tasks', 'Tags'],
   s3: ['Overview', 'Tags'],
   iam: ['Overview', 'Tags'],
   elb: ['Overview', 'Tags'],
@@ -237,6 +239,12 @@ export function Drawer({
               )}
               {tab === 'Images' && (
                 <DrawerECRImages profile={profile} region={region} repo={resource.name} />
+              )}
+              {tab === 'Services' && service === 'ecs' && (
+                <DrawerECSServices profile={profile} region={region} cluster={resource.name} />
+              )}
+              {tab === 'Tasks' && service === 'ecs' && (
+                <DrawerECSTasks profile={profile} region={region} cluster={resource.name} />
               )}
             </div>
           </>

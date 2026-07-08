@@ -9,7 +9,12 @@ import {
   tidbCostFromRaw,
   tidbProjectFromRaw,
 } from '../lib/normalizeNonAws';
-import { ecrImageFromRaw, ecsContainerFromRaw, ecsTaskFromRaw } from '../lib/normalize';
+import {
+  ecrImageFromRaw,
+  ecsContainerFromRaw,
+  ecsServiceFromRaw,
+  ecsTaskFromRaw,
+} from '../lib/normalize';
 import {
   getBQDatasets,
   getBQSchema,
@@ -20,6 +25,7 @@ import {
   getDatadogHistorical,
   getECRImages,
   getECSContainers,
+  getECSServices,
   getECSTasks,
   getProfiles,
   getRegions,
@@ -110,6 +116,15 @@ export function useRegions(profile: string) {
 // ============================================================
 // ECS Services / Tasks / Containers (Terminal タブの Exec 対象選択に使う)
 // ============================================================
+export function useECSServices(profile: string, region: string, cluster: string) {
+  return useQuery({
+    queryKey: ['aws', 'ecs-services', profile, region, cluster],
+    queryFn: async () => (await getECSServices(profile, region, cluster)).map(ecsServiceFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!cluster,
+  });
+}
+
 export function useECSTasks(profile: string, region: string, cluster: string, service?: string) {
   return useQuery({
     queryKey: ['aws', 'ecs-tasks', profile, region, cluster, service],
