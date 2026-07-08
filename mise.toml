@@ -2,63 +2,132 @@
 GOPATH = "{{env.HOME}}/go"
 
 [tools]
-go = "1.25.7"
+go = "1.25.11"
 prek = "latest"
+node = "26.4.0"
+"go:github.com/vektra/mockery/v2" = "latest"
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+"go:honnef.co/go/tools/cmd/staticcheck" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 
+# === 全体 (ルート) ===
 [tasks.setup]
-description = "Setup the project"
-run = "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
+description = "初期セットアップ (backend + frontend 依存取得)"
+depends = ["backend:setup", "frontend:setup"]
 
 [tasks.fmt]
-description = "Run go fmt"
-run = "go fmt ./..."
+description = "backend + frontend フォーマット"
+depends = ["backend:fmt", "frontend:fmt"]
 
-[tasks.vet]
-description = "Run go vet"
-run = "go vet ./..."
-
-[tasks.tidy]
-description = "Run go mod tidy"
-run = "go mod tidy -v"
-
-[tasks.golangci-lint]
-description = "Run golangci-lint"
-run = "golangci-lint run ./..."
-
-[tasks.prepare]
-description = "Prepare the project"
-depends = ["fmt", "vet", "tidy", "golangci-lint"]
-
-[tasks.update]
-description = "Update packages"
-run = "go get -u ./..."
-depends_post = ["tidy"]
+[tasks.lint]
+description = "backend + frontend Lint"
+depends = ["backend:lint", "frontend:lint"]
 
 [tasks.test]
-description = "Run tests"
-run = "go test -v -race --cover ./..."
-depends = ["prepare"]
+description = "backend + frontend テスト"
+depends = ["backend:test", "frontend:test"]
 
-[tasks.install]
-description = "Install binary"
-shell = 'bash -c'
-run = "go install"
+[tasks.check]
+description = "PR 提出前の最終確認 (fmt + lint + test)"
+depends = ["fmt", "lint", "test"]
 
-[tasks.build]
-description = "Build binary"
-shell = 'bash -c'
+# === backend ===
+[tasks."backend:setup"]
+description = "backend 依存取得"
+dir = "backend"
+run = "go mod download && go mod tidy"
+
+[tasks."backend:build"]
+description = "backend ビルド"
+dir = "backend"
 run = "go build ./..."
 
-[tasks.docs]
-description = "Generate documentation"
-run = '''
-go run docs/main.go
-mv docs/thief.md docs/index.md
-'''
+[tasks."backend:test"]
+description = "backend ユニットテスト (race)"
+dir = "backend"
+run = "go test -race -cover ./..."
 
-[tasks.demo]
-description = "Generate demo animation"
-run = '''
-vhs docs/demo.tape
-'''
+[tasks."backend:lint"]
+description = "backend 静的解析"
+dir = "backend"
+run = """
+go vet ./...
+staticcheck ./...
+govulncheck ./...
+"""
 
+[tasks."backend:fmt"]
+description = "backend フォーマット"
+dir = "backend"
+run = """
+gofmt -w .
+goimports -w .
+"""
+
+[tasks."backend:tidy"]
+description = "backend go mod tidy"
+dir = "backend"
+run = "go mod tidy -v"
+
+[tasks."backend:update"]
+description = "backend 依存更新"
+dir = "backend"
+run = "go get -u ./..."
+depends_post = ["backend:tidy"]
+
+[tasks."backend:mocks"]
+description = "mockery でモック生成"
+dir = "backend"
+run = "mockery"
+
+[tasks."backend:run"]
+description = "API サーバー起動 (127.0.0.1:8080)"
+dir = "backend"
+run = "go run ./cmd/server"
+
+[tasks."backend:tui"]
+description = "TUI 起動"
+dir = "backend"
+run = "go run ./cmd/thief tui"
+
+# === frontend ===
+[tasks."frontend:setup"]
+description = "frontend 依存取得"
+dir = "frontend"
+run = "npm install"
+
+[tasks."frontend:fetch-icons"]
+description = "AWS 公式アイコン (zip) を public/assets/aws-icons/ に展開する (引数: zip ファイルパス)"
+dir = "frontend"
+usage = "arg \"<zip>\" help=\"AWS 公式アイコンパッケージの zip ファイルパス\""
+run = "node scripts/fetch-aws-icons.mjs \"$usage_zip\""
+
+[tasks."frontend:build"]
+description = "frontend ビルド (Web)"
+dir = "frontend"
+run = "npm run build"
+
+[tasks."frontend:test"]
+description = "frontend ユニットテスト (vitest)"
+dir = "frontend"
+run = "npm run test"
+
+[tasks."frontend:lint"]
+description = "frontend Lint (eslint + tsc)"
+dir = "frontend"
+run = "npm run lint"
+
+[tasks."frontend:fmt"]
+description = "frontend フォーマット (prettier)"
+dir = "frontend"
+run = "npm run fmt"
+
+[tasks."frontend:run"]
+description = "Vite dev server 起動 (ブラウザで http://localhost:8082 を開く)"
+dir = "frontend"
+run = "npm run dev"
+
+[tasks."frontend:serve"]
+description = "frontend ビルドして dist を静的サーブ (vite preview, ポート 8082)"
+dir = "frontend"
+run = "npm run build && npm run preview"

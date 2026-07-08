@@ -1,0 +1,44 @@
+// AWS 公式 Architecture Icons (public/assets/aws-icons/*.svg) を表示するアイコンコンポーネント
+export interface AwsIconProps {
+  size?: number;
+}
+
+type AwsIconComponent = (p?: AwsIconProps) => JSX.Element;
+
+// サービスキー → public/assets/aws-icons/ 配下のファイル名
+const AWS_ICON_FILES: Record<string, string> = {
+  ec2: 'ec2.svg',
+  ecr: 'ecr.svg',
+  lambda: 'lambda.svg',
+  ecs: 'ecs.svg',
+  rds: 'rds.svg',
+  dynamo: 'dynamo.svg',
+  cache: 'cache.svg',
+  s3: 's3.svg',
+  iam: 'iam.svg',
+  elb: 'elb.svg',
+  cloudfront: 'cloudfront.svg',
+  apigw: 'apigw.svg',
+  natgw: 'natgw.svg',
+  sqs: 'sqs.svg',
+  kinesis: 'kinesis.svg',
+  waf: 'waf.svg',
+  ssm: 'ssm.svg',
+  secrets: 'secrets.svg',
+};
+
+function AwsIcon(svc: string, { size = 16 }: AwsIconProps = {}) {
+  return (
+    <img
+      src={`/assets/aws-icons/${AWS_ICON_FILES[svc]}`}
+      width={size}
+      height={size}
+      alt={svc}
+      style={{ display: 'block', borderRadius: 3.5 }}
+    />
+  );
+}
+
+export const AwsIcons: Record<string, AwsIconComponent> = Object.fromEntries(
+  Object.keys(AWS_ICON_FILES).map((svc) => [svc, (p?: AwsIconProps) => AwsIcon(svc, p)]),
+);

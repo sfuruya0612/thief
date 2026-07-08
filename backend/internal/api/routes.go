@@ -1,0 +1,54 @@
+package api
+
+func (s *Server) registerRoutes() {
+	// AWS profiles
+	s.mux.HandleFunc("GET /api/aws/profiles", s.handleListProfiles)
+
+	// AWS per-profile resources
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2", s.handleEC2)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds", s.handleRDS)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elasticache", s.handleElastiCache)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/lambda", s.handleLambda)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs", s.handleECS)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/services", s.handleECSServices)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks", s.handleECSTasks)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks/{task}/containers", s.handleECSContainers)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2/{instance}/session", s.handleEC2Session)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks/{task}/exec", s.handleECSExec)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecr", s.handleECR)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecr/{repo}/images", s.handleECRImages)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/s3", s.handleS3)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/iam", s.handleIAM)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/sso", s.handleSSO)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/login", s.handleSSOLogin)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ssm/parameters", s.handleSSMList)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ssm/parameters/{name}", s.handleSSMGet)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/secretsmanager", s.handleSecretsList)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cfn/stacks", s.handleCFN)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/kinesis", s.handleKinesis)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cloudfront", s.handleCloudFront)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations", s.handleCloudFrontInvalidation)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elb", s.handleELB)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/dynamo", s.handleDynamo)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/apigw", s.handleAPIGW)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/natgw", s.handleNATGW)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/sqs", s.handleSQS)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/waf", s.handleWAF)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost", s.handleCost)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost/forecast", s.handleCostForecast)
+
+	// BigQuery
+	s.mux.HandleFunc("GET /api/bigquery/datasets", s.handleBQDatasets)
+	s.mux.HandleFunc("GET /api/bigquery/datasets/{dataset}/tables", s.handleBQTables)
+	s.mux.HandleFunc("GET /api/bigquery/datasets/{dataset}/tables/{table}/schema", s.handleBQSchema)
+	s.mux.HandleFunc("POST /api/bigquery/query", s.handleBQQuery)
+
+	// Datadog
+	s.mux.HandleFunc("GET /api/datadog/cost/historical", s.handleDatadogHistorical)
+	s.mux.HandleFunc("GET /api/datadog/cost/estimated", s.handleDatadogEstimated)
+
+	// TiDB
+	s.mux.HandleFunc("GET /api/tidb/projects", s.handleTiDBProjects)
+	s.mux.HandleFunc("GET /api/tidb/projects/{project_id}/clusters", s.handleTiDBClusters)
+	s.mux.HandleFunc("GET /api/tidb/cost", s.handleTiDBCost)
+}
