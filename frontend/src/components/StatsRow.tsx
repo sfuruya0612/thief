@@ -3,15 +3,12 @@
 // Monthly cost は useCost(profile, region) の結果からサービス別合計を抽出して表示する。
 import type { ReactNode } from 'react';
 import type { CostRow } from '../types/aws';
-import { Spark } from './icons/Spark';
-import { makeSpark } from '../lib/spark';
 import { formatMoney } from '../lib/format';
 
 interface Stat {
   label: string;
   value: ReactNode;
   tone?: 'pos' | 'neg';
-  spark?: number[] | null;
 }
 
 export interface StatsRowProps {
@@ -23,7 +20,6 @@ export interface StatsRowProps {
     pendingTasks?: number;
   }>;
   service: string;
-  showCharts: boolean;
   cost: CostRow[];
 }
 
@@ -63,18 +59,16 @@ function monthlyCostFor(
   };
 }
 
-function costStats(service: string, cost: CostRow[], showCharts: boolean): Stat[] {
+function costStats(service: string, cost: CostRow[]): Stat[] {
   const amounts = monthlyCostFor(service, cost);
   return [
     {
       label: 'Monthly cost (Unblended)',
       value: amounts === undefined ? '—' : formatMoney(amounts.unblended),
-      spark: showCharts ? makeSpark(`cost-unblended-${service}`, 20) : null,
     },
     {
       label: 'Monthly cost (Net Amortized)',
       value: amounts === undefined ? '—' : formatMoney(amounts.netAmortized),
-      spark: showCharts ? makeSpark(`cost-net-amortized-${service}`, 20) : null,
     },
   ];
 }
@@ -84,7 +78,7 @@ const SIMPLE_COST_ONLY = new Set(['apigw', 'natgw', 'sqs', 'kinesis', 'waf', 'dy
 // state を持たず Cost Explorer の対応もないサービスは Resources のみ表示する
 const RESOURCES_ONLY = new Set(['ecr', 'ssm', 'secrets']);
 
-export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps) {
+export function StatsRow({ resources, service, cost }: StatsRowProps) {
   const running = resources.filter((r) => RUNNING_STATES.has(r.state ?? '')).length;
   const stopped = resources.filter((r) => r.state === 'stopped').length;
   const other = resources.length - running - stopped;
@@ -93,15 +87,9 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
   if (RESOURCES_ONLY.has(service)) {
     stats = [{ label: 'Resources', value: resources.length }];
   } else if (service === 's3') {
-    stats = [
-      { label: 'Resources', value: resources.length },
-      ...costStats(service, cost, showCharts),
-    ];
+    stats = [{ label: 'Resources', value: resources.length }, ...costStats(service, cost)];
   } else if (service === 'elb') {
-    stats = [
-      { label: 'Resources', value: resources.length },
-      ...costStats(service, cost, showCharts),
-    ];
+    stats = [{ label: 'Resources', value: resources.length }, ...costStats(service, cost)];
   } else if (service === 'cloudfront') {
     const deployed = resources.filter((r) => r.state === 'deployed').length;
     const inProgress = resources.filter((r) => r.state === 'in-progress').length;
@@ -111,13 +99,10 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
       { label: 'Deployed', value: deployed, tone: 'pos' },
       { label: 'In Progress', value: inProgress },
       { label: 'Other', value: otherCf, tone: otherCf > 0 ? 'neg' : undefined },
-      ...costStats(service, cost, showCharts),
+      ...costStats(service, cost),
     ];
   } else if (SIMPLE_COST_ONLY.has(service)) {
-    stats = [
-      { label: 'Resources', value: resources.length },
-      ...costStats(service, cost, showCharts),
-    ];
+    stats = [{ label: 'Resources', value: resources.length }, ...costStats(service, cost)];
   } else if (service === 'iam') {
     stats = [
       { label: 'Users', value: resources.filter((r) => r.kind === 'user').length },
@@ -132,7 +117,7 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
       { label: 'Desired', value: desired },
       { label: 'Running', value: runningTasks, tone: 'pos' },
       { label: 'Pending', value: pendingTasks },
-      ...costStats(service, cost, showCharts),
+      ...costStats(service, cost),
     ];
   } else if (service === 'cache') {
     // ElastiCache は AWS 上 stopped 相当の state を持たないため Running / Other + cost にする
@@ -141,7 +126,7 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
       { label: 'Resources', value: resources.length },
       { label: 'Running', value: running, tone: 'pos' },
       { label: 'Other', value: otherCache, tone: otherCache > 0 ? 'neg' : undefined },
-      ...costStats(service, cost, showCharts),
+      ...costStats(service, cost),
     ];
   } else if (service === 'lambda') {
     // Lambda は AWS 実 state (active/inactive/pending/failed) をそのまま返すため専用に集計する
@@ -153,7 +138,7 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
       { label: 'Active', value: activeCount, tone: 'pos' },
       { label: 'Inactive', value: inactiveCount },
       { label: 'Other', value: otherLambda, tone: otherLambda > 0 ? 'neg' : undefined },
-      ...costStats(service, cost, showCharts),
+      ...costStats(service, cost),
     ];
   } else {
     stats = [
@@ -161,7 +146,7 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
       { label: 'Running', value: running, tone: 'pos' },
       { label: 'Stopped', value: stopped },
       { label: 'Other', value: other, tone: other > 0 ? 'neg' : undefined },
-      ...costStats(service, cost, showCharts),
+      ...costStats(service, cost),
     ];
   }
 
@@ -171,13 +156,7 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
         <div key={i} className="stat">
           <div className="label">{s.label}</div>
           <div className="value">{s.value}</div>
-          {s.spark ? (
-            <div className="spark">
-              <Spark values={s.spark} w={120} h={20} stroke="var(--accent)" fill="var(--accent)" />
-            </div>
-          ) : (
-            <div className={`delta ${s.tone ?? ''}`}>{s.tone ? '' : ' '}</div>
-          )}
+          <div className={`delta ${s.tone ?? ''}`}>{s.tone ? '' : ' '}</div>
         </div>
       ))}
     </div>

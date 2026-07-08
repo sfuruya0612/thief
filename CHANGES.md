@@ -28,6 +28,8 @@
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
+- [CHANGE] Monthly Cost の統計に表示していた実データと無関係な spark ミニチャートを削除する
+  - @sfuruya0612
 - [CHANGE] フッターを全ビュー共通で画面最下部に固定し、ウィジェットをブラウザ幅に追従させる
   - @sfuruya0612
 - [CHANGE] AWS Profile / Region のセレクターをトップバーからサイドバーへ移設し、profile 表示の重複と Region pill の重複表示を解消する

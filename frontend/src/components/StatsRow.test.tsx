@@ -20,39 +20,27 @@ function valueOf(container: HTMLElement, label: string): string {
 describe('StatsRow', () => {
   it('ecr は Resources のみ表示する', () => {
     const { container } = render(
-      <StatsRow
-        service="ecr"
-        resources={[{ state: '' }, { state: '' }]}
-        cost={[]}
-        showCharts={false}
-      />,
+      <StatsRow service="ecr" resources={[{ state: '' }, { state: '' }]} cost={[]} />,
     );
     expect(labelsOf(container)).toEqual(['Resources']);
     expect(valueOf(container, 'Resources')).toBe('2');
   });
 
   it('ssm は Resources のみ表示する', () => {
-    const { container } = render(
-      <StatsRow service="ssm" resources={[{ state: '' }]} cost={[]} showCharts={false} />,
-    );
+    const { container } = render(<StatsRow service="ssm" resources={[{ state: '' }]} cost={[]} />);
     expect(labelsOf(container)).toEqual(['Resources']);
   });
 
   it('secrets は Resources のみ表示する', () => {
     const { container } = render(
-      <StatsRow service="secrets" resources={[{ state: '' }]} cost={[]} showCharts={false} />,
+      <StatsRow service="secrets" resources={[{ state: '' }]} cost={[]} />,
     );
     expect(labelsOf(container)).toEqual(['Resources']);
   });
 
   it('elb は Resources と cost 2 種のみ表示する (Active/Other を出さない)', () => {
     const { container } = render(
-      <StatsRow
-        service="elb"
-        resources={[{ state: 'active' }, { state: 'active' }]}
-        cost={[]}
-        showCharts={false}
-      />,
+      <StatsRow service="elb" resources={[{ state: 'active' }, { state: 'active' }]} cost={[]} />,
     );
     expect(labelsOf(container)).toEqual([
       'Resources',
@@ -67,7 +55,6 @@ describe('StatsRow', () => {
         service="cache"
         resources={[{ state: 'available' }, { state: 'available' }, { state: 'creating' }]}
         cost={[]}
-        showCharts={false}
       />,
     );
     const labels = labelsOf(container);
@@ -83,7 +70,6 @@ describe('StatsRow', () => {
         service="cloudfront"
         resources={[{ state: 'deployed' }, { state: 'deployed' }, { state: 'in-progress' }]}
         cost={[]}
-        showCharts={false}
       />,
     );
     expect(valueOf(container, 'Deployed')).toBe('2');
@@ -97,7 +83,6 @@ describe('StatsRow', () => {
         service="ecs"
         resources={[{ state: 'active', activeServices: 3, runningTasks: 5, pendingTasks: 1 }]}
         cost={[]}
-        showCharts={false}
       />,
     );
     const labels = labelsOf(container);
@@ -121,7 +106,6 @@ describe('StatsRow', () => {
           { state: 'failed' },
         ]}
         cost={[]}
-        showCharts={false}
       />,
     );
     expect(valueOf(container, 'Active')).toBe('2');

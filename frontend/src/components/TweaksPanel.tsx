@@ -71,16 +71,6 @@ function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
             ))}
           </div>
         </div>
-        <div className="trow">
-          <div
-            className={`toggle ${tweaks.showMiniCharts ? 'on' : ''}`}
-            onClick={() => update({ showMiniCharts: !tweaks.showMiniCharts })}
-            style={{ cursor: 'pointer' }}
-          >
-            <span>Mini charts in stats</span>
-            <span className="tg" />
-          </div>
-        </div>
       </div>
     </div>
   );

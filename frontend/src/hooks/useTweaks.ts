@@ -9,7 +9,6 @@ export const DEFAULT_TWEAKS: Tweaks = {
   accent: 'green',
   layout: 'tabs-top',
   drawerPos: 'bottom',
-  showMiniCharts: true,
 };
 
 export function useTweaks() {

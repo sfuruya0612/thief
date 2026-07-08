@@ -82,7 +82,6 @@ interface ServicePanelProps<TRaw, TRow extends BaseRow> {
   normalizer: (raw: TRaw, region: string) => TRow;
   columns: ColumnDef<TRow>[];
   overviewRows: (row: TRow) => OverviewEntry[];
-  showMiniCharts: boolean;
   drawerPos: DrawerPos;
   selectedId: string | null;
   onSelectId: (id: string | null) => void;
@@ -97,7 +96,6 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   normalizer,
   columns,
   overviewRows,
-  showMiniCharts,
   drawerPos,
   selectedId,
   onSelectId,
@@ -142,12 +140,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
 
       {ssoExpired && <SSOExpiredBanner profile={profile} />}
 
-      <StatsRow
-        resources={allResources}
-        service={service}
-        showCharts={showMiniCharts}
-        cost={cost ?? []}
-      />
+      <StatsRow resources={allResources} service={service} cost={cost ?? []} />
 
       <FacetBar
         rows={allResources}
@@ -185,7 +178,6 @@ export interface AccountViewProps {
   onRegionChange: (region: string) => void;
   activeService: string;
   onServiceChange: (service: string) => void;
-  showMiniCharts: boolean;
   drawerPos: DrawerPos;
   onSidebarWidthChange?: (width: number) => void;
 }
@@ -198,7 +190,6 @@ export function AccountView({
   onRegionChange,
   activeService,
   onServiceChange,
-  showMiniCharts,
   drawerPos,
   onSidebarWidthChange,
 }: AccountViewProps) {
@@ -230,7 +221,6 @@ export function AccountView({
           normalizer={ec2FromRaw}
           columns={ec2Columns}
           overviewRows={ec2OverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -244,7 +234,6 @@ export function AccountView({
           normalizer={ecrFromRaw}
           columns={ecrColumns}
           overviewRows={ecrOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -258,7 +247,6 @@ export function AccountView({
           normalizer={rdsFromRaw}
           columns={rdsColumns}
           overviewRows={rdsOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -272,7 +260,6 @@ export function AccountView({
           normalizer={dynamoFromRaw}
           columns={dynamoColumns}
           overviewRows={dynamoOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -286,7 +273,6 @@ export function AccountView({
           normalizer={cacheFromRaw}
           columns={cacheColumns}
           overviewRows={cacheOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -300,7 +286,6 @@ export function AccountView({
           normalizer={lambdaFromRaw}
           columns={lambdaColumns}
           overviewRows={lambdaOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -314,7 +299,6 @@ export function AccountView({
           normalizer={ecsFromRaw}
           columns={ecsColumns}
           overviewRows={ecsOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -328,7 +312,6 @@ export function AccountView({
           normalizer={s3FromRaw}
           columns={s3Columns}
           overviewRows={s3OverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -342,7 +325,6 @@ export function AccountView({
           normalizer={iamFromRaw}
           columns={iamColumns}
           overviewRows={iamOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -356,7 +338,6 @@ export function AccountView({
           normalizer={elbFromRaw}
           columns={elbColumns}
           overviewRows={elbOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -370,7 +351,6 @@ export function AccountView({
           normalizer={cloudfrontFromRaw}
           columns={cloudfrontColumns}
           overviewRows={cloudfrontOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -384,7 +364,6 @@ export function AccountView({
           normalizer={apigwFromRaw}
           columns={apigwColumns}
           overviewRows={apigwOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -398,7 +377,6 @@ export function AccountView({
           normalizer={natgwFromRaw}
           columns={natgwColumns}
           overviewRows={natgwOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -412,7 +390,6 @@ export function AccountView({
           normalizer={sqsFromRaw}
           columns={sqsColumns}
           overviewRows={sqsOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -426,7 +403,6 @@ export function AccountView({
           normalizer={kinesisFromRaw}
           columns={kinesisColumns}
           overviewRows={kinesisOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -440,7 +416,6 @@ export function AccountView({
           normalizer={wafFromRaw}
           columns={wafColumns}
           overviewRows={wafOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -454,7 +429,6 @@ export function AccountView({
           normalizer={ssmFromRaw}
           columns={ssmColumns}
           overviewRows={ssmOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
@@ -468,7 +442,6 @@ export function AccountView({
           normalizer={secretFromRaw}
           columns={secretColumns}
           overviewRows={secretOverviewRows}
-          showMiniCharts={showMiniCharts}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
