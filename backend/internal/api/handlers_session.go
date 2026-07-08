@@ -19,11 +19,6 @@ const ecsExecDefaultCommand = "/bin/sh"
 // sessionTerminateTimeout はセッション確立に失敗した際の後始末 (TerminateSSMSession 呼び出し) に使うタイムアウト。
 const sessionTerminateTimeout = 5 * time.Second
 
-// wsOriginPatterns はブラウザからの WebSocket アップグレードを許可するオリジンパターン。
-// DNS rebinding 対策のため websocket.Accept の OriginPatterns にのみ渡し、InsecureSkipVerify は使わない。
-// frontend dev server (mise run frontend:run) のポートに合わせる。
-var wsOriginPatterns = []string{"localhost:8082", "127.0.0.1:8082"}
-
 // handleEC2Session は EC2 インスタンスへの SSM Session Manager セッションを開始し、
 // ブラウザ WebSocket とデータチャネルの間をブリッジする。
 func (s *Server) handleEC2Session(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +78,11 @@ func (s *Server) runSessionBridge(w http.ResponseWriter, r *http.Request, result
 		return
 	}
 
+	// OriginPatterns は cfg.WebOrigins (デフォルト localhost:8082/127.0.0.1:8082、環境変数
+	// THIEF_WEB_ORIGINS で上書き可能) に従う。DNS rebinding 対策のためここにのみ渡し、
+	// InsecureSkipVerify は使わない。
 	browser, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: wsOriginPatterns,
+		OriginPatterns: s.cfg.WebOrigins,
 	})
 	if err != nil {
 		slog.Warn("failed to accept browser websocket", "err", err)

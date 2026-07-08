@@ -82,14 +82,15 @@ func (s *Server) Close() {
 // readHeaderTimeout はリクエストヘッダ読み取りのタイムアウト。Slowloris 対策として必須。
 const readHeaderTimeout = 10 * time.Second
 
-// HTTPServer builds a ready-to-start http.Server bound to 127.0.0.1:8080.
+// HTTPServer builds a ready-to-start http.Server. Listen アドレスは cfg.ListenAddr
+// (デフォルト 127.0.0.1:8080、環境変数 THIEF_LISTEN_ADDR で上書き可能) に従う。
 //
 // ReadTimeout/WriteTimeout はセッションブリッジ (EC2 Start Session / ECS Exec Command) の
 // WebSocket 接続がハンドラ内で長時間ブロックすることと衝突するため設定しない。アイドル接続の
 // 切断はアプリ層 (ブラウザ切断検知によるブリッジ終了) に委ねる。ReadHeaderTimeout のみ設定する。
 func (s *Server) HTTPServer(ctx context.Context) *http.Server {
 	return &http.Server{
-		Addr:              "127.0.0.1:8080",
+		Addr:              s.cfg.ListenAddr,
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: readHeaderTimeout,
 		BaseContext: func(_ net.Listener) context.Context {
