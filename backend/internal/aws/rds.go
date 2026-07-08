@@ -70,7 +70,7 @@ func rdsFromInstance(db rdstypes.DBInstance) RDSResource {
 	return RDSResource{
 		ID:            ptrStr(db.DBInstanceIdentifier),
 		Name:          ptrStr(db.DBInstanceIdentifier),
-		State:         ptrStr(db.DBInstanceStatus),
+		State:         DisplayState(ptrStr(db.DBInstanceStatus)),
 		Engine:        ptrStr(db.Engine),
 		EngineVersion: ptrStr(db.EngineVersion),
 		Class:         ptrStr(db.DBInstanceClass),

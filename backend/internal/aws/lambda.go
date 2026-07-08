@@ -52,18 +52,17 @@ func ListLambdaResources(ctx context.Context, profile, region string) ([]LambdaR
 }
 
 func lambdaFromFunction(fn lambdatypes.FunctionConfiguration) LambdaResource {
+	// State 空 (古いランタイム等で未取得) は active 扱い
 	state := "active"
-	if fn.State != "" {
-		switch fn.State {
-		case lambdatypes.StatePending:
-			state = "updating"
-		case lambdatypes.StateInactive:
-			state = "stopped"
-		case lambdatypes.StateFailed:
-			state = "error"
-		default:
-			state = "running"
-		}
+	switch fn.State {
+	case lambdatypes.StatePending:
+		state = "pending"
+	case lambdatypes.StateInactive:
+		state = "inactive"
+	case lambdatypes.StateFailed:
+		state = "failed"
+	case lambdatypes.StateActive:
+		state = "active"
 	}
 	return LambdaResource{
 		ID:         ptrStr(fn.FunctionArn),

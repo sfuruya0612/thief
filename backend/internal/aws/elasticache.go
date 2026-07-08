@@ -61,7 +61,7 @@ func elastiCacheFromCluster(c ectypes.CacheCluster) ElastiCacheResource {
 	return ElastiCacheResource{
 		ID:            ptrStr(c.CacheClusterId),
 		Name:          ptrStr(c.CacheClusterId),
-		State:         ptrStr(c.CacheClusterStatus),
+		State:         DisplayState(ptrStr(c.CacheClusterStatus)),
 		Engine:        ptrStr(c.Engine),
 		EngineVersion: ptrStr(c.EngineVersion),
 		NodeType:      ptrStr(c.CacheNodeType),

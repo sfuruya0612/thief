@@ -65,7 +65,7 @@ func kinesisFromSummary(s *kinesistypes.StreamDescriptionSummary) KinesisResourc
 	return KinesisResource{
 		ID:             ptrStr(s.StreamARN),
 		Name:           ptrStr(s.StreamName),
-		State:          string(s.StreamStatus),
+		State:          DisplayState(string(s.StreamStatus)),
 		ShardCount:     ptrInt32(s.OpenShardCount),
 		RetentionHours: ptrInt32(s.RetentionPeriodHours),
 		EncryptionType: string(s.EncryptionType),

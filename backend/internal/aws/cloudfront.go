@@ -92,7 +92,7 @@ func cloudfrontFromSummary(d cftypes.DistributionSummary) CloudFrontResource {
 	return CloudFrontResource{
 		ID:         ptrStr(d.Id),
 		Name:       name,
-		State:      ptrStr(d.Status),
+		State:      DisplayState(ptrStr(d.Status)),
 		DomainName: ptrStr(d.DomainName),
 		Origins:    origins,
 		Enabled:    ptrBool(d.Enabled),

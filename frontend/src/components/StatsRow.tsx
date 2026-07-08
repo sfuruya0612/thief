@@ -81,23 +81,25 @@ function costStats(service: string, cost: CostRow[], showCharts: boolean): Stat[
 
 const SIMPLE_COST_ONLY = new Set(['apigw', 'natgw', 'sqs', 'kinesis', 'waf', 'dynamo']);
 
+// state を持たず Cost Explorer の対応もないサービスは Resources のみ表示する
+const RESOURCES_ONLY = new Set(['ecr', 'ssm', 'secrets']);
+
 export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps) {
   const running = resources.filter((r) => RUNNING_STATES.has(r.state ?? '')).length;
   const stopped = resources.filter((r) => r.state === 'stopped').length;
   const other = resources.length - running - stopped;
 
   let stats: Stat[];
-  if (service === 's3') {
+  if (RESOURCES_ONLY.has(service)) {
+    stats = [{ label: 'Resources', value: resources.length }];
+  } else if (service === 's3') {
     stats = [
       { label: 'Resources', value: resources.length },
       ...costStats(service, cost, showCharts),
     ];
   } else if (service === 'elb') {
-    const otherElb = resources.length - running;
     stats = [
       { label: 'Resources', value: resources.length },
-      { label: 'Active', value: running, tone: 'pos' },
-      { label: 'Other', value: otherElb, tone: otherElb > 0 ? 'neg' : undefined },
       ...costStats(service, cost, showCharts),
     ];
   } else if (service === 'cloudfront') {
@@ -122,16 +124,35 @@ export function StatsRow({ resources, service, showCharts, cost }: StatsRowProps
       { label: 'Roles', value: resources.filter((r) => r.kind === 'role').length },
     ];
   } else if (service === 'ecs') {
-    // ECSRow はクラスタ単位の集計値のためタスク単位の Desired/Running/Pending/Stopped を近似する
+    // ECSRow はクラスタ単位の集計値のためタスク単位の Desired/Running/Pending を近似する
     const desired = resources.reduce((sum, r) => sum + (r.activeServices ?? 0), 0);
     const runningTasks = resources.reduce((sum, r) => sum + (r.runningTasks ?? 0), 0);
     const pendingTasks = resources.reduce((sum, r) => sum + (r.pendingTasks ?? 0), 0);
-    const stoppedClusters = resources.filter((r) => r.state === 'stopped').length;
     stats = [
       { label: 'Desired', value: desired },
       { label: 'Running', value: runningTasks, tone: 'pos' },
       { label: 'Pending', value: pendingTasks },
-      { label: 'Stopped', value: stoppedClusters },
+      ...costStats(service, cost, showCharts),
+    ];
+  } else if (service === 'cache') {
+    // ElastiCache は AWS 上 stopped 相当の state を持たないため Running / Other + cost にする
+    const otherCache = resources.length - running;
+    stats = [
+      { label: 'Resources', value: resources.length },
+      { label: 'Running', value: running, tone: 'pos' },
+      { label: 'Other', value: otherCache, tone: otherCache > 0 ? 'neg' : undefined },
+      ...costStats(service, cost, showCharts),
+    ];
+  } else if (service === 'lambda') {
+    // Lambda は AWS 実 state (active/inactive/pending/failed) をそのまま返すため専用に集計する
+    const activeCount = resources.filter((r) => r.state === 'active').length;
+    const inactiveCount = resources.filter((r) => r.state === 'inactive').length;
+    const otherLambda = resources.length - activeCount - inactiveCount;
+    stats = [
+      { label: 'Resources', value: resources.length },
+      { label: 'Active', value: activeCount, tone: 'pos' },
+      { label: 'Inactive', value: inactiveCount },
+      { label: 'Other', value: otherLambda, tone: otherLambda > 0 ? 'neg' : undefined },
       ...costStats(service, cost, showCharts),
     ];
   } else {
