@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,6 +22,14 @@ type Config struct {
 	Output   string `yaml:"output"`
 	NoHeader bool   `yaml:"no-header"`
 	GroupBy  string `yaml:"-"`
+
+	// ListenAddr は API サーバの listen アドレス。API サーバ (cmd/server) 専用で
+	// CLI (cmd/thief) からは参照されない。
+	ListenAddr string `yaml:"listen-addr"`
+
+	// WebOrigins はブラウザからの WebSocket アップグレード (EC2 Session / ECS Exec) を
+	// 許可するオリジンパターン。API サーバ専用。
+	WebOrigins []string `yaml:"-"`
 
 	BigQuery BigQueryConfig
 	Datadog  DatadogConfig `yaml:"datadog"`
@@ -58,11 +67,12 @@ func (r redacted) value() string        { return string(r) }
 
 // fileConfig mirrors top-level fields for YAML unmarshalling.
 type fileConfig struct {
-	Profile  string `yaml:"profile"`
-	Region   string `yaml:"region"`
-	Output   string `yaml:"output"`
-	NoHeader bool   `yaml:"no-header"`
-	BigQuery struct {
+	Profile    string `yaml:"profile"`
+	Region     string `yaml:"region"`
+	Output     string `yaml:"output"`
+	NoHeader   bool   `yaml:"no-header"`
+	ListenAddr string `yaml:"listen-addr"`
+	BigQuery   struct {
 		ProjectID string `yaml:"project-id"`
 	} `yaml:"bigquery"`
 	Datadog struct {
@@ -77,11 +87,17 @@ type fileConfig struct {
 	} `yaml:"tidb"`
 }
 
+// defaultWebOrigins は frontend dev server (mise run frontend:run) のポートに合わせた
+// WebSocket 許可オリジンのデフォルト値。
+var defaultWebOrigins = []string{"localhost:8082", "127.0.0.1:8082"}
+
 // Defaults returns a Config with built-in default values.
 func Defaults() *Config {
 	return &Config{
-		Region: "ap-northeast-1",
-		Output: "tab",
+		Region:     "ap-northeast-1",
+		Output:     "tab",
+		ListenAddr: "127.0.0.1:8080",
+		WebOrigins: defaultWebOrigins,
 		Datadog: DatadogConfig{
 			Site: "datadoghq.com",
 			View: "summary",
@@ -114,6 +130,9 @@ func applyFile(cfg *Config, fc fileConfig) {
 	}
 	if fc.NoHeader {
 		cfg.NoHeader = true
+	}
+	if fc.ListenAddr != "" {
+		cfg.ListenAddr = fc.ListenAddr
 	}
 	if fc.BigQuery.ProjectID != "" {
 		cfg.BigQuery.ProjectID = fc.BigQuery.ProjectID
@@ -148,6 +167,16 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("THIEF_OUTPUT"); v != "" {
 		cfg.Output = v
+	}
+	if v := os.Getenv("THIEF_LISTEN_ADDR"); v != "" {
+		cfg.ListenAddr = v
+	}
+	if v := os.Getenv("THIEF_WEB_ORIGINS"); v != "" {
+		origins := strings.Split(v, ",")
+		for i, o := range origins {
+			origins[i] = strings.TrimSpace(o)
+		}
+		cfg.WebOrigins = origins
 	}
 	if v := os.Getenv("GOOGLE_CLOUD_PROJECT"); v != "" {
 		cfg.BigQuery.ProjectID = v

@@ -131,3 +131,12 @@ run = "npm run dev"
 description = "frontend ビルドして dist を静的サーブ (vite preview, ポート 8082)"
 dir = "frontend"
 run = "npm run build && npm run preview"
+
+# === docker ===
+[tasks."docker:up"]
+description = "docker compose で frontend (8088) / backend (8089) を起動"
+run = "docker compose up --build"
+
+[tasks."docker:down"]
+description = "docker compose を停止"
+run = "docker compose down"

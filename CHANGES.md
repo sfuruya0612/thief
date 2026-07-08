@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] backend の listen アドレスと WebSocket 許可オリジンを環境変数 (`THIEF_LISTEN_ADDR` / `THIEF_WEB_ORIGINS`) で設定可能にする
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
@@ -23,6 +25,8 @@
 - [ADD] ECS タスク一覧にコンテナ名を表示する
   - @sfuruya0612
 - [ADD] ECS クラスタの Drawer の Services / Tasks タブにフィルター機能を追加する
+  - @sfuruya0612
+- [ADD] frontend / backend を Docker 上で起動できるようにする (`docker compose up`, ポート frontend:8088 / backend:8089)
   - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
