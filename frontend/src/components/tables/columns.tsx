@@ -455,15 +455,21 @@ export const ecrImageColumns: ColumnDef<ECRImageRow>[] = [
   {
     key: 'imageSizeBytes',
     header: 'Size',
-    width: '14%',
+    width: '10%',
     align: 'right',
     cell: (r) => <span style={mutedMono}>{formatBytes(r.imageSizeBytes)}</span>,
   },
   {
     key: 'pushedAt',
     header: 'Pushed',
-    width: '28%',
+    width: '16%',
     cell: (r) => (r.pushedAt ? <span style={dimMono}>{r.pushedAt}</span> : <Dash />),
+  },
+  {
+    key: 'lastPulledAt',
+    header: 'Pulled',
+    width: '16%',
+    cell: (r) => (r.lastPulledAt ? <span style={dimMono}>{r.lastPulledAt}</span> : <Dash />),
   },
 ];
 

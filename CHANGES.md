@@ -28,6 +28,8 @@
   - @sfuruya0612
 - [ADD] frontend / backend を Docker 上で起動できるようにする (`docker compose up`, ポート frontend:8088 / backend:8089)
   - @sfuruya0612
+- [ADD] ECR イメージ一覧に最終 pull 日時と検索バーを追加する
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする

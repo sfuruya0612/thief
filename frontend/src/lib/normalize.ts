@@ -212,6 +212,7 @@ export function ecrImageFromRaw(raw: ECRImageRaw): ECRImageRow {
     imageTag: raw.image_tag,
     imageDigest: raw.image_digest,
     pushedAt: raw.pushed_at,
+    lastPulledAt: raw.last_pulled_at,
     imageSizeBytes: raw.image_size_bytes,
   };
 }
