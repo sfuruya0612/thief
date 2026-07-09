@@ -8,7 +8,7 @@ services:
       - "8089:8089"
     environment:
       - THIEF_LISTEN_ADDR=0.0.0.0:8089
-      - THIEF_WEB_ORIGINS=localhost:8088,127.0.0.1:8088
+      - THIEF_WEB_ORIGINS=localhost:8088,127.0.0.1:8088,thief.local:8088
       - AWS_PROFILE=${AWS_PROFILE:-}
       - AWS_REGION=${AWS_REGION:-ap-northeast-1}
     volumes:
@@ -19,7 +19,10 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE: http://localhost:8089
+        # 空文字を指定し、nginx の /api/ リバースプロキシ (frontend/nginx.conf) 経由で
+        # 同一オリジンから backend を呼び出す。thief.local 等のカスタムドメインでも
+        # ホスト名をハードコードせずに動作させるため。
+        VITE_API_BASE: ""
       secrets:
         - custom_ca
     ports:

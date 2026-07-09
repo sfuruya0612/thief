@@ -1,6 +1,14 @@
 import { ApiError } from '../types/common';
 
-const BASE_URL = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080';
+// VITE_API_BASE が未設定ならローカル開発時の backend デフォルトを使う。
+// 空文字が明示された場合は「同一オリジン (リバースプロキシ経由)」を意味し、現在の origin を使う。
+const rawApiBase = import.meta.env.VITE_API_BASE;
+const BASE_URL =
+  rawApiBase === undefined
+    ? 'http://127.0.0.1:8080'
+    : rawApiBase === ''
+      ? window.location.origin
+      : rawApiBase;
 
 // 非 2xx レスポンスから標準エラー DTO を読み取り ApiError を構築する
 async function throwApiError(res: Response): Promise<never> {
