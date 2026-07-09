@@ -415,6 +415,85 @@ export interface ELBRow {
 }
 
 // ============================================================
+// ELB Listener / Rule / TargetGroup / TargetHealth (Drawer の Listeners / Targets タブ)
+// ============================================================
+export interface ELBListenerRaw {
+  arn: string;
+  load_balancer_arn: string;
+  protocol: string;
+  port: number;
+  default_action_type: string;
+  default_target_group_arn: string;
+}
+
+export interface ELBListenerRow {
+  arn: string;
+  loadBalancerArn: string;
+  protocol: string;
+  port: number;
+  defaultActionType: string;
+  defaultTargetGroupArn: string;
+}
+
+export interface ELBRuleRaw {
+  arn: string;
+  priority: string;
+  is_default: boolean;
+  conditions: string[] | null;
+  action_type: string;
+  target_group_arn: string;
+}
+
+export interface ELBRuleRow {
+  arn: string;
+  priority: string;
+  isDefault: boolean;
+  conditions: string[];
+  actionType: string;
+  targetGroupArn: string;
+}
+
+export interface ELBTargetGroupRaw {
+  arn: string;
+  name: string;
+  protocol: string;
+  port: number;
+  target_type: string;
+  vpc_id: string;
+  health_check_path: string;
+  load_balancer_arns: string[] | null;
+}
+
+export interface ELBTargetGroupRow {
+  arn: string;
+  name: string;
+  protocol: string;
+  port: number;
+  targetType: string;
+  vpcId: string;
+  healthCheckPath: string;
+  loadBalancerArns: string[];
+}
+
+export interface ELBTargetHealthRaw {
+  target_id: string;
+  port: number;
+  availability_zone: string;
+  state: string;
+  reason: string;
+  description: string;
+}
+
+export interface ELBTargetHealthRow {
+  targetId: string;
+  port: number;
+  availabilityZone: string;
+  state: string;
+  reason: string;
+  description: string;
+}
+
+// ============================================================
 // CloudFront (グローバル: region は 'global' 固定)
 // ============================================================
 export interface CloudFrontRaw {

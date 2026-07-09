@@ -23,8 +23,16 @@ import type {
   ECSServiceRow,
   ECSTaskRaw,
   ECSTaskRow,
+  ELBListenerRaw,
+  ELBListenerRow,
   ELBRaw,
   ELBRow,
+  ELBRuleRaw,
+  ELBRuleRow,
+  ELBTargetGroupRaw,
+  ELBTargetGroupRow,
+  ELBTargetHealthRaw,
+  ELBTargetHealthRow,
   IAMRaw,
   IAMRow,
   KinesisRaw,
@@ -305,6 +313,52 @@ export function elbFromRaw(raw: ELBRaw, region: string): ELBRow {
     dnsName: raw.dns_name,
     vpcId: raw.vpc_id,
     azs: raw.azs ?? [],
+  };
+}
+
+export function elbListenerFromRaw(raw: ELBListenerRaw): ELBListenerRow {
+  return {
+    arn: raw.arn,
+    loadBalancerArn: raw.load_balancer_arn,
+    protocol: raw.protocol,
+    port: raw.port,
+    defaultActionType: raw.default_action_type,
+    defaultTargetGroupArn: raw.default_target_group_arn,
+  };
+}
+
+export function elbRuleFromRaw(raw: ELBRuleRaw): ELBRuleRow {
+  return {
+    arn: raw.arn,
+    priority: raw.priority,
+    isDefault: raw.is_default,
+    conditions: raw.conditions ?? [],
+    actionType: raw.action_type,
+    targetGroupArn: raw.target_group_arn,
+  };
+}
+
+export function elbTargetGroupFromRaw(raw: ELBTargetGroupRaw): ELBTargetGroupRow {
+  return {
+    arn: raw.arn,
+    name: raw.name,
+    protocol: raw.protocol,
+    port: raw.port,
+    targetType: raw.target_type,
+    vpcId: raw.vpc_id,
+    healthCheckPath: raw.health_check_path,
+    loadBalancerArns: raw.load_balancer_arns ?? [],
+  };
+}
+
+export function elbTargetHealthFromRaw(raw: ELBTargetHealthRaw): ELBTargetHealthRow {
+  return {
+    targetId: raw.target_id,
+    port: raw.port,
+    availabilityZone: raw.availability_zone,
+    state: raw.state,
+    reason: raw.reason,
+    description: raw.description,
   };
 }
 
