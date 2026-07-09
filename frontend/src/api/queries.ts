@@ -14,6 +14,10 @@ import {
   ecsContainerFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
+  elbListenerFromRaw,
+  elbRuleFromRaw,
+  elbTargetGroupFromRaw,
+  elbTargetHealthFromRaw,
   s3ObjectFromRaw,
 } from '../lib/normalize';
 import {
@@ -28,6 +32,10 @@ import {
   getECSContainers,
   getECSServices,
   getECSTasks,
+  getELBListeners,
+  getELBRules,
+  getELBTargetGroups,
+  getELBTargetHealth,
   getProfiles,
   getRegions,
   getResources,
@@ -181,6 +189,47 @@ export function useECRImages(profile: string, region: string, repo: string) {
     queryFn: async () => (await getECRImages(profile, region, repo)).map(ecrImageFromRaw),
     staleTime: 60_000,
     enabled: !!profile && !!repo,
+  });
+}
+
+// ============================================================
+// ELB Listener / Rule / TargetGroup / TargetHealth (Drawer の Listeners / Targets タブ)
+// ============================================================
+export function useELBListeners(profile: string, region: string, lbArn: string) {
+  return useQuery({
+    queryKey: ['aws', 'elb-listeners', profile, region, lbArn],
+    queryFn: async () => (await getELBListeners(profile, region, lbArn)).map(elbListenerFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!lbArn,
+  });
+}
+
+export function useELBRules(profile: string, region: string, listenerArn: string) {
+  return useQuery({
+    queryKey: ['aws', 'elb-rules', profile, region, listenerArn],
+    queryFn: async () => (await getELBRules(profile, region, listenerArn)).map(elbRuleFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!listenerArn,
+  });
+}
+
+export function useELBTargetGroups(profile: string, region: string, lbArn: string) {
+  return useQuery({
+    queryKey: ['aws', 'elb-target-groups', profile, region, lbArn],
+    queryFn: async () =>
+      (await getELBTargetGroups(profile, region, lbArn)).map(elbTargetGroupFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!lbArn,
+  });
+}
+
+export function useELBTargetHealth(profile: string, region: string, tgArn: string) {
+  return useQuery({
+    queryKey: ['aws', 'elb-target-health', profile, region, tgArn],
+    queryFn: async () =>
+      (await getELBTargetHealth(profile, region, tgArn)).map(elbTargetHealthFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!tgArn,
   });
 }
 

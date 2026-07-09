@@ -4,6 +4,10 @@ import type {
   ECSContainerRaw,
   ECSServiceRaw,
   ECSTaskRaw,
+  ELBListenerRaw,
+  ELBRuleRaw,
+  ELBTargetGroupRaw,
+  ELBTargetHealthRaw,
   ForecastRaw,
   RegionRaw,
   S3ObjectRaw,
@@ -170,6 +174,53 @@ export function getECRImages(
   return apiGet<ECRImageRaw[] | null>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecr/${encodeURIComponent(repo)}/images`,
     { region },
+  ).then((v) => v ?? []);
+}
+
+// ============================================================
+// ELB Listener / Rule / TargetGroup / TargetHealth (Drawer の Listeners / Targets タブ)
+// ============================================================
+export function getELBListeners(
+  profile: string,
+  region: string,
+  lbArn: string,
+): Promise<ELBListenerRaw[]> {
+  return apiGet<ELBListenerRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/elb/listeners`,
+    { region, lb_arn: lbArn },
+  ).then((v) => v ?? []);
+}
+
+export function getELBRules(
+  profile: string,
+  region: string,
+  listenerArn: string,
+): Promise<ELBRuleRaw[]> {
+  return apiGet<ELBRuleRaw[] | null>(`/api/aws/profiles/${encodeURIComponent(profile)}/elb/rules`, {
+    region,
+    listener_arn: listenerArn,
+  }).then((v) => v ?? []);
+}
+
+export function getELBTargetGroups(
+  profile: string,
+  region: string,
+  lbArn: string,
+): Promise<ELBTargetGroupRaw[]> {
+  return apiGet<ELBTargetGroupRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/elb/target-groups`,
+    { region, lb_arn: lbArn },
+  ).then((v) => v ?? []);
+}
+
+export function getELBTargetHealth(
+  profile: string,
+  region: string,
+  tgArn: string,
+): Promise<ELBTargetHealthRaw[]> {
+  return apiGet<ELBTargetHealthRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/elb/target-health`,
+    { region, tg_arn: tgArn },
   ).then((v) => v ?? []);
 }
 

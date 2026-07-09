@@ -34,6 +34,8 @@
   - @sfuruya0612
 - [ADD] ECS クラスタの Tasks タブでタスクを選択すると詳細ペインを表示するようにする
   - @sfuruya0612
+- [ADD] ELB の Drawer に Listeners / Targets タブを追加し、Listener → Rule → Target Group → ターゲットヘルスを辿れるようにする
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする

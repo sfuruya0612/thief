@@ -8,6 +8,8 @@ import { StatusBadge } from '../primitives';
 import { DrawerECRImages } from './DrawerECRImages';
 import { DrawerECSServices } from './DrawerECSServices';
 import { DrawerECSTasks } from './DrawerECSTasks';
+import { DrawerELBListeners } from './DrawerELBListeners';
+import { DrawerELBTargets } from './DrawerELBTargets';
 import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerTags } from './DrawerTags';
 import { DrawerTerminal } from './DrawerTerminal';
@@ -22,7 +24,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   ecs: ['Overview', 'Services', 'Tasks', 'Terminal', 'Tags'],
   s3: ['Overview', 'Objects', 'Tags'],
   iam: ['Overview', 'Tags'],
-  elb: ['Overview', 'Tags'],
+  elb: ['Overview', 'Listeners', 'Targets', 'Tags'],
   cloudfront: ['Overview', 'Tags'],
   apigw: ['Overview', 'Tags'],
   natgw: ['Overview', 'Tags'],
@@ -246,6 +248,12 @@ export function Drawer({
               )}
               {tab === 'Objects' && service === 's3' && (
                 <DrawerS3Objects profile={profile} region={region} bucket={resource.name} />
+              )}
+              {tab === 'Listeners' && service === 'elb' && (
+                <DrawerELBListeners profile={profile} region={region} lbArn={resource.id} />
+              )}
+              {tab === 'Targets' && service === 'elb' && (
+                <DrawerELBTargets profile={profile} region={region} lbArn={resource.id} />
               )}
             </div>
           </>

@@ -14,7 +14,11 @@ import type {
   ECSRow,
   ECSServiceRow,
   ECSTaskRow,
+  ELBListenerRow,
   ELBRow,
+  ELBRuleRow,
+  ELBTargetGroupRow,
+  ELBTargetHealthRow,
   IAMRow,
   KinesisRow,
   LambdaRow,
@@ -676,6 +680,186 @@ export const elbColumns: ColumnDef<ELBRow>[] = [
     header: 'AZs',
     width: '15%',
     cell: (r) => <span style={mutedMono}>{r.azs.join(', ') || '—'}</span>,
+  },
+];
+
+// ============================================================
+// ELB Listener / Rule / TargetGroup / TargetHealth
+// ============================================================
+export const elbListenerColumns: ColumnDef<ELBListenerRow>[] = [
+  {
+    key: 'protocol',
+    header: 'Protocol',
+    width: '14%',
+    cell: (r) => <span className="primary">{r.protocol}</span>,
+  },
+  {
+    key: 'port',
+    header: 'Port',
+    width: '10%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.port}</span>,
+  },
+  {
+    key: 'defaultActionType',
+    header: 'Default action',
+    width: '18%',
+    cell: (r) => <span style={mutedMono}>{r.defaultActionType || <Dash />}</span>,
+  },
+  {
+    key: 'defaultTargetGroupArn',
+    header: 'Default target group',
+    width: '38%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.defaultTargetGroupArn || <Dash />}
+      </span>
+    ),
+  },
+  {
+    key: 'arn',
+    header: 'ARN',
+    width: '20%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.arn}
+      </span>
+    ),
+  },
+];
+
+export const elbRuleColumns: ColumnDef<ELBRuleRow>[] = [
+  {
+    key: 'priority',
+    header: 'Priority',
+    width: '10%',
+    cell: (r) => <span className="primary">{r.isDefault ? 'default' : r.priority}</span>,
+  },
+  {
+    key: 'conditions',
+    header: 'Conditions',
+    width: '32%',
+    cell: (r) => <span className="truncate">{r.conditions.join(' / ') || <Dash />}</span>,
+  },
+  {
+    key: 'actionType',
+    header: 'Action',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.actionType || <Dash />}</span>,
+  },
+  {
+    key: 'targetGroupArn',
+    header: 'Target group',
+    width: '28%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.targetGroupArn || <Dash />}
+      </span>
+    ),
+  },
+  {
+    key: 'arn',
+    header: 'ARN',
+    width: '16%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.arn}
+      </span>
+    ),
+  },
+];
+
+export const elbTargetGroupColumns: ColumnDef<ELBTargetGroupRow>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    width: '22%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  {
+    key: 'protocol',
+    header: 'Protocol',
+    width: '12%',
+    cell: (r) => <span style={mutedMono}>{r.protocol}</span>,
+  },
+  {
+    key: 'port',
+    header: 'Port',
+    width: '8%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.port}</span>,
+  },
+  {
+    key: 'targetType',
+    header: 'Target type',
+    width: '12%',
+    cell: (r) => <span style={mutedMono}>{r.targetType}</span>,
+  },
+  {
+    key: 'healthCheckPath',
+    header: 'Health check',
+    width: '18%',
+    cell: (r) => <span style={dimMono}>{r.healthCheckPath || <Dash />}</span>,
+  },
+  {
+    key: 'vpcId',
+    header: 'VPC',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.vpcId}</span>,
+  },
+  {
+    key: 'arn',
+    header: 'ARN',
+    width: '14%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.arn}
+      </span>
+    ),
+  },
+];
+
+export const elbTargetHealthColumns: ColumnDef<ELBTargetHealthRow>[] = [
+  {
+    key: 'targetId',
+    header: 'Target',
+    width: '20%',
+    cell: (r) => (
+      <span className="primary truncate" style={monoStyle}>
+        {r.targetId}
+      </span>
+    ),
+  },
+  {
+    key: 'port',
+    header: 'Port',
+    width: '8%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.port}</span>,
+  },
+  {
+    key: 'state',
+    header: 'State',
+    width: '12%',
+    cell: (r) => <StatusBadge state={r.state} />,
+  },
+  {
+    key: 'availabilityZone',
+    header: 'AZ',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.availabilityZone || <Dash />}</span>,
+  },
+  {
+    key: 'reason',
+    header: 'Reason',
+    width: '20%',
+    cell: (r) => <span style={dimMono}>{r.reason || <Dash />}</span>,
+  },
+  {
+    key: 'description',
+    header: 'Description',
+    width: '26%',
+    cell: (r) => <span className="truncate">{r.description || <Dash />}</span>,
   },
 ];
 

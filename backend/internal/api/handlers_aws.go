@@ -338,6 +338,82 @@ func (s *Server) handleELB(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, entry.Value)
 }
 
+func (s *Server) handleELBListeners(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	lbArn := r.URL.Query().Get("lb_arn")
+	if lbArn == "" {
+		writeBadRequest(w, "lb_arn query parameter is required")
+		return
+	}
+	key := cacheKey("elb-listeners", profile, region, lbArn)
+	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+		return awsinternal.ListELBListeners(r.Context(), profile, region, lbArn)
+	})
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
+	writeJSON(w, entry.Value)
+}
+
+func (s *Server) handleELBRules(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	listenerArn := r.URL.Query().Get("listener_arn")
+	if listenerArn == "" {
+		writeBadRequest(w, "listener_arn query parameter is required")
+		return
+	}
+	key := cacheKey("elb-rules", profile, region, listenerArn)
+	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+		return awsinternal.ListELBRules(r.Context(), profile, region, listenerArn)
+	})
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
+	writeJSON(w, entry.Value)
+}
+
+func (s *Server) handleELBTargetGroups(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	lbArn := r.URL.Query().Get("lb_arn")
+	if lbArn == "" {
+		writeBadRequest(w, "lb_arn query parameter is required")
+		return
+	}
+	key := cacheKey("elb-target-groups", profile, region, lbArn)
+	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+		return awsinternal.ListELBTargetGroups(r.Context(), profile, region, lbArn)
+	})
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
+	writeJSON(w, entry.Value)
+}
+
+func (s *Server) handleELBTargetHealth(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	tgArn := r.URL.Query().Get("tg_arn")
+	if tgArn == "" {
+		writeBadRequest(w, "tg_arn query parameter is required")
+		return
+	}
+	key := cacheKey("elb-target-health", profile, region, tgArn)
+	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+		return awsinternal.DescribeELBTargetHealth(r.Context(), profile, region, tgArn)
+	})
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
+	writeJSON(w, entry.Value)
+}
+
 func (s *Server) handleDynamo(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	key := cacheKey("dynamo", profile, region)
