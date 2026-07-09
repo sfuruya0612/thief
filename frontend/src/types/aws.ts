@@ -271,6 +271,7 @@ export interface ECRImageRaw {
   image_tag: string;
   image_digest: string;
   pushed_at: string;
+  last_pulled_at: string;
   image_size_bytes: number;
 }
 
@@ -281,6 +282,7 @@ export interface ECRImageRow {
   imageTag: string;
   imageDigest: string;
   pushedAt: string;
+  lastPulledAt: string;
   imageSizeBytes: number;
 }
 

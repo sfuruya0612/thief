@@ -32,6 +32,7 @@ type ECRImageResource struct {
 	ImageTag       string `json:"image_tag"`
 	ImageDigest    string `json:"image_digest"`
 	PushedAt       string `json:"pushed_at"`
+	LastPulledAt   string `json:"last_pulled_at"`
 	ImageSizeBytes int64  `json:"image_size_bytes"`
 }
 
@@ -111,11 +112,16 @@ func ecrImageFromDetail(repoName string, img ecrtypes.ImageDetail) ECRImageResou
 	if img.ImagePushedAt != nil {
 		pushedAt = img.ImagePushedAt.Format(time.RFC3339)
 	}
+	lastPulledAt := ""
+	if img.LastRecordedPullTime != nil {
+		lastPulledAt = img.LastRecordedPullTime.Format(time.RFC3339)
+	}
 	return ECRImageResource{
 		RepositoryName: repoName,
 		ImageTag:       tag,
 		ImageDigest:    ptrStr(img.ImageDigest),
 		PushedAt:       pushedAt,
+		LastPulledAt:   lastPulledAt,
 		ImageSizeBytes: ptrInt64(img.ImageSizeInBytes),
 	}
 }
