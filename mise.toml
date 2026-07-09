@@ -2,7 +2,7 @@
 GOPATH = "{{env.HOME}}/go"
 
 [tools]
-go = "1.25.11"
+go = "1.25.12"
 prek = "latest"
 node = "26.4.0"
 "go:github.com/vektra/mockery/v2" = "latest"
