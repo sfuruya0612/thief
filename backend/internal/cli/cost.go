@@ -22,7 +22,7 @@ func newCostCmd() *cobra.Command {
 			return runList(cmd,
 				[]util.Column{{Header: "Date"}, {Header: "Service"}, {Header: "Unblended"}, {Header: "NetAmortized"}, {Header: "Unit"}},
 				func(ctx context.Context, profile, region string) ([]awsinternal.CostResource, error) {
-					return awsinternal.GetCost(ctx, profile, region, includeToday)
+					return awsinternal.GetCost(ctx, profile, region, awsinternal.CostQueryOptions{IncludeToday: includeToday})
 				},
 			)
 		},

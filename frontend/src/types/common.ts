@@ -15,7 +15,7 @@ export class ApiError extends Error {
   }
 }
 
-export type ServiceGroup = 'compute' | 'data' | 'network' | 'messaging' | 'security';
+export type ServiceGroup = 'compute' | 'data' | 'network' | 'messaging' | 'security' | 'cost';
 
 export interface ServiceMeta {
   key: string;

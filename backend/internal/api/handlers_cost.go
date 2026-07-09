@@ -2,16 +2,26 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 )
 
 func (s *Server) handleCost(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	includeToday := r.URL.Query().Get("include_today") == "true"
-	key := cacheKey("cost", profile, region, boolStr(includeToday))
+	q := r.URL.Query()
+	opts := awsinternal.CostQueryOptions{
+		IncludeToday:     q.Get("include_today") == "true",
+		Granularity:      q.Get("granularity"),
+		GroupByDimension: q.Get("group_by"),
+		ServiceFilter:    q.Get("service"),
+	}
+	if months, err := strconv.Atoi(q.Get("months")); err == nil {
+		opts.Months = months
+	}
+	key := cacheKey("cost", profile, region, boolStr(opts.IncludeToday), opts.Granularity, opts.GroupByDimension, opts.ServiceFilter, strconv.Itoa(opts.Months))
 	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
-		return awsinternal.GetCost(r.Context(), profile, region, includeToday)
+		return awsinternal.GetCost(r.Context(), profile, region, opts)
 	})
 	if err != nil {
 		writeInternalError(w, err.Error())

@@ -11,6 +11,7 @@ import (
 )
 
 // CostResource represents a line item in Cost Explorer results.
+// GroupKey は GroupByDimension で指定した次元の値 (デフォルトはサービス名) を保持する。
 type CostResource struct {
 	TimePeriod         string  `json:"time_period"`
 	Service            string  `json:"service"`
@@ -31,9 +32,47 @@ type ForecastResource struct {
 	Unit       string  `json:"unit"`
 }
 
-// GetCost returns daily cost by service for the given date range.
+// CostGroupByDimension は GetCost の GroupBy 次元として許可する値。
+// AWS Cost Explorer が対応する Dimension のうち、コスト可視化で使う頻度が高いものに限定する (YAGNI)。
+const (
+	CostGroupByService       = "SERVICE"
+	CostGroupByUsageType     = "USAGE_TYPE"
+	CostGroupByLinkedAccount = "LINKED_ACCOUNT"
+	CostGroupByRegion        = "REGION"
+)
+
+// CostQueryOptions は GetCost の検索条件を表す。ゼロ値は以下のデフォルトとして扱う。
+//   - Granularity: 空文字は DAILY
+//   - GroupByDimension: 空文字は SERVICE
+//   - ServiceFilter: 空文字は絞り込みなし (Dimension SERVICE の EQUALS フィルタ)
+//   - Months: 0 以下は 1 (取得期間を遡る月数)
+type CostQueryOptions struct {
+	IncludeToday     bool
+	Granularity      string
+	GroupByDimension string
+	ServiceFilter    string
+	Months           int
+}
+
+func costGranularity(g string) cetypes.Granularity {
+	if g == "MONTHLY" {
+		return cetypes.GranularityMonthly
+	}
+	return cetypes.GranularityDaily
+}
+
+func costGroupByDimension(dim string) string {
+	switch dim {
+	case CostGroupByUsageType, CostGroupByLinkedAccount, CostGroupByRegion:
+		return dim
+	default:
+		return CostGroupByService
+	}
+}
+
+// GetCost returns cost grouped by the given dimension for the given date range.
 // If includeToday is false, the end date is yesterday.
-func GetCost(ctx context.Context, profile, region string, includeToday bool) ([]CostResource, error) {
+func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions) ([]CostResource, error) {
 	// Cost Explorer is a global service; us-east-1 is the standard endpoint.
 	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *costexplorer.Client {
 		return costexplorer.NewFromConfig(cfg)
@@ -44,22 +83,37 @@ func GetCost(ctx context.Context, profile, region string, includeToday bool) ([]
 
 	now := time.Now().UTC()
 	end := now.Format("2006-01-02")
-	if !includeToday {
+	if !opts.IncludeToday {
 		end = now.AddDate(0, 0, -1).Format("2006-01-02")
 	}
-	start := now.AddDate(0, -1, 0).Format("2006-01-02")
+	months := opts.Months
+	if months <= 0 {
+		months = 1
+	}
+	start := now.AddDate(0, -months, 0).Format("2006-01-02")
 
-	out, err := client.GetCostAndUsage(ctx, &costexplorer.GetCostAndUsageInput{
+	input := &costexplorer.GetCostAndUsageInput{
 		TimePeriod: &cetypes.DateInterval{
 			Start: aws.String(start),
 			End:   aws.String(end),
 		},
-		Granularity: cetypes.GranularityDaily,
+		Granularity: costGranularity(opts.Granularity),
 		Metrics:     []string{"UnblendedCost", "NetAmortizedCost"},
 		GroupBy: []cetypes.GroupDefinition{
-			{Type: cetypes.GroupDefinitionTypeDimension, Key: aws.String("SERVICE")},
+			{Type: cetypes.GroupDefinitionTypeDimension, Key: aws.String(costGroupByDimension(opts.GroupByDimension))},
 		},
-	})
+	}
+	if opts.ServiceFilter != "" {
+		input.Filter = &cetypes.Expression{
+			Dimensions: &cetypes.DimensionValues{
+				Key:          cetypes.DimensionService,
+				Values:       []string{opts.ServiceFilter},
+				MatchOptions: []cetypes.MatchOption{cetypes.MatchOptionEquals},
+			},
+		}
+	}
+
+	out, err := client.GetCostAndUsage(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("get cost and usage: %w", err)
 	}

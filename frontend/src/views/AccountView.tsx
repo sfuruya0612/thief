@@ -74,6 +74,7 @@ import { StatsRow } from '../components/StatsRow';
 import { FacetBar, type Filters } from '../components/FacetBar';
 import { DataTable } from '../components/DataTable';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
+import { CostExplorerPanel } from './CostExplorerPanel';
 
 interface ServicePanelProps<TRaw, TRow extends BaseRow> {
   service: string;
@@ -447,6 +448,7 @@ export function AccountView({
           onSelectId={setSelectedId}
         />
       )}
+      {activeService === 'costexplorer' && <CostExplorerPanel profile={profile} region={region} />}
     </div>
   );
 }
