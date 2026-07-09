@@ -76,3 +76,5 @@
   - @sfuruya0612
 - [FIX] Terminal タブでセッションを開き直すと xterm.js にフォーカスが移らず入力できなくなる不具合を修正する
   - @sfuruya0612
+- [FIX] StrictMode の再マウント時に xterm.js 内部の未キャンセル setTimeout が dispose 後に発火し Terminal タブがクラッシュする不具合を修正する
+  - @sfuruya0612
