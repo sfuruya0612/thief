@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ecsServiceFromRaw, ecsTaskFromRaw, s3ObjectFromRaw } from './normalize';
+import {
+  dynamoTableSchemaFromRaw,
+  ecsServiceFromRaw,
+  ecsTaskFromRaw,
+  s3ObjectFromRaw,
+} from './normalize';
 
 describe('ecsServiceFromRaw', () => {
   it('snake_case を camelCase に変換する', () => {
@@ -128,5 +133,52 @@ describe('s3ObjectFromRaw', () => {
     expect(row.key).toBe('');
     expect(row.size).toBe(0);
     expect(row.storageClass).toBe('');
+  });
+});
+
+describe('dynamoTableSchemaFromRaw', () => {
+  it('snake_case を camelCase に変換し sort_key を保持する', () => {
+    const row = dynamoTableSchemaFromRaw({
+      table_name: 'users',
+      table: {
+        name: 'users',
+        partition_key: { name: 'pk', type: 'S' },
+        sort_key: { name: 'sk', type: 'N' },
+      },
+      gsis: [
+        {
+          name: 'gsi1',
+          partition_key: { name: 'gsi1pk', type: 'S' },
+        },
+      ],
+    });
+    expect(row).toEqual({
+      tableName: 'users',
+      table: {
+        name: 'users',
+        partitionKey: { name: 'pk', type: 'S' },
+        sortKey: { name: 'sk', type: 'N' },
+      },
+      gsis: [
+        {
+          name: 'gsi1',
+          partitionKey: { name: 'gsi1pk', type: 'S' },
+          sortKey: undefined,
+        },
+      ],
+    });
+  });
+
+  it('sort_key と gsis が null の場合を空配列/undefined として扱う', () => {
+    const row = dynamoTableSchemaFromRaw({
+      table_name: 'orders',
+      table: {
+        name: 'orders',
+        partition_key: { name: 'pk', type: 'S' },
+      },
+      gsis: null,
+    });
+    expect(row.table.sortKey).toBeUndefined();
+    expect(row.gsis).toEqual([]);
   });
 });

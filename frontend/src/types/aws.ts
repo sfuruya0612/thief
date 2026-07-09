@@ -97,6 +97,45 @@ export interface DynamoRow {
   tags: Record<string, string>;
 }
 
+// DynamoDB Item 検索 (Drawer の Items タブ)
+export interface DynamoKeyAttributeRaw {
+  name: string;
+  type: string;
+}
+
+export interface DynamoKeyAttributeRow {
+  name: string;
+  type: string;
+}
+
+export interface DynamoIndexSchemaRaw {
+  name: string;
+  partition_key: DynamoKeyAttributeRaw;
+  sort_key?: DynamoKeyAttributeRaw;
+}
+
+export interface DynamoIndexSchemaRow {
+  name: string;
+  partitionKey: DynamoKeyAttributeRow;
+  sortKey?: DynamoKeyAttributeRow;
+}
+
+export interface DynamoTableSchemaRaw {
+  table_name: string;
+  table: DynamoIndexSchemaRaw;
+  gsis: DynamoIndexSchemaRaw[] | null;
+}
+
+export interface DynamoTableSchemaRow {
+  tableName: string;
+  table: DynamoIndexSchemaRow;
+  gsis: DynamoIndexSchemaRow[];
+}
+
+// Item は属性名がテーブルごとに動的なため、キーを固定した型変換は行わない。
+export type DynamoItemRaw = Record<string, unknown>;
+export type DynamoItemRow = Record<string, unknown>;
+
 // ============================================================
 // ElastiCache (キー: cache)
 // ============================================================

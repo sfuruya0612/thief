@@ -38,6 +38,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elb/target-groups", s.handleELBTargetGroups)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elb/target-health", s.handleELBTargetHealth)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/dynamo", s.handleDynamo)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/dynamo/{table}/schema", s.handleDynamoSchema)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/dynamo/{table}/items", s.handleDynamoItems)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/apigw", s.handleAPIGW)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/natgw", s.handleNATGW)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/sqs", s.handleSQS)

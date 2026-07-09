@@ -7,8 +7,12 @@ import type {
   CacheRow,
   CloudFrontRaw,
   CloudFrontRow,
+  DynamoIndexSchemaRaw,
+  DynamoIndexSchemaRow,
   DynamoRaw,
   DynamoRow,
+  DynamoTableSchemaRaw,
+  DynamoTableSchemaRow,
   EC2Raw,
   EC2Row,
   ECRImageRaw,
@@ -118,6 +122,22 @@ export function dynamoFromRaw(raw: DynamoRaw, region: string): DynamoRow {
     sizeBytes: raw.size_bytes,
     gsiCount: raw.gsi_count,
     tags: raw.tags ?? {},
+  };
+}
+
+export function dynamoIndexSchemaFromRaw(raw: DynamoIndexSchemaRaw): DynamoIndexSchemaRow {
+  return {
+    name: raw.name,
+    partitionKey: { name: raw.partition_key.name, type: raw.partition_key.type },
+    sortKey: raw.sort_key ? { name: raw.sort_key.name, type: raw.sort_key.type } : undefined,
+  };
+}
+
+export function dynamoTableSchemaFromRaw(raw: DynamoTableSchemaRaw): DynamoTableSchemaRow {
+  return {
+    tableName: raw.table_name,
+    table: dynamoIndexSchemaFromRaw(raw.table),
+    gsis: (raw.gsis ?? []).map(dynamoIndexSchemaFromRaw),
   };
 }
 
