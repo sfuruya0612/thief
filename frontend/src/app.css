@@ -663,6 +663,20 @@ table.dt thead th.sorted .sort {
   color: var(--accent);
 }
 
+/* 列幅ドラッグリサイズ用ハンドル (th 右端、セッション内のみ幅を保持) */
+table.dt thead th .col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+table.dt thead th .col-resize-handle:hover {
+  background: var(--accent-dim);
+}
+
 table.dt tbody tr {
   height: var(--row-h);
   cursor: pointer;

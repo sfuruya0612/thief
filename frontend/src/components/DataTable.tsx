@@ -17,6 +17,9 @@ function sortValue<T>(row: T, key: string): string | number | undefined {
   return undefined;
 }
 
+// 列幅の最小値 (px)。これより小さくはリサイズできない
+const MIN_COL_WIDTH = 60;
+
 export function DataTable<T extends { id: string; state?: string }>({
   rows,
   columns,
@@ -26,6 +29,8 @@ export function DataTable<T extends { id: string; state?: string }>({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  // ドラッグで変更した列幅 (px)。セッション内 (state) のみで保持し、永続化しない
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
 
   const sorted = useMemo(() => {
     if (!sortKey) return rows;
@@ -58,13 +63,37 @@ export function DataTable<T extends { id: string; state?: string }>({
     });
   };
 
+  // th 右端のハンドルをドラッグして列幅を変更する (Drawer.tsx の startResize と同型)。
+  // 初期幅は % 指定のため、ドラッグ開始時の実描画幅 (px) を基準にする
+  const startColResize = (key: string) => (e: React.PointerEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.currentTarget.closest('th');
+    const startWidth = th?.getBoundingClientRect().width ?? MIN_COL_WIDTH;
+    const startX = e.clientX;
+    const move = (ev: PointerEvent) => {
+      const next = Math.max(startWidth + (ev.clientX - startX), MIN_COL_WIDTH);
+      setColWidths((prev) => ({ ...prev, [key]: Math.round(next) }));
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
   return (
     <div className="table-wrap">
       <table className="dt">
         <colgroup>
           <col style={{ width: 32 }} />
           {columns.map((c) => (
-            <col key={c.key} style={{ width: c.width }} />
+            <col key={c.key} style={{ width: colWidths[c.key] ?? c.width }} />
           ))}
         </colgroup>
         <thead>
@@ -83,13 +112,18 @@ export function DataTable<T extends { id: string; state?: string }>({
               <th
                 key={c.key}
                 className={`sortable ${sortKey === c.key ? 'sorted' : ''}`}
-                style={{ textAlign: c.align ?? 'left' }}
+                style={{ textAlign: c.align ?? 'left', position: 'relative' }}
                 onClick={() => toggleSort(c.key)}
               >
                 {c.header}
                 <span className="sort">
                   {sortKey === c.key ? (sortDir === 'asc' ? '▲' : '▼') : '▲▼'}
                 </span>
+                <span
+                  className="col-resize-handle"
+                  onPointerDown={startColResize(c.key)}
+                  title="Drag to resize column"
+                />
               </th>
             ))}
           </tr>

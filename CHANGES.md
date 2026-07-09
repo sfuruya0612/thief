@@ -30,6 +30,8 @@
   - @sfuruya0612
 - [ADD] ECR イメージ一覧に最終 pull 日時と検索バーを追加する
   - @sfuruya0612
+- [ADD] 一覧のカラム幅をドラッグでリサイズできるようにする (セッション内のみ保持)
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
