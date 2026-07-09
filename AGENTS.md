@@ -62,11 +62,12 @@
 
 `docker compose up --build` (または `mise run docker:up`) で frontend / backend をコンテナ上で起動できる。用途はローカル開発。
 
-- frontend: nginx で `dist` を静的配信。ポート **8088**。
-- backend: distroless static イメージ。ポート **8089** (listen アドレスは `THIEF_LISTEN_ADDR=0.0.0.0:8089` で指定)。
+- frontend: nginx で `dist` を静的配信。ポート **8088**。`/api/` 配下は同一コンテナの nginx (`frontend/nginx.conf`) が backend コンテナへリバースプロキシする (WebSocket アップグレードも含む)。
+- backend: distroless static イメージ。ポート **8089** (listen アドレスは `THIEF_LISTEN_ADDR=0.0.0.0:8089` で指定)。ホストに直接公開もされているが、通常は frontend 経由でアクセスする。
 - AWS 認証はホストの `~/.aws` (config/credentials/SSO cache) を `/root/.aws:ro` で read-only マウントして共有する。`aws sso login` は事前にホスト側で実行しておくこと。
-- frontend の API 向き先 (`VITE_API_BASE`) はビルド時に静的置換されるため、`compose.yaml` の build args で `http://localhost:8089` を注入している。backend の URL を変える場合は再ビルドが必要。
-- WebSocket (EC2 Start Session / ECS Exec ターミナル) の許可オリジンは `THIEF_WEB_ORIGINS` で指定する (デフォルトは frontend dev server 用の `localhost:8082,127.0.0.1:8082`)。
+- frontend の API 向き先 (`VITE_API_BASE`) はビルド時に静的置換される。`compose.yaml` の build args では空文字を渡し、frontend の nginx が配信された origin (`http://<host>:8088`) をそのまま同一オリジンで使う。ホスト名をハードコードしないため `thief.local` 等どのホスト名でアクセスしても再ビルド不要。
+- WebSocket (EC2 Start Session / ECS Exec ターミナル) の許可オリジンは `THIEF_WEB_ORIGINS` で指定する (デフォルトは `localhost:8088,127.0.0.1:8088,thief.local:8088`)。ブラウザの Origin と `Host` ヘッダーが同一なら自動許可されるため、通常は追加設定不要。
+- **カスタムドメイン `thief.local` でアクセスする場合**: ホストの `/etc/hosts` に `127.0.0.1 thief.local` を追記した上で `http://thief.local:8088` を開く。
 - AWS 公式アイコン (`frontend/public/assets/aws-icons/`) は `.gitignore` 対象。事前に `mise run frontend:fetch-icons <zip>` で展開しておくと Docker イメージにも含まれる。未展開でも起動・表示は可能(アイコンが欠けるだけ)。
 - `mise run docker:down` で停止する。
 - 企業ネットワークの TLS インスペクション CA 配下では、build 中の `go mod download` / `npm ci` が証明書エラーで失敗する。環境変数 `CUSTOM_CA_CERT` にホスト側の CA バンドル (PEM) のパスを指定して build/up すると、BuildKit の secret マウント経由で各 Dockerfile に注入される (ビルドキャッシュ/イメージ履歴には残らない)。未設定時は何も注入されない。

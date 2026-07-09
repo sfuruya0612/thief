@@ -40,6 +40,8 @@
   - @sfuruya0612
 - [ADD] AWS サービス一覧に Cost Explorer を追加し、期間 / Granularity / GroupBy / サービス名でフィルタしたコストを積み上げグラフと表で視覚化できるようにする
   - @sfuruya0612
+- [ADD] docker compose 起動時に frontend の nginx が backend へリバースプロキシし、単一オリジン (`thief.local` 等任意のホスト名) で frontend/backend にアクセスできるようにする
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
