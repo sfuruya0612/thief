@@ -21,6 +21,7 @@ const SECTIONS: SidebarSection[] = [
   { label: 'Network', services: ['elb', 'cloudfront', 'apigw', 'natgw'] },
   { label: 'Messaging', services: ['sqs', 'kinesis'] },
   { label: 'Security', services: ['waf', 'iam', 'ssm', 'secrets'] },
+  { label: 'Cost', services: ['costexplorer'] },
 ];
 
 const SIDEBAR_MIN_WIDTH = 160;

@@ -38,6 +38,8 @@
   - @sfuruya0612
 - [ADD] DynamoDB の Drawer に Items タブを追加し、Key-Value 指定で Item を検索できるようにする (プレビュー 10 件、検索は Query 中心)
   - @sfuruya0612
+- [ADD] AWS サービス一覧に Cost Explorer を追加し、期間 / Granularity / GroupBy / サービス名でフィルタしたコストを積み上げグラフと表で視覚化できるようにする
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする

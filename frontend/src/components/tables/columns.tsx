@@ -7,6 +7,7 @@ import type {
   APIGWRow,
   CacheRow,
   CloudFrontRow,
+  CostRow,
   DynamoRow,
   EC2Row,
   ECRImageRow,
@@ -1255,5 +1256,51 @@ export const iamColumns: ColumnDef<IAMRow>[] = [
     width: '15%',
     align: 'right',
     cell: (r) => <span style={mutedMono}>{r.groups.length}</span>,
+  },
+];
+
+// ============================================================
+// Cost Explorer (明細テーブル)
+// ============================================================
+export const costColumns: ColumnDef<CostRow>[] = [
+  {
+    key: 'timePeriod',
+    header: 'Date',
+    width: '16%',
+    cell: (r) => <span style={mutedMono}>{r.timePeriod}</span>,
+  },
+  {
+    key: 'service',
+    header: 'Service',
+    width: '38%',
+    cell: (r) => <span className="primary truncate">{r.service}</span>,
+  },
+  {
+    key: 'unblendedAmount',
+    header: 'Unblended',
+    width: '16%',
+    align: 'right',
+    cell: (r) => (
+      <span style={monoStyle}>
+        ${r.unblendedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+      </span>
+    ),
+  },
+  {
+    key: 'netAmortizedAmount',
+    header: 'Net Amortized',
+    width: '18%',
+    align: 'right',
+    cell: (r) => (
+      <span style={monoStyle}>
+        ${r.netAmortizedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+      </span>
+    ),
+  },
+  {
+    key: 'unit',
+    header: 'Unit',
+    width: '12%',
+    cell: (r) => <span style={dimMono}>{r.unit}</span>,
   },
 ];

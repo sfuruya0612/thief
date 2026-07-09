@@ -49,14 +49,28 @@ export function getResources<TRaw>(
   }).then((v) => v ?? []);
 }
 
+// Cost Explorer の検索条件。省略時のバックエンド側デフォルトは Granularity: DAILY /
+// GroupByDimension: SERVICE / ServiceFilter: 絞り込みなし / Months: 1 (直近 1 ヶ月)。
+export interface CostQueryOptions {
+  includeToday?: boolean;
+  granularity?: string;
+  groupBy?: string;
+  service?: string;
+  months?: number;
+}
+
 export function getCost(
   profile: string,
   region: string,
-  includeToday?: boolean,
+  opts?: CostQueryOptions,
 ): Promise<CostRaw[]> {
   return apiGet<CostRaw[] | null>(`/api/aws/profiles/${encodeURIComponent(profile)}/cost`, {
     region,
-    include_today: includeToday ? true : undefined,
+    include_today: opts?.includeToday ? true : undefined,
+    granularity: opts?.granularity,
+    group_by: opts?.groupBy,
+    service: opts?.service,
+    months: opts?.months !== undefined ? String(opts.months) : undefined,
   }).then((v) => v ?? []);
 }
 

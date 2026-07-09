@@ -50,6 +50,13 @@ export const SERVICES: ServiceMeta[] = [
     color: 'var(--svc-secrets)',
     group: 'security',
   },
+  {
+    key: 'costexplorer',
+    name: 'Cost Explorer',
+    sub: 'Cost & Usage',
+    color: 'var(--svc-costexplorer)',
+    group: 'cost',
+  },
 ];
 
 // サービスキー → バックエンド URL パスセグメント

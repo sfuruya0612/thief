@@ -762,6 +762,9 @@ export interface CostRaw {
 }
 
 export interface CostRow {
+  // DataTable の行選択 (T extends { id }) 用に time_period/service から合成する。
+  // バックエンドの CostResource.ResourceID() (time_period + "/" + service) と同じ形式。
+  id: string;
   timePeriod: string;
   service: string;
   unblendedAmount: number;

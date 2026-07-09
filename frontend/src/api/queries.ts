@@ -22,6 +22,7 @@ import {
   s3ObjectFromRaw,
 } from '../lib/normalize';
 import {
+  type CostQueryOptions,
   getBQDatasets,
   getBQSchema,
   getBQTables,
@@ -77,12 +78,22 @@ export function useResources<TRaw, TRow>(
   });
 }
 
-export function useCost(profile: string, region: string) {
+export function useCost(profile: string, region: string, opts?: CostQueryOptions) {
   return useQuery({
-    queryKey: ['aws', 'cost', profile, region],
+    queryKey: [
+      'aws',
+      'cost',
+      profile,
+      region,
+      opts?.granularity,
+      opts?.groupBy,
+      opts?.service,
+      opts?.months,
+    ],
     queryFn: async (): Promise<CostRow[]> => {
-      const raws = await getCost(profile, region);
+      const raws = await getCost(profile, region, opts);
       return raws.map((r) => ({
+        id: `${r.time_period}/${r.service}`,
         timePeriod: r.time_period,
         service: r.service,
         unblendedAmount: r.unblended_amount,
