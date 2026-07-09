@@ -2,6 +2,7 @@ package aws
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -65,6 +66,10 @@ func TestECSServiceFromSDK(t *testing.T) {
 }
 
 func TestECSTaskFromSDK(t *testing.T) {
+	startedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	stoppedAt := time.Date(2026, 1, 2, 4, 5, 6, 0, time.UTC)
+	exitCode := int32(1)
+
 	tests := []struct {
 		name string
 		in   ecstypes.Task
@@ -79,8 +84,16 @@ func TestECSTaskFromSDK(t *testing.T) {
 				DesiredStatus:        aws.String("RUNNING"),
 				LaunchType:           ecstypes.LaunchTypeFargate,
 				EnableExecuteCommand: true,
+				Cpu:                  aws.String("256"),
+				Memory:               aws.String("512"),
+				StartedAt:            &startedAt,
 				Containers: []ecstypes.Container{
-					{Name: aws.String("app")},
+					{
+						Name:         aws.String("app"),
+						Image:        aws.String("app:latest"),
+						LastStatus:   aws.String("RUNNING"),
+						HealthStatus: ecstypes.HealthStatusHealthy,
+					},
 					{Name: aws.String("sidecar")},
 				},
 			},
@@ -92,26 +105,43 @@ func TestECSTaskFromSDK(t *testing.T) {
 				LaunchType:           "FARGATE",
 				EnableExecuteCommand: true,
 				ContainerNames:       []string{"app", "sidecar"},
+				CPU:                  "256",
+				Memory:               "512",
+				StartedAt:            startedAt.Format(time.RFC3339),
+				Containers: []ECSTaskContainerDetail{
+					{Name: "app", Image: "app:latest", LastStatus: "running", HealthStatus: "healthy"},
+					{Name: "sidecar"},
+				},
 			},
 		},
 		{
-			name: "stopped",
+			name: "stopped with reason and exit code",
 			in: ecstypes.Task{
 				TaskArn:       aws.String("arn:task/b"),
 				LastStatus:    aws.String("STOPPED"),
 				DesiredStatus: aws.String("STOPPED"),
+				StoppedAt:     &stoppedAt,
+				StoppedReason: aws.String("Essential container in task exited"),
+				Containers: []ecstypes.Container{
+					{Name: aws.String("app"), LastStatus: aws.String("STOPPED"), ExitCode: &exitCode, Reason: aws.String("nonzero exit")},
+				},
 			},
 			want: ECSTaskResource{
 				ARN:            "arn:task/b",
 				LastStatus:     "stopped",
 				DesiredStatus:  "stopped",
-				ContainerNames: []string{},
+				ContainerNames: []string{"app"},
+				StoppedAt:      stoppedAt.Format(time.RFC3339),
+				StoppedReason:  "Essential container in task exited",
+				Containers: []ECSTaskContainerDetail{
+					{Name: "app", LastStatus: "stopped", ExitCode: &exitCode, Reason: "nonzero exit"},
+				},
 			},
 		},
 		{
 			name: "empty statuses",
 			in:   ecstypes.Task{},
-			want: ECSTaskResource{ContainerNames: []string{}},
+			want: ECSTaskResource{ContainerNames: []string{}, Containers: []ECSTaskContainerDetail{}},
 		},
 	}
 	for _, tt := range tests {
