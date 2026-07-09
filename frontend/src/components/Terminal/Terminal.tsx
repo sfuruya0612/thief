@@ -43,20 +43,28 @@ export function Terminal({ wsUrl }: TerminalProps) {
       term.focus();
     }
 
+    // StrictMode の effect 二重実行 (マウント→即クリーンアップ→再マウント) や、クリーンアップ後に
+    // 配送される WebSocket/ResizeObserver の遅延コールバックから dispose 済みの term を守るためのフラグ。
+    // dispose 済み term への write()/fit() 呼び出しは xterm 内部の _renderService が
+    // undefined になっており例外になるため、すべてのコールバックの先頭でこれを確認する。
+    let disposed = false;
+
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
 
     function sendResize() {
-      if (ws.readyState !== WebSocket.OPEN) return;
+      if (disposed || ws.readyState !== WebSocket.OPEN) return;
       ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
     }
 
     ws.onopen = () => {
+      if (disposed) return;
       setStatus('connected');
       sendResize();
     };
 
     ws.onmessage = (ev) => {
+      if (disposed) return;
       if (typeof ev.data === 'string') {
         let msg: ControlMessage;
         try {
@@ -77,29 +85,41 @@ export function Terminal({ wsUrl }: TerminalProps) {
     };
 
     ws.onerror = () => {
+      if (disposed) return;
       setStatus('error');
     };
 
     ws.onclose = () => {
+      if (disposed) return;
       setStatus((prev) => (prev === 'error' ? prev : 'closed'));
     };
 
     const dataSub = term.onData((data) => {
+      if (disposed) return;
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(new TextEncoder().encode(data));
       }
     });
     const resizeSub = term.onResize(() => sendResize());
 
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+    const resizeObserver = new ResizeObserver(() => {
+      if (disposed) return;
+      fitAddon.fit();
+    });
     if (containerRef.current) resizeObserver.observe(containerRef.current);
 
     return () => {
+      disposed = true;
       resizeObserver.disconnect();
       dataSub.dispose();
       resizeSub.dispose();
       ws.close();
-      term.dispose();
+      // xterm.js は Viewport 生成時に setTimeout(() => this.syncScrollArea()) を内部で登録しており、
+      // これは公開 API からキャンセルできない。term.dispose() を同期的に呼ぶと、その内部タイマーが
+      // 発火した時点で破棄済みの内部状態 (_renderService) にアクセスして例外になる
+      // (StrictMode の mount→cleanup→再 mount のような同一タイミングで顕在化しやすい)。
+      // dispose 自体を次のマクロタスクへ遅らせ、内部タイマーを先に消化させてから破棄する。
+      setTimeout(() => term.dispose());
     };
   }, [wsUrl]);
 
