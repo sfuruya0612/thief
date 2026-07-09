@@ -207,6 +207,24 @@ export interface ECSServiceRow {
   launchType: string;
 }
 
+export interface ECSTaskContainerDetailRaw {
+  name: string;
+  image: string;
+  last_status: string;
+  health_status: string;
+  exit_code?: number;
+  reason: string;
+}
+
+export interface ECSTaskContainerDetailRow {
+  name: string;
+  image: string;
+  lastStatus: string;
+  healthStatus: string;
+  exitCode?: number;
+  reason: string;
+}
+
 export interface ECSTaskRaw {
   arn: string;
   group: string;
@@ -215,6 +233,12 @@ export interface ECSTaskRaw {
   launch_type: string;
   enable_execute_command: boolean;
   container_names: string[];
+  cpu: string;
+  memory: string;
+  started_at: string;
+  stopped_at: string;
+  stopped_reason: string;
+  containers: ECSTaskContainerDetailRaw[];
 }
 
 export interface ECSTaskRow {
@@ -225,6 +249,12 @@ export interface ECSTaskRow {
   launchType: string;
   enableExecuteCommand: boolean;
   containerNames: string[];
+  cpu: string;
+  memory: string;
+  startedAt: string;
+  stoppedAt: string;
+  stoppedReason: string;
+  containers: ECSTaskContainerDetailRow[];
 }
 
 export interface ECSContainerRaw {

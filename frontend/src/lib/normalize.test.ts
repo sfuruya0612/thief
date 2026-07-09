@@ -36,6 +36,21 @@ describe('ecsTaskFromRaw', () => {
       launch_type: 'FARGATE',
       enable_execute_command: true,
       container_names: ['app', 'sidecar'],
+      cpu: '256',
+      memory: '512',
+      started_at: '2026-07-08T00:00:00Z',
+      stopped_at: '',
+      stopped_reason: '',
+      containers: [
+        {
+          name: 'app',
+          image: 'app:latest',
+          last_status: 'running',
+          health_status: 'healthy',
+          exit_code: undefined,
+          reason: '',
+        },
+      ],
     });
     expect(row).toEqual({
       arn: 'arn:aws:ecs:ap-northeast-1:123:task/my-cluster/abc',
@@ -45,6 +60,21 @@ describe('ecsTaskFromRaw', () => {
       launchType: 'FARGATE',
       enableExecuteCommand: true,
       containerNames: ['app', 'sidecar'],
+      cpu: '256',
+      memory: '512',
+      startedAt: '2026-07-08T00:00:00Z',
+      stoppedAt: '',
+      stoppedReason: '',
+      containers: [
+        {
+          name: 'app',
+          image: 'app:latest',
+          lastStatus: 'running',
+          healthStatus: 'healthy',
+          exitCode: undefined,
+          reason: '',
+        },
+      ],
     });
   });
 
@@ -57,8 +87,15 @@ describe('ecsTaskFromRaw', () => {
       launch_type: '',
       enable_execute_command: false,
       container_names: undefined as unknown as string[],
+      cpu: '',
+      memory: '',
+      started_at: '',
+      stopped_at: '',
+      stopped_reason: '',
+      containers: undefined as unknown as never[],
     });
     expect(row.containerNames).toEqual([]);
+    expect(row.containers).toEqual([]);
   });
 });
 

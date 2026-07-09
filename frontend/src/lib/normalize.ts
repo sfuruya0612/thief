@@ -179,6 +179,19 @@ export function ecsTaskFromRaw(raw: ECSTaskRaw): ECSTaskRow {
     launchType: raw.launch_type,
     enableExecuteCommand: raw.enable_execute_command,
     containerNames: raw.container_names ?? [],
+    cpu: raw.cpu,
+    memory: raw.memory,
+    startedAt: raw.started_at,
+    stoppedAt: raw.stopped_at,
+    stoppedReason: raw.stopped_reason,
+    containers: (raw.containers ?? []).map((c) => ({
+      name: c.name,
+      image: c.image,
+      lastStatus: c.last_status,
+      healthStatus: c.health_status,
+      exitCode: c.exit_code,
+      reason: c.reason,
+    })),
   };
 }
 

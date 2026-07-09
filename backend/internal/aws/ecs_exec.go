@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -23,13 +24,31 @@ type ECSServiceResource struct {
 
 // ECSTaskResource represents a single ECS task.
 type ECSTaskResource struct {
-	ARN                  string   `json:"arn"`
-	Group                string   `json:"group"`
-	LastStatus           string   `json:"last_status"`
-	DesiredStatus        string   `json:"desired_status"`
-	LaunchType           string   `json:"launch_type"`
-	EnableExecuteCommand bool     `json:"enable_execute_command"`
-	ContainerNames       []string `json:"container_names"`
+	ARN                  string                   `json:"arn"`
+	Group                string                   `json:"group"`
+	LastStatus           string                   `json:"last_status"`
+	DesiredStatus        string                   `json:"desired_status"`
+	LaunchType           string                   `json:"launch_type"`
+	EnableExecuteCommand bool                     `json:"enable_execute_command"`
+	ContainerNames       []string                 `json:"container_names"`
+	CPU                  string                   `json:"cpu"`
+	Memory               string                   `json:"memory"`
+	StartedAt            string                   `json:"started_at"`
+	StoppedAt            string                   `json:"stopped_at"`
+	StoppedReason        string                   `json:"stopped_reason"`
+	Containers           []ECSTaskContainerDetail `json:"containers"`
+}
+
+// ECSTaskContainerDetail はタスク詳細ペインに表示するコンテナ単位の情報。
+// ListECSContainers が返す ECSContainerResource (Exec 対象選択用) とは異なり、
+// タスク一覧取得時に DescribeTasks から一度に得られる情報のみを保持する。
+type ECSTaskContainerDetail struct {
+	Name         string `json:"name"`
+	Image        string `json:"image"`
+	LastStatus   string `json:"last_status"`
+	HealthStatus string `json:"health_status"`
+	ExitCode     *int32 `json:"exit_code,omitempty"`
+	Reason       string `json:"reason"`
 }
 
 // ECSContainerResource represents a single container within an ECS task.
@@ -146,8 +165,25 @@ func ListECSTasks(ctx context.Context, profile, region, cluster, service string)
 
 func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 	names := make([]string, 0, len(t.Containers))
+	containers := make([]ECSTaskContainerDetail, 0, len(t.Containers))
 	for _, c := range t.Containers {
 		names = append(names, ptrStr(c.Name))
+		containers = append(containers, ECSTaskContainerDetail{
+			Name:         ptrStr(c.Name),
+			Image:        ptrStr(c.Image),
+			LastStatus:   DisplayState(ptrStr(c.LastStatus)),
+			HealthStatus: DisplayState(string(c.HealthStatus)),
+			ExitCode:     c.ExitCode,
+			Reason:       ptrStr(c.Reason),
+		})
+	}
+	startedAt := ""
+	if t.StartedAt != nil {
+		startedAt = t.StartedAt.Format(time.RFC3339)
+	}
+	stoppedAt := ""
+	if t.StoppedAt != nil {
+		stoppedAt = t.StoppedAt.Format(time.RFC3339)
 	}
 	return ECSTaskResource{
 		ARN:                  ptrStr(t.TaskArn),
@@ -157,6 +193,12 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 		LaunchType:           string(t.LaunchType),
 		EnableExecuteCommand: t.EnableExecuteCommand,
 		ContainerNames:       names,
+		CPU:                  ptrStr(t.Cpu),
+		Memory:               ptrStr(t.Memory),
+		StartedAt:            startedAt,
+		StoppedAt:            stoppedAt,
+		StoppedReason:        ptrStr(t.StoppedReason),
+		Containers:           containers,
 	}
 }
 
