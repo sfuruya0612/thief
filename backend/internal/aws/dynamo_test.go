@@ -82,3 +82,114 @@ func TestDynamoTagsToMap(t *testing.T) {
 		t.Errorf("got %v want %v", got, want)
 	}
 }
+
+func TestDynamoAttributeTypes(t *testing.T) {
+	defs := []dynamodbtypes.AttributeDefinition{
+		{AttributeName: aws.String("pk"), AttributeType: dynamodbtypes.ScalarAttributeTypeS},
+		{AttributeName: aws.String("sk"), AttributeType: dynamodbtypes.ScalarAttributeTypeN},
+	}
+	got := dynamoAttributeTypes(defs)
+	want := map[string]string{"pk": "S", "sk": "N"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v want %v", got, want)
+	}
+}
+
+func TestDynamoIndexSchemaFromKeySchema(t *testing.T) {
+	attrTypes := map[string]string{"pk": "S", "sk": "N"}
+	tests := []struct {
+		name      string
+		idxName   string
+		keySchema []dynamodbtypes.KeySchemaElement
+		want      DynamoIndexSchema
+	}{
+		{
+			name:    "partition key only",
+			idxName: "table",
+			keySchema: []dynamodbtypes.KeySchemaElement{
+				{AttributeName: aws.String("pk"), KeyType: dynamodbtypes.KeyTypeHash},
+			},
+			want: DynamoIndexSchema{
+				Name:         "table",
+				PartitionKey: DynamoKeyAttribute{Name: "pk", Type: "S"},
+			},
+		},
+		{
+			name:    "partition and sort key",
+			idxName: "gsi1",
+			keySchema: []dynamodbtypes.KeySchemaElement{
+				{AttributeName: aws.String("pk"), KeyType: dynamodbtypes.KeyTypeHash},
+				{AttributeName: aws.String("sk"), KeyType: dynamodbtypes.KeyTypeRange},
+			},
+			want: DynamoIndexSchema{
+				Name:         "gsi1",
+				PartitionKey: DynamoKeyAttribute{Name: "pk", Type: "S"},
+				SortKey:      &DynamoKeyAttribute{Name: "sk", Type: "N"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dynamoIndexSchemaFromKeySchema(tt.idxName, tt.keySchema, attrTypes)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %#v want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDynamoAttributeValueFromString(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    string
+		attrType string
+		want     dynamodbtypes.AttributeValue
+	}{
+		{
+			name:     "string type",
+			value:    "abc",
+			attrType: "S",
+			want:     &dynamodbtypes.AttributeValueMemberS{Value: "abc"},
+		},
+		{
+			name:     "number type",
+			value:    "123",
+			attrType: "N",
+			want:     &dynamodbtypes.AttributeValueMemberN{Value: "123"},
+		},
+		{
+			name:     "unknown type defaults to string",
+			value:    "abc",
+			attrType: "B",
+			want:     &dynamodbtypes.AttributeValueMemberS{Value: "abc"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dynamoAttributeValueFromString(tt.value, tt.attrType)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %#v want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDynamoUnmarshalItems(t *testing.T) {
+	items := []map[string]dynamodbtypes.AttributeValue{
+		{
+			"pk":   &dynamodbtypes.AttributeValueMemberS{Value: "user#1"},
+			"name": &dynamodbtypes.AttributeValueMemberS{Value: "alice"},
+			"age":  &dynamodbtypes.AttributeValueMemberN{Value: "30"},
+		},
+	}
+	got, err := dynamoUnmarshalItems(items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d items, want 1", len(got))
+	}
+	if got[0]["pk"] != "user#1" || got[0]["name"] != "alice" {
+		t.Errorf("got %#v", got[0])
+	}
+}

@@ -5,6 +5,7 @@ import { AwsIcons } from '../icons/AwsIcons';
 import { Icons } from '../icons/Icons';
 import { SERVICES } from '../../lib/serviceMeta';
 import { StatusBadge } from '../primitives';
+import { DrawerDynamoItems } from './DrawerDynamoItems';
 import { DrawerECRImages } from './DrawerECRImages';
 import { DrawerECSServices } from './DrawerECSServices';
 import { DrawerECSTasks } from './DrawerECSTasks';
@@ -31,7 +32,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   sqs: ['Overview', 'Tags'],
   kinesis: ['Overview', 'Tags'],
   waf: ['Overview', 'Tags'],
-  dynamo: ['Overview', 'Tags'],
+  dynamo: ['Overview', 'Items', 'Tags'],
   ssm: ['Overview', 'Tags'],
   secrets: ['Overview', 'Tags'],
 };
@@ -254,6 +255,9 @@ export function Drawer({
               )}
               {tab === 'Targets' && service === 'elb' && (
                 <DrawerELBTargets profile={profile} region={region} lbArn={resource.id} />
+              )}
+              {tab === 'Items' && service === 'dynamo' && (
+                <DrawerDynamoItems profile={profile} region={region} table={resource.name} />
               )}
             </div>
           </>

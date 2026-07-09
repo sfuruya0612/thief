@@ -10,6 +10,7 @@ import {
   tidbProjectFromRaw,
 } from '../lib/normalizeNonAws';
 import {
+  dynamoTableSchemaFromRaw,
   ecrImageFromRaw,
   ecsContainerFromRaw,
   ecsServiceFromRaw,
@@ -28,6 +29,8 @@ import {
   getCostForecast,
   getDatadogEstimated,
   getDatadogHistorical,
+  getDynamoItems,
+  getDynamoSchema,
   getECRImages,
   getECSContainers,
   getECSServices,
@@ -230,6 +233,34 @@ export function useELBTargetHealth(profile: string, region: string, tgArn: strin
       (await getELBTargetHealth(profile, region, tgArn)).map(elbTargetHealthFromRaw),
     staleTime: 60_000,
     enabled: !!profile && !!tgArn,
+  });
+}
+
+// ============================================================
+// DynamoDB Item 検索 (Drawer の Items タブ)
+// ============================================================
+export function useDynamoSchema(profile: string, region: string, table: string) {
+  return useQuery({
+    queryKey: ['aws', 'dynamo-schema', profile, region, table],
+    queryFn: async () => dynamoTableSchemaFromRaw(await getDynamoSchema(profile, region, table)),
+    staleTime: 60_000,
+    enabled: !!profile && !!table,
+  });
+}
+
+// pkValue 未指定時はプレビュー (Scan Limit:10) を、指定時は Query (Limit:10) を返す。
+export function useDynamoItems(
+  profile: string,
+  region: string,
+  table: string,
+  pkValue?: string,
+  skValue?: string,
+) {
+  return useQuery({
+    queryKey: ['aws', 'dynamo-items', profile, region, table, pkValue, skValue],
+    queryFn: () => getDynamoItems(profile, region, table, pkValue, skValue),
+    staleTime: 60_000,
+    enabled: !!profile && !!table,
   });
 }
 

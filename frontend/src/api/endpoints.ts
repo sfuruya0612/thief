@@ -1,5 +1,7 @@
 import type {
   CostRaw,
+  DynamoItemRaw,
+  DynamoTableSchemaRaw,
   ECRImageRaw,
   ECSContainerRaw,
   ECSServiceRaw,
@@ -221,6 +223,33 @@ export function getELBTargetHealth(
   return apiGet<ELBTargetHealthRaw[] | null>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/elb/target-health`,
     { region, tg_arn: tgArn },
+  ).then((v) => v ?? []);
+}
+
+// ============================================================
+// DynamoDB Item 検索 (Drawer の Items タブ)
+// ============================================================
+export function getDynamoSchema(
+  profile: string,
+  region: string,
+  table: string,
+): Promise<DynamoTableSchemaRaw> {
+  return apiGet<DynamoTableSchemaRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/dynamo/${encodeURIComponent(table)}/schema`,
+    { region },
+  );
+}
+
+export function getDynamoItems(
+  profile: string,
+  region: string,
+  table: string,
+  pkValue?: string,
+  skValue?: string,
+): Promise<DynamoItemRaw[]> {
+  return apiGet<DynamoItemRaw[] | null>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/dynamo/${encodeURIComponent(table)}/items`,
+    { region, pk_val: pkValue, sk_val: skValue },
   ).then((v) => v ?? []);
 }
 

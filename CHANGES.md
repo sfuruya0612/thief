@@ -36,6 +36,8 @@
   - @sfuruya0612
 - [ADD] ELB の Drawer に Listeners / Targets タブを追加し、Listener → Rule → Target Group → ターゲットヘルスを辿れるようにする
   - @sfuruya0612
+- [ADD] DynamoDB の Drawer に Items タブを追加し、Key-Value 指定で Item を検索できるようにする (プレビュー 10 件、検索は Query 中心)
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
