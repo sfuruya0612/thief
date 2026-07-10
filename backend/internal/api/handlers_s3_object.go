@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -72,8 +73,29 @@ func (s *Server) handleS3ObjectDownload(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// handleS3ObjectUpload は multipart/form-data の Part をストリーミングで PutObject に渡す。
-// r.ParseMultipartForm のような全部バッファする方式は使わない。
+// maxS3UploadSize は handleS3ObjectUpload が受け付けるアップロードの上限サイズ。
+// S3 PutObject は Content-Length が必須で、multipart.Part は io.Seeker を実装しないため
+// アップロード前にメモリへ読み込んでサイズを確定する。無制限に読み込むとメモリを圧迫するため
+// 上限を設ける。
+const maxS3UploadSize = 100 << 20 // 100MiB
+
+// errS3UploadTooLarge は読み込んだ body が maxS3UploadSize を超えたことを示す。
+var errS3UploadTooLarge = fmt.Errorf("file exceeds max upload size of %d bytes", maxS3UploadSize)
+
+// readS3UploadBody は r から最大 maxS3UploadSize+1 バイトを読み込み、上限超過を検出する。
+// 上限を超えた場合は errS3UploadTooLarge を返す。
+func readS3UploadBody(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxS3UploadSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxS3UploadSize {
+		return nil, errS3UploadTooLarge
+	}
+	return body, nil
+}
+
+// handleS3ObjectUpload は multipart/form-data の file パートを読み込んで PutObject する。
 func (s *Server) handleS3ObjectUpload(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	bucket := r.PathValue("bucket")
@@ -108,13 +130,16 @@ func (s *Server) handleS3ObjectUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		contentType := part.Header.Get("Content-Type")
-		// Content-Length は multipart part では通常取得できないため 0 を渡す (chunked)。
-		if err := awsinternal.PutS3Object(r.Context(), profile, region, bucket, objectKey, part, 0, contentType); err != nil {
-			part.Close()
+		body, err := readS3UploadBody(part)
+		part.Close()
+		if err != nil {
+			writeBadRequest(w, "read file part: "+err.Error())
+			return
+		}
+		if err := awsinternal.PutS3Object(r.Context(), profile, region, bucket, objectKey, bytes.NewReader(body), int64(len(body)), contentType); err != nil {
 			writeAWSError(w, err)
 			return
 		}
-		part.Close()
 		uploaded = true
 		break
 	}

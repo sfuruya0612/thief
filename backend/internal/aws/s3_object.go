@@ -70,20 +70,18 @@ func GetS3Object(ctx context.Context, profile, region, bucket, key string) (*s3.
 }
 
 // PutS3Object は body を PutObject の Body にそのまま渡してオブジェクトを書き込む。
-// body は io.Reader のまま SDK に渡し、[]byte 化しない。
-// contentLength が 0 以下の場合は SDK 側でストリーミング (chunked) 送信となる。
+// S3 の PutObject は Content-Length が必須のため、呼び出し側は body の
+// 全長が確定した contentLength を渡すこと。
 func PutS3Object(ctx context.Context, profile, region, bucket, key string, body io.Reader, contentLength int64, contentType string) error {
 	client, err := newS3ClientForBucket(ctx, profile, region, bucket)
 	if err != nil {
 		return err
 	}
 	input := &s3.PutObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-		Body:   body,
-	}
-	if contentLength > 0 {
-		input.ContentLength = aws.Int64(contentLength)
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(key),
+		Body:          body,
+		ContentLength: aws.Int64(contentLength),
 	}
 	if contentType != "" {
 		input.ContentType = aws.String(contentType)

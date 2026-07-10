@@ -1,6 +1,11 @@
 package api
 
-import "testing"
+import (
+	"bytes"
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestSanitizeContentDispositionFilename(t *testing.T) {
 	tests := []struct {
@@ -49,6 +54,47 @@ func TestSanitizeContentDispositionFilename(t *testing.T) {
 			got := sanitizeContentDispositionFilename(tt.in)
 			if got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadS3UploadBody(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      []byte
+		want    []byte
+		wantErr error
+	}{
+		{
+			name: "empty body",
+			in:   []byte{},
+			want: []byte{},
+		},
+		{
+			name: "small body",
+			in:   []byte("hello"),
+			want: []byte("hello"),
+		},
+		{
+			name: "exactly at limit",
+			in:   bytes.Repeat([]byte("a"), maxS3UploadSize),
+			want: bytes.Repeat([]byte("a"), maxS3UploadSize),
+		},
+		{
+			name:    "exceeds limit",
+			in:      bytes.Repeat([]byte("a"), maxS3UploadSize+1),
+			wantErr: errS3UploadTooLarge,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := readS3UploadBody(strings.NewReader(string(tt.in)))
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == nil && !bytes.Equal(got, tt.want) {
+				t.Errorf("got %d bytes, want %d bytes", len(got), len(tt.want))
 			}
 		})
 	}
