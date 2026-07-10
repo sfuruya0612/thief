@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -63,6 +64,20 @@ func (c *Cache[V]) Get(key string) (Entry[V], bool) {
 func (c *Cache[V]) Invalidate(key string) {
 	c.mu.Lock()
 	delete(c.items, key)
+	c.mu.Unlock()
+}
+
+// InvalidatePrefix removes every entry whose key starts with prefix.
+// Used when a write affects an unknown set of cached keys that share a
+// common namespace segment (e.g. all "s3-objects:profile:region:bucket:*"
+// entries regardless of the trailing prefix query parameter).
+func (c *Cache[V]) InvalidatePrefix(prefix string) {
+	c.mu.Lock()
+	for k := range c.items {
+		if strings.HasPrefix(k, prefix) {
+			delete(c.items, k)
+		}
+	}
 	c.mu.Unlock()
 }
 

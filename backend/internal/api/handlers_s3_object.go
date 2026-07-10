@@ -150,10 +150,8 @@ func (s *Server) handleS3ObjectUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// アップロード成功後、対象バケット配下のオブジェクト一覧キャッシュを無効化する。
-	// prefix ごとにキーが分かれるため prefix 部分をワイルドカード相当で扱えないので
-	// バケット単位で invalidate する簡易実装として、対象キーを含む prefix 群は
-	// 次回アクセス時に refresh=true が来るまで stale の可能性がある。
-	// (現状 cache パッケージにワイルドカード invalidate API がないため許容)
+	// prefix ごとにキーが分かれるため、バケット単位のキー前方一致で一括無効化する。
+	s.resourceCache.InvalidatePrefix(cacheKey("s3-objects", profile, region, bucket, ""))
 	writeJSON(w, map[string]string{"status": "ok", "key": objectKey})
 }
 
