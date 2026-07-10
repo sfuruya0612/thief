@@ -108,4 +108,95 @@ describe('DrawerS3Objects', () => {
     expect(init.method).toBe('POST');
     expect(init.body).toBeInstanceOf(FormData);
   });
+
+  it('prefix 入力では API を再実行せず、取得済みの一覧をフロントエンドでフィルタする', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => [
+        { key: 'logs/a.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+        { key: 'other/b.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '2' },
+      ],
+    } as Response);
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('logs/a.txt');
+    });
+    expect(container.textContent).toContain('other/b.txt');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const prefixInput = container.querySelector(
+      'input[placeholder="prefix (folder/subfolder)…"]',
+    ) as HTMLInputElement;
+    // 入力途中 (末尾スラッシュなし) でも前方一致でフィルタされることを確認する
+    fireEvent.change(prefixInput, { target: { value: '/log' } });
+
+    // prefix でフロントエンド側フィルタされ、一覧 GET は再実行されない
+    await waitFor(() => {
+      expect(container.textContent).not.toContain('other/b.txt');
+    });
+    expect(container.textContent).toContain('logs/a.txt');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefix を入力してアップロードすると key に prefix が付与される', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => [],
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        json: async () => ({}),
+      } as Response)
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => [],
+      } as Response);
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    const prefixInput = container.querySelector(
+      'input[placeholder="prefix (folder/subfolder)…"]',
+    ) as HTMLInputElement;
+    fireEvent.change(prefixInput, { target: { value: '/logs/' } });
+
+    // prefix 入力だけでは一覧 GET は再実行されない
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['hello'], 'hello.txt', { type: 'text/plain' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const uploadBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Upload',
+    ) as HTMLButtonElement;
+    fireEvent.click(uploadBtn);
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    const uploadCall = fetchMock.mock.calls[1];
+    expect(uploadCall[0]).toContain('/objects/upload');
+    expect(uploadCall[0]).toContain('key=logs%2Fhello.txt');
+  });
 });

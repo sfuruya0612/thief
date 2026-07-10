@@ -1500,6 +1500,65 @@ table.dt tbody td.primary {
 }
 
 /* ============================================================
+   S3 アップロード (DrawerS3Objects)
+   ============================================================ */
+.s3-prefix-input {
+  display: flex;
+  margin-bottom: 8px;
+  width: 100%;
+}
+.s3-prefix-input input {
+  width: 100%;
+}
+.s3-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.s3-upload-dropzone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--line-3);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  color: var(--text-3);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    border-color 0.1s,
+    background 0.1s,
+    color 0.1s;
+}
+.s3-upload-dropzone:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+.s3-upload-dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+.s3-upload-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.s3-upload-input:disabled {
+  cursor: not-allowed;
+}
+.s3-upload-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
    Utilities
    ============================================================ */
 .row {
