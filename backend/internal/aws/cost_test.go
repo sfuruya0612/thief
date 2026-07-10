@@ -2,6 +2,7 @@ package aws
 
 import (
 	"testing"
+	"time"
 
 	cetypes "github.com/aws/aws-sdk-go-v2/service/costexplorer/types"
 )
@@ -48,4 +49,57 @@ func TestCostGroupByDimension(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCostDateRange(t *testing.T) {
+	t.Run("StartDate/EndDate 両方指定時はそれを優先する", func(t *testing.T) {
+		start, end := costDateRange(CostQueryOptions{
+			StartDate: "2026-01-01",
+			EndDate:   "2026-01-31",
+			Months:    6, // 優先されないことを確認する
+		})
+		if start != "2026-01-01" || end != "2026-01-31" {
+			t.Errorf("costDateRange() = (%q, %q), want (2026-01-01, 2026-01-31)", start, end)
+		}
+	})
+
+	t.Run("StartDate のみでは Months ベースにフォールバックする", func(t *testing.T) {
+		_, end := costDateRange(CostQueryOptions{StartDate: "2026-01-01"})
+		wantEnd := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+		if end != wantEnd {
+			t.Errorf("end = %q, want %q (StartDate だけでは無効)", end, wantEnd)
+		}
+	})
+
+	t.Run("IncludeToday が false の場合 end は前日になる", func(t *testing.T) {
+		_, end := costDateRange(CostQueryOptions{IncludeToday: false})
+		want := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+		if end != want {
+			t.Errorf("end = %q, want %q", end, want)
+		}
+	})
+
+	t.Run("IncludeToday が true の場合 end は今日になる", func(t *testing.T) {
+		_, end := costDateRange(CostQueryOptions{IncludeToday: true})
+		want := time.Now().UTC().Format("2006-01-02")
+		if end != want {
+			t.Errorf("end = %q, want %q", end, want)
+		}
+	})
+
+	t.Run("Months が 0 以下ならデフォルト 1 ヶ月遡る", func(t *testing.T) {
+		start, _ := costDateRange(CostQueryOptions{Months: -1})
+		want := time.Now().UTC().AddDate(0, -1, 0).Format("2006-01-02")
+		if start != want {
+			t.Errorf("start = %q, want %q", start, want)
+		}
+	})
+
+	t.Run("Months 指定分だけ遡る", func(t *testing.T) {
+		start, _ := costDateRange(CostQueryOptions{Months: 3})
+		want := time.Now().UTC().AddDate(0, -3, 0).Format("2006-01-02")
+		if start != want {
+			t.Errorf("start = %q, want %q", start, want)
+		}
+	})
 }

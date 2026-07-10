@@ -15,11 +15,13 @@ func (s *Server) handleCost(w http.ResponseWriter, r *http.Request) {
 		Granularity:      q.Get("granularity"),
 		GroupByDimension: q.Get("group_by"),
 		ServiceFilter:    q.Get("service"),
+		StartDate:        q.Get("start"),
+		EndDate:          q.Get("end"),
 	}
 	if months, err := strconv.Atoi(q.Get("months")); err == nil {
 		opts.Months = months
 	}
-	key := cacheKey("cost", profile, region, boolStr(opts.IncludeToday), opts.Granularity, opts.GroupByDimension, opts.ServiceFilter, strconv.Itoa(opts.Months))
+	key := cacheKey("cost", profile, region, boolStr(opts.IncludeToday), opts.Granularity, opts.GroupByDimension, opts.ServiceFilter, opts.StartDate, opts.EndDate, strconv.Itoa(opts.Months))
 	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
 		return awsinternal.GetCost(r.Context(), profile, region, opts)
 	})
