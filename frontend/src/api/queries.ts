@@ -150,11 +150,11 @@ export function useS3Objects(profile: string, region: string, bucket: string, pr
   });
 }
 
-export function useS3Upload(profile: string, region: string, bucket: string) {
+export function useS3Upload(profile: string, region: string, bucket: string, prefix?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ key, file }: { key: string; file: File }) =>
-      uploadS3Object(profile, region, bucket, key, file),
+      uploadS3Object(profile, region, bucket, `${prefix ?? ''}${key}`, file),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['aws', 's3-objects', profile, region, bucket],
