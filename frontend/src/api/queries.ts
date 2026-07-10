@@ -87,7 +87,8 @@ export function useCost(profile: string, region: string, opts?: CostQueryOptions
       region,
       opts?.granularity,
       opts?.groupBy,
-      opts?.service,
+      opts?.startDate,
+      opts?.endDate,
       opts?.months,
     ],
     queryFn: async (): Promise<CostRow[]> => {

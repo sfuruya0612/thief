@@ -711,6 +711,73 @@ table.dt tbody td.primary {
   font-weight: 500;
 }
 
+/* Cost Explorer クロス表: 列数が日付範囲に応じて可変なため table-layout: fixed (幅 100% 固定)
+   ではなく auto にし、列を潰さず横スクロールで見せる */
+table.dt.cost-cross-table {
+  width: auto;
+  min-width: 100%;
+  table-layout: auto;
+}
+table.dt.cost-cross-table th,
+table.dt.cost-cross-table td {
+  min-width: 88px;
+  white-space: nowrap;
+}
+/* Group (1列目) と Total (2列目) は横スクロールしても常に見える位置に固定する。
+   sticky の left オフセットは実際の描画幅と一致していないと、スクロール量に応じて
+   ズレて見える (ある程度スクロールしてから初めて正しい位置に固定されたように見える)。
+   table-layout: auto では min-width だけだと内容によって実幅が変わってしまうため、
+   1 列目は width も固定し、2 列目の left (160px) と確実に一致させる。 */
+table.dt.cost-cross-table td:first-child,
+table.dt.cost-cross-table td:nth-child(2) {
+  position: sticky;
+  z-index: 1;
+  background: var(--bg-1);
+}
+table.dt.cost-cross-table td:first-child {
+  left: 0;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+}
+table.dt.cost-cross-table td:nth-child(2) {
+  left: 160px;
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  border-right: 1px solid var(--line-1);
+}
+[data-theme='dark'] table.dt.cost-cross-table td:first-child,
+[data-theme='dark'] table.dt.cost-cross-table td:nth-child(2) {
+  background: var(--bg-0);
+}
+/* thead th:first-child / th:nth-child(2) は縦 (top) と横 (left) の両方に sticky する
+   角セルのため、横スクロールで流れる他のヘッダーセル (z-index: 2) より手前に表示させる
+   必要がある。ここで z-index を上げないと、スクロールで流れてきた日付ヘッダーが重なる。 */
+table.dt.cost-cross-table thead th:first-child,
+table.dt.cost-cross-table thead th:nth-child(2) {
+  position: sticky;
+  z-index: 3;
+  background: var(--bg-1);
+}
+table.dt.cost-cross-table thead th:first-child {
+  left: 0;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+}
+table.dt.cost-cross-table thead th:nth-child(2) {
+  left: 160px;
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  border-right: 1px solid var(--line-1);
+}
+[data-theme='dark'] table.dt.cost-cross-table thead th:first-child,
+[data-theme='dark'] table.dt.cost-cross-table thead th:nth-child(2) {
+  background: var(--bg-0);
+}
+
 /* checkbox */
 .cb {
   appearance: none;

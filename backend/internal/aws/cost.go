@@ -45,12 +45,15 @@ const (
 //   - Granularity: 空文字は DAILY
 //   - GroupByDimension: 空文字は SERVICE
 //   - ServiceFilter: 空文字は絞り込みなし (Dimension SERVICE の EQUALS フィルタ)
-//   - Months: 0 以下は 1 (取得期間を遡る月数)
+//   - StartDate/EndDate: 両方指定時のみ有効な期間として使う (YYYY-MM-DD)。指定時は Months を無視する。
+//   - Months: StartDate/EndDate 未指定時のみ使う。0 以下は 1 (取得期間を遡る月数)
 type CostQueryOptions struct {
 	IncludeToday     bool
 	Granularity      string
 	GroupByDimension string
 	ServiceFilter    string
+	StartDate        string
+	EndDate          string
 	Months           int
 }
 
@@ -70,6 +73,27 @@ func costGroupByDimension(dim string) string {
 	}
 }
 
+// costDateRange は CostQueryOptions から Cost Explorer に渡す期間 (YYYY-MM-DD) を決める。
+// StartDate/EndDate が両方指定されていればそれを使い、そうでなければ Months (現在からの
+// 相対期間、デフォルト 1 ヶ月) から算出する。
+func costDateRange(opts CostQueryOptions) (start, end string) {
+	if opts.StartDate != "" && opts.EndDate != "" {
+		return opts.StartDate, opts.EndDate
+	}
+
+	now := time.Now().UTC()
+	end = now.Format("2006-01-02")
+	if !opts.IncludeToday {
+		end = now.AddDate(0, 0, -1).Format("2006-01-02")
+	}
+	months := opts.Months
+	if months <= 0 {
+		months = 1
+	}
+	start = now.AddDate(0, -months, 0).Format("2006-01-02")
+	return start, end
+}
+
 // GetCost returns cost grouped by the given dimension for the given date range.
 // If includeToday is false, the end date is yesterday.
 func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions) ([]CostResource, error) {
@@ -81,16 +105,7 @@ func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions)
 		return nil, err
 	}
 
-	now := time.Now().UTC()
-	end := now.Format("2006-01-02")
-	if !opts.IncludeToday {
-		end = now.AddDate(0, 0, -1).Format("2006-01-02")
-	}
-	months := opts.Months
-	if months <= 0 {
-		months = 1
-	}
-	start := now.AddDate(0, -months, 0).Format("2006-01-02")
+	start, end := costDateRange(opts)
 
 	input := &costexplorer.GetCostAndUsageInput{
 		TimePeriod: &cetypes.DateInterval{
