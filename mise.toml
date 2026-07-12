@@ -42,6 +42,11 @@ description = "backend ビルド"
 dir = "backend"
 run = "go build ./..."
 
+[tasks."backend:install"]
+description = "thief CLI を $GOPATH/bin にインストール"
+dir = "backend"
+run = "go install ./cmd/thief"
+
 [tasks."backend:test"]
 description = "backend ユニットテスト (race)"
 dir = "backend"
