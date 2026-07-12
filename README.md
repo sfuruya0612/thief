@@ -20,6 +20,14 @@
    aws sso login --profile <プロファイル名>
    ```
 
+4. (任意) AWS 公式アイコンを展開する。
+
+   `frontend/public/assets/aws-icons/` はライセンス上リポジトリにコミットしていないため、AWS 公式サイトから Asset Package (zip) をダウンロードし、以下のコマンドで展開する。未展開でも起動・表示は可能 (アイコンが欠けるだけ)。
+
+   ```sh
+   mise run frontend:fetch-icons <path-to-aws-icons.zip>
+   ```
+
 ## ローカルで起動する
 
 backend と frontend をそれぞれ別ターミナルで起動する。

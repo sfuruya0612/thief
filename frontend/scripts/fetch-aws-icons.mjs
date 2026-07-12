@@ -8,7 +8,7 @@
 // ファイル名一致で検索する (ディレクトリ階層には依存しない)。
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync, statSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, statSync, copyFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,6 +90,9 @@ function main() {
 
     const index = buildFilenameIndex(tmpDir);
     const missing = [];
+
+    // 出力先は .gitignore 対象のため、初回セットアップ時は存在しない。
+    mkdirSync(OUTPUT_DIR, { recursive: true });
 
     for (const [key, filename] of Object.entries(ICON_FILENAMES)) {
       const src = index.get(filename);
