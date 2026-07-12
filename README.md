@@ -31,6 +31,17 @@ mise run frontend:run  # Vite dev server 起動 (http://localhost:8082)
 
 ブラウザで `http://localhost:8082` を開く。
 
+## CLI として使う
+
+`thief` は API サーバー / frontend を使わず、単体の CLI ツールとしても利用できる。
+
+```sh
+mise run backend:install   # go install ./cmd/thief で $GOPATH/bin に導入
+thief ec2                  # 例: EC2 インスタンス一覧を表示
+```
+
+`$GOPATH/bin` (通常 `~/go/bin`) が `PATH` に含まれていることを確認すること。サブコマンド一覧は `thief --help` を参照。
+
 ## Docker で起動する
 
 ```sh
