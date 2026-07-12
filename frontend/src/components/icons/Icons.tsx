@@ -318,18 +318,6 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
-  // Cost Explorer サービスアイコン (AWS 公式 Architecture Icons に該当がないため cost と同意匠を使う)
-  costexplorer: (p = {}) => (
-    <Icon
-      {...p}
-      d={
-        <>
-          <path d="M12 3v18" />
-          <path d="M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7" />
-        </>
-      }
-    />
-  ),
   clock: (p = {}) => (
     <Icon
       {...p}
