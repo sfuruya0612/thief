@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -185,18 +186,25 @@ func dynamoIndexSchemaFromKeySchema(name string, keySchema []dynamodbtypes.KeySc
 }
 
 // DynamoItemQuery は Item 検索の Key-Value 指定を表す。PK/SK いずれも未指定ならプレビューとして扱う。
+// AttrName/AttrValue は PK/SK 以外の任意属性による絞り込み (FilterExpression) を表し、
+// PK/SK と併用できる。AttrName 単独 (PK 未指定) の場合は Scan + FilterExpression になる。
 type DynamoItemQuery struct {
-	PKValue string
-	SKValue string
+	PKValue   string
+	SKValue   string
+	AttrName  string
+	AttrValue string
 }
 
 // QueryDynamoItems はテーブルの Item を検索する。
 //
 // コスト/負荷最小化のため:
-//   - PK 未指定 (プレビュー) の場合のみ Scan を Limit:10 で 1 回実行する。
-//   - PK 指定時は必ず Query (KeyConditionExpression) を使い、Scan は使わない。
+//   - PK 未指定の場合は Scan を Limit:10 で 1 回実行する (AttrName/AttrValue 指定時は FilterExpression を付与)。
+//   - PK 指定時は必ず Query (KeyConditionExpression) を使い、Scan は使わない (AttrName/AttrValue 指定時は
+//     FilterExpression を併用する)。
 //
 // 件数はプレビュー・明示検索とも dynamoItemQueryLimit (10) 固定とし、ページングは行わない。
+// FilterExpression は Query/Scan が返した Limit 件に対して適用されるため、フィルタ後の件数が
+// Limit より少なくなることがある (DynamoDB の仕様通り)。
 func QueryDynamoItems(ctx context.Context, profile, region, table string, req DynamoItemQuery) ([]map[string]any, error) {
 	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *dynamodb.Client {
 		return dynamodb.NewFromConfig(cfg)
@@ -205,12 +213,20 @@ func QueryDynamoItems(ctx context.Context, profile, region, table string, req Dy
 		return nil, err
 	}
 
+	filterExpr, filterNames, filterValues := dynamoAttrFilterExpression(req.AttrName, req.AttrValue)
+
 	if req.PKValue == "" {
-		// プレビュー: キー未指定の初期表示のみ Scan を許容する (Limit:10, 1 回限り)。
-		out, err := client.Scan(ctx, &dynamodb.ScanInput{
+		// プレビュー/属性フィルタのみの検索: キー未指定の場合は Scan を許容する (Limit:10, 1 回限り)。
+		input := &dynamodb.ScanInput{
 			TableName: aws.String(table),
 			Limit:     aws.Int32(dynamoItemQueryLimit),
-		})
+		}
+		if filterExpr != "" {
+			input.FilterExpression = aws.String(filterExpr)
+			input.ExpressionAttributeNames = filterNames
+			input.ExpressionAttributeValues = filterValues
+		}
+		out, err := client.Scan(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("scan dynamodb table %s: %w", table, err)
 		}
@@ -239,23 +255,54 @@ func QueryDynamoItems(ctx context.Context, profile, region, table string, req Dy
 		values[":sk"] = dynamoAttributeValueFromString(req.SKValue, schema.Table.SortKey.Type)
 	}
 
-	out, err := client.Query(ctx, &dynamodb.QueryInput{
+	input := &dynamodb.QueryInput{
 		TableName:                 aws.String(table),
 		KeyConditionExpression:    aws.String(keyCondition),
 		ExpressionAttributeNames:  names,
 		ExpressionAttributeValues: values,
 		Limit:                     aws.Int32(dynamoItemQueryLimit),
-	})
+	}
+	if filterExpr != "" {
+		input.FilterExpression = aws.String(filterExpr)
+		for k, v := range filterNames {
+			names[k] = v
+		}
+		for k, v := range filterValues {
+			values[k] = v
+		}
+	}
+
+	out, err := client.Query(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("query dynamodb table %s: %w", table, err)
 	}
 	return dynamoUnmarshalItems(out.Items)
 }
 
+// dynamoAttrFilterExpression は任意属性名/値から FilterExpression を組み立てる。
+// AttrName が空の場合は絞り込みなし (空文字列を返す)。
+func dynamoAttrFilterExpression(attrName, attrValue string) (string, map[string]string, map[string]dynamodbtypes.AttributeValue) {
+	if attrName == "" {
+		return "", nil, nil
+	}
+	return "#filterAttr = :filterVal",
+		map[string]string{"#filterAttr": attrName},
+		map[string]dynamodbtypes.AttributeValue{":filterVal": dynamoAttributeValueFromInput(attrValue)}
+}
+
 // dynamoAttributeValueFromString は文字列の検索入力値を、キー属性の型 (S/N/B) に応じた
 // AttributeValue に変換する。B (バイナリ) は検索フォームでの入力を想定しないため S として扱う。
 func dynamoAttributeValueFromString(value, attrType string) dynamodbtypes.AttributeValue {
 	if attrType == string(dynamodbtypes.ScalarAttributeTypeN) {
+		return &dynamodbtypes.AttributeValueMemberN{Value: value}
+	}
+	return &dynamodbtypes.AttributeValueMemberS{Value: value}
+}
+
+// dynamoAttributeValueFromInput は型情報のない任意属性の検索入力値を AttributeValue に変換する。
+// 数値としてパース可能な場合は N、それ以外は S として扱う。
+func dynamoAttributeValueFromInput(value string) dynamodbtypes.AttributeValue {
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
 		return &dynamodbtypes.AttributeValueMemberN{Value: value}
 	}
 	return &dynamodbtypes.AttributeValueMemberS{Value: value}

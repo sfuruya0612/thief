@@ -258,16 +258,28 @@ export function getDynamoSchema(
   );
 }
 
+export interface DynamoItemQueryOptions {
+  pkValue?: string;
+  skValue?: string;
+  attrName?: string;
+  attrValue?: string;
+}
+
 export function getDynamoItems(
   profile: string,
   region: string,
   table: string,
-  pkValue?: string,
-  skValue?: string,
+  opts: DynamoItemQueryOptions = {},
 ): Promise<DynamoItemRaw[]> {
   return apiGet<DynamoItemRaw[] | null>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/dynamo/${encodeURIComponent(table)}/items`,
-    { region, pk_val: pkValue, sk_val: skValue },
+    {
+      region,
+      pk_val: opts.pkValue,
+      sk_val: opts.skValue,
+      attr_name: opts.attrName,
+      attr_val: opts.attrValue,
+    },
   ).then((v) => v ?? []);
 }
 

@@ -25,11 +25,13 @@ func (s *Server) handleDynamoItems(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	table := r.PathValue("table")
 	req := awsinternal.DynamoItemQuery{
-		PKValue: r.URL.Query().Get("pk_val"),
-		SKValue: r.URL.Query().Get("sk_val"),
+		PKValue:   r.URL.Query().Get("pk_val"),
+		SKValue:   r.URL.Query().Get("sk_val"),
+		AttrName:  r.URL.Query().Get("attr_name"),
+		AttrValue: r.URL.Query().Get("attr_val"),
 	}
-	// PK/SK 値そのものをキャッシュキーに含める (Query/Scan 結果はキー入力ごとに変わる)。
-	key := cacheKey("dynamo-items", profile, region, table, req.PKValue, req.SKValue)
+	// PK/SK/属性フィルタの値そのものをキャッシュキーに含める (Query/Scan 結果は入力ごとに変わる)。
+	key := cacheKey("dynamo-items", profile, region, table, req.PKValue, req.SKValue, req.AttrName, req.AttrValue)
 	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
 		return awsinternal.QueryDynamoItems(r.Context(), profile, region, table, req)
 	})

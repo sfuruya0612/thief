@@ -174,6 +174,95 @@ func TestDynamoAttributeValueFromString(t *testing.T) {
 	}
 }
 
+func TestDynamoAttrFilterExpression(t *testing.T) {
+	tests := []struct {
+		name       string
+		attrName   string
+		attrValue  string
+		wantExpr   string
+		wantNames  map[string]string
+		wantValues map[string]dynamodbtypes.AttributeValue
+	}{
+		{
+			name:      "attrName が空なら絞り込みなし",
+			attrName:  "",
+			attrValue: "anything",
+			wantExpr:  "",
+		},
+		{
+			name:      "文字列値",
+			attrName:  "status",
+			attrValue: "active",
+			wantExpr:  "#filterAttr = :filterVal",
+			wantNames: map[string]string{"#filterAttr": "status"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":filterVal": &dynamodbtypes.AttributeValueMemberS{Value: "active"},
+			},
+		},
+		{
+			name:      "数値値",
+			attrName:  "age",
+			attrValue: "42",
+			wantExpr:  "#filterAttr = :filterVal",
+			wantNames: map[string]string{"#filterAttr": "age"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":filterVal": &dynamodbtypes.AttributeValueMemberN{Value: "42"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotExpr, gotNames, gotValues := dynamoAttrFilterExpression(tt.attrName, tt.attrValue)
+			if gotExpr != tt.wantExpr {
+				t.Errorf("expr = %q want %q", gotExpr, tt.wantExpr)
+			}
+			if !reflect.DeepEqual(gotNames, tt.wantNames) {
+				t.Errorf("names = %#v want %#v", gotNames, tt.wantNames)
+			}
+			if !reflect.DeepEqual(gotValues, tt.wantValues) {
+				t.Errorf("values = %#v want %#v", gotValues, tt.wantValues)
+			}
+		})
+	}
+}
+
+func TestDynamoAttributeValueFromInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  dynamodbtypes.AttributeValue
+	}{
+		{
+			name:  "整数はN型になる",
+			value: "42",
+			want:  &dynamodbtypes.AttributeValueMemberN{Value: "42"},
+		},
+		{
+			name:  "小数もN型になる",
+			value: "3.14",
+			want:  &dynamodbtypes.AttributeValueMemberN{Value: "3.14"},
+		},
+		{
+			name:  "数値でない文字列はS型になる",
+			value: "abc",
+			want:  &dynamodbtypes.AttributeValueMemberS{Value: "abc"},
+		},
+		{
+			name:  "空文字列はS型になる",
+			value: "",
+			want:  &dynamodbtypes.AttributeValueMemberS{Value: ""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dynamoAttributeValueFromInput(tt.value)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %#v want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDynamoUnmarshalItems(t *testing.T) {
 	items := []map[string]dynamodbtypes.AttributeValue{
 		{

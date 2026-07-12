@@ -23,6 +23,7 @@ import {
 } from '../lib/normalize';
 import {
   type CostQueryOptions,
+  type DynamoItemQueryOptions,
   getBQDatasets,
   getBQSchema,
   getBQTables,
@@ -261,16 +262,28 @@ export function useDynamoSchema(profile: string, region: string, table: string) 
 }
 
 // pkValue 未指定時はプレビュー (Scan Limit:10) を、指定時は Query (Limit:10) を返す。
+// attrName/attrValue は PK/SK 以外の任意属性による絞り込み (FilterExpression) で、
+// pkValue/skValue と併用できる。
 export function useDynamoItems(
   profile: string,
   region: string,
   table: string,
-  pkValue?: string,
-  skValue?: string,
+  opts: DynamoItemQueryOptions = {},
 ) {
+  const { pkValue, skValue, attrName, attrValue } = opts;
   return useQuery({
-    queryKey: ['aws', 'dynamo-items', profile, region, table, pkValue, skValue],
-    queryFn: () => getDynamoItems(profile, region, table, pkValue, skValue),
+    queryKey: [
+      'aws',
+      'dynamo-items',
+      profile,
+      region,
+      table,
+      pkValue,
+      skValue,
+      attrName,
+      attrValue,
+    ],
+    queryFn: () => getDynamoItems(profile, region, table, opts),
     staleTime: 60_000,
     enabled: !!profile && !!table,
   });
