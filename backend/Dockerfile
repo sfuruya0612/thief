@@ -35,7 +35,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 go build -o /out/server ./cmd/thief
 
 # runtime: distroless base (glibc 同梱、root バリアント、HOME=/root)。
 # CA 証明書は同梱済みのため AWS/SSO への TLS 通信に追加設定は不要。
@@ -53,4 +53,4 @@ COPY --from=builder /out/server /server
 ENV PATH="/usr/local/aws-cli/v2/current/bin:${PATH}" \
     LD_LIBRARY_PATH="/usr/local/lib"
 EXPOSE 8089
-ENTRYPOINT ["/server"]
+ENTRYPOINT ["/server", "server"]
