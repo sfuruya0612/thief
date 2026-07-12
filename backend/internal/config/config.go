@@ -23,8 +23,8 @@ type Config struct {
 	NoHeader bool   `yaml:"no-header"`
 	GroupBy  string `yaml:"-"`
 
-	// ListenAddr は API サーバの listen アドレス。API サーバ (cmd/server) 専用で
-	// CLI (cmd/thief) からは参照されない。
+	// ListenAddr は API サーバの listen アドレス。`thief server` サブコマンド専用で
+	// 他のサブコマンドからは参照されない。
 	ListenAddr string `yaml:"listen-addr"`
 
 	// WebOrigins はブラウザからの WebSocket アップグレード (EC2 Session / ECS Exec) を
