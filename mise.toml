@@ -85,11 +85,6 @@ description = "API サーバー起動 (127.0.0.1:8080)"
 dir = "backend"
 run = "go run ./cmd/server"
 
-[tasks."backend:tui"]
-description = "TUI 起動"
-dir = "backend"
-run = "go run ./cmd/thief tui"
-
 # === frontend ===
 [tasks."frontend:setup"]
 description = "frontend 依存取得"
