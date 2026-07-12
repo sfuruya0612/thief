@@ -1,6 +1,7 @@
 // DynamoDB テーブルの Item を Key-Value 指定で検索する Drawer タブ
 // 初期表示はプレビュー (Scan Limit:10)、PK (+SK) を指定すると Query (Limit:10) に切り替わる。
 // 検索時の負荷とコストを最小化するため、明示検索は必ず Query を使う (バックエンド側で保証)。
+// PK/SK に加えて、任意の属性名 + 値による絞り込み (FilterExpression) も PK/SK と併用できる。
 import { useMemo, useState } from 'react';
 import { useDynamoItems, useDynamoSchema } from '../../api/queries';
 
@@ -24,19 +25,22 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
   const { data: schema, isLoading: schemaLoading } = useDynamoSchema(profile, region, table);
   const [pkInput, setPkInput] = useState('');
   const [skInput, setSkInput] = useState('');
+  const [attrNameInput, setAttrNameInput] = useState('');
+  const [attrValueInput, setAttrValueInput] = useState('');
   // 検索実行済みの値のみクエリに渡す (入力中は検索しない)
   const [submittedPk, setSubmittedPk] = useState('');
   const [submittedSk, setSubmittedSk] = useState('');
+  const [submittedAttrName, setSubmittedAttrName] = useState('');
+  const [submittedAttrValue, setSubmittedAttrValue] = useState('');
 
-  const { data: items, isLoading: itemsLoading } = useDynamoItems(
-    profile,
-    region,
-    table,
-    submittedPk || undefined,
-    submittedSk || undefined,
-  );
+  const { data: items, isLoading: itemsLoading } = useDynamoItems(profile, region, table, {
+    pkValue: submittedPk || undefined,
+    skValue: submittedSk || undefined,
+    attrName: submittedAttrName || undefined,
+    attrValue: submittedAttrValue || undefined,
+  });
 
-  const isPreview = !submittedPk;
+  const isPreview = !submittedPk && !submittedAttrName;
   const rows = useMemo(() => items ?? [], [items]);
   const columns = useMemo(() => {
     const keys = new Set<string>();
@@ -49,13 +53,19 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
   const handleSearch = () => {
     setSubmittedPk(pkInput.trim());
     setSubmittedSk(skInput.trim());
+    setSubmittedAttrName(attrNameInput.trim());
+    setSubmittedAttrValue(attrValueInput.trim());
   };
 
   const handleClear = () => {
     setPkInput('');
     setSkInput('');
+    setAttrNameInput('');
+    setAttrValueInput('');
     setSubmittedPk('');
     setSubmittedSk('');
+    setSubmittedAttrName('');
+    setSubmittedAttrValue('');
   };
 
   const pkName = schema?.table.partitionKey.name ?? 'PK';
@@ -85,7 +95,25 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             )}
-            <button className="btn sm" onClick={handleSearch} disabled={!pkInput.trim()}>
+            <input
+              style={inputStyle}
+              placeholder="attribute name"
+              value={attrNameInput}
+              onChange={(e) => setAttrNameInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            />
+            <input
+              style={inputStyle}
+              placeholder="attribute value"
+              value={attrValueInput}
+              onChange={(e) => setAttrValueInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            />
+            <button
+              className="btn sm"
+              onClick={handleSearch}
+              disabled={!pkInput.trim() && !attrNameInput.trim()}
+            >
               Search
             </button>
             {!isPreview && (
@@ -97,7 +125,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
           <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 8 }}>
             {isPreview
               ? `Preview (最大 ${rows.length} 件、Scan)`
-              : `Query 結果 (最大 ${rows.length} 件)`}
+              : `${submittedPk ? 'Query' : 'Scan'} 結果 (最大 ${rows.length} 件)`}
           </div>
           {itemsLoading ? (
             <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
