@@ -1,12 +1,14 @@
 // tables.jsx DataTable の汎用化移植
 import { useMemo, useState } from 'react';
 import type { ColumnDef } from './tables/columns';
+import { Loading } from './Loading';
 
 export interface DataTableProps<T extends { id: string; state?: string }> {
   rows: T[];
   columns: ColumnDef<T>[];
   onSelect: (row: T) => void;
   selectedId: string | null;
+  isLoading?: boolean;
 }
 
 // ソート可能な値のみを対象にする (それ以外はソート不能として扱う)
@@ -25,6 +27,7 @@ export function DataTable<T extends { id: string; state?: string }>({
   columns,
   onSelect,
   selectedId,
+  isLoading,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -86,6 +89,14 @@ export function DataTable<T extends { id: string; state?: string }>({
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
+
+  if (isLoading) {
+    return (
+      <div className="table-wrap">
+        <Loading />
+      </div>
+    );
+  }
 
   return (
     <div className="table-wrap">
