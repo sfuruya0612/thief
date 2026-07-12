@@ -101,7 +101,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   selectedId,
   onSelectId,
 }: ServicePanelProps<TRaw, TRow>) {
-  const { data, error } = useResources<TRaw, TRow>(service, profile, region, normalizer);
+  const { data, isLoading, error } = useResources<TRaw, TRow>(service, profile, region, normalizer);
   const { data: cost } = useCost(profile, region);
   const [filters, setFilters] = useState<Filters>({});
   const [search, setSearch] = useState('');
@@ -156,6 +156,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
         columns={columns}
         onSelect={(r) => onSelectId(r.id)}
         selectedId={selectedId}
+        isLoading={isLoading}
       />
 
       <Drawer
