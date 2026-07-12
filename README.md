@@ -51,6 +51,7 @@ mise run docker:up     # docker compose up --build と同義
 - frontend: `http://localhost:8088` (nginx が `dist` を静的配信し、`/api/` 配下は backend へリバースプロキシする)。
 - backend: `http://localhost:8089` (通常は frontend 経由でアクセスするため直接開く必要はない)。
 - AWS 認証はホストの `~/.aws` (config/credentials/SSO cache) を読み取り専用でマウントするため、事前にホスト側で `aws sso login` を実行しておくこと。
+- backend イメージには aws CLI v2 を同梱している。SSO トークン期限切れ時に画面上の「SSO 再ログイン」ボタンを押すと、backend コンテナ内で `aws sso login` が起動し、ホストのブラウザで認可を完了できる。
 - 停止する場合は `mise run docker:down` を実行する。
 
 ### カスタムドメイン (`thief.local`) でアクセスする
