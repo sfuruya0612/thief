@@ -27,3 +27,6 @@ go.work.sum
 
 # Mac OS X Finder directory files
 .DS_Store
+
+# issue 管理ディレクトリ (git 管理対象外)
+issues/
