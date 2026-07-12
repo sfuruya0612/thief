@@ -38,7 +38,6 @@ func NewRootCmd() *cobra.Command {
 		newDatadogCmd(),
 		newTiDBCmd(),
 		newServerCmd(),
-		newTUICmd(),
 	)
 	return root
 }
