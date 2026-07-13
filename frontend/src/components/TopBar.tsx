@@ -1,12 +1,12 @@
 // app.jsx TopBar の移植
-// + AWS/BigQuery/Datadog/TiDB のトップレベルビュー切替 (Phase 5 で新規追加)
+// + AWS/GCP/Datadog/TiDB のトップレベルビュー切替
 // profile/region セレクタはサイドバーの profile-card へ移設済み (Sidebar.tsx を参照)
 import type { AppView, Theme } from '../types/common';
 import { Icons } from './icons/Icons';
 
 const VIEWS: Array<[AppView, string]> = [
   ['aws', 'AWS'],
-  ['bigquery', 'BigQuery'],
+  ['gcp', 'Google Cloud'],
   ['datadog', 'Datadog'],
   ['tidb', 'TiDB'],
 ];

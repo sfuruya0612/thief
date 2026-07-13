@@ -29,9 +29,35 @@ func (s *Server) handleListProfiles(w http.ResponseWriter, r *http.Request) {
 	}
 	var infos []ProfileInfo
 	for _, p := range profiles {
-		infos = append(infos, ProfileInfo{Name: p})
+		infos = append(infos, ProfileInfo{
+			Name:        p.Name,
+			AccountID:   p.AccountID,
+			SSORoleName: p.SSORoleName,
+		})
 	}
 	writeJSON(w, infos)
+}
+
+// handleProfileIdentity resolves the AWS account ID for profile via STS
+// GetCallerIdentity. Unlike handleListProfiles (static config parse), this
+// makes a live AWS call and is invoked only for the profile the user
+// selected, not for every profile in the list.
+func (s *Server) handleProfileIdentity(w http.ResponseWriter, r *http.Request) {
+	profile := r.PathValue("profile")
+	if err := awsinternal.ValidateProfileName(profile); err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+	identity, err := awsinternal.GetCallerIdentity(r.Context(), profile)
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeJSON(w, CallerIdentityInfo{
+		AccountID: identity.AccountID,
+		Arn:       identity.ARN,
+		UserID:    identity.UserID,
+	})
 }
 
 func (s *Server) handleEC2(w http.ResponseWriter, r *http.Request) {

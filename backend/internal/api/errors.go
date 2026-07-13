@@ -28,6 +28,12 @@ func writeUnauthorized(w http.ResponseWriter, msg string) {
 	writeError(w, http.StatusUnauthorized, "SSO_TOKEN_EXPIRED", msg)
 }
 
+// writeGCPNotConfigured は GCP project ID が解決できない場合に 503 を返す。
+func writeGCPNotConfigured(w http.ResponseWriter) {
+	writeError(w, http.StatusServiceUnavailable, "GCP_NOT_CONFIGURED",
+		"GCP is not configured; provide ?project_id= or set GOOGLE_CLOUD_PROJECT")
+}
+
 // writeAWSError writes the appropriate HTTP error based on whether err is an
 // SSO token expiry (401 SSO_TOKEN_EXPIRED) or a generic AWS error (500).
 func writeAWSError(w http.ResponseWriter, err error) {

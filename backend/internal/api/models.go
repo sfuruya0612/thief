@@ -20,6 +20,17 @@ type CacheHeaders struct {
 // ProfileInfo is returned by GET /api/aws/profiles.
 type ProfileInfo struct {
 	Name string `json:"name"`
+	// AccountID / SSORoleName are parsed statically from ~/.aws/config
+	// (sso_account_id / sso_role_name) and are empty for non-SSO profiles.
+	AccountID   string `json:"account_id,omitempty"`
+	SSORoleName string `json:"sso_role_name,omitempty"`
+}
+
+// CallerIdentityInfo is returned by GET /api/aws/profiles/{profile}/identity.
+type CallerIdentityInfo struct {
+	AccountID string `json:"account_id"`
+	Arn       string `json:"arn"`
+	UserID    string `json:"user_id"`
 }
 
 // SSMValueResponse is returned by GET /api/aws/profiles/{profile}/ssm/parameters/{name}.

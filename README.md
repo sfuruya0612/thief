@@ -20,12 +20,13 @@
    aws sso login --profile <プロファイル名>
    ```
 
-4. (任意) AWS 公式アイコンを展開する。
+4. (任意) AWS / Google Cloud 公式アイコンを展開する。
 
-   `frontend/public/assets/aws-icons/` はライセンス上リポジトリにコミットしていないため、AWS 公式サイトから Asset Package (zip) をダウンロードし、以下のコマンドで展開する。未展開でも起動・表示は可能 (アイコンが欠けるだけ)。
+   `frontend/public/assets/aws-icons/` と `frontend/public/assets/gcp-icons/` はライセンス上リポジトリにコミットしていないため、各社公式サイトから Asset Package (zip) をダウンロードし、以下のコマンドで展開する。未展開でも起動・表示は可能 (アイコンが欠けるだけ)。
 
    ```sh
-   mise run frontend:fetch-icons <path-to-aws-icons.zip>
+   mise run frontend:fetch-aws-icons <path-to-aws-icons.zip>
+   mise run frontend:fetch-gcp-icons <path-to-gcp-icons.zip>
    ```
 
 ## ローカルで起動する

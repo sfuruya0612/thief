@@ -68,7 +68,7 @@
 - frontend の API 向き先 (`VITE_API_BASE`) はビルド時に静的置換される。`compose.yaml` の build args では空文字を渡し、frontend の nginx が配信された origin (`http://<host>:8088`) をそのまま同一オリジンで使う。ホスト名をハードコードしないため `thief.local` 等どのホスト名でアクセスしても再ビルド不要。
 - WebSocket (EC2 Start Session / ECS Exec ターミナル) の許可オリジンは `THIEF_WEB_ORIGINS` で指定する (デフォルトは `localhost:8088,127.0.0.1:8088,thief.local:8088`)。ブラウザの Origin と `Host` ヘッダーが同一なら自動許可されるため、通常は追加設定不要。
 - **カスタムドメイン `thief.local` でアクセスする場合**: ホストの `/etc/hosts` に `127.0.0.1 thief.local` を追記した上で `http://thief.local:8088` を開く。
-- AWS 公式アイコン (`frontend/public/assets/aws-icons/`) は `.gitignore` 対象。事前に `mise run frontend:fetch-icons <zip>` で展開しておくと Docker イメージにも含まれる。未展開でも起動・表示は可能(アイコンが欠けるだけ)。
+- AWS 公式アイコン (`frontend/public/assets/aws-icons/`) と Google Cloud 公式アイコン (`frontend/public/assets/gcp-icons/`) は `.gitignore` 対象。事前に `mise run frontend:fetch-aws-icons <zip>` / `mise run frontend:fetch-gcp-icons <zip>` で展開しておくと Docker イメージにも含まれる。未展開でも起動・表示は可能(アイコンが欠けるだけ)。
 - `mise run docker:down` で停止する。
 - 企業ネットワークの TLS インスペクション CA 配下では、build 中の `go mod download` / `npm ci` が証明書エラーで失敗する。環境変数 `CUSTOM_CA_CERT` にホスト側の CA バンドル (PEM) のパスを指定して build/up すると、BuildKit の secret マウント経由で各 Dockerfile に注入される (ビルドキャッシュ/イメージ履歴には残らない)。未設定時は何も注入されない。
   - 例: `CUSTOM_CA_CERT=/path/to/corp-ca.pem docker compose up --build`
@@ -314,7 +314,8 @@ frontend/
 - サービスごとに異なる Raw/Row 型を扱う AWS リソース表示は、`AccountView.tsx` の汎用 `ServicePanel<TRaw, TRow>` に `normalizer`/`columns`/`overviewRows` を渡す形で分岐する。サービス追加時もこのパターンに従う。
 - テーブル列定義は `components/tables/columns.tsx`(`ColumnDef<T>` 型、`Dash()` ヘルパー、`formatBytes()` 等の共通ヘルパー)に集約する。非 AWS ドメイン(BigQuery/Datadog/TiDB)の列定義は `nonAwsColumns.tsx` に分離し、既存の AWS 専用 `columns.tsx` を汚さない。
 - 汎用アイコンはインライン SVG(`components/icons/Icons.tsx`)で持つ。外部アイコンパッケージは導入しない。
-- AWS サービスアイコン(`components/icons/AwsIcons.tsx`)は `public/assets/aws-icons/<service>.svg` を `<img>` で参照する。この SVG は AWS 公式 Architecture Icons の無改変ファイルであり、ライセンス上リポジトリにコミットしない(`.gitignore` 対象)。初回セットアップ時に `mise run frontend:fetch-icons <zip>` で AWS 公式アイコンパッケージ(zip)から展開する。対応関係は `frontend/scripts/fetch-aws-icons.mjs` の `ICON_FILENAMES` を参照(natgw のみ Architecture Icons に該当がなく Resource Icons の 48px 版を使用)。
+- AWS サービスアイコン(`components/icons/AwsIcons.tsx`)は `public/assets/aws-icons/<service>.svg` を `<img>` で参照する。この SVG は AWS 公式 Architecture Icons の無改変ファイルであり、ライセンス上リポジトリにコミットしない(`.gitignore` 対象)。初回セットアップ時に `mise run frontend:fetch-aws-icons <zip>` で AWS 公式アイコンパッケージ(zip)から展開する。対応関係は `frontend/scripts/fetch-aws-icons.mjs` の `ICON_FILENAMES` を参照(natgw のみ Architecture Icons に該当がなく Resource Icons の 48px 版を使用)。
+- Google Cloud サービスアイコン(`components/icons/GcpIcons.tsx`)は `public/assets/gcp-icons/<service>.svg` を `<img>` で参照する。この SVG は Google Cloud 公式 Icons (Unique Icons) の無改変ファイルであり、ライセンス上リポジトリにコミットしない(`.gitignore` 対象)。初回セットアップ時に `mise run frontend:fetch-gcp-icons <zip>` で Google Cloud 公式アイコンパッケージ(zip)から展開する。対応関係は `frontend/scripts/fetch-gcp-icons.mjs` の `ICON_FILENAMES` を参照。
 
 ### コーディングスタイル
 

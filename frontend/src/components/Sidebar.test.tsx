@@ -46,7 +46,7 @@ describe('Sidebar region selector', () => {
         onService={() => {}}
       />,
     );
-    const regionSelect = container.querySelectorAll('select')[1];
+    const regionSelect = container.querySelectorAll('select')[0];
     const options = regionSelect.querySelectorAll('option');
     expect(options).toHaveLength(1);
     expect(options[0].getAttribute('value')).toBe('ap-northeast-1');
@@ -70,11 +70,11 @@ describe('Sidebar region selector', () => {
       />,
     );
     await waitFor(() => {
-      const regionSelect = container.querySelectorAll('select')[1];
+      const regionSelect = container.querySelectorAll('select')[0];
       const options = regionSelect.querySelectorAll('option');
       expect(options).toHaveLength(2);
     });
-    const regionSelect = container.querySelectorAll('select')[1];
+    const regionSelect = container.querySelectorAll('select')[0];
     const optionTexts = Array.from(regionSelect.querySelectorAll('option')).map(
       (o) => o.textContent,
     );

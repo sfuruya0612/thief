@@ -1,10 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import {
+  callerIdentityFromRaw,
   dynamoTableSchemaFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
+  profileFromRaw,
   s3ObjectFromRaw,
 } from './normalize';
+
+describe('profileFromRaw', () => {
+  it('sso_account_id / sso_role_name を camelCase に変換する', () => {
+    const row = profileFromRaw({
+      name: 'my-sso-profile',
+      account_id: '111111111111',
+      sso_role_name: 'AdministratorAccess',
+    });
+    expect(row).toEqual({
+      name: 'my-sso-profile',
+      accountId: '111111111111',
+      ssoRoleName: 'AdministratorAccess',
+    });
+  });
+
+  it('account_id / sso_role_name が欠落した非 SSO プロファイルでも変換できる', () => {
+    const row = profileFromRaw({ name: 'plain-profile' });
+    expect(row).toEqual({
+      name: 'plain-profile',
+      accountId: undefined,
+      ssoRoleName: undefined,
+    });
+  });
+});
+
+describe('callerIdentityFromRaw', () => {
+  it('snake_case を camelCase に変換する', () => {
+    const row = callerIdentityFromRaw({
+      account_id: '222222222222',
+      arn: 'arn:aws:iam::222222222222:user/me',
+      user_id: 'AIDAEXAMPLE',
+    });
+    expect(row).toEqual({
+      accountId: '222222222222',
+      arn: 'arn:aws:iam::222222222222:user/me',
+      userId: 'AIDAEXAMPLE',
+    });
+  });
+});
 
 describe('ecsServiceFromRaw', () => {
   it('snake_case を camelCase に変換する', () => {

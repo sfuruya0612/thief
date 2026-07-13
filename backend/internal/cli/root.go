@@ -35,6 +35,7 @@ func NewRootCmd() *cobra.Command {
 		newELBCmd(),
 		newCostCmd(),
 		newBQCmd(),
+		newGCPCmd(),
 		newDatadogCmd(),
 		newTiDBCmd(),
 		newServerCmd(),

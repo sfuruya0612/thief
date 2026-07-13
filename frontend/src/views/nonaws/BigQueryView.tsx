@@ -1,18 +1,23 @@
 // BigQuery ビュー: dataset 一覧 → table 一覧 → schema 表示 + アドホック SQL 実行
+// GCP 統合ビューの一部として projectId prop を受け取り、全 BQ フックへ流し込む
 import { useState } from 'react';
 import { useBQDatasets, useBQQuery, useBQSchema, useBQTables } from '../../api/queries';
 import { DataTable } from '../../components/DataTable';
 import { bqFieldColumns, bqTableColumns } from '../../components/tables/nonAwsColumns';
 import { Icons } from '../../components/icons/Icons';
 
-export function BigQueryView() {
+export interface BigQueryViewProps {
+  projectId?: string;
+}
+
+export function BigQueryView({ projectId }: BigQueryViewProps = {}) {
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [sql, setSql] = useState('SELECT 1');
 
-  const { data: datasets } = useBQDatasets();
-  const { data: tables } = useBQTables(selectedDataset ?? '');
-  const { data: fields } = useBQSchema(selectedDataset ?? '', selectedTable ?? '');
+  const { data: datasets } = useBQDatasets(projectId);
+  const { data: tables } = useBQTables(selectedDataset ?? '', projectId);
+  const { data: fields } = useBQSchema(selectedDataset ?? '', selectedTable ?? '', projectId);
   const runQuery = useBQQuery();
 
   return (
@@ -30,7 +35,7 @@ export function BigQueryView() {
           <button
             className="btn sm primary"
             disabled={runQuery.isPending || !sql.trim()}
-            onClick={() => runQuery.mutate({ sql })}
+            onClick={() => runQuery.mutate({ sql, projectId })}
           >
             {runQuery.isPending ? 'Running…' : 'Run query'}
           </button>
