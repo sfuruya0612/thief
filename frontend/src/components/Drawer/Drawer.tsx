@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react';
 import type { BaseRow, DrawerPos } from '../../types/common';
 import { AwsIcons } from '../icons/AwsIcons';
+import { GcpIcons } from '../icons/GcpIcons';
 import { Icons } from '../icons/Icons';
-import { SERVICES } from '../../lib/serviceMeta';
+import { GCP_SERVICES, SERVICES } from '../../lib/serviceMeta';
 import { StatusBadge } from '../primitives';
 import { DrawerDynamoItems } from './DrawerDynamoItems';
 import { DrawerECRImages } from './DrawerECRImages';
@@ -11,6 +12,7 @@ import { DrawerECSServices } from './DrawerECSServices';
 import { DrawerECSTasks } from './DrawerECSTasks';
 import { DrawerELBListeners } from './DrawerELBListeners';
 import { DrawerELBTargets } from './DrawerELBTargets';
+import { DrawerGCSObjects } from './DrawerGCSObjects';
 import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerTags } from './DrawerTags';
 import { DrawerTerminal } from './DrawerTerminal';
@@ -35,6 +37,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   dynamo: ['Overview', 'Items', 'Tags'],
   ssm: ['Overview', 'Tags'],
   secrets: ['Overview', 'Tags'],
+  gcs: ['Overview', 'Objects'],
 };
 
 const DRAWER_SIZE_KEY = 'cloudlens:drawerSize';
@@ -143,8 +146,9 @@ export function Drawer({
   };
 
   const tabs = DRAWER_TABS[service] ?? ['Overview'];
-  const svcMeta = SERVICES.find((s) => s.key === service);
-  const IconEl = AwsIcons[service];
+  const svcMeta =
+    SERVICES.find((s) => s.key === service) ?? GCP_SERVICES.find((s) => s.key === service);
+  const IconEl = AwsIcons[service] ?? GcpIcons[service];
 
   const sizeStyle: React.CSSProperties =
     position === 'bottom'
@@ -249,6 +253,9 @@ export function Drawer({
               )}
               {tab === 'Objects' && service === 's3' && (
                 <DrawerS3Objects profile={profile} region={region} bucket={resource.name} />
+              )}
+              {tab === 'Objects' && service === 'gcs' && (
+                <DrawerGCSObjects projectId={profile} bucket={resource.name} />
               )}
               {tab === 'Listeners' && service === 'elb' && (
                 <DrawerELBListeners profile={profile} region={region} lbArn={resource.id} />

@@ -3,6 +3,7 @@ package api
 func (s *Server) registerRoutes() {
 	// AWS profiles
 	s.mux.HandleFunc("GET /api/aws/profiles", s.handleListProfiles)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/identity", s.handleProfileIdentity)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/regions", s.handleRegions)
 
 	// AWS per-profile resources
@@ -52,6 +53,14 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/bigquery/datasets/{dataset}/tables", s.handleBQTables)
 	s.mux.HandleFunc("GET /api/bigquery/datasets/{dataset}/tables/{table}/schema", s.handleBQSchema)
 	s.mux.HandleFunc("POST /api/bigquery/query", s.handleBQQuery)
+
+	// GCP
+	s.mux.HandleFunc("GET /api/gcp/projects", s.handleGCPProjects)
+	s.mux.HandleFunc("GET /api/gcp/cloudrun", s.handleGCPCloudRun)
+	s.mux.HandleFunc("GET /api/gcp/gcs", s.handleGCPGCS)
+	s.mux.HandleFunc("GET /api/gcp/gcs/{bucket}/objects", s.handleGCPGCSObjects)
+	s.mux.HandleFunc("GET /api/gcp/gcs/{bucket}/objects/download", s.handleGCPGCSObjectDownload)
+	s.mux.HandleFunc("POST /api/gcp/gcs/{bucket}/objects/upload", s.handleGCPGCSObjectUpload)
 
 	// Datadog
 	s.mux.HandleFunc("GET /api/datadog/cost/historical", s.handleDatadogHistorical)

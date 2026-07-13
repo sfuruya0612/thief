@@ -9,6 +9,7 @@ import { Icons } from './icons/Icons';
 import { SERVICES } from '../lib/serviceMeta';
 import { useRegions } from '../api/queries';
 import type { Profile } from '../types/common';
+import { ProfileSelect } from './ProfileSelect';
 
 interface SidebarSection {
   label: string;
@@ -75,32 +76,25 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="profile-card">
-        <span className="label">AWS_PROFILE</span>
-        <select
-          className="btn sm"
-          value={profile}
-          onChange={(e) => onProfileChange(e.target.value)}
-          title="AWS Profile"
-        >
-          {profiles.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <span className="label">AWS_REGION</span>
-        <select
-          className="btn sm"
-          value={region}
-          onChange={(e) => onRegionChange(e.target.value)}
-          title="Region"
-        >
-          {regionOptions.map((r) => (
-            <option key={r.code} value={r.code}>
-              {r.name === r.code ? r.code : `${r.name} (${r.code})`}
-            </option>
-          ))}
-        </select>
+        <div className="profile-card-field">
+          <span className="label">AWS_PROFILE</span>
+          <ProfileSelect profile={profile} profiles={profiles} onProfileChange={onProfileChange} />
+        </div>
+        <div className="profile-card-field">
+          <span className="label">AWS_REGION</span>
+          <select
+            className="btn sm"
+            value={region}
+            onChange={(e) => onRegionChange(e.target.value)}
+            title="Region"
+          >
+            {regionOptions.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.name === r.code ? r.code : `${r.name} (${r.code})`}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {SECTIONS.map((section) => (

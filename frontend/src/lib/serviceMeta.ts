@@ -59,6 +59,32 @@ export const SERVICES: ServiceMeta[] = [
   },
 ];
 
+// GCP サービス一覧
+export const GCP_SERVICES: ServiceMeta[] = [
+  {
+    key: 'cloudrun',
+    name: 'Cloud Run',
+    sub: 'Services & Jobs',
+    color: 'var(--svc-cloudrun)',
+    group: 'compute',
+  },
+  {
+    key: 'bigquery',
+    name: 'BigQuery',
+    sub: 'Datasets',
+    color: 'var(--svc-bigquery)',
+    group: 'data',
+  },
+  { key: 'gcs', name: 'Cloud Storage', sub: 'Buckets', color: 'var(--svc-gcs)', group: 'data' },
+];
+
+// GCP サービスキー → バックエンド URL パスセグメント
+// bigquery は埋め込みビュー (既存 useBQDatasets 等を再利用) のためパスなし
+export const GCP_SERVICE_TO_PATH: Record<string, string> = {
+  cloudrun: 'cloudrun',
+  gcs: 'gcs',
+};
+
 // サービスキー → バックエンド URL パスセグメント
 export const SERVICE_TO_PATH: Record<string, string> = {
   ec2: 'ec2',

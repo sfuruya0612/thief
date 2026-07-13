@@ -1,0 +1,175 @@
+// GCP 統合ビュー: GcpSidebar + activeService に応じた ServicePanel / BigQueryView 埋め込み。
+// AccountView のパターンを踏襲するが、リージョン切替や Cost Explorer 相当はサービスごとに
+// 挙動が違うため、サービス単位で個別の分岐を書く。
+import { useEffect, useMemo, useState } from 'react';
+import { useGcpResources } from '../api/queries';
+import { cloudRunResourceFromRaw, gcsBucketFromRaw } from '../lib/normalizeGcp';
+import { cloudRunColumns, gcsBucketColumns } from '../components/tables/gcpColumns';
+import {
+  cloudRunOverviewRows,
+  gcsBucketOverviewRows,
+  type OverviewEntry,
+} from '../components/Drawer/overviewRows';
+import type { ColumnDef } from '../components/tables/columns';
+import { GCP_SERVICES } from '../lib/serviceMeta';
+import type { BaseRow, DrawerPos } from '../types/common';
+import type {
+  CloudRunResourceRaw,
+  CloudRunResourceRow,
+  GcpProject,
+  GcsBucketRaw,
+  GcsBucketRow,
+} from '../types/gcp';
+import { GcpSidebar } from './GcpSidebar';
+import { FacetBar, type Filters } from '../components/FacetBar';
+import { DataTable } from '../components/DataTable';
+import { Drawer } from '../components/Drawer/Drawer';
+import { BigQueryView } from './nonaws/BigQueryView';
+
+interface GcpServicePanelProps<TRaw, TRow extends BaseRow> {
+  service: string;
+  projectId: string;
+  normalizer: (raw: TRaw) => TRow;
+  columns: ColumnDef<TRow>[];
+  overviewRows: (row: TRow) => OverviewEntry[];
+  drawerPos: DrawerPos;
+  selectedId: string | null;
+  onSelectId: (id: string | null) => void;
+}
+
+// 汎用 GCP サービスパネル: useGcpResources 呼び出し + Facet/Table/Drawer 描画
+function GcpServicePanel<TRaw, TRow extends BaseRow>({
+  service,
+  projectId,
+  normalizer,
+  columns,
+  overviewRows,
+  drawerPos,
+  selectedId,
+  onSelectId,
+}: GcpServicePanelProps<TRaw, TRow>) {
+  const { data, isLoading } = useGcpResources<TRaw, TRow>(service, projectId, normalizer);
+  const [filters, setFilters] = useState<Filters>({});
+  const [search, setSearch] = useState('');
+
+  const allResources = data ?? [];
+  const selected = allResources.find((r) => r.id === selectedId) ?? null;
+
+  const filtered = useMemo(() => {
+    return allResources.filter((r) => {
+      if (search) {
+        const q = search.toLowerCase();
+        const hay = `${r.name} ${r.id}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filters.region?.length && !filters.region.includes(r.region ?? '')) return false;
+      if (filters.state?.length && !filters.state.includes(r.state ?? '')) return false;
+      return true;
+    });
+  }, [allResources, filters, search]);
+
+  const svcMeta = GCP_SERVICES.find((s) => s.key === service);
+
+  return (
+    <div className="main">
+      <div className="toolbar">
+        <div className="title">
+          <h1>{svcMeta?.name}</h1>
+          <span className="subtitle">{svcMeta?.sub.toLowerCase()}</span>
+        </div>
+      </div>
+
+      <FacetBar
+        rows={allResources}
+        filters={filters}
+        setFilters={setFilters}
+        search={search}
+        setSearch={setSearch}
+      />
+
+      <DataTable
+        rows={filtered}
+        columns={columns}
+        onSelect={(r) => onSelectId(r.id)}
+        selectedId={selectedId}
+        isLoading={isLoading}
+      />
+
+      <Drawer
+        resource={selected}
+        service={service}
+        profile={projectId}
+        region={selected?.region ?? ''}
+        position={drawerPos}
+        overviewRows={selected ? overviewRows(selected) : []}
+        onClose={() => onSelectId(null)}
+      />
+    </div>
+  );
+}
+
+export interface GcpViewProps {
+  activeProject: string;
+  projects: GcpProject[];
+  onProjectChange: (id: string) => void;
+  activeService: string;
+  onServiceChange: (service: string) => void;
+  drawerPos: DrawerPos;
+  onSidebarWidthChange?: (width: number) => void;
+}
+
+export function GcpView({
+  activeProject,
+  projects,
+  onProjectChange,
+  activeService,
+  onServiceChange,
+  drawerPos,
+  onSidebarWidthChange,
+}: GcpViewProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // サービス切替時は選択状態をリセット
+  useEffect(() => {
+    setSelectedId(null);
+  }, [activeService]);
+
+  return (
+    <div className="body">
+      <GcpSidebar
+        project={activeProject}
+        projects={projects}
+        onProjectChange={onProjectChange}
+        onWidthChange={onSidebarWidthChange}
+        activeService={activeService}
+        onService={onServiceChange}
+      />
+
+      {activeService === 'cloudrun' && (
+        <GcpServicePanel<CloudRunResourceRaw, CloudRunResourceRow>
+          service="cloudrun"
+          projectId={activeProject}
+          normalizer={cloudRunResourceFromRaw}
+          columns={cloudRunColumns}
+          overviewRows={cloudRunOverviewRows}
+          drawerPos={drawerPos}
+          selectedId={selectedId}
+          onSelectId={setSelectedId}
+        />
+      )}
+      {activeService === 'gcs' && (
+        <GcpServicePanel<GcsBucketRaw, GcsBucketRow>
+          service="gcs"
+          projectId={activeProject}
+          normalizer={gcsBucketFromRaw}
+          columns={gcsBucketColumns}
+          overviewRows={gcsBucketOverviewRows}
+          drawerPos={drawerPos}
+          selectedId={selectedId}
+          onSelectId={setSelectedId}
+        />
+      )}
+      {activeService === 'bigquery' && <BigQueryView projectId={activeProject} />}
+    </div>
+  );
+}

@@ -97,11 +97,17 @@ description = "frontend 依存取得"
 dir = "frontend"
 run = "npm install"
 
-[tasks."frontend:fetch-icons"]
+[tasks."frontend:fetch-aws-icons"]
 description = "AWS 公式アイコン (zip) を public/assets/aws-icons/ に展開する (引数: zip ファイルパス)"
 dir = "frontend"
 usage = "arg \"<zip>\" help=\"AWS 公式アイコンパッケージの zip ファイルパス\""
 run = "node scripts/fetch-aws-icons.mjs \"$usage_zip\""
+
+[tasks."frontend:fetch-gcp-icons"]
+description = "Google Cloud 公式アイコン (zip) を public/assets/gcp-icons/ に展開する (引数: zip ファイルパス)"
+dir = "frontend"
+usage = "arg \"<zip>\" help=\"Google Cloud 公式アイコンパッケージの zip ファイルパス\""
+run = "node scripts/fetch-gcp-icons.mjs \"$usage_zip\""
 
 [tasks."frontend:build"]
 description = "frontend ビルド (Web)"

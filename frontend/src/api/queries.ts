@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CostRow } from '../types/aws';
+import type { BaseRow } from '../types/common';
+import { gcpProjectFromRaw, gcsObjectFromRaw } from '../lib/normalizeGcp';
 import {
   bqDatasetFromRaw,
   bqFieldFromRaw,
@@ -10,6 +12,7 @@ import {
   tidbProjectFromRaw,
 } from '../lib/normalizeNonAws';
 import {
+  callerIdentityFromRaw,
   dynamoTableSchemaFromRaw,
   ecrImageFromRaw,
   ecsContainerFromRaw,
@@ -19,6 +22,7 @@ import {
   elbRuleFromRaw,
   elbTargetGroupFromRaw,
   elbTargetHealthFromRaw,
+  profileFromRaw,
   s3ObjectFromRaw,
 } from '../lib/normalize';
 import {
@@ -41,6 +45,10 @@ import {
   getELBRules,
   getELBTargetGroups,
   getELBTargetHealth,
+  getGcpProjects,
+  getGcpResources,
+  getGcsObjects,
+  getProfileIdentity,
   getProfiles,
   getRegions,
   getResources,
@@ -50,14 +58,26 @@ import {
   getTiDBProjects,
   postBQQuery,
   postSSOLogin,
+  uploadGcsObject,
   uploadS3Object,
 } from './endpoints';
 
 export function useProfiles() {
   return useQuery({
     queryKey: ['aws', 'profiles'],
-    queryFn: getProfiles,
+    queryFn: async () => (await getProfiles()).map(profileFromRaw),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+// 選択中プロファイルの Account ID を STS で確定する。プロファイルを切り替えるたび
+// に 1 件だけ発火する (一覧取得時に全プロファイル分呼ぶことはしない)。
+export function useProfileIdentity(profile: string) {
+  return useQuery({
+    queryKey: ['aws', 'profile-identity', profile],
+    queryFn: async () => callerIdentityFromRaw(await getProfileIdentity(profile)),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!profile,
   });
 }
 
@@ -381,5 +401,59 @@ export function useTiDBCost(month?: string) {
     queryKey: ['tidb', 'cost', month],
     queryFn: async () => (await getTiDBCost(month)).map(tidbCostFromRaw),
     staleTime: 60_000,
+  });
+}
+
+// ============================================================
+// GCP
+// ============================================================
+export function useGcpProjects() {
+  return useQuery({
+    queryKey: ['gcp', 'projects'],
+    queryFn: async () => (await getGcpProjects()).map(gcpProjectFromRaw),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// service (cloudrun / gcs) 単位で GCP リソースを取得する汎用フック。
+// AWS 側 useResources と対称の形。normalizer に渡す Raw 型は呼び出し側で確定させる。
+export function useGcpResources<TRaw, TRow extends BaseRow>(
+  service: string,
+  projectId: string,
+  normalizer: (raw: TRaw) => TRow,
+) {
+  return useQuery({
+    queryKey: ['gcp', service, projectId],
+    queryFn: async () => {
+      const raws = await getGcpResources<TRaw>(service, projectId);
+      return raws.map(normalizer);
+    },
+    staleTime: 60_000,
+    enabled: !!projectId,
+  });
+}
+
+export function useGcsObjects(projectId: string, bucket: string, prefix?: string) {
+  return useQuery({
+    queryKey: ['gcp', 'gcs-objects', projectId, bucket, prefix],
+    queryFn: async () =>
+      (await getGcsObjects(projectId, bucket, prefix)).map((raw, idx) =>
+        gcsObjectFromRaw(raw, idx),
+      ),
+    staleTime: 60_000,
+    enabled: !!projectId && !!bucket,
+  });
+}
+
+export function useGcsUpload(projectId: string, bucket: string, prefix?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, file }: { key: string; file: File }) =>
+      uploadGcsObject(projectId, bucket, `${prefix ?? ''}${key}`, file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['gcp', 'gcs-objects', projectId, bucket],
+      });
+    },
   });
 }

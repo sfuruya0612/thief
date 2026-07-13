@@ -30,3 +30,6 @@ go.work.sum
 
 # issue 管理ディレクトリ (git 管理対象外)
 issues/
+
+# 作業用の一時参照ファイル (アイコン元 zip・デザインモックアップ等、git 管理対象外)
+/sample/

@@ -25,8 +25,8 @@ export interface ServiceMeta {
   group: ServiceGroup;
 }
 
-// トップレベルビュー切替 (AWS / 非 AWS 統合先)
-export type AppView = 'aws' | 'bigquery' | 'datadog' | 'tidb';
+// トップレベルビュー切替 (AWS / GCP / 非 AWS 統合先)
+export type AppView = 'aws' | 'gcp' | 'datadog' | 'tidb';
 
 // tweaks.jsx / index.html 由来のフィールド
 export type Theme = 'dark' | 'light';
@@ -43,8 +43,33 @@ export interface Tweaks {
   drawerPos: DrawerPos;
 }
 
+// GET /api/aws/profiles のバックエンド JSON 形状。
+// AccountID / SSORoleName は ~/.aws/config の静的パース結果で、
+// SSO プロファイル以外では欠落する。
+export interface ProfileRaw {
+  name: string;
+  account_id?: string;
+  sso_role_name?: string;
+}
+
 export interface Profile {
   name: string;
+  accountId?: string;
+  ssoRoleName?: string;
+}
+
+// GET /api/aws/profiles/{profile}/identity のバックエンド JSON 形状。
+// 選択中プロファイルに対して STS GetCallerIdentity で解決した実際の Account ID。
+export interface CallerIdentityRaw {
+  account_id: string;
+  arn: string;
+  user_id: string;
+}
+
+export interface CallerIdentity {
+  accountId: string;
+  arn: string;
+  userId: string;
 }
 
 // 全 15 サービスの XxxRow が共通して持つ形状 (ServicePanel / Drawer で共有する)

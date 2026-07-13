@@ -1,5 +1,6 @@
 // Raw (バックエンド JSON) → Row (UI 用) 変換関数
 import { formatUptime } from './format';
+import type { CallerIdentity, CallerIdentityRaw, Profile, ProfileRaw } from '../types/common';
 import type {
   APIGWRaw,
   APIGWRow,
@@ -73,6 +74,22 @@ function uptimeOrUndef(iso: string): string | undefined {
   if (!iso) return undefined;
   const u = formatUptime(iso);
   return u || undefined;
+}
+
+export function profileFromRaw(raw: ProfileRaw): Profile {
+  return {
+    name: raw.name,
+    accountId: raw.account_id,
+    ssoRoleName: raw.sso_role_name,
+  };
+}
+
+export function callerIdentityFromRaw(raw: CallerIdentityRaw): CallerIdentity {
+  return {
+    accountId: raw.account_id,
+    arn: raw.arn,
+    userId: raw.user_id,
+  };
 }
 
 export function ec2FromRaw(raw: EC2Raw, region: string): EC2Row {

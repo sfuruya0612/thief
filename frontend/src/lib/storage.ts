@@ -9,6 +9,7 @@ export interface PersistedState {
   region?: string;
   view?: AppView;
   sidebarWidth?: number;
+  gcpProject?: string;
 }
 
 export function loadState<T>(key: string, fallback: T): T {
@@ -30,7 +31,14 @@ export function saveState<T>(key: string, value: T): void {
 }
 
 export function loadPersisted(): PersistedState {
-  return loadState<PersistedState>(STORAGE_KEY, {});
+  const state = loadState<PersistedState>(STORAGE_KEY, {});
+  // 旧 AppView 値 'bigquery' → 'gcp' への後方互換マイグレーション
+  // (BigQuery 単独ビューは GCP 統合ビューに吸収されたため、古い localStorage 値のままだと
+  // 現在の AppView 型と矛盾して空画面になる)
+  if ((state.view as string | undefined) === 'bigquery') {
+    state.view = 'gcp';
+  }
+  return state;
 }
 
 export function savePersisted(s: PersistedState): void {

@@ -14,7 +14,7 @@ import type {
   RegionRaw,
   S3ObjectRaw,
 } from '../types/aws';
-import type { Profile } from '../types/common';
+import type { CallerIdentityRaw, ProfileRaw } from '../types/common';
 import type {
   BQDatasetRaw,
   BQFieldRaw,
@@ -25,12 +25,21 @@ import type {
   TiDBCostRaw,
   TiDBProjectRaw,
 } from '../types/nonaws';
-import { SERVICE_TO_PATH } from '../lib/serviceMeta';
+import type { CloudRunResourceRaw, GcpProjectRaw, GcsBucketRaw, GcsObjectRaw } from '../types/gcp';
+import { GCP_SERVICE_TO_PATH, SERVICE_TO_PATH } from '../lib/serviceMeta';
 import { apiBaseUrl, apiGet, apiPost, apiPostForm } from './client';
 
-export function getProfiles(): Promise<Profile[]> {
+export function getProfiles(): Promise<ProfileRaw[]> {
   // バックエンドは users がない場合 null を返しうるので配列に正規化する
-  return apiGet<Profile[] | null>('/api/aws/profiles').then((v) => v ?? []);
+  return apiGet<ProfileRaw[] | null>('/api/aws/profiles').then((v) => v ?? []);
+}
+
+// 選択されたプロファイル 1 件だけ STS GetCallerIdentity で Account ID を確定する。
+// 一覧取得 (getProfiles) は ~/.aws/config の静的パースのみで SSO ログイン不要だが、
+// role_arn / credential_process 系プロファイルでは Account ID が config に無いため、
+// 選択時にこちらで補完する。
+export function getProfileIdentity(profile: string): Promise<CallerIdentityRaw> {
+  return apiGet<CallerIdentityRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/identity`);
 }
 
 export function getResources<TRaw>(
@@ -354,4 +363,66 @@ export function getTiDBClusters(projectId: string): Promise<TiDBClusterRaw[]> {
 
 export function getTiDBCost(month?: string): Promise<TiDBCostRaw[]> {
   return apiGet<TiDBCostRaw[] | null>('/api/tidb/cost', { month }).then((v) => v ?? []);
+}
+
+// ============================================================
+// GCP
+// ============================================================
+// GCP プロジェクト一覧 (Cloud Resource Manager)
+export function getGcpProjects(): Promise<GcpProjectRaw[]> {
+  return apiGet<GcpProjectRaw[] | null>('/api/gcp/projects').then((v) => v ?? []);
+}
+
+// service (cloudrun / gcs) 単位で GCP リソース一覧を取得する。
+// パスセグメントは呼び出し側で GCP_SERVICE_TO_PATH から解決する形と揃えるため、
+// この関数内で GCP_SERVICE_TO_PATH を参照する (AWS 側 getResources と対称)。
+export function getGcpResources<TRaw>(service: string, projectId: string): Promise<TRaw[]> {
+  const seg = GCP_SERVICE_TO_PATH[service];
+  if (!seg) {
+    return Promise.reject(new Error(`unknown gcp service key: ${service}`));
+  }
+  return apiGet<TRaw[] | null>(`/api/gcp/${seg}`, { project_id: projectId }).then((v) => v ?? []);
+}
+
+// 型を明示したい呼び出し側向けのエイリアス (使わなくても可)
+export function getCloudRunResources(projectId: string): Promise<CloudRunResourceRaw[]> {
+  return getGcpResources<CloudRunResourceRaw>('cloudrun', projectId);
+}
+
+export function getGcsBuckets(projectId: string): Promise<GcsBucketRaw[]> {
+  return getGcpResources<GcsBucketRaw>('gcs', projectId);
+}
+
+// GCS バケット内のオブジェクト一覧 (Drawer の Objects タブ相当)
+export function getGcsObjects(
+  projectId: string,
+  bucket: string,
+  prefix?: string,
+): Promise<GcsObjectRaw[]> {
+  return apiGet<GcsObjectRaw[] | null>(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects`, {
+    project_id: projectId,
+    prefix,
+  }).then((v) => v ?? []);
+}
+
+export function uploadGcsObject(
+  projectId: string,
+  bucket: string,
+  key: string,
+  file: File,
+): Promise<{ status: string; key: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiPostForm<{ status: string; key: string }>(
+    `/api/gcp/gcs/${encodeURIComponent(bucket)}/objects/upload`,
+    formData,
+    { project_id: projectId, key },
+  );
+}
+
+export function gcsDownloadUrl(projectId: string, bucket: string, key: string): string {
+  const url = new URL(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects/download`, apiBaseUrl());
+  url.searchParams.set('project_id', projectId);
+  url.searchParams.set('key', key);
+  return url.toString();
 }
