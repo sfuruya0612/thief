@@ -138,6 +138,42 @@ func (s *Server) handleGCPGCSObjectDownload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// handleGCPIAM は指定プロジェクトの IAM ポリシーをメンバー単位に展開して返す。
+func (s *Server) handleGCPIAM(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := s.gcpProjectIDFromQuery(w, r)
+	if !ok {
+		return
+	}
+	key := cacheKey("gcp-iam", projectID)
+	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+		return gcp.ListIAMBindings(r.Context(), projectID)
+	})
+	if err != nil {
+		writeInternalError(w, err.Error())
+		return
+	}
+	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
+	writeJSON(w, entry.Value)
+}
+
+// handleGCPServiceAccounts は指定プロジェクトの Service Account 一覧を返す。
+func (s *Server) handleGCPServiceAccounts(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := s.gcpProjectIDFromQuery(w, r)
+	if !ok {
+		return
+	}
+	key := cacheKey("gcp-serviceaccounts", projectID)
+	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+		return gcp.ListServiceAccounts(r.Context(), projectID)
+	})
+	if err != nil {
+		writeInternalError(w, err.Error())
+		return
+	}
+	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
+	writeJSON(w, entry.Value)
+}
+
 // handleGCPGCSObjectUpload は multipart/form-data の file パートを読み込んで GCS に書き込む。
 // アップロード上限サイズは S3 と同じ maxS3UploadSize / readS3UploadBody を再利用する。
 func (s *Server) handleGCPGCSObjectUpload(w http.ResponseWriter, r *http.Request) {

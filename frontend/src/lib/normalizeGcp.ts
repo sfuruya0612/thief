@@ -8,6 +8,10 @@ import type {
   GcsBucketRow,
   GcsObjectRaw,
   GcsObjectRow,
+  IAMBindingRaw,
+  IAMBindingRow,
+  ServiceAccountRaw,
+  ServiceAccountRow,
 } from '../types/gcp';
 
 export function gcpProjectFromRaw(raw: GcpProjectRaw): GcpProject {
@@ -53,5 +57,29 @@ export function gcsObjectFromRaw(raw: GcsObjectRaw, index: number): GcsObjectRow
     contentType: raw.content_type,
     updated: raw.updated,
     storageClass: raw.storage_class,
+  };
+}
+
+export function iamBindingFromRaw(raw: IAMBindingRaw): IAMBindingRow {
+  return {
+    id: `${raw.member}/${raw.role}/${raw.condition_title}`,
+    name: raw.member,
+    member: raw.member,
+    role: raw.role,
+    projectId: raw.project_id,
+    conditionTitle: raw.condition_title,
+  };
+}
+
+export function serviceAccountFromRaw(raw: ServiceAccountRaw): ServiceAccountRow {
+  return {
+    id: raw.email,
+    name: raw.display_name || raw.email,
+    email: raw.email,
+    displayName: raw.display_name,
+    description: raw.description,
+    projectId: raw.project_id,
+    uniqueId: raw.unique_id,
+    disabled: raw.disabled,
   };
 }

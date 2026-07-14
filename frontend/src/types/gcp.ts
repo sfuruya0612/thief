@@ -81,3 +81,45 @@ export interface GcsObjectRow {
   updated: string;
   storageClass: string;
 }
+
+// ============================================================
+// IAM (プロジェクトの IAM ポリシーをメンバー単位に展開した 1 行)
+// ============================================================
+export interface IAMBindingRaw {
+  member: string;
+  role: string;
+  project_id: string;
+  condition_title: string;
+}
+
+export interface IAMBindingRow {
+  id: string;
+  name: string;
+  member: string;
+  role: string;
+  projectId: string;
+  conditionTitle: string;
+}
+
+// ============================================================
+// Service Account
+// ============================================================
+export interface ServiceAccountRaw {
+  email: string;
+  display_name: string;
+  description: string;
+  project_id: string;
+  unique_id: string;
+  disabled: boolean;
+}
+
+export interface ServiceAccountRow {
+  id: string;
+  name: string;
+  email: string;
+  displayName: string;
+  description: string;
+  projectId: string;
+  uniqueId: string;
+  disabled: boolean;
+}

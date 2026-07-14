@@ -3,11 +3,23 @@
 // 挙動が違うため、サービス単位で個別の分岐を書く。
 import { useEffect, useMemo, useState } from 'react';
 import { useGcpResources } from '../api/queries';
-import { cloudRunResourceFromRaw, gcsBucketFromRaw } from '../lib/normalizeGcp';
-import { cloudRunColumns, gcsBucketColumns } from '../components/tables/gcpColumns';
+import {
+  cloudRunResourceFromRaw,
+  gcsBucketFromRaw,
+  iamBindingFromRaw,
+  serviceAccountFromRaw,
+} from '../lib/normalizeGcp';
+import {
+  cloudRunColumns,
+  gcsBucketColumns,
+  iamBindingColumns,
+  serviceAccountColumns,
+} from '../components/tables/gcpColumns';
 import {
   cloudRunOverviewRows,
   gcsBucketOverviewRows,
+  iamBindingOverviewRows,
+  serviceAccountOverviewRows,
   type OverviewEntry,
 } from '../components/Drawer/overviewRows';
 import type { ColumnDef } from '../components/tables/columns';
@@ -19,6 +31,10 @@ import type {
   GcpProject,
   GcsBucketRaw,
   GcsBucketRow,
+  IAMBindingRaw,
+  IAMBindingRow,
+  ServiceAccountRaw,
+  ServiceAccountRow,
 } from '../types/gcp';
 import { GcpSidebar } from './GcpSidebar';
 import { FacetBar, type Filters } from '../components/FacetBar';
@@ -164,6 +180,30 @@ export function GcpView({
           normalizer={gcsBucketFromRaw}
           columns={gcsBucketColumns}
           overviewRows={gcsBucketOverviewRows}
+          drawerPos={drawerPos}
+          selectedId={selectedId}
+          onSelectId={setSelectedId}
+        />
+      )}
+      {activeService === 'gcpiam' && (
+        <GcpServicePanel<IAMBindingRaw, IAMBindingRow>
+          service="gcpiam"
+          projectId={activeProject}
+          normalizer={iamBindingFromRaw}
+          columns={iamBindingColumns}
+          overviewRows={iamBindingOverviewRows}
+          drawerPos={drawerPos}
+          selectedId={selectedId}
+          onSelectId={setSelectedId}
+        />
+      )}
+      {activeService === 'gcpserviceaccounts' && (
+        <GcpServicePanel<ServiceAccountRaw, ServiceAccountRow>
+          service="gcpserviceaccounts"
+          projectId={activeProject}
+          normalizer={serviceAccountFromRaw}
+          columns={serviceAccountColumns}
+          overviewRows={serviceAccountOverviewRows}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}

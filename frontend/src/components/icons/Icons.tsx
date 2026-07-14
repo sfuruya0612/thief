@@ -104,6 +104,29 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  gcpiam: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+        </>
+      }
+    />
+  ),
+  gcpserviceaccounts: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <circle cx="9" cy="12" r="2" />
+          <path d="M14 9h4M14 13h4M14 15h3" />
+        </>
+      }
+    />
+  ),
   elb: (p = {}) => (
     <Icon
       {...p}

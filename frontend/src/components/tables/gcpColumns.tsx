@@ -1,5 +1,11 @@
 // GCP サービス用の列定義
-import type { CloudRunResourceRow, GcsBucketRow, GcsObjectRow } from '../../types/gcp';
+import type {
+  CloudRunResourceRow,
+  GcsBucketRow,
+  GcsObjectRow,
+  IAMBindingRow,
+  ServiceAccountRow,
+} from '../../types/gcp';
 import type { ColumnDef } from './columns';
 import { formatBytes } from './columns';
 import { StatusBadge } from '../primitives';
@@ -108,5 +114,59 @@ export const gcsObjectColumns: ColumnDef<GcsObjectRow>[] = [
     header: 'Updated',
     width: '16%',
     cell: (r) => (r.updated ? <span style={mutedMono}>{r.updated}</span> : <Dash />),
+  },
+];
+
+// ============================================================
+// IAM (メンバー単位に展開したバインディング)
+// ============================================================
+export const iamBindingColumns: ColumnDef<IAMBindingRow>[] = [
+  {
+    key: 'member',
+    header: 'Member',
+    width: '38%',
+    cell: (r) => <span className="primary truncate">{r.member}</span>,
+  },
+  {
+    key: 'role',
+    header: 'Role',
+    width: '32%',
+    cell: (r) => <span style={mutedMono}>{r.role}</span>,
+  },
+  {
+    key: 'conditionTitle',
+    header: 'Condition',
+    width: '30%',
+    cell: (r) => (r.conditionTitle ? <span style={mutedMono}>{r.conditionTitle}</span> : <Dash />),
+  },
+];
+
+// ============================================================
+// Service Account
+// ============================================================
+export const serviceAccountColumns: ColumnDef<ServiceAccountRow>[] = [
+  {
+    key: 'email',
+    header: 'Email',
+    width: '36%',
+    cell: (r) => <span className="primary truncate">{r.email}</span>,
+  },
+  {
+    key: 'displayName',
+    header: 'Display name',
+    width: '24%',
+    cell: (r) => (r.displayName ? <span style={mutedMono}>{r.displayName}</span> : <Dash />),
+  },
+  {
+    key: 'disabled',
+    header: 'Status',
+    width: '14%',
+    cell: (r) => <StatusBadge state={r.disabled ? 'disabled' : 'enabled'} />,
+  },
+  {
+    key: 'description',
+    header: 'Description',
+    width: '26%',
+    cell: (r) => (r.description ? <span style={mutedMono}>{r.description}</span> : <Dash />),
   },
 ];
