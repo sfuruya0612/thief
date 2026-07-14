@@ -7,7 +7,6 @@ import (
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
 )
 
 // BucketInfo は Cloud Storage バケットの表示用メタデータ。
@@ -31,9 +30,13 @@ type ObjectInfo struct {
 
 // ListBuckets は指定プロジェクトの Cloud Storage バケット一覧を返す。
 func ListBuckets(ctx context.Context, projectID string) ([]BucketInfo, error) {
-	// WithQuotaProject を指定しない場合、ADC のデフォルト quota project がクオータ判定に
-	// 使われ、選択中の projectID と食い違ってしまうため常に明示する。
-	client, err := storage.NewClient(ctx, option.WithQuotaProject(projectID))
+	// storage.NewClient は内部で htransport.NewClient が生成した *http.Client を
+	// option.WithHTTPClient として自身の opts に追加してから raw.NewService を呼ぶため、
+	// 呼び出し側が option.WithQuotaProject を渡すと "WithHTTPClient is incompatible with
+	// QuotaProject" で失敗する (cloud.google.com/go/storage v1.57 以降で入った制約)。
+	// ListBuckets の課金/権限判定は API 呼び出し自体に渡す projectID で行われるため、
+	// クライアント生成時に quota project を指定する必要はない。
+	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create storage client: %w", err)
 	}
@@ -56,14 +59,14 @@ func ListBuckets(ctx context.Context, projectID string) ([]BucketInfo, error) {
 
 // ListObjects は指定バケット内のオブジェクトを prefix 絞り込みで列挙する。
 func ListObjects(ctx context.Context, projectID, bucket, prefix string) ([]ObjectInfo, error) {
-	client, err := storage.NewClient(ctx, option.WithQuotaProject(projectID))
+	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create storage client: %w", err)
 	}
 	defer client.Close()
 
 	var objects []ObjectInfo
-	it := client.Bucket(bucket).Objects(ctx, &storage.Query{Prefix: prefix})
+	it := client.Bucket(bucket).UserProject(projectID).Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {
@@ -98,12 +101,12 @@ func (r *ObjectReader) Close() error {
 
 // GetObject は指定バケット・オブジェクトのダウンロード用ストリームを開く。
 func GetObject(ctx context.Context, projectID, bucket, key string) (*ObjectReader, error) {
-	client, err := storage.NewClient(ctx, option.WithQuotaProject(projectID))
+	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create storage client: %w", err)
 	}
 
-	reader, err := client.Bucket(bucket).Object(key).NewReader(ctx)
+	reader, err := client.Bucket(bucket).UserProject(projectID).Object(key).NewReader(ctx)
 	if err != nil {
 		client.Close()
 		return nil, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
@@ -120,13 +123,13 @@ func GetObject(ctx context.Context, projectID, bucket, key string) (*ObjectReade
 
 // PutObject は body を Cloud Storage オブジェクトとして書き込む。
 func PutObject(ctx context.Context, projectID, bucket, key string, body io.Reader, contentType string) error {
-	client, err := storage.NewClient(ctx, option.WithQuotaProject(projectID))
+	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return fmt.Errorf("create storage client: %w", err)
 	}
 	defer client.Close()
 
-	writer := client.Bucket(bucket).Object(key).NewWriter(ctx)
+	writer := client.Bucket(bucket).UserProject(projectID).Object(key).NewWriter(ctx)
 	if contentType != "" {
 		writer.ContentType = contentType
 	}
