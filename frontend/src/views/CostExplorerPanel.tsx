@@ -8,6 +8,7 @@ import { Icons } from '../components/icons/Icons';
 import { Loading } from '../components/Loading';
 import { ApiError } from '../types/common';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { aggregateCost, type CostMetricType } from '../lib/costAggregate';
 
 export interface CostExplorerPanelProps {
@@ -106,6 +107,7 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
       </div>
 
       {ssoExpired && <SSOExpiredBanner profile={profile} />}
+      {!ssoExpired && error && <ErrorBanner error={error} />}
 
       <div className="stats" style={{ gridTemplateColumns: 'repeat(1, 1fr)' }}>
         <div className="stat">

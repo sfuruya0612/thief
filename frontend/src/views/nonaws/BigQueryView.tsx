@@ -5,6 +5,7 @@ import { useBQDatasets, useBQQuery, useBQSchema, useBQTables } from '../../api/q
 import { DataTable } from '../../components/DataTable';
 import { bqFieldColumns, bqTableColumns } from '../../components/tables/nonAwsColumns';
 import { Icons } from '../../components/icons/Icons';
+import { ErrorBanner } from '../../components/ErrorBanner';
 
 export interface BigQueryViewProps {
   projectId?: string;
@@ -15,10 +16,16 @@ export function BigQueryView({ projectId }: BigQueryViewProps = {}) {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [sql, setSql] = useState('SELECT 1');
 
-  const { data: datasets } = useBQDatasets(projectId);
-  const { data: tables } = useBQTables(selectedDataset ?? '', projectId);
-  const { data: fields } = useBQSchema(selectedDataset ?? '', selectedTable ?? '', projectId);
+  const { data: datasets, error: datasetsError } = useBQDatasets(projectId);
+  const { data: tables, error: tablesError } = useBQTables(selectedDataset ?? '', projectId);
+  const { data: fields, error: schemaError } = useBQSchema(
+    selectedDataset ?? '',
+    selectedTable ?? '',
+    projectId,
+  );
   const runQuery = useBQQuery();
+
+  const resourceError = datasetsError ?? tablesError ?? schemaError;
 
   return (
     <div className="main">
@@ -28,6 +35,8 @@ export function BigQueryView({ projectId }: BigQueryViewProps = {}) {
           <span className="subtitle">datasets & tables</span>
         </div>
       </div>
+
+      {resourceError && <ErrorBanner error={resourceError} />}
 
       <div className="query-box">
         <textarea value={sql} onChange={(e) => setSql(e.target.value)} spellCheck={false} />

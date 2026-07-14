@@ -1603,6 +1603,20 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   color: var(--err);
 }
 
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(235, 87, 87, 0.12);
+  border-bottom: 1px solid var(--line-1);
+  color: var(--err);
+  font-size: 12.5px;
+}
+.error-banner-text {
+  flex: 1;
+}
+
 .nonaws-cols {
   display: grid;
   grid-template-columns: 260px 1fr;

@@ -3,15 +3,17 @@ import { useState } from 'react';
 import { useDatadogEstimated, useDatadogHistorical } from '../../api/queries';
 import { DataTable } from '../../components/DataTable';
 import { datadogCostColumns } from '../../components/tables/nonAwsColumns';
+import { ErrorBanner } from '../../components/ErrorBanner';
 
 type Mode = 'historical' | 'estimated';
 
 export function DatadogView() {
   const [mode, setMode] = useState<Mode>('historical');
-  const { data: historical } = useDatadogHistorical();
-  const { data: estimated } = useDatadogEstimated();
+  const { data: historical, error: historicalError } = useDatadogHistorical();
+  const { data: estimated, error: estimatedError } = useDatadogEstimated();
 
   const rows = mode === 'historical' ? (historical ?? []) : (estimated ?? []);
+  const error = mode === 'historical' ? historicalError : estimatedError;
 
   return (
     <div className="main">
@@ -35,6 +37,8 @@ export function DatadogView() {
           </button>
         </div>
       </div>
+
+      {error && <ErrorBanner error={error} />}
 
       <DataTable rows={rows} columns={datadogCostColumns} onSelect={() => {}} selectedId={null} />
     </div>
