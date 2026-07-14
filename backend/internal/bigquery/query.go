@@ -55,12 +55,8 @@ func (c *Client) ExecuteQuery(ctx context.Context, sql string) (*QueryResult, er
 		return nil, fmt.Errorf("execute bigquery query: %w", err)
 	}
 
-	schema := it.Schema
-	colNames := make([]string, len(schema))
-	for i, f := range schema {
-		colNames[i] = f.Name
-	}
-
+	// it.Schema は Read 直後には空であり、最初の Next 呼び出し後に初めて確定する。
+	var colNames []string
 	var rows [][]string
 	for {
 		var rowMap map[string]bigquery.Value
@@ -69,6 +65,12 @@ func (c *Client) ExecuteQuery(ctx context.Context, sql string) (*QueryResult, er
 		} else if err != nil {
 			return nil, fmt.Errorf("iterate bigquery results: %w", err)
 		}
+		if colNames == nil {
+			colNames = make([]string, len(it.Schema))
+			for i, f := range it.Schema {
+				colNames[i] = f.Name
+			}
+		}
 		row := make([]string, len(colNames))
 		for i, col := range colNames {
 			if v, ok := rowMap[col]; ok && v != nil {
@@ -76,6 +78,14 @@ func (c *Client) ExecuteQuery(ctx context.Context, sql string) (*QueryResult, er
 			}
 		}
 		rows = append(rows, row)
+	}
+
+	// 結果 0 件の場合、ループ内で Schema を確定できないため Read 完了後の値で補う。
+	if colNames == nil {
+		colNames = make([]string, len(it.Schema))
+		for i, f := range it.Schema {
+			colNames[i] = f.Name
+		}
 	}
 
 	return &QueryResult{Columns: colNames, Rows: rows}, nil
