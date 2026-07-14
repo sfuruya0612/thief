@@ -3,7 +3,7 @@ import type {
   CloudRunResourceRow,
   GcsBucketRow,
   GcsObjectRow,
-  IAMBindingRow,
+  IAMMemberRow,
   ServiceAccountRow,
 } from '../../types/gcp';
 import type { ColumnDef } from './columns';
@@ -118,9 +118,9 @@ export const gcsObjectColumns: ColumnDef<GcsObjectRow>[] = [
 ];
 
 // ============================================================
-// IAM (メンバー単位に展開したバインディング)
+// IAM (メンバー単位に集約し、複数ロールは 1 セル内に並べて表示する)
 // ============================================================
-export const iamBindingColumns: ColumnDef<IAMBindingRow>[] = [
+export const iamMemberColumns: ColumnDef<IAMMemberRow>[] = [
   {
     key: 'member',
     header: 'Member',
@@ -128,16 +128,25 @@ export const iamBindingColumns: ColumnDef<IAMBindingRow>[] = [
     cell: (r) => <span className="primary truncate">{r.member}</span>,
   },
   {
-    key: 'role',
-    header: 'Role',
-    width: '32%',
-    cell: (r) => <span style={mutedMono}>{r.role}</span>,
+    key: 'roles',
+    header: 'Roles',
+    width: '52%',
+    cell: (r) => (
+      <span className="tag-list">
+        {r.roles.map((role) => (
+          <span key={role} className="tag">
+            <span className="v">{role}</span>
+          </span>
+        ))}
+      </span>
+    ),
   },
   {
-    key: 'conditionTitle',
-    header: 'Condition',
-    width: '30%',
-    cell: (r) => (r.conditionTitle ? <span style={mutedMono}>{r.conditionTitle}</span> : <Dash />),
+    key: 'roleCount',
+    header: 'Count',
+    width: '10%',
+    align: 'right',
+    cell: (r) => <span style={mutedMono}>{r.roles.length}</span>,
   },
 ];
 
