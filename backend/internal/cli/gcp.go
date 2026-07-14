@@ -68,7 +68,33 @@ func newGCPCmd() *cobra.Command {
 	objectsCmd.Flags().String("prefix", "", "Object name prefix filter")
 	gcsCmd.AddCommand(objectsCmd)
 
-	cmd.AddCommand(projectsCmd, runCmd, gcsCmd)
+	// iam サブコマンド
+	iamCmd := &cobra.Command{
+		Use:   "iam",
+		Short: "IAM operations",
+	}
+	iamCmd.AddCommand(&cobra.Command{
+		Use:   "ls",
+		Short: "List IAM policy bindings (flattened per member)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gcpRunIAMBindings(cmd)
+		},
+	})
+
+	// serviceaccounts サブコマンド
+	serviceAccountsCmd := &cobra.Command{
+		Use:   "serviceaccounts",
+		Short: "Service Account operations",
+	}
+	serviceAccountsCmd.AddCommand(&cobra.Command{
+		Use:   "ls",
+		Short: "List service accounts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gcpRunServiceAccounts(cmd)
+		},
+	})
+
+	cmd.AddCommand(projectsCmd, runCmd, gcsCmd, iamCmd, serviceAccountsCmd)
 	return cmd
 }
 
@@ -180,6 +206,68 @@ func gcpRunBuckets(cmd *cobra.Command) error {
 		{Header: "StorageClass"},
 		{Header: "CreateTime"},
 		{Header: "UpdateTime"},
+	}
+	f := util.NewTableFormatter(cols, cfg.Output)
+	if !cfg.NoHeader {
+		f.PrintHeader()
+	}
+	f.PrintRows(rows)
+	return nil
+}
+
+func gcpRunIAMBindings(cmd *cobra.Command) error {
+	projectID, err := gcpRequireProjectID(cmd)
+	if err != nil {
+		return err
+	}
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	bindings, err := gcp.ListIAMBindings(context.Background(), projectID)
+	if err != nil {
+		return err
+	}
+	rows := make([][]string, len(bindings))
+	for i, b := range bindings {
+		rows[i] = []string{b.Member, b.Role, b.ProjectID, b.ConditionTitle}
+	}
+	cols := []util.Column{
+		{Header: "Member"},
+		{Header: "Role"},
+		{Header: "ProjectID"},
+		{Header: "ConditionTitle"},
+	}
+	f := util.NewTableFormatter(cols, cfg.Output)
+	if !cfg.NoHeader {
+		f.PrintHeader()
+	}
+	f.PrintRows(rows)
+	return nil
+}
+
+func gcpRunServiceAccounts(cmd *cobra.Command) error {
+	projectID, err := gcpRequireProjectID(cmd)
+	if err != nil {
+		return err
+	}
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	accounts, err := gcp.ListServiceAccounts(context.Background(), projectID)
+	if err != nil {
+		return err
+	}
+	rows := make([][]string, len(accounts))
+	for i, a := range accounts {
+		rows[i] = []string{a.Email, a.DisplayName, a.Description, fmt.Sprintf("%t", a.Disabled)}
+	}
+	cols := []util.Column{
+		{Header: "Email"},
+		{Header: "DisplayName"},
+		{Header: "Description"},
+		{Header: "Disabled"},
 	}
 	f := util.NewTableFormatter(cols, cfg.Output)
 	if !cfg.NoHeader {

@@ -20,7 +20,12 @@ import type {
   SSMParamRow,
   WAFRow,
 } from '../../types/aws';
-import type { CloudRunResourceRow, GcsBucketRow } from '../../types/gcp';
+import type {
+  CloudRunResourceRow,
+  GcsBucketRow,
+  IAMBindingRow,
+  ServiceAccountRow,
+} from '../../types/gcp';
 import { formatBytes } from '../tables/columns';
 
 export type OverviewEntry = [string, ReactNode];
@@ -253,5 +258,25 @@ export function gcsBucketOverviewRows(r: GcsBucketRow): OverviewEntry[] {
     ['Location', r.location],
     ['Storage class', r.storageClass],
     ['Created', r.createTime || dash],
+  ];
+}
+
+export function iamBindingOverviewRows(r: IAMBindingRow): OverviewEntry[] {
+  return [
+    ['Member', r.member],
+    ['Role', r.role],
+    ['Project', r.projectId],
+    ['Condition', r.conditionTitle || dash],
+  ];
+}
+
+export function serviceAccountOverviewRows(r: ServiceAccountRow): OverviewEntry[] {
+  return [
+    ['Email', r.email],
+    ['Display name', r.displayName || dash],
+    ['Description', r.description || dash],
+    ['Project', r.projectId],
+    ['Unique ID', r.uniqueId],
+    ['Status', r.disabled ? 'disabled' : 'enabled'],
   ];
 }

@@ -18,6 +18,7 @@ interface SidebarSection {
 const SECTIONS: SidebarSection[] = [
   { label: 'Compute', services: ['cloudrun'] },
   { label: 'Data', services: ['bigquery', 'gcs'] },
+  { label: 'Security', services: ['gcpiam', 'gcpserviceaccounts'] },
 ];
 
 const SIDEBAR_MIN_WIDTH = 160;

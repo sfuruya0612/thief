@@ -76,6 +76,20 @@ export const GCP_SERVICES: ServiceMeta[] = [
     group: 'data',
   },
   { key: 'gcs', name: 'Cloud Storage', sub: 'Buckets', color: 'var(--svc-gcs)', group: 'data' },
+  {
+    key: 'gcpiam',
+    name: 'IAM',
+    sub: 'Bindings',
+    color: 'var(--svc-gcpiam)',
+    group: 'security',
+  },
+  {
+    key: 'gcpserviceaccounts',
+    name: 'Service Accounts',
+    sub: 'Accounts',
+    color: 'var(--svc-gcpserviceaccounts)',
+    group: 'security',
+  },
 ];
 
 // GCP サービスキー → バックエンド URL パスセグメント
@@ -83,6 +97,8 @@ export const GCP_SERVICES: ServiceMeta[] = [
 export const GCP_SERVICE_TO_PATH: Record<string, string> = {
   cloudrun: 'cloudrun',
   gcs: 'gcs',
+  gcpiam: 'iam',
+  gcpserviceaccounts: 'serviceaccounts',
 };
 
 // サービスキー → バックエンド URL パスセグメント
