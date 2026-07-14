@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   cloudRunResourceFromRaw,
   gcpProjectFromRaw,
+  groupIAMBindingsByMember,
   gcsBucketFromRaw,
   gcsObjectFromRaw,
 } from './normalizeGcp';
+import type { IAMBindingRow } from '../types/gcp';
 
 describe('gcpProjectFromRaw', () => {
   it('project_id / project_number / create_time を camelCase に変換する', () => {
@@ -74,6 +76,67 @@ describe('gcsBucketFromRaw', () => {
     expect(row.location).toBe('ASIA-NORTHEAST1');
     expect(row.storageClass).toBe('STANDARD');
     expect(row.createTime).toBe('2024-01-01T00:00:00Z');
+  });
+});
+
+describe('groupIAMBindingsByMember', () => {
+  function binding(overrides: Partial<IAMBindingRow>): IAMBindingRow {
+    return {
+      id: `${overrides.member}/${overrides.role}`,
+      name: overrides.member ?? '',
+      member: '',
+      role: '',
+      projectId: 'p-1',
+      conditionTitle: '',
+      ...overrides,
+    };
+  }
+
+  it('同じメンバーの複数バインディングを 1 行にまとめ、roles に全ロールを並べる', () => {
+    const bindings = [
+      binding({ member: 'user:alice@example.com', role: 'roles/storage.objectCreator' }),
+      binding({ member: 'user:alice@example.com', role: 'roles/bigquery.dataViewer' }),
+      binding({ member: 'user:bob@example.com', role: 'roles/viewer' }),
+    ];
+
+    const rows = groupIAMBindingsByMember(bindings);
+
+    expect(rows).toEqual([
+      {
+        id: 'user:alice@example.com',
+        name: 'user:alice@example.com',
+        member: 'user:alice@example.com',
+        roles: ['roles/storage.objectCreator', 'roles/bigquery.dataViewer'],
+        projectId: 'p-1',
+      },
+      {
+        id: 'user:bob@example.com',
+        name: 'user:bob@example.com',
+        member: 'user:bob@example.com',
+        roles: ['roles/viewer'],
+        projectId: 'p-1',
+      },
+    ]);
+  });
+
+  it('同一メンバー・同一ロールの重複バインディングは 1 つに統合する', () => {
+    const bindings = [
+      binding({ member: 'user:alice@example.com', role: 'roles/viewer' }),
+      binding({
+        member: 'user:alice@example.com',
+        role: 'roles/viewer',
+        conditionTitle: 'expires',
+      }),
+    ];
+
+    const rows = groupIAMBindingsByMember(bindings);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].roles).toEqual(['roles/viewer']);
+  });
+
+  it('入力が空なら空配列を返す', () => {
+    expect(groupIAMBindingsByMember([])).toEqual([]);
   });
 });
 

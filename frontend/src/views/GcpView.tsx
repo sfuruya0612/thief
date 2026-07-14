@@ -6,19 +6,20 @@ import { useGcpResources } from '../api/queries';
 import {
   cloudRunResourceFromRaw,
   gcsBucketFromRaw,
+  groupIAMBindingsByMember,
   iamBindingFromRaw,
   serviceAccountFromRaw,
 } from '../lib/normalizeGcp';
 import {
   cloudRunColumns,
   gcsBucketColumns,
-  iamBindingColumns,
+  iamMemberColumns,
   serviceAccountColumns,
 } from '../components/tables/gcpColumns';
 import {
   cloudRunOverviewRows,
   gcsBucketOverviewRows,
-  iamBindingOverviewRows,
+  iamMemberOverviewRows,
   serviceAccountOverviewRows,
   type OverviewEntry,
 } from '../components/Drawer/overviewRows';
@@ -33,6 +34,7 @@ import type {
   GcsBucketRow,
   IAMBindingRaw,
   IAMBindingRow,
+  IAMMemberRow,
   ServiceAccountRaw,
   ServiceAccountRow,
 } from '../types/gcp';
@@ -42,10 +44,11 @@ import { DataTable } from '../components/DataTable';
 import { Drawer } from '../components/Drawer/Drawer';
 import { BigQueryView } from './nonaws/BigQueryView';
 
-interface GcpServicePanelProps<TRaw, TRow extends BaseRow> {
+interface GcpRowsPanelProps<TRow extends BaseRow> {
   service: string;
   projectId: string;
-  normalizer: (raw: TRaw) => TRow;
+  rows: TRow[];
+  isLoading: boolean;
   columns: ColumnDef<TRow>[];
   overviewRows: (row: TRow) => OverviewEntry[];
   drawerPos: DrawerPos;
@@ -53,26 +56,26 @@ interface GcpServicePanelProps<TRaw, TRow extends BaseRow> {
   onSelectId: (id: string | null) => void;
 }
 
-// 汎用 GCP サービスパネル: useGcpResources 呼び出し + Facet/Table/Drawer 描画
-function GcpServicePanel<TRaw, TRow extends BaseRow>({
+// GCP サービスパネルの表示部分 (Facet/Table/Drawer)。データ取得は呼び出し側の責務とし、
+// 取得後に加工 (IAM のメンバー単位集約等) が必要なサービスでも再利用できるようにする。
+function GcpRowsPanel<TRow extends BaseRow>({
   service,
   projectId,
-  normalizer,
+  rows,
+  isLoading,
   columns,
   overviewRows,
   drawerPos,
   selectedId,
   onSelectId,
-}: GcpServicePanelProps<TRaw, TRow>) {
-  const { data, isLoading } = useGcpResources<TRaw, TRow>(service, projectId, normalizer);
+}: GcpRowsPanelProps<TRow>) {
   const [filters, setFilters] = useState<Filters>({});
   const [search, setSearch] = useState('');
 
-  const allResources = data ?? [];
-  const selected = allResources.find((r) => r.id === selectedId) ?? null;
+  const selected = rows.find((r) => r.id === selectedId) ?? null;
 
   const filtered = useMemo(() => {
-    return allResources.filter((r) => {
+    return rows.filter((r) => {
       if (search) {
         const q = search.toLowerCase();
         const hay = `${r.name} ${r.id}`.toLowerCase();
@@ -82,7 +85,7 @@ function GcpServicePanel<TRaw, TRow extends BaseRow>({
       if (filters.state?.length && !filters.state.includes(r.state ?? '')) return false;
       return true;
     });
-  }, [allResources, filters, search]);
+  }, [rows, filters, search]);
 
   const svcMeta = GCP_SERVICES.find((s) => s.key === service);
 
@@ -96,7 +99,7 @@ function GcpServicePanel<TRaw, TRow extends BaseRow>({
       </div>
 
       <FacetBar
-        rows={allResources}
+        rows={rows}
         filters={filters}
         setFilters={setFilters}
         search={search}
@@ -121,6 +124,78 @@ function GcpServicePanel<TRaw, TRow extends BaseRow>({
         onClose={() => onSelectId(null)}
       />
     </div>
+  );
+}
+
+interface GcpServicePanelProps<TRaw, TRow extends BaseRow> {
+  service: string;
+  projectId: string;
+  normalizer: (raw: TRaw) => TRow;
+  columns: ColumnDef<TRow>[];
+  overviewRows: (row: TRow) => OverviewEntry[];
+  drawerPos: DrawerPos;
+  selectedId: string | null;
+  onSelectId: (id: string | null) => void;
+}
+
+// 汎用 GCP サービスパネル: useGcpResources 呼び出し + GcpRowsPanel 描画
+function GcpServicePanel<TRaw, TRow extends BaseRow>({
+  service,
+  projectId,
+  normalizer,
+  columns,
+  overviewRows,
+  drawerPos,
+  selectedId,
+  onSelectId,
+}: GcpServicePanelProps<TRaw, TRow>) {
+  const { data, isLoading } = useGcpResources<TRaw, TRow>(service, projectId, normalizer);
+
+  return (
+    <GcpRowsPanel<TRow>
+      service={service}
+      projectId={projectId}
+      rows={data ?? []}
+      isLoading={isLoading}
+      columns={columns}
+      overviewRows={overviewRows}
+      drawerPos={drawerPos}
+      selectedId={selectedId}
+      onSelectId={onSelectId}
+    />
+  );
+}
+
+interface GcpIAMPanelProps {
+  projectId: string;
+  drawerPos: DrawerPos;
+  selectedId: string | null;
+  onSelectId: (id: string | null) => void;
+}
+
+// IAM パネル専用: バインディング (1 メンバー x 1 ロール) をメンバー単位に集約してから表示する。
+// 同じメンバーに複数ロールが付いている場合、一覧では 1 行にまとめてロールを列挙する。
+function GcpIAMPanel({ projectId, drawerPos, selectedId, onSelectId }: GcpIAMPanelProps) {
+  const { data, isLoading } = useGcpResources<IAMBindingRaw, IAMBindingRow>(
+    'gcpiam',
+    projectId,
+    iamBindingFromRaw,
+  );
+
+  const memberRows = useMemo(() => groupIAMBindingsByMember(data ?? []), [data]);
+
+  return (
+    <GcpRowsPanel<IAMMemberRow>
+      service="gcpiam"
+      projectId={projectId}
+      rows={memberRows}
+      isLoading={isLoading}
+      columns={iamMemberColumns}
+      overviewRows={iamMemberOverviewRows}
+      drawerPos={drawerPos}
+      selectedId={selectedId}
+      onSelectId={onSelectId}
+    />
   );
 }
 
@@ -186,12 +261,8 @@ export function GcpView({
         />
       )}
       {activeService === 'gcpiam' && (
-        <GcpServicePanel<IAMBindingRaw, IAMBindingRow>
-          service="gcpiam"
+        <GcpIAMPanel
           projectId={activeProject}
-          normalizer={iamBindingFromRaw}
-          columns={iamBindingColumns}
-          overviewRows={iamBindingOverviewRows}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}

@@ -101,6 +101,16 @@ export interface IAMBindingRow {
   conditionTitle: string;
 }
 
+// メンバー単位に IAMBindingRow を集約した表示行。1 メンバーが複数ロールを持つ場合、
+// role には全ロールが含まれる (一覧では 1 メンバー = 1 行として表示する)。
+export interface IAMMemberRow {
+  id: string;
+  name: string;
+  member: string;
+  roles: string[];
+  projectId: string;
+}
+
 // ============================================================
 // Service Account
 // ============================================================

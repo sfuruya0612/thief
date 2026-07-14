@@ -23,7 +23,7 @@ import type {
 import type {
   CloudRunResourceRow,
   GcsBucketRow,
-  IAMBindingRow,
+  IAMMemberRow,
   ServiceAccountRow,
 } from '../../types/gcp';
 import { formatBytes } from '../tables/columns';
@@ -261,12 +261,12 @@ export function gcsBucketOverviewRows(r: GcsBucketRow): OverviewEntry[] {
   ];
 }
 
-export function iamBindingOverviewRows(r: IAMBindingRow): OverviewEntry[] {
+export function iamMemberOverviewRows(r: IAMMemberRow): OverviewEntry[] {
   return [
     ['Member', r.member],
-    ['Role', r.role],
     ['Project', r.projectId],
-    ['Condition', r.conditionTitle || dash],
+    ['Roles', r.roles.length],
+    ...r.roles.map((role, i): OverviewEntry => [`Role ${i + 1}`, role]),
   ];
 }
 
