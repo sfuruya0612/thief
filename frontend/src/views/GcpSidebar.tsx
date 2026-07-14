@@ -9,6 +9,7 @@ import type { GcpProject } from '../types/gcp';
 import { Icons } from '../components/icons/Icons';
 import { GcpIcons } from '../components/icons/GcpIcons';
 import { GcpProjectSelect } from '../components/GcpProjectSelect';
+import { useRefreshGcpProjects } from '../api/queries';
 
 interface SidebarSection {
   label: string;
@@ -41,6 +42,8 @@ export function GcpSidebar({
   onService,
   onWidthChange,
 }: GcpSidebarProps) {
+  const refreshProjects = useRefreshGcpProjects();
+
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     const move = (ev: PointerEvent) => {
@@ -64,7 +67,18 @@ export function GcpSidebar({
     <aside className="sidebar">
       <div className="profile-card">
         <div className="profile-card-field">
-          <span className="label">GOOGLE_CLOUD_PROJECT</span>
+          <span className="label">
+            GOOGLE_CLOUD_PROJECT
+            <button
+              className="btn sm ghost"
+              style={{ marginLeft: 6, padding: '1px 4px' }}
+              title="Refresh project list from Cloud Resource Manager"
+              disabled={refreshProjects.isPending}
+              onClick={() => refreshProjects.mutate()}
+            >
+              <Icons.refresh size={11} />
+            </button>
+          </span>
           <GcpProjectSelect
             project={project}
             projects={projects}

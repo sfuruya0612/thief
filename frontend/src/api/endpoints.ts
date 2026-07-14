@@ -368,9 +368,12 @@ export function getTiDBCost(month?: string): Promise<TiDBCostRaw[]> {
 // ============================================================
 // GCP
 // ============================================================
-// GCP プロジェクト一覧 (Cloud Resource Manager)
-export function getGcpProjects(): Promise<GcpProjectRaw[]> {
-  return apiGet<GcpProjectRaw[] | null>('/api/gcp/projects').then((v) => v ?? []);
+// GCP プロジェクト一覧。バックエンドはローカルディスクキャッシュ (~/.config/thief/gcp-projects.json)
+// を返す。refresh=true を渡すと Cloud Resource Manager から再取得しキャッシュを更新する (手動更新)。
+export function getGcpProjects(opts?: { refresh?: boolean }): Promise<GcpProjectRaw[]> {
+  return apiGet<GcpProjectRaw[] | null>('/api/gcp/projects', {
+    refresh: opts?.refresh ? true : undefined,
+  }).then((v) => v ?? []);
 }
 
 // service (cloudrun / gcs) 単位で GCP リソース一覧を取得する。

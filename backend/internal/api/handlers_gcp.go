@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/gcp"
 )
 
@@ -26,12 +27,30 @@ func (s *Server) gcpProjectIDFromQuery(w http.ResponseWriter, r *http.Request) (
 	return projectID, true
 }
 
-// handleGCPProjects は ADC で列挙可能な GCP プロジェクトを返す。
-// project_id 指定は不要 (全プロジェクト列挙のため)。変化が少ないため長期 TTL を用いる。
+// handleGCPProjects は GCP プロジェクト一覧を返す。project_id 指定は不要 (全プロジェクト列挙のため)。
+//
+// プロジェクトの作成/削除は頻繁ではないため、定期的な自動更新は行わない。ローカルディスク
+// (~/.config/thief/gcp-projects.json) に保存された一覧をそのまま返し、Cloud Resource Manager
+// への API 呼び出しは「ディスクにキャッシュが存在しない初回起動時」または「?refresh=true が
+// 明示された手動更新時」のみ行う。
 func (s *Server) handleGCPProjects(w http.ResponseWriter, r *http.Request) {
+	dir, err := config.Dir()
+	if err != nil {
+		writeInternalError(w, err.Error())
+		return
+	}
+
+	refresh := s.refresh(r)
 	key := cacheKey("gcp-projects")
-	entry, hit, err := s.resourceCache.Load(key, regionsCacheTTL, s.refresh(r), func() (any, error) {
-		return gcp.ListProjects(r.Context())
+	entry, hit, err := s.resourceCache.Load(key, regionsCacheTTL, refresh, func() (any, error) {
+		if !refresh {
+			if projects, _, ok, err := gcp.LoadProjectsFromDisk(dir); err != nil {
+				return nil, err
+			} else if ok {
+				return projects, nil
+			}
+		}
+		return gcp.RefreshProjectsOnDisk(r.Context(), dir)
 	})
 	if err != nil {
 		writeInternalError(w, err.Error())

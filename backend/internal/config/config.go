@@ -226,6 +226,20 @@ func configFilePaths() []string {
 	return paths
 }
 
+// Dir returns the directory used for thief's persistent local state
+// (config.yaml と同じ場所: $XDG_CONFIG_HOME/thief または ~/.config/thief)。
+// gcp プロジェクト一覧のローカルキャッシュ等、config.yaml 以外のファイルもここに置く。
+func Dir() (string, error) {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "thief"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("user home dir: %w", err)
+	}
+	return filepath.Join(home, ".config", "thief"), nil
+}
+
 func firstEnv(keys ...string) string {
 	for _, k := range keys {
 		if v := os.Getenv(k); v != "" {

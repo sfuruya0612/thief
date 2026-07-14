@@ -415,6 +415,17 @@ export function useGcpProjects() {
   });
 }
 
+// プロジェクト一覧の手動更新 (Cloud Resource Manager から再取得しローカルキャッシュを上書き)。
+export function useRefreshGcpProjects() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await getGcpProjects({ refresh: true })).map(gcpProjectFromRaw),
+    onSuccess: (projects) => {
+      queryClient.setQueryData(['gcp', 'projects'], projects);
+    },
+  });
+}
+
 // service (cloudrun / gcs) 単位で GCP リソースを取得する汎用フック。
 // AWS 側 useResources と対称の形。normalizer に渡す Raw 型は呼び出し側で確定させる。
 export function useGcpResources<TRaw, TRow extends BaseRow>(

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/gcp"
 	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
@@ -25,9 +26,16 @@ func newGCPCmd() *cobra.Command {
 	}
 	projectsCmd.AddCommand(&cobra.Command{
 		Use:   "ls",
-		Short: "List projects",
+		Short: "List projects (from local cache; run 'refresh' first if empty)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return gcpRunProjects(cmd)
+		},
+	})
+	projectsCmd.AddCommand(&cobra.Command{
+		Use:   "refresh",
+		Short: "Refresh the local project cache from Cloud Resource Manager",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gcpRunProjectsRefresh(cmd)
 		},
 	})
 
@@ -122,15 +130,50 @@ func gcpRequireProjectID(cmd *cobra.Command) (string, error) {
 	return projectID, nil
 }
 
+// gcpRunProjects はローカルキャッシュ (~/.config/thief/gcp-projects.json) からプロジェクト
+// 一覧を表示する。プロジェクトの作成/削除は頻繁ではないため API を毎回呼ばない。
+// キャッシュが無い場合は自動で 1 回だけ Cloud Resource Manager から取得しキャッシュを作る。
 func gcpRunProjects(cmd *cobra.Command) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	projects, err := gcp.ListProjects(context.Background())
+	dir, err := config.Dir()
 	if err != nil {
 		return err
 	}
+	projects, _, ok, err := gcp.LoadProjectsFromDisk(dir)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		projects, err = gcp.RefreshProjectsOnDisk(context.Background(), dir)
+		if err != nil {
+			return err
+		}
+	}
+	return printGCPProjects(cfg, projects)
+}
+
+// gcpRunProjectsRefresh は Cloud Resource Manager から最新のプロジェクト一覧を取得し、
+// ローカルキャッシュを上書きする (手動更新)。
+func gcpRunProjectsRefresh(cmd *cobra.Command) error {
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	dir, err := config.Dir()
+	if err != nil {
+		return err
+	}
+	projects, err := gcp.RefreshProjectsOnDisk(context.Background(), dir)
+	if err != nil {
+		return err
+	}
+	return printGCPProjects(cfg, projects)
+}
+
+func printGCPProjects(cfg *config.Config, projects []gcp.ProjectInfo) error {
 	rows := make([][]string, len(projects))
 	for i, p := range projects {
 		rows[i] = []string{p.ProjectID, p.Name, fmt.Sprintf("%d", p.ProjectNumber), p.State, p.CreateTime}
