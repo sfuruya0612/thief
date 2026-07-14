@@ -74,6 +74,7 @@ import { StatsRow } from '../components/StatsRow';
 import { FacetBar, type Filters } from '../components/FacetBar';
 import { DataTable } from '../components/DataTable';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { CostExplorerPanel } from './CostExplorerPanel';
 
 interface ServicePanelProps<TRaw, TRow extends BaseRow> {
@@ -140,6 +141,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
       </div>
 
       {ssoExpired && <SSOExpiredBanner profile={profile} />}
+      {!ssoExpired && error && <ErrorBanner error={error} />}
 
       <StatsRow resources={allResources} service={service} cost={cost ?? []} />
 

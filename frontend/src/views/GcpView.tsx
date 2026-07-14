@@ -42,6 +42,7 @@ import { GcpSidebar } from './GcpSidebar';
 import { FacetBar, type Filters } from '../components/FacetBar';
 import { DataTable } from '../components/DataTable';
 import { Drawer } from '../components/Drawer/Drawer';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { BigQueryView } from './nonaws/BigQueryView';
 
 interface GcpRowsPanelProps<TRow extends BaseRow> {
@@ -49,6 +50,7 @@ interface GcpRowsPanelProps<TRow extends BaseRow> {
   projectId: string;
   rows: TRow[];
   isLoading: boolean;
+  error?: unknown;
   columns: ColumnDef<TRow>[];
   overviewRows: (row: TRow) => OverviewEntry[];
   drawerPos: DrawerPos;
@@ -63,6 +65,7 @@ function GcpRowsPanel<TRow extends BaseRow>({
   projectId,
   rows,
   isLoading,
+  error,
   columns,
   overviewRows,
   drawerPos,
@@ -97,6 +100,8 @@ function GcpRowsPanel<TRow extends BaseRow>({
           <span className="subtitle">{svcMeta?.sub.toLowerCase()}</span>
         </div>
       </div>
+
+      {Boolean(error) && <ErrorBanner error={error} />}
 
       <FacetBar
         rows={rows}
@@ -149,7 +154,7 @@ function GcpServicePanel<TRaw, TRow extends BaseRow>({
   selectedId,
   onSelectId,
 }: GcpServicePanelProps<TRaw, TRow>) {
-  const { data, isLoading } = useGcpResources<TRaw, TRow>(service, projectId, normalizer);
+  const { data, isLoading, error } = useGcpResources<TRaw, TRow>(service, projectId, normalizer);
 
   return (
     <GcpRowsPanel<TRow>
@@ -157,6 +162,7 @@ function GcpServicePanel<TRaw, TRow extends BaseRow>({
       projectId={projectId}
       rows={data ?? []}
       isLoading={isLoading}
+      error={error}
       columns={columns}
       overviewRows={overviewRows}
       drawerPos={drawerPos}
@@ -176,7 +182,7 @@ interface GcpIAMPanelProps {
 // IAM パネル専用: バインディング (1 メンバー x 1 ロール) をメンバー単位に集約してから表示する。
 // 同じメンバーに複数ロールが付いている場合、一覧では 1 行にまとめてロールを列挙する。
 function GcpIAMPanel({ projectId, drawerPos, selectedId, onSelectId }: GcpIAMPanelProps) {
-  const { data, isLoading } = useGcpResources<IAMBindingRaw, IAMBindingRow>(
+  const { data, isLoading, error } = useGcpResources<IAMBindingRaw, IAMBindingRow>(
     'gcpiam',
     projectId,
     iamBindingFromRaw,
@@ -190,6 +196,7 @@ function GcpIAMPanel({ projectId, drawerPos, selectedId, onSelectId }: GcpIAMPan
       projectId={projectId}
       rows={memberRows}
       isLoading={isLoading}
+      error={error}
       columns={iamMemberColumns}
       overviewRows={iamMemberOverviewRows}
       drawerPos={drawerPos}

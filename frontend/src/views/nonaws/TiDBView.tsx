@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTiDBClusters, useTiDBCost, useTiDBProjects } from '../../api/queries';
 import { DataTable } from '../../components/DataTable';
 import { tidbClusterColumns, tidbCostColumns } from '../../components/tables/nonAwsColumns';
+import { ErrorBanner } from '../../components/ErrorBanner';
 
 type Tab = 'clusters' | 'cost';
 
@@ -10,9 +11,11 @@ export function TiDBView() {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('clusters');
 
-  const { data: projects } = useTiDBProjects();
-  const { data: clusters } = useTiDBClusters(selectedProject ?? '');
-  const { data: cost } = useTiDBCost();
+  const { data: projects, error: projectsError } = useTiDBProjects();
+  const { data: clusters, error: clustersError } = useTiDBClusters(selectedProject ?? '');
+  const { data: cost, error: costError } = useTiDBCost();
+
+  const error = tab === 'cost' ? costError : (projectsError ?? clustersError);
 
   return (
     <div className="main">
@@ -30,6 +33,8 @@ export function TiDBView() {
           </button>
         </div>
       </div>
+
+      {error && <ErrorBanner error={error} />}
 
       {tab === 'cost' ? (
         <DataTable

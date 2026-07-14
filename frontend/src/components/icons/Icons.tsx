@@ -352,4 +352,15 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  alertTriangle: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <path d="M12 3l9 16H3z" />
+          <path d="M12 10v4M12 17.5v.01" />
+        </>
+      }
+    />
+  ),
 };
