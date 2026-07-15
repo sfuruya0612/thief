@@ -341,10 +341,12 @@ export function getDatadogHistorical(
 export function getDatadogEstimated(
   startMonth?: string,
   endMonth?: string,
+  view?: string,
 ): Promise<DatadogCostRaw[]> {
   return apiGet<DatadogCostRaw[] | null>('/api/datadog/cost/estimated', {
     start_month: startMonth,
     end_month: endMonth,
+    view,
   }).then((v) => v ?? []);
 }
 
