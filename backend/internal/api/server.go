@@ -24,7 +24,6 @@ const regionsCacheTTL = 24 * time.Hour
 type Server struct {
 	cfg           *config.Config
 	bq            *bqclient.Client
-	ddV1          *ddclient.UsageMeteringV1API
 	ddV2          *ddclient.UsageMeteringV2API
 	ddCtx         context.Context
 	tidb          *tidbclient.Client
@@ -51,7 +50,6 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 
 	// Datadog
 	ddCfg := ddclient.NewConfiguration(cfg.Datadog.Site)
-	s.ddV1 = ddclient.NewUsageMeteringV1API(ddCfg)
 	s.ddV2 = ddclient.NewUsageMeteringV2API(ddCfg)
 	s.ddCtx = ddclient.NewContext(ctx, cfg.DatadogAPIKey(), cfg.DatadogAppKey())
 

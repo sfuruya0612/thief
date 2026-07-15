@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 )
 
@@ -22,17 +21,6 @@ func NewContext(ctx context.Context, apiKey, appKey string) context.Context {
 		"appKeyAuth": {Key: appKey},
 	})
 	return ctx
-}
-
-// UsageMeteringV1API wraps the Datadog v1 usage metering API.
-type UsageMeteringV1API struct {
-	api *datadogV1.UsageMeteringApi
-}
-
-// NewUsageMeteringV1API creates a new UsageMeteringV1API.
-func NewUsageMeteringV1API(cfg *datadog.Configuration) *UsageMeteringV1API {
-	client := datadog.NewAPIClient(cfg)
-	return &UsageMeteringV1API{api: datadogV1.NewUsageMeteringApi(client)}
 }
 
 // UsageMeteringV2API wraps the Datadog v2 usage metering API.

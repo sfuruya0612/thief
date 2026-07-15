@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 )
 
@@ -59,13 +58,14 @@ func GetHistoricalCost(ctx context.Context, api *UsageMeteringV2API, startMonth,
 	return result, nil
 }
 
-// GetEstimatedCost returns estimated cost data.
-func GetEstimatedCost(ctx context.Context, api *UsageMeteringV1API, startMonth, endMonth string) ([]CostInfo, error) {
+// GetEstimatedCost returns estimated cost data for the current and/or previous
+// month (Datadog only exposes estimated cost for those two months).
+func GetEstimatedCost(ctx context.Context, api *UsageMeteringV2API, startMonth, endMonth, view string) ([]CostInfo, error) {
 	start, err := parseMonth(startMonth)
 	if err != nil {
 		return nil, fmt.Errorf("parse start_month: %w", err)
 	}
-	params := datadogV1.GetUsageSummaryOptionalParameters{}
+	params := datadogV2.GetEstimatedCostByOrgOptionalParameters{StartMonth: &start}
 	if endMonth != "" {
 		end, err := parseMonth(endMonth)
 		if err != nil {
@@ -73,17 +73,28 @@ func GetEstimatedCost(ctx context.Context, api *UsageMeteringV1API, startMonth, 
 		}
 		params.EndMonth = &end
 	}
+	if view != "" {
+		params.View = &view
+	}
 
-	resp, _, err := api.api.GetUsageSummary(ctx, start, params)
+	resp, _, err := api.api.GetEstimatedCostByOrg(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("get datadog estimated cost: %w", err)
 	}
 
 	result := []CostInfo{}
-	for _, usage := range resp.GetUsage() {
-		result = append(result, CostInfo{
-			Month: usage.GetDate().Format("2006-01"),
-		})
+	for _, item := range resp.GetData() {
+		attrs := item.GetAttributes()
+		for _, charge := range attrs.GetCharges() {
+			result = append(result, CostInfo{
+				Month:       attrs.GetDate().Format("2006-01"),
+				AccountName: attrs.GetAccountName(),
+				OrgName:     attrs.GetOrgName(),
+				ProductName: charge.GetProductName(),
+				ChargeType:  charge.GetChargeType(),
+				Cost:        charge.GetCost(),
+			})
+		}
 	}
 	return result, nil
 }
