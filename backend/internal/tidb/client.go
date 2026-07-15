@@ -12,12 +12,17 @@ import (
 	"time"
 )
 
-const baseURL = "https://api.tidbcloud.com"
+const (
+	defaultBaseURL    = "https://api.tidbcloud.com"
+	defaultBillingURL = "https://billing.tidbapi.com"
+)
 
 // Client is a TiDB Cloud API client with Digest Authentication.
 type Client struct {
 	publicKey  string
 	privateKey string
+	baseURL    string
+	billingURL string
 	http       *http.Client
 }
 
@@ -26,14 +31,24 @@ func NewClient(publicKey, privateKey string) *Client {
 	return &Client{
 		publicKey:  publicKey,
 		privateKey: privateKey,
+		baseURL:    defaultBaseURL,
+		billingURL: defaultBillingURL,
 		http:       &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 // Get performs an authenticated GET request to the TiDB Cloud API.
 func (c *Client) Get(endpoint string) (*http.Response, error) {
-	url := baseURL + endpoint
+	return c.get(c.baseURL + endpoint)
+}
 
+// getBilling performs an authenticated GET request to the TiDB Cloud billing API,
+// which is served from a separate host from the main v1beta API.
+func (c *Client) getBilling(endpoint string) (*http.Response, error) {
+	return c.get(c.billingURL + endpoint)
+}
+
+func (c *Client) get(url string) (*http.Response, error) {
 	// First request to get the WWW-Authenticate challenge.
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {

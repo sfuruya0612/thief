@@ -32,10 +32,19 @@ func (s *Server) handleTiDBClusters(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTiDBCost(w http.ResponseWriter, r *http.Request) {
-	month := r.URL.Query().Get("month")
-	key := cacheKey("tidb-cost", month)
+	q := r.URL.Query()
+	start := q.Get("start")
+	end := q.Get("end")
+	if start == "" && end == "" {
+		// 後方互換: month のみ指定された単月クエリ。
+		if month := q.Get("month"); month != "" {
+			start, end = month, month
+		}
+	}
+
+	key := cacheKey("tidb-cost", start, end)
 	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
-		return s.tidb.GetCost(month)
+		return s.tidb.GetCostRange(start, end)
 	})
 	if err != nil {
 		writeInternalError(w, err.Error())
