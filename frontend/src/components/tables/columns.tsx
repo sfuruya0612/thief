@@ -124,38 +124,44 @@ export const rdsColumns: ColumnDef<RDSRow>[] = [
   {
     key: 'name',
     header: 'Identifier',
-    width: '16%',
+    width: '14%',
     cell: (r) => <span className="primary truncate">{r.name}</span>,
   },
-  { key: 'state', header: 'State', width: '9%', cell: (r) => <StatusBadge state={r.state} /> },
+  { key: 'state', header: 'State', width: '8%', cell: (r) => <StatusBadge state={r.state} /> },
   {
     key: 'engine',
     header: 'Engine',
-    width: '13%',
+    width: '10%',
     cell: (r) => <span style={mutedMono}>{r.engine}</span>,
+  },
+  {
+    key: 'engineVersion',
+    header: 'Engine Version',
+    width: '11%',
+    cell: (r) => <span style={mutedMono}>{r.engineVersion}</span>,
   },
   {
     key: 'class',
     header: 'Class',
-    width: '11%',
+    width: '10%',
     cell: (r) => <span style={monoStyle}>{r.class}</span>,
   },
   {
     key: 'region',
     header: 'Region',
-    width: '11%',
+    width: '10%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
   },
   {
     key: 'multiAz',
     header: 'MultiAZ',
-    width: '7%',
+    width: '6%',
     cell: (r) => (r.multiAz ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />),
   },
   {
     key: 'endpoint',
     header: 'Endpoint',
-    width: '20%',
+    width: '18%',
     cell: (r) => (
       <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
         {r.endpoint}
