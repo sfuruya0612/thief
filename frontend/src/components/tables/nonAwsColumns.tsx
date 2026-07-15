@@ -4,7 +4,6 @@ import type {
   BQDatasetRow,
   BQFieldRow,
   BQTableRow,
-  DatadogCostRow,
   TiDBClusterRow,
   TiDBProjectRow,
 } from '../../types/nonaws';
@@ -123,53 +122,6 @@ export const bqFieldColumns: ColumnDef<BQFieldRow>[] = [
     header: 'Description',
     width: '36%',
     cell: (r) => (r.description ? <span className="truncate">{r.description}</span> : <Dash />),
-  },
-];
-
-// ============================================================
-// Datadog
-// ============================================================
-export const datadogCostColumns: ColumnDef<DatadogCostRow>[] = [
-  {
-    key: 'month',
-    header: 'Month',
-    width: '12%',
-    cell: (r) => <span style={mutedMono}>{r.month}</span>,
-  },
-  {
-    key: 'orgName',
-    header: 'Org',
-    width: '18%',
-    cell: (r) => <span className="truncate">{r.orgName}</span>,
-  },
-  {
-    key: 'accountName',
-    header: 'Account',
-    width: '18%',
-    cell: (r) => <span className="truncate">{r.accountName}</span>,
-  },
-  {
-    key: 'productName',
-    header: 'Product',
-    width: '20%',
-    cell: (r) => <span className="truncate">{r.productName}</span>,
-  },
-  {
-    key: 'chargeType',
-    header: 'Charge type',
-    width: '16%',
-    cell: (r) => <span style={mutedMono}>{r.chargeType}</span>,
-  },
-  {
-    key: 'cost',
-    header: 'Cost',
-    width: '16%',
-    align: 'right',
-    cell: (r) => (
-      <span style={monoStyle}>
-        ${r.cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-      </span>
-    ),
   },
 ];
 
