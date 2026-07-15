@@ -58,6 +58,7 @@ import {
   getTiDBProjects,
   postBQQuery,
   postSSOLogin,
+  type TiDBCostQueryOptions,
   uploadGcsObject,
   uploadS3Object,
 } from './endpoints';
@@ -396,10 +397,10 @@ export function useTiDBClusters(projectId: string) {
   });
 }
 
-export function useTiDBCost(month?: string) {
+export function useTiDBCost(opts?: TiDBCostQueryOptions) {
   return useQuery({
-    queryKey: ['tidb', 'cost', month],
-    queryFn: async () => (await getTiDBCost(month)).map(tidbCostFromRaw),
+    queryKey: ['tidb', 'cost', opts?.start, opts?.end],
+    queryFn: async () => (await getTiDBCost(opts)).map(tidbCostFromRaw),
     staleTime: 60_000,
   });
 }

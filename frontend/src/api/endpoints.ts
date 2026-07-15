@@ -361,8 +361,18 @@ export function getTiDBClusters(projectId: string): Promise<TiDBClusterRaw[]> {
   ).then((v) => v ?? []);
 }
 
-export function getTiDBCost(month?: string): Promise<TiDBCostRaw[]> {
-  return apiGet<TiDBCostRaw[] | null>('/api/tidb/cost', { month }).then((v) => v ?? []);
+// TiDB Cloud の billing API は月単位でしか取得できないため、start/end (YYYY-MM) で
+// 期間を指定するとバックエンドが月ごとに集約して返す。
+export interface TiDBCostQueryOptions {
+  start?: string;
+  end?: string;
+}
+
+export function getTiDBCost(opts?: TiDBCostQueryOptions): Promise<TiDBCostRaw[]> {
+  return apiGet<TiDBCostRaw[] | null>('/api/tidb/cost', {
+    start: opts?.start,
+    end: opts?.end,
+  }).then((v) => v ?? []);
 }
 
 // ============================================================

@@ -6,7 +6,6 @@ import type {
   BQTableRow,
   DatadogCostRow,
   TiDBClusterRow,
-  TiDBCostRow,
   TiDBProjectRow,
 } from '../../types/nonaws';
 import type { ColumnDef } from './columns';
@@ -243,58 +242,5 @@ export const tidbClusterColumns: ColumnDef<TiDBClusterRow>[] = [
     header: 'Created',
     width: '18%',
     cell: (r) => (r.createdAt ? <span style={mutedMono}>{r.createdAt}</span> : <Dash />),
-  },
-];
-
-function money(v: number): string {
-  return `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-
-export const tidbCostColumns: ColumnDef<TiDBCostRow>[] = [
-  {
-    key: 'billedDate',
-    header: 'Billed',
-    width: '14%',
-    cell: (r) => <span style={mutedMono}>{r.billedDate}</span>,
-  },
-  {
-    key: 'projectName',
-    header: 'Project',
-    width: '18%',
-    cell: (r) => (r.projectName ? <span className="truncate">{r.projectName}</span> : <Dash />),
-  },
-  {
-    key: 'clusterName',
-    header: 'Cluster',
-    width: '18%',
-    cell: (r) => (r.clusterName ? <span className="truncate">{r.clusterName}</span> : <Dash />),
-  },
-  {
-    key: 'servicePathName',
-    header: 'Service',
-    width: '16%',
-    cell: (r) =>
-      r.servicePathName ? <span style={mutedMono}>{r.servicePathName}</span> : <Dash />,
-  },
-  {
-    key: 'credits',
-    header: 'Credits',
-    width: '10%',
-    align: 'right',
-    cell: (r) => <span style={monoStyle}>{money(r.credits)}</span>,
-  },
-  {
-    key: 'discounts',
-    header: 'Discounts',
-    width: '10%',
-    align: 'right',
-    cell: (r) => <span style={mutedMono}>{money(r.discounts)}</span>,
-  },
-  {
-    key: 'totalCost',
-    header: 'Total',
-    width: '14%',
-    align: 'right',
-    cell: (r) => <span style={monoStyle}>{money(r.totalCost)}</span>,
   },
 ];

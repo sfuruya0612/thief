@@ -1631,8 +1631,23 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   flex: 1;
   overflow: hidden;
 }
-.nonaws-list {
+.nonaws-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-right: 1px solid var(--line-1);
+}
+.nonaws-list-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line-1);
+}
+.nonaws-list-filter .chip-search {
+  flex: 1;
+}
+.nonaws-list {
   overflow-y: auto;
   padding: var(--sp-2);
   display: flex;
