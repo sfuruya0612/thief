@@ -42,7 +42,7 @@ func GetHistoricalCost(ctx context.Context, api *UsageMeteringV2API, startMonth,
 		return nil, fmt.Errorf("get datadog historical cost: %w", err)
 	}
 
-	var result []CostInfo
+	result := []CostInfo{}
 	for _, item := range resp.GetData() {
 		attrs := item.GetAttributes()
 		for _, charge := range attrs.GetCharges() {
@@ -79,7 +79,7 @@ func GetEstimatedCost(ctx context.Context, api *UsageMeteringV1API, startMonth, 
 		return nil, fmt.Errorf("get datadog estimated cost: %w", err)
 	}
 
-	var result []CostInfo
+	result := []CostInfo{}
 	for _, usage := range resp.GetUsage() {
 		result = append(result, CostInfo{
 			Month: usage.GetDate().Format("2006-01"),
