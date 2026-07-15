@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 )
 
@@ -49,6 +50,7 @@ type projectsResponse struct {
 		UserCount    int    `json:"user_count"`
 		CreateTime   string `json:"create_timestamp"`
 	} `json:"items"`
+	Total int `json:"total"`
 }
 
 type clustersResponse struct {
@@ -63,96 +65,111 @@ type clustersResponse struct {
 		CloudProvider string `json:"cloud_provider"`
 		CreateTime    string `json:"create_timestamp"`
 	} `json:"items"`
+	Total int `json:"total"`
 }
 
+// tidbListPageSize is the page size used when paginating TiDB Cloud list
+// endpoints. TiDB Cloud API v1beta caps page_size at 100.
+const tidbListPageSize = 100
+
 type billResponse struct {
-	Overview []struct {
-		BilledMonth  string  `json:"billed_month"`
-		Credits      float64 `json:"credits"`
-		Discounts    float64 `json:"discounts"`
-		RunningTotal float64 `json:"running_total"`
-		TotalCost    float64 `json:"total_cost"`
-	} `json:"overview"`
-	SummaryByProject []struct {
-		ProjectName string  `json:"project_name"`
-		TotalCost   float64 `json:"total_cost"`
-	} `json:"summary_by_project"`
+	Details []struct {
+		BilledDate      string `json:"billedDate"`
+		ClusterName     string `json:"clusterName"`
+		Credits         string `json:"credits"`
+		Discounts       string `json:"discounts"`
+		ProjectName     string `json:"projectName"`
+		RunningTotal    string `json:"runningTotal"`
+		ServicePathName string `json:"servicePathName"`
+		TotalCost       string `json:"totalCost"`
+	} `json:"details"`
 }
 
 // ListProjects returns all TiDB Cloud projects.
 func (c *Client) ListProjects() ([]Project, error) {
-	resp, err := c.Get("/api/v1beta/projects")
-	if err != nil {
-		return nil, fmt.Errorf("list tidb projects: %w", err)
-	}
-	defer resp.Body.Close()
+	projects := []Project{}
+	for page := 1; ; page++ {
+		resp, err := c.Get(fmt.Sprintf("/api/v1beta/projects?page=%d&page_size=%d", page, tidbListPageSize))
+		if err != nil {
+			return nil, fmt.Errorf("list tidb projects: %w", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read tidb projects response: %w", err)
+		}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read tidb projects response: %w", err)
-	}
+		var data projectsResponse
+		if err := json.Unmarshal(body, &data); err != nil {
+			return nil, fmt.Errorf("parse tidb projects response: %w", err)
+		}
 
-	var data projectsResponse
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("parse tidb projects response: %w", err)
-	}
+		for _, item := range data.Items {
+			t, _ := time.Parse(time.RFC3339, item.CreateTime)
+			projects = append(projects, Project{
+				ID:           item.ID,
+				Name:         item.Name,
+				OrgID:        item.OrgID,
+				ClusterCount: item.ClusterCount,
+				UserCount:    item.UserCount,
+				CreatedAt:    t,
+			})
+		}
 
-	var projects []Project
-	for _, item := range data.Items {
-		t, _ := time.Parse(time.RFC3339, item.CreateTime)
-		projects = append(projects, Project{
-			ID:           item.ID,
-			Name:         item.Name,
-			OrgID:        item.OrgID,
-			ClusterCount: item.ClusterCount,
-			UserCount:    item.UserCount,
-			CreatedAt:    t,
-		})
+		if len(data.Items) < tidbListPageSize || len(projects) >= data.Total {
+			break
+		}
 	}
 	return projects, nil
 }
 
 // ListClusters returns all clusters for the given project.
 func (c *Client) ListClusters(projectID string) ([]Cluster, error) {
-	resp, err := c.Get(fmt.Sprintf("/api/v1beta/projects/%s/clusters", projectID))
-	if err != nil {
-		return nil, fmt.Errorf("list tidb clusters: %w", err)
-	}
-	defer resp.Body.Close()
+	clusters := []Cluster{}
+	for page := 1; ; page++ {
+		resp, err := c.Get(fmt.Sprintf("/api/v1beta/projects/%s/clusters?page=%d&page_size=%d", projectID, page, tidbListPageSize))
+		if err != nil {
+			return nil, fmt.Errorf("list tidb clusters: %w", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read tidb clusters response: %w", err)
+		}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read tidb clusters response: %w", err)
-	}
+		var data clustersResponse
+		if err := json.Unmarshal(body, &data); err != nil {
+			return nil, fmt.Errorf("parse tidb clusters response: %w", err)
+		}
 
-	var data clustersResponse
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("parse tidb clusters response: %w", err)
-	}
+		for _, item := range data.Items {
+			t, _ := time.Parse(time.RFC3339, item.CreateTime)
+			clusters = append(clusters, Cluster{
+				ID:            item.ID,
+				Name:          item.Name,
+				Status:        item.Status.ClusterStatus,
+				Region:        item.Region,
+				ClusterType:   item.ClusterType,
+				CloudProvider: item.CloudProvider,
+				CreatedAt:     t,
+			})
+		}
 
-	var clusters []Cluster
-	for _, item := range data.Items {
-		t, _ := time.Parse(time.RFC3339, item.CreateTime)
-		clusters = append(clusters, Cluster{
-			ID:            item.ID,
-			Name:          item.Name,
-			Status:        item.Status.ClusterStatus,
-			Region:        item.Region,
-			ClusterType:   item.ClusterType,
-			CloudProvider: item.CloudProvider,
-			CreatedAt:     t,
-		})
+		if len(data.Items) < tidbListPageSize || len(clusters) >= data.Total {
+			break
+		}
 	}
 	return clusters, nil
 }
 
-// GetCost returns billing cost for the given month (YYYY-MM).
+// GetCost returns billing cost details for the given month (YYYY-MM).
+// If month is empty, the current year-month is used.
 func (c *Client) GetCost(month string) ([]Cost, error) {
-	endpoint := "/api/v1beta/bills"
-	if month != "" {
-		endpoint += "?month=" + month
+	if month == "" {
+		month = time.Now().Format("2006-01")
 	}
-	resp, err := c.Get(endpoint)
+
+	resp, err := c.getBilling(fmt.Sprintf("/v1beta1/billsDetails/%s", month))
 	if err != nil {
 		return nil, fmt.Errorf("get tidb cost: %w", err)
 	}
@@ -168,15 +185,65 @@ func (c *Client) GetCost(month string) ([]Cost, error) {
 		return nil, fmt.Errorf("parse tidb cost response: %w", err)
 	}
 
-	var costs []Cost
-	for _, item := range data.Overview {
+	costs := []Cost{}
+	for _, item := range data.Details {
 		costs = append(costs, Cost{
-			BilledDate:   item.BilledMonth,
-			Credits:      item.Credits,
-			Discounts:    item.Discounts,
-			RunningTotal: item.RunningTotal,
-			TotalCost:    item.TotalCost,
+			BilledDate:      item.BilledDate,
+			ProjectName:     item.ProjectName,
+			ClusterName:     item.ClusterName,
+			ServicePathName: item.ServicePathName,
+			Credits:         parseFloat(item.Credits),
+			Discounts:       parseFloat(item.Discounts),
+			RunningTotal:    parseFloat(item.RunningTotal),
+			TotalCost:       parseFloat(item.TotalCost),
 		})
+	}
+	return costs, nil
+}
+
+// parseFloat parses a TiDB Cloud billing amount string into a float64,
+// returning 0 if the value is empty or malformed.
+func parseFloat(s string) float64 {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// GetCostRange returns billing cost details for every month in
+// [startMonth, endMonth] (both YYYY-MM, inclusive). The TiDB Cloud billing
+// API only accepts a single month per request, so this issues one request
+// per month. If startMonth or endMonth is empty, the current year-month is
+// used for that end of the range.
+func (c *Client) GetCostRange(startMonth, endMonth string) ([]Cost, error) {
+	now := time.Now()
+	if startMonth == "" {
+		startMonth = now.Format("2006-01")
+	}
+	if endMonth == "" {
+		endMonth = now.Format("2006-01")
+	}
+
+	start, err := time.Parse("2006-01", startMonth)
+	if err != nil {
+		return nil, fmt.Errorf("parse start month %q: %w", startMonth, err)
+	}
+	end, err := time.Parse("2006-01", endMonth)
+	if err != nil {
+		return nil, fmt.Errorf("parse end month %q: %w", endMonth, err)
+	}
+	if end.Before(start) {
+		start, end = end, start
+	}
+
+	costs := []Cost{}
+	for m := start; !m.After(end); m = m.AddDate(0, 1, 0) {
+		monthCosts, err := c.GetCost(m.Format("2006-01"))
+		if err != nil {
+			return nil, err
+		}
+		costs = append(costs, monthCosts...)
 	}
 	return costs, nil
 }
