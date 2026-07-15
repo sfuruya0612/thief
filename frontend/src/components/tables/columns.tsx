@@ -39,6 +39,11 @@ export interface ColumnDef<T> {
   width: string;
   align?: 'right';
   cell: (row: T) => ReactNode;
+  // 列フィルターを明示的に有効/無効化する。未指定時は header が空 or key === 'actions' 以外を対象とする
+  filterable?: boolean;
+  // フィルター判定に使う文字列を返す。表示値でフィルタしたい列 (例: size は formatBytes 後の値) で指定する。
+  // 未指定時は row[key] の生値を String() 化して用いる
+  filterValue?: (row: T) => string;
 }
 
 // バイト数を人が読みやすい単位 (KB/MB/GB/TB) に変換する

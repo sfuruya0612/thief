@@ -1,5 +1,5 @@
 // tables.jsx DataTable の汎用化移植
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { ColumnDef } from './tables/columns';
 import { Loading } from './Loading';
 
@@ -19,6 +19,20 @@ function sortValue<T>(row: T, key: string): string | number | undefined {
   return undefined;
 }
 
+// 列フィルターの対象にするかどうか。明示指定を優先し、未指定時は
+// header が空 (Actions 列等) でも key === 'actions' でもない列を対象とする
+function isFilterable<T>(c: ColumnDef<T>): boolean {
+  return c.filterable ?? (c.header !== '' && c.key !== 'actions');
+}
+
+// 列フィルターの判定に使う文字列を取り出す。filterValue 指定があればそれを使い、
+// なければ row[key] の生値を文字列化する (cell の表示値とは異なる場合がある)
+function filterText<T>(c: ColumnDef<T>, row: T): string {
+  if (c.filterValue) return c.filterValue(row);
+  const v = (row as Record<string, unknown>)[c.key];
+  return v == null ? '' : String(v);
+}
+
 // 列幅の最小値 (px)。これより小さくはリサイズできない
 const MIN_COL_WIDTH = 60;
 
@@ -34,11 +48,27 @@ export function DataTable<T extends { id: string; state?: string }>({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // ドラッグで変更した列幅 (px)。セッション内 (state) のみで保持し、永続化しない
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  // 列リサイズが一度でも行われたか。true になると table を colgroup の px 合計幅で
+  // 描画し、はみ出した分は .table-wrap の横スクロールに委ねる (dt-resized クラス)
+  const [resized, setResized] = useState(false);
+  const theadRowRef = useRef<HTMLTableRowElement>(null);
+  // 列ごとのフィルター入力値 (key -> 入力文字列)
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+
+  const filtered = useMemo(() => {
+    const activeCols = columns.filter((c) => isFilterable(c) && colFilters[c.key]?.trim());
+    if (activeCols.length === 0) return rows;
+    return rows.filter((row) =>
+      activeCols.every((c) =>
+        filterText(c, row).toLowerCase().includes(colFilters[c.key].trim().toLowerCase()),
+      ),
+    );
+  }, [rows, columns, colFilters]);
 
   const sorted = useMemo(() => {
-    if (!sortKey) return rows;
+    if (!sortKey) return filtered;
     const mul = sortDir === 'asc' ? 1 : -1;
-    return [...rows].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const av = sortValue(a, sortKey);
       const bv = sortValue(b, sortKey);
       if (av == null) return 1;
@@ -46,7 +76,7 @@ export function DataTable<T extends { id: string; state?: string }>({
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * mul;
       return String(av).localeCompare(String(bv)) * mul;
     });
-  }, [rows, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir]);
 
   const toggleSort = (k: string) => {
     if (sortKey === k) {
@@ -67,13 +97,22 @@ export function DataTable<T extends { id: string; state?: string }>({
   };
 
   // th 右端のハンドルをドラッグして列幅を変更する (Drawer.tsx の startResize と同型)。
-  // 初期幅は % 指定のため、ドラッグ開始時の実描画幅 (px) を基準にする
+  // 初期幅は % 指定のため、ドラッグ開始時に全列の実描画幅 (px) を確定させる。
+  // 対象列だけを px 化すると他の列が % のまま残り幅計算が不定になるため、
+  // ここで一括してスナップショットを取り colWidths に反映する (dt-resized クラスで有効化)
   const startColResize = (key: string) => (e: React.PointerEvent<HTMLSpanElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const th = e.currentTarget.closest('th');
-    const startWidth = th?.getBoundingClientRect().width ?? MIN_COL_WIDTH;
+    const ths = theadRowRef.current?.querySelectorAll<HTMLTableCellElement>('th[data-col-key]');
+    const snapshot: Record<string, number> = {};
+    ths?.forEach((th) => {
+      const k = th.dataset.colKey;
+      if (k) snapshot[k] = Math.round(th.getBoundingClientRect().width);
+    });
+    const startWidth = snapshot[key] ?? MIN_COL_WIDTH;
     const startX = e.clientX;
+    setColWidths((prev) => ({ ...snapshot, ...prev }));
+    setResized(true);
     const move = (ev: PointerEvent) => {
       const next = Math.max(startWidth + (ev.clientX - startX), MIN_COL_WIDTH);
       setColWidths((prev) => ({ ...prev, [key]: Math.round(next) }));
@@ -100,7 +139,7 @@ export function DataTable<T extends { id: string; state?: string }>({
 
   return (
     <div className="table-wrap">
-      <table className="dt">
+      <table className={`dt${resized ? ' dt-resized' : ''}`}>
         <colgroup>
           <col style={{ width: 32 }} />
           {columns.map((c) => (
@@ -108,20 +147,21 @@ export function DataTable<T extends { id: string; state?: string }>({
           ))}
         </colgroup>
         <thead>
-          <tr>
+          <tr ref={theadRowRef}>
             <th>
               <input
                 type="checkbox"
                 className="cb"
-                checked={checked.size === rows.length && rows.length > 0}
+                checked={checked.size === filtered.length && filtered.length > 0}
                 onChange={(e) =>
-                  setChecked(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())
+                  setChecked(e.target.checked ? new Set(filtered.map((r) => r.id)) : new Set())
                 }
               />
             </th>
             {columns.map((c) => (
               <th
                 key={c.key}
+                data-col-key={c.key}
                 className={`sortable ${sortKey === c.key ? 'sorted' : ''}`}
                 style={{ textAlign: c.align ?? 'left', position: 'relative' }}
                 onClick={() => toggleSort(c.key)}
@@ -137,6 +177,26 @@ export function DataTable<T extends { id: string; state?: string }>({
                 />
               </th>
             ))}
+          </tr>
+          <tr className="dt-filter-row">
+            <th />
+            {columns.map((c) =>
+              isFilterable(c) ? (
+                <th key={c.key}>
+                  <input
+                    className="dt-col-filter"
+                    value={colFilters[c.key] ?? ''}
+                    placeholder="フィルター…"
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      setColFilters((prev) => ({ ...prev, [c.key]: e.target.value }))
+                    }
+                  />
+                </th>
+              ) : (
+                <th key={c.key} />
+              ),
+            )}
           </tr>
         </thead>
         <tbody>

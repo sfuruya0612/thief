@@ -42,6 +42,10 @@
   - @sfuruya0612
 - [ADD] docker compose 起動時に frontend の nginx が backend へリバースプロキシし、単一オリジン (`thief.local` 等任意のホスト名) で frontend/backend にアクセスできるようにする
   - @sfuruya0612
+- [ADD] 一覧表 / Drawer 内の表 (S3・GCS のオブジェクト一覧等) に列ごとのテキストフィルターを追加する
+  - @sfuruya0612
+- [ADD] Cost Explorer のクロス集計表の列幅をドラッグでリサイズできるようにする
+  - @sfuruya0612
 - [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
@@ -64,6 +68,10 @@
   - @sfuruya0612
 - [CHANGE] ECS の常に 0 となる Stopped カウントを統計から削除する
   - @sfuruya0612
+- [CHANGE] 列ごとのフィルターと機能が重複する FacetBar の全体検索ボックスを削除する
+  - @sfuruya0612
+- [CHANGE] 機能していない FacetBar の Add filter ボタンを削除する
+  - @sfuruya0612
 - [CHANGE] backend が返す各 AWS サービスの state を小文字・ハイフン表記に統一する
   - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
@@ -79,4 +87,6 @@
 - [FIX] Terminal タブでセッションを開き直すと xterm.js にフォーカスが移らず入力できなくなる不具合を修正する
   - @sfuruya0612
 - [FIX] StrictMode の再マウント時に xterm.js 内部の未キャンセル setTimeout が dispose 後に発火し Terminal タブがクラッシュする不具合を修正する
+  - @sfuruya0612
+- [FIX] Drawer 内の表 (S3・GCS のオブジェクト一覧等) で列幅ドラッグリサイズが `table-layout: fixed` + 幅 100% 固定により実質効かない不具合を修正する
   - @sfuruya0612

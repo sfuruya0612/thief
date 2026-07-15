@@ -14,13 +14,11 @@ export interface FacetBarProps {
   rows: FacetRow[];
   filters: Filters;
   setFilters: (f: Filters) => void;
-  search: string;
-  setSearch: (s: string) => void;
 }
 
 const FACET_TYPES = ['Env', 'state', 'region', 'Team'] as const;
 
-export function FacetBar({ rows, filters, setFilters, search, setSearch }: FacetBarProps) {
+export function FacetBar({ rows, filters, setFilters }: FacetBarProps) {
   const available = useMemo(() => {
     const envs = new Set<string>();
     const states = new Set<string>();
@@ -49,22 +47,12 @@ export function FacetBar({ rows, filters, setFilters, search, setSearch }: Facet
   };
   const clearAll = () => {
     setFilters({});
-    setSearch('');
   };
 
-  const hasFilters = Object.values(filters).some((v) => v?.length) || !!search;
+  const hasFilters = Object.values(filters).some((v) => v?.length);
 
   return (
     <div className="facets">
-      <span className="chip-search">
-        <Icons.search size={12} />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="filter by name or id…"
-        />
-      </span>
-
       {FACET_TYPES.map(
         (type) =>
           available[type]?.length > 0 && (
@@ -86,11 +74,6 @@ export function FacetBar({ rows, filters, setFilters, search, setSearch }: Facet
             </span>
           ),
       )}
-
-      <span className="facet">
-        <Icons.plus size={10} />
-        <span className="k">Add filter</span>
-      </span>
 
       {hasFilters && (
         <button className="btn sm ghost clear-btn" onClick={clearAll}>
