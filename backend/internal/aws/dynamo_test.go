@@ -263,6 +263,28 @@ func TestDynamoAttributeValueFromInput(t *testing.T) {
 	}
 }
 
+func TestResolveDynamoItemLimit(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested int32
+		want      int32
+	}{
+		{name: "0以下は既定値", requested: 0, want: dynamoItemQueryLimit},
+		{name: "負数は既定値", requested: -1, want: dynamoItemQueryLimit},
+		{name: "指定値をそのまま使う", requested: 50, want: 50},
+		{name: "上限超過は上限に切り詰め", requested: 1000, want: dynamoItemQueryMaxLimit},
+		{name: "上限と同値はそのまま", requested: dynamoItemQueryMaxLimit, want: dynamoItemQueryMaxLimit},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveDynamoItemLimit(tt.requested)
+			if got != tt.want {
+				t.Errorf("got %d want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDynamoUnmarshalItems(t *testing.T) {
 	items := []map[string]dynamodbtypes.AttributeValue{
 		{

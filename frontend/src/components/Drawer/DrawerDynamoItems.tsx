@@ -1,8 +1,9 @@
 // DynamoDB テーブルの Item を Key-Value 指定で検索する Drawer タブ
-// 初期表示はプレビュー (Scan Limit:10)、PK (+SK) を指定すると Query (Limit:10) に切り替わる。
+// 初期表示はプレビュー (Scan)、PK (+SK) を指定すると Query に切り替わる。
 // 検索時の負荷とコストを最小化するため、明示検索は必ず Query を使う (バックエンド側で保証)。
 // PK/SK に加えて、任意の属性名 + 値による絞り込み (FilterExpression) も PK/SK と併用できる。
-import { useMemo, useState } from 'react';
+// 取得件数は LIMIT_OPTIONS から選択でき、未選択時は DEFAULT_LIMIT (10件)。
+import { useMemo, useRef, useState } from 'react';
 import { useDynamoItems, useDynamoSchema } from '../../api/queries';
 
 const inputStyle = {
@@ -14,6 +15,12 @@ const inputStyle = {
   fontSize: 12,
   color: 'var(--text-1)',
 } as const;
+
+const LIMIT_OPTIONS = [10, 50, 100] as const;
+const DEFAULT_LIMIT: (typeof LIMIT_OPTIONS)[number] = 10;
+
+// 列幅の最小値 (px)。これより小さくはリサイズできない
+const MIN_COL_WIDTH = 60;
 
 export interface DrawerDynamoItemsProps {
   profile: string;
@@ -27,6 +34,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
   const [skInput, setSkInput] = useState('');
   const [attrNameInput, setAttrNameInput] = useState('');
   const [attrValueInput, setAttrValueInput] = useState('');
+  const [limit, setLimit] = useState<(typeof LIMIT_OPTIONS)[number]>(DEFAULT_LIMIT);
   // 検索実行済みの値のみクエリに渡す (入力中は検索しない)
   const [submittedPk, setSubmittedPk] = useState('');
   const [submittedSk, setSubmittedSk] = useState('');
@@ -38,6 +46,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
     skValue: submittedSk || undefined,
     attrName: submittedAttrName || undefined,
     attrValue: submittedAttrValue || undefined,
+    limit,
   });
 
   const isPreview = !submittedPk && !submittedAttrName;
@@ -49,6 +58,52 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
     }
     return Array.from(keys);
   }, [rows]);
+
+  // 列ごとのフィルター入力値 (取得済み結果に対するクライアント側の絞り込み)
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const filteredRows = useMemo(() => {
+    const activeCols = columns.filter((c) => colFilters[c]?.trim());
+    if (activeCols.length === 0) return rows;
+    return rows.filter((row) =>
+      activeCols.every((c) => {
+        const v = row[c];
+        const text = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+        return text.toLowerCase().includes(colFilters[c].trim().toLowerCase());
+      }),
+    );
+  }, [rows, columns, colFilters]);
+
+  // ドラッグで変更した列幅 (px)。セッション内 (state) のみで保持し、永続化しない
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const theadRowRef = useRef<HTMLTableRowElement>(null);
+
+  const startColResize = (key: string) => (e: React.PointerEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ths = theadRowRef.current?.querySelectorAll<HTMLTableCellElement>('th[data-col-key]');
+    const snapshot: Record<string, number> = {};
+    ths?.forEach((th) => {
+      const k = th.dataset.colKey;
+      if (k) snapshot[k] = Math.round(th.getBoundingClientRect().width);
+    });
+    const startWidth = snapshot[key] ?? MIN_COL_WIDTH;
+    const startX = e.clientX;
+    setColWidths((prev) => ({ ...snapshot, ...prev }));
+    const move = (ev: PointerEvent) => {
+      const next = Math.max(startWidth + (ev.clientX - startX), MIN_COL_WIDTH);
+      setColWidths((prev) => ({ ...prev, [key]: Math.round(next) }));
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const handleSearch = () => {
     setSubmittedPk(pkInput.trim());
@@ -109,6 +164,17 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
               onChange={(e) => setAttrValueInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
+            <select
+              style={inputStyle}
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value) as (typeof LIMIT_OPTIONS)[number])}
+            >
+              {LIMIT_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n} 件
+                </option>
+              ))}
+            </select>
             <button
               className="btn sm"
               onClick={handleSearch}
@@ -132,15 +198,42 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
           ) : (
             <div className="table-wrap">
               <table className="dt">
+                <colgroup>
+                  {columns.map((c) => (
+                    <col key={c} style={{ width: colWidths[c] }} />
+                  ))}
+                </colgroup>
                 <thead>
-                  <tr>
+                  <tr ref={theadRowRef}>
                     {columns.map((c) => (
-                      <th key={c}>{c}</th>
+                      <th key={c} data-col-key={c} style={{ position: 'relative' }}>
+                        {c}
+                        <span
+                          className="col-resize-handle"
+                          onPointerDown={startColResize(c)}
+                          title="Drag to resize column"
+                        />
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="dt-filter-row">
+                    {columns.map((c) => (
+                      <th key={c}>
+                        <input
+                          className="dt-col-filter"
+                          value={colFilters[c] ?? ''}
+                          placeholder="フィルター…"
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) =>
+                            setColFilters((prev) => ({ ...prev, [c]: e.target.value }))
+                          }
+                        />
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, i) => (
+                  {filteredRows.map((row, i) => (
                     <tr key={i}>
                       {columns.map((c) => (
                         <td key={c} style={{ fontFamily: 'var(--font-mono)' }}>
@@ -149,7 +242,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
                       ))}
                     </tr>
                   ))}
-                  {rows.length === 0 && (
+                  {filteredRows.length === 0 && (
                     <tr>
                       <td
                         colSpan={Math.max(columns.length, 1)}

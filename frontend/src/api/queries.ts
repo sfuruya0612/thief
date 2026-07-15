@@ -282,16 +282,16 @@ export function useDynamoSchema(profile: string, region: string, table: string) 
   });
 }
 
-// pkValue 未指定時はプレビュー (Scan Limit:10) を、指定時は Query (Limit:10) を返す。
-// attrName/attrValue は PK/SK 以外の任意属性による絞り込み (FilterExpression) で、
-// pkValue/skValue と併用できる。
+// pkValue 未指定時はプレビュー (Scan) を、指定時は Query を返す。取得件数は opts.limit
+// (未指定時はバックエンド既定値)。attrName/attrValue は PK/SK 以外の任意属性による
+// 絞り込み (FilterExpression) で、pkValue/skValue と併用できる。
 export function useDynamoItems(
   profile: string,
   region: string,
   table: string,
   opts: DynamoItemQueryOptions = {},
 ) {
-  const { pkValue, skValue, attrName, attrValue } = opts;
+  const { pkValue, skValue, attrName, attrValue, limit } = opts;
   return useQuery({
     queryKey: [
       'aws',
@@ -303,6 +303,7 @@ export function useDynamoItems(
       skValue,
       attrName,
       attrValue,
+      limit,
     ],
     queryFn: () => getDynamoItems(profile, region, table, opts),
     staleTime: 60_000,
