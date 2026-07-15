@@ -19,7 +19,6 @@ type ECSServiceTableRow = ECSServiceRow & { id: string; state: string };
 export function DrawerECSServices({ profile, region, cluster }: DrawerECSServicesProps) {
   const { data, isLoading } = useECSServices(profile, region, cluster);
   const [filters, setFilters] = useState<Filters>({});
-  const [search, setSearch] = useState('');
   const rows = useMemo<ECSServiceTableRow[]>(
     () => (data ?? []).map((r) => ({ ...r, id: r.arn, state: r.status })),
     [data],
@@ -27,14 +26,10 @@ export function DrawerECSServices({ profile, region, cluster }: DrawerECSService
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (search) {
-        const q = search.toLowerCase();
-        if (!r.name.toLowerCase().includes(q)) return false;
-      }
       if (filters.state?.length && !filters.state.includes(r.state)) return false;
       return true;
     });
-  }, [rows, filters, search]);
+  }, [rows, filters]);
 
   return (
     <div className="section">
@@ -43,13 +38,7 @@ export function DrawerECSServices({ profile, region, cluster }: DrawerECSService
         <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
       ) : (
         <>
-          <FacetBar
-            rows={rows}
-            filters={filters}
-            setFilters={setFilters}
-            search={search}
-            setSearch={setSearch}
-          />
+          <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
           <DataTable
             rows={filtered}
             columns={ecsServiceColumns}

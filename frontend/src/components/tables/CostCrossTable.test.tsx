@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { CostCrossTable } from './CostCrossTable';
 
 describe('CostCrossTable', () => {
@@ -29,5 +29,47 @@ describe('CostCrossTable', () => {
   it('rows が空の場合は空メッセージを表示する', () => {
     const { getByText } = render(<CostCrossTable categories={['2026-07-01']} rows={[]} />);
     expect(getByText('No cost data match current filters')).toBeInTheDocument();
+  });
+
+  it('Group 列ヘッダのハンドルをドラッグすると列幅が px 化され、Total 列の left オフセットも追従する', () => {
+    const { container } = render(
+      <CostCrossTable
+        categories={['2026-07-01']}
+        rows={[{ group: 'AmazonEC2', amounts: [10], total: 10 }]}
+      />,
+    );
+    const handle = container.querySelector(
+      'th[data-col-key="group"] .col-resize-handle',
+    ) as HTMLSpanElement;
+
+    fireEvent.pointerDown(handle, { clientX: 100 });
+    fireEvent(document, new MouseEvent('pointermove', { clientX: 220 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    const groupCol = container.querySelector('col:nth-of-type(1)') as HTMLTableColElement;
+    const totalHeader = container.querySelector('th[data-col-key="total"]') as HTMLTableCellElement;
+    // jsdom の getBoundingClientRect は常に 0 を返すため、幅の絶対値ではなく
+    // px 化されたこと・Total 列の left が Group 列幅と一致していることのみ検証する
+    expect(groupCol.style.width.endsWith('px')).toBe(true);
+    expect(totalHeader.style.left).toBe(groupCol.style.width);
+  });
+
+  it('ドラッグしても MIN_COL_WIDTH 未満には縮まない', () => {
+    const { container } = render(
+      <CostCrossTable
+        categories={['2026-07-01']}
+        rows={[{ group: 'AmazonEC2', amounts: [10], total: 10 }]}
+      />,
+    );
+    const handle = container.querySelector(
+      'th[data-col-key="2026-07-01"] .col-resize-handle',
+    ) as HTMLSpanElement;
+
+    fireEvent.pointerDown(handle, { clientX: 100 });
+    fireEvent(document, new MouseEvent('pointermove', { clientX: -1000 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    const categoryCol = container.querySelector('col:nth-of-type(3)') as HTMLTableColElement;
+    expect(categoryCol.style.width).toBe('60px');
   });
 });

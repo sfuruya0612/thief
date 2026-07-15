@@ -73,22 +73,16 @@ function GcpRowsPanel<TRow extends BaseRow>({
   onSelectId,
 }: GcpRowsPanelProps<TRow>) {
   const [filters, setFilters] = useState<Filters>({});
-  const [search, setSearch] = useState('');
 
   const selected = rows.find((r) => r.id === selectedId) ?? null;
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const hay = `${r.name} ${r.id}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       if (filters.region?.length && !filters.region.includes(r.region ?? '')) return false;
       if (filters.state?.length && !filters.state.includes(r.state ?? '')) return false;
       return true;
     });
-  }, [rows, filters, search]);
+  }, [rows, filters]);
 
   const svcMeta = GCP_SERVICES.find((s) => s.key === service);
 
@@ -103,13 +97,7 @@ function GcpRowsPanel<TRow extends BaseRow>({
 
       {Boolean(error) && <ErrorBanner error={error} />}
 
-      <FacetBar
-        rows={rows}
-        filters={filters}
-        setFilters={setFilters}
-        search={search}
-        setSearch={setSearch}
-      />
+      <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
 
       <DataTable
         rows={filtered}

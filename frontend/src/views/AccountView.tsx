@@ -105,7 +105,6 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   const { data, isLoading, error } = useResources<TRaw, TRow>(service, profile, region, normalizer);
   const { data: cost } = useCost(profile, region);
   const [filters, setFilters] = useState<Filters>({});
-  const [search, setSearch] = useState('');
 
   const ssoExpired = error instanceof ApiError && error.code === 'SSO_TOKEN_EXPIRED';
   const allResources = data ?? [];
@@ -113,11 +112,6 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
 
   const filtered = useMemo(() => {
     return allResources.filter((r) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const hay = `${r.name} ${r.id}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       if (filters.Env?.length && !filters.Env.includes(r.tags?.Env ?? '')) return false;
       if (filters.state?.length && !filters.state.includes(r.state ?? '')) return false;
       if (filters.region?.length && !filters.region.includes(r.region ?? '')) return false;
@@ -127,7 +121,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
       }
       return true;
     });
-  }, [allResources, filters, search]);
+  }, [allResources, filters]);
 
   const svcMeta = SERVICES.find((s) => s.key === service);
 
@@ -145,13 +139,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
 
       <StatsRow resources={allResources} service={service} cost={cost ?? []} />
 
-      <FacetBar
-        rows={allResources}
-        filters={filters}
-        setFilters={setFilters}
-        search={search}
-        setSearch={setSearch}
-      />
+      <FacetBar rows={allResources} filters={filters} setFilters={setFilters} />
 
       <DataTable
         rows={filtered}

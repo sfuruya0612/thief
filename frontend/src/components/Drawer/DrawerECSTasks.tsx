@@ -105,7 +105,6 @@ function ECSTaskDetail({ task, onClose }: { task: ECSTaskTableRow; onClose: () =
 export function DrawerECSTasks({ profile, region, cluster }: DrawerECSTasksProps) {
   const { data, isLoading } = useECSTasks(profile, region, cluster);
   const [filters, setFilters] = useState<Filters>({});
-  const [search, setSearch] = useState('');
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const rows = useMemo<ECSTaskTableRow[]>(
     () => (data ?? []).map((r) => ({ ...r, id: r.arn, state: r.lastStatus })),
@@ -114,15 +113,10 @@ export function DrawerECSTasks({ profile, region, cluster }: DrawerECSTasksProps
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const hay = `${r.group} ${r.arn} ${r.containerNames.join(' ')}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
       if (filters.state?.length && !filters.state.includes(r.state)) return false;
       return true;
     });
-  }, [rows, filters, search]);
+  }, [rows, filters]);
 
   const selectedTask = useMemo(
     () => rows.find((r) => r.arn === selectedArn) ?? null,
@@ -136,13 +130,7 @@ export function DrawerECSTasks({ profile, region, cluster }: DrawerECSTasksProps
         <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
       ) : (
         <>
-          <FacetBar
-            rows={rows}
-            filters={filters}
-            setFilters={setFilters}
-            search={search}
-            setSearch={setSearch}
-          />
+          <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
           <DataTable
             rows={filtered}
             columns={ecsTaskColumns}
