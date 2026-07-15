@@ -25,9 +25,10 @@ func (s *Server) handleDatadogHistorical(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleDatadogEstimated(w http.ResponseWriter, r *http.Request) {
 	startMonth := r.URL.Query().Get("start_month")
 	endMonth := r.URL.Query().Get("end_month")
-	key := cacheKey("dd-estimated", startMonth, endMonth)
+	view := r.URL.Query().Get("view")
+	key := cacheKey("dd-estimated", startMonth, endMonth, view)
 	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
-		return datadog.GetEstimatedCost(s.ddCtx, s.ddV1, startMonth, endMonth)
+		return datadog.GetEstimatedCost(s.ddCtx, s.ddV2, startMonth, endMonth, view)
 	})
 	if err != nil {
 		writeInternalError(w, err.Error())

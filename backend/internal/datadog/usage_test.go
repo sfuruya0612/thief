@@ -9,20 +9,6 @@ import (
 	"testing"
 )
 
-// newTestV1API returns a UsageMeteringV1API pointed at the given httptest.Server.
-func newTestV1API(t *testing.T, srv *httptest.Server) (*UsageMeteringV1API, context.Context) {
-	t.Helper()
-	t.Cleanup(srv.Close)
-
-	host := strings.TrimPrefix(srv.URL, "http://")
-	cfg := NewConfiguration("datadoghq.com")
-	cfg.Host = host
-	cfg.Scheme = "http"
-
-	ctx := NewContext(context.Background(), "public", "private")
-	return NewUsageMeteringV1API(cfg), ctx
-}
-
 // newTestV2API returns a UsageMeteringV2API pointed at the given httptest.Server.
 func newTestV2API(t *testing.T, srv *httptest.Server) (*UsageMeteringV2API, context.Context) {
 	t.Helper()
@@ -105,14 +91,14 @@ func TestGetHistoricalCostReturnsEmptySliceWhenDataIsEmpty(t *testing.T) {
 	}
 }
 
-func TestGetEstimatedCostReturnsEmptySliceWhenUsageIsEmpty(t *testing.T) {
+func TestGetEstimatedCostReturnsEmptySliceWhenDataIsEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"usage":[]}`)
+		fmt.Fprint(w, `{"data":[]}`)
 	}))
-	api, ctx := newTestV1API(t, srv)
+	api, ctx := newTestV2API(t, srv)
 
-	costs, err := GetEstimatedCost(ctx, api, "2024-01", "")
+	costs, err := GetEstimatedCost(ctx, api, "2024-01", "", "")
 	if err != nil {
 		t.Fatalf("GetEstimatedCost() error = %v", err)
 	}
@@ -129,22 +115,30 @@ func TestGetEstimatedCost(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"usage":[{"date":"2024-01-01T00:00:00Z"}]}`)
+		fmt.Fprint(w, costByOrgBody)
 	}))
-	api, ctx := newTestV1API(t, srv)
+	api, ctx := newTestV2API(t, srv)
 
-	costs, err := GetEstimatedCost(ctx, api, "2024-01", "")
+	costs, err := GetEstimatedCost(ctx, api, "2024-01", "", "")
 	if err != nil {
 		t.Fatalf("GetEstimatedCost() error = %v", err)
 	}
-	if gotPath != "/api/v1/usage/summary" {
-		t.Errorf("requested path = %q, want /api/v1/usage/summary", gotPath)
+	if gotPath != "/api/v2/usage/estimated_cost" {
+		t.Errorf("requested path = %q, want /api/v2/usage/estimated_cost", gotPath)
 	}
 	if len(costs) != 1 {
 		t.Fatalf("len(costs) = %d, want 1", len(costs))
 	}
-	if costs[0].Month != "2024-01" {
-		t.Errorf("costs[0].Month = %q, want 2024-01", costs[0].Month)
+	want := CostInfo{
+		Month:       "2024-01",
+		AccountName: "acct1",
+		OrgName:     "org1",
+		ProductName: "infra",
+		ChargeType:  "on-demand",
+		Cost:        12.5,
+	}
+	if costs[0] != want {
+		t.Errorf("costs[0] = %+v, want %+v", costs[0], want)
 	}
 }
 
@@ -156,8 +150,8 @@ func TestGetHistoricalCostInvalidStartMonth(t *testing.T) {
 }
 
 func TestGetEstimatedCostInvalidEndMonth(t *testing.T) {
-	api := &UsageMeteringV1API{}
-	if _, err := GetEstimatedCost(context.Background(), api, "", "not-a-month"); err == nil {
+	api := &UsageMeteringV2API{}
+	if _, err := GetEstimatedCost(context.Background(), api, "", "not-a-month", ""); err == nil {
 		t.Fatal("expected error for invalid end_month, got nil")
 	}
 }
