@@ -369,10 +369,11 @@ export function useDatadogHistorical(startMonth?: string, endMonth?: string, vie
   });
 }
 
-export function useDatadogEstimated(startMonth?: string, endMonth?: string) {
+export function useDatadogEstimated(startMonth?: string, endMonth?: string, view?: string) {
   return useQuery({
-    queryKey: ['datadog', 'estimated', startMonth, endMonth],
-    queryFn: async () => (await getDatadogEstimated(startMonth, endMonth)).map(datadogCostFromRaw),
+    queryKey: ['datadog', 'estimated', startMonth, endMonth, view],
+    queryFn: async () =>
+      (await getDatadogEstimated(startMonth, endMonth, view)).map(datadogCostFromRaw),
     staleTime: 60_000,
   });
 }
