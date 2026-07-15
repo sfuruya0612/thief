@@ -272,6 +272,7 @@ export interface DynamoItemQueryOptions {
   skValue?: string;
   attrName?: string;
   attrValue?: string;
+  limit?: number;
 }
 
 export function getDynamoItems(
@@ -288,6 +289,7 @@ export function getDynamoItems(
       sk_val: opts.skValue,
       attr_name: opts.attrName,
       attr_val: opts.attrValue,
+      limit: opts.limit !== undefined ? String(opts.limit) : undefined,
     },
   ).then((v) => v ?? []);
 }

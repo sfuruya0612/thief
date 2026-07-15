@@ -11,9 +11,13 @@ import (
 	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// dynamoItemQueryLimit は Item 検索 (Query/Scan) の取得件数上限。
-// プレビュー・明示検索とも 10 件固定とし、負荷とコストを最小化する。
+// dynamoItemQueryLimit は Item 検索 (Query/Scan) の取得件数の既定値。
+// リクエストで Limit が指定されなかった場合に使う。
 const dynamoItemQueryLimit = 10
+
+// dynamoItemQueryMaxLimit は Item 検索 (Query/Scan) の取得件数の上限。
+// これを超える Limit 指定は上限に切り詰め、負荷とコストを最小化する。
+const dynamoItemQueryMaxLimit = 100
 
 // DynamoResource represents a DynamoDB table.
 type DynamoResource struct {
@@ -188,21 +192,35 @@ func dynamoIndexSchemaFromKeySchema(name string, keySchema []dynamodbtypes.KeySc
 // DynamoItemQuery は Item 検索の Key-Value 指定を表す。PK/SK いずれも未指定ならプレビューとして扱う。
 // AttrName/AttrValue は PK/SK 以外の任意属性による絞り込み (FilterExpression) を表し、
 // PK/SK と併用できる。AttrName 単独 (PK 未指定) の場合は Scan + FilterExpression になる。
+// Limit が 0 以下の場合は dynamoItemQueryLimit (10) を既定値として使う。
 type DynamoItemQuery struct {
 	PKValue   string
 	SKValue   string
 	AttrName  string
 	AttrValue string
+	Limit     int32
+}
+
+// resolveDynamoItemLimit はリクエストの Limit を実際に使う値に解決する。
+// 0 以下は既定値 (dynamoItemQueryLimit) に、上限 (dynamoItemQueryMaxLimit) 超過は上限に切り詰める。
+func resolveDynamoItemLimit(requested int32) int32 {
+	if requested <= 0 {
+		return dynamoItemQueryLimit
+	}
+	if requested > dynamoItemQueryMaxLimit {
+		return dynamoItemQueryMaxLimit
+	}
+	return requested
 }
 
 // QueryDynamoItems はテーブルの Item を検索する。
 //
 // コスト/負荷最小化のため:
-//   - PK 未指定の場合は Scan を Limit:10 で 1 回実行する (AttrName/AttrValue 指定時は FilterExpression を付与)。
+//   - PK 未指定の場合は Scan を Limit 件で 1 回実行する (AttrName/AttrValue 指定時は FilterExpression を付与)。
 //   - PK 指定時は必ず Query (KeyConditionExpression) を使い、Scan は使わない (AttrName/AttrValue 指定時は
 //     FilterExpression を併用する)。
 //
-// 件数はプレビュー・明示検索とも dynamoItemQueryLimit (10) 固定とし、ページングは行わない。
+// 件数はプレビュー・明示検索とも req.Limit (未指定時は dynamoItemQueryLimit) 固定とし、ページングは行わない。
 // FilterExpression は Query/Scan が返した Limit 件に対して適用されるため、フィルタ後の件数が
 // Limit より少なくなることがある (DynamoDB の仕様通り)。
 func QueryDynamoItems(ctx context.Context, profile, region, table string, req DynamoItemQuery) ([]map[string]any, error) {
@@ -213,13 +231,15 @@ func QueryDynamoItems(ctx context.Context, profile, region, table string, req Dy
 		return nil, err
 	}
 
+	limit := resolveDynamoItemLimit(req.Limit)
+
 	filterExpr, filterNames, filterValues := dynamoAttrFilterExpression(req.AttrName, req.AttrValue)
 
 	if req.PKValue == "" {
-		// プレビュー/属性フィルタのみの検索: キー未指定の場合は Scan を許容する (Limit:10, 1 回限り)。
+		// プレビュー/属性フィルタのみの検索: キー未指定の場合は Scan を許容する (Limit 件, 1 回限り)。
 		input := &dynamodb.ScanInput{
 			TableName: aws.String(table),
-			Limit:     aws.Int32(dynamoItemQueryLimit),
+			Limit:     aws.Int32(limit),
 		}
 		if filterExpr != "" {
 			input.FilterExpression = aws.String(filterExpr)
@@ -260,7 +280,7 @@ func QueryDynamoItems(ctx context.Context, profile, region, table string, req Dy
 		KeyConditionExpression:    aws.String(keyCondition),
 		ExpressionAttributeNames:  names,
 		ExpressionAttributeValues: values,
-		Limit:                     aws.Int32(dynamoItemQueryLimit),
+		Limit:                     aws.Int32(limit),
 	}
 	if filterExpr != "" {
 		input.FilterExpression = aws.String(filterExpr)
