@@ -238,23 +238,32 @@ func TestNewAcknowledgeMessage(t *testing.T) {
 	}
 }
 
-func TestNewSizeInputMessage(t *testing.T) {
-	msg, err := NewSizeInputMessage(3, 120, 40)
-	if err != nil {
-		t.Fatalf("NewSizeInputMessage() error = %v", err)
+func TestNewInputStreamDataMessage(t *testing.T) {
+	tests := []struct {
+		name           string
+		sequenceNumber int64
+		payloadType    PayloadType
+		wantFlags      uint64
+	}{
+		{name: "ストリーム先頭は SYN フラグを立てる", sequenceNumber: 0, payloadType: PayloadTypeHandshakeResponse, wantFlags: FlagSyn},
+		{name: "2 番目以降はフラグなし", sequenceNumber: 1, payloadType: PayloadTypeOutput, wantFlags: 0},
+		{name: "リサイズも 2 番目以降はフラグなし", sequenceNumber: 3, payloadType: PayloadTypeSize, wantFlags: 0},
 	}
-	if msg.PayloadType != PayloadTypeSize {
-		t.Errorf("PayloadType = %d, want %d", msg.PayloadType, PayloadTypeSize)
-	}
-	if msg.SequenceNumber != 3 {
-		t.Errorf("SequenceNumber = %d, want 3", msg.SequenceNumber)
-	}
-
-	var size SizeData
-	if err := json.Unmarshal(msg.Payload, &size); err != nil {
-		t.Fatalf("unmarshal size data: %v", err)
-	}
-	if size.Cols != 120 || size.Rows != 40 {
-		t.Errorf("SizeData = %+v, want {Cols:120 Rows:40}", size)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := NewInputStreamDataMessage(tt.sequenceNumber, tt.payloadType, []byte("payload"))
+			if msg.MessageType != MessageTypeInputStreamData {
+				t.Errorf("MessageType = %q, want %q", msg.MessageType, MessageTypeInputStreamData)
+			}
+			if msg.SequenceNumber != tt.sequenceNumber {
+				t.Errorf("SequenceNumber = %d, want %d", msg.SequenceNumber, tt.sequenceNumber)
+			}
+			if msg.PayloadType != tt.payloadType {
+				t.Errorf("PayloadType = %d, want %d", msg.PayloadType, tt.payloadType)
+			}
+			if msg.Flags != tt.wantFlags {
+				t.Errorf("Flags = %d, want %d", msg.Flags, tt.wantFlags)
+			}
+		})
 	}
 }

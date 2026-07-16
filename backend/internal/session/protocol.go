@@ -324,23 +324,20 @@ func NewAcknowledgeMessage(received *AgentMessage) (*AgentMessage, error) {
 
 // NewInputStreamDataMessage は入力バイト列 (端末入力) を input_stream_data メッセージに変換する。
 // sequenceNumber は呼び出し側 (datachannel) が管理する送信シーケンス番号を渡す。
+// AWS 公式実装 (SendStreamDataMessage) と同様、ストリーム先頭 (シーケンス番号 0) には SYN フラグを立てる。
 func NewInputStreamDataMessage(sequenceNumber int64, payloadType PayloadType, payload []byte) *AgentMessage {
+	var flags uint64
+	if sequenceNumber == 0 {
+		flags = FlagSyn
+	}
 	return &AgentMessage{
 		MessageType:    MessageTypeInputStreamData,
 		SchemaVersion:  1,
 		CreatedDate:    uint64(time.Now().UnixMilli()),
 		SequenceNumber: sequenceNumber,
+		Flags:          flags,
 		MessageID:      uuid.New(),
 		PayloadType:    payloadType,
 		Payload:        payload,
 	}
-}
-
-// NewSizeInputMessage は端末サイズ変更を通知する input_stream_data メッセージ (PayloadType: Size) を生成する。
-func NewSizeInputMessage(sequenceNumber int64, cols, rows uint32) (*AgentMessage, error) {
-	payload, err := json.Marshal(SizeData{Cols: cols, Rows: rows})
-	if err != nil {
-		return nil, fmt.Errorf("marshal size data: %w", err)
-	}
-	return NewInputStreamDataMessage(sequenceNumber, PayloadTypeSize, payload), nil
 }

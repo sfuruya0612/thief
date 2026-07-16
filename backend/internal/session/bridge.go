@@ -129,7 +129,11 @@ func (b *Bridge) pumpBrowserToDataChannel(ctx context.Context) error {
 	for {
 		typ, data, err := b.Browser.Read(ctx)
 		if err != nil {
-			// ブラウザ側の正常切断 (Drawer を閉じる等) はここに到達する。上位で context.Canceled 相当として扱う。
+			// ブラウザ側の正常切断 (Drawer やタブを閉じる等) はエラーではなくブリッジの正常終了として扱う。
+			switch websocket.CloseStatus(err) {
+			case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+				return nil
+			}
 			return err
 		}
 

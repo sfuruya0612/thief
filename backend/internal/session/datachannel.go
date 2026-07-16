@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
@@ -15,18 +16,28 @@ const dataChannelReadLimit = 1 << 20 // 1MiB
 
 // DataChannel は SSM Session Manager / ECS Exec のデータチャネル (agent 側 WebSocket) との接続を表す。
 //
-// シーケンス番号の管理について: sendSequenceNumber は「ブラウザ→データチャネル」方向の goroutine のみが、
-// expectedSequenceNumber は「データチャネル→ブラウザ」方向の goroutine のみが、それぞれ単独で更新する前提のため
-// mutex を持たない (bridge.go の Run が 2 goroutine 構成であることに依存する)。
+// シーケンス番号の管理について: sendSequenceNumber は「ブラウザ→データチャネル」方向の goroutine (キー入力・リサイズ) と
+// 「データチャネル→ブラウザ」方向の goroutine (ハンドシェイク応答) の両方から更新されるため、
+// 採番と送信を 1 クリティカルセクションで行う sendMu で保護する (採番順と送信順の一致を保証する)。
+// expectedSequenceNumber は「データチャネル→ブラウザ」方向の goroutine のみが更新するため mutex 不要。
 // また、WebSocket は単一 TCP 接続上の順序保証があり、本実装では再接続・再送を行わないため、
 // AWS 公式実装が持つ IncomingMessageBuffer によるアウトオブオーダー処理は実装しない。
+//
+// 入力のゲートについて: AWS 公式 session-manager-plugin と同様、ハンドシェイク完了前にキー入力や
+// リサイズを送信すると agent 側の入力ストリーム処理が乱れるため、SendInput / SendSize は
+// handshakeDone が close されるまでブロックする。ハンドシェイク非対応の agent 向けに、
+// 通常出力の初回受信でも handshakeDone を close する。
 type DataChannel struct {
 	conn      *websocket.Conn
 	clientID  string
 	sessionID string
 
+	sendMu                 sync.Mutex
 	sendSequenceNumber     int64
 	expectedSequenceNumber int64
+
+	handshakeOnce sync.Once
+	handshakeDone chan struct{}
 }
 
 // OpenDataChannel は StreamUrl に WebSocket 接続し、OpenDataChannelInput をテキストメッセージとして
@@ -39,9 +50,10 @@ func OpenDataChannel(ctx context.Context, streamURL, tokenValue, sessionID strin
 	conn.SetReadLimit(dataChannelReadLimit)
 
 	dc := &DataChannel{
-		conn:      conn,
-		clientID:  uuid.NewString(),
-		sessionID: sessionID,
+		conn:          conn,
+		clientID:      uuid.NewString(),
+		sessionID:     sessionID,
+		handshakeDone: make(chan struct{}),
 	}
 
 	input := NewOpenDataChannelInput(dc.clientID, tokenValue)
@@ -71,21 +83,48 @@ func (dc *DataChannel) Close() error {
 }
 
 // SendInput は端末入力バイト列を input_stream_data メッセージとして送信する。
+// ハンドシェイク完了までブロックする (ctx キャンセルで解除される)。
 func (dc *DataChannel) SendInput(ctx context.Context, payloadType PayloadType, payload []byte) error {
-	msg := NewInputStreamDataMessage(dc.sendSequenceNumber, payloadType, payload)
-	if err := dc.send(ctx, msg); err != nil {
+	if err := dc.waitHandshake(ctx); err != nil {
 		return err
 	}
-	dc.sendSequenceNumber++
-	return nil
+	return dc.sendInputStreamData(ctx, payloadType, payload)
 }
 
 // SendSize は端末サイズ変更を set_size (PayloadType: Size) の input_stream_data メッセージとして送信する。
+// ハンドシェイク完了までブロックする (ctx キャンセルで解除される)。
 func (dc *DataChannel) SendSize(ctx context.Context, cols, rows uint32) error {
-	msg, err := NewSizeInputMessage(dc.sendSequenceNumber, cols, rows)
-	if err != nil {
+	if err := dc.waitHandshake(ctx); err != nil {
 		return err
 	}
+	payload, err := json.Marshal(SizeData{Cols: cols, Rows: rows})
+	if err != nil {
+		return fmt.Errorf("marshal size data: %w", err)
+	}
+	return dc.sendInputStreamData(ctx, PayloadTypeSize, payload)
+}
+
+// waitHandshake はハンドシェイク完了 (またはハンドシェイク非対応 agent の初回出力受信) まで待機する。
+func (dc *DataChannel) waitHandshake(ctx context.Context) error {
+	select {
+	case <-dc.handshakeDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// markHandshakeDone は入力送信のゲートを解放する。複数回呼んでも安全。
+func (dc *DataChannel) markHandshakeDone() {
+	dc.handshakeOnce.Do(func() { close(dc.handshakeDone) })
+}
+
+// sendInputStreamData は input_stream_data メッセージに送信シーケンス番号を採番して送信する。
+// 採番順と実際の送信順を一致させるため、メッセージ生成から送信完了までを sendMu で保護する。
+func (dc *DataChannel) sendInputStreamData(ctx context.Context, payloadType PayloadType, payload []byte) error {
+	dc.sendMu.Lock()
+	defer dc.sendMu.Unlock()
+	msg := NewInputStreamDataMessage(dc.sendSequenceNumber, payloadType, payload)
 	if err := dc.send(ctx, msg); err != nil {
 		return err
 	}
@@ -169,10 +208,14 @@ func (dc *DataChannel) handleOutputStreamData(ctx context.Context, msg *AgentMes
 			return ReadResult{}, err
 		}
 		// HandshakeCompletePayload の内容 (CustomerMessage 等) は特に処理せず、開始通知として扱う。
+		dc.markHandshakeDone()
 	default:
 		if err := dc.sendAcknowledge(ctx, msg); err != nil {
 			return ReadResult{}, err
 		}
+		// ハンドシェイク非対応の agent はハンドシェイクなしで出力を送ってくるため、
+		// 初回の通常出力でも入力ゲートを解放する。
+		dc.markHandshakeDone()
 		dc.expectedSequenceNumber++
 		return ReadResult{Output: msg.Payload}, nil
 	}
@@ -227,7 +270,8 @@ func (dc *DataChannel) handleHandshakeRequest(ctx context.Context, msg *AgentMes
 	if err != nil {
 		return fmt.Errorf("marshal handshake response: %w", err)
 	}
-	return dc.SendInput(ctx, PayloadTypeHandshakeResponse, payload)
+	// ハンドシェイク完了前に送る応答のため、入力ゲート (waitHandshake) を通さず直接送信する。
+	return dc.sendInputStreamData(ctx, PayloadTypeHandshakeResponse, payload)
 }
 
 // sendAcknowledge は受信メッセージへの acknowledge を送信する。
