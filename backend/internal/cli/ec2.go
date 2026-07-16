@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/config"
@@ -136,16 +135,7 @@ func startEC2Session(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("start session: %w", err)
 	}
 
-	// session-manager-plugin が期待する StartSession API レスポンス/リクエストの JSON 形状。
-	sessJSON, err := util.Parser(struct {
-		SessionId  string
-		StreamUrl  string
-		TokenValue string
-	}{
-		SessionId:  session.SessionID,
-		StreamUrl:  session.StreamURL,
-		TokenValue: session.TokenValue,
-	})
+	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
 	}
@@ -157,9 +147,9 @@ func startEC2Session(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("marshal start session input: %w", err)
 	}
 
-	plug, err := exec.LookPath("session-manager-plugin")
+	plug, err := lookupSessionManagerPlugin()
 	if err != nil {
-		return errors.New("session-manager-plugin not found in PATH")
+		return err
 	}
 
 	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", cfg.Region)

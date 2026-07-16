@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
@@ -213,16 +212,7 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("execute command: %w", err)
 	}
 
-	// session-manager-plugin が期待する Session の JSON 形状。
-	sessJSON, err := util.Parser(struct {
-		SessionId  string
-		StreamUrl  string
-		TokenValue string
-	}{
-		SessionId:  session.SessionID,
-		StreamUrl:  session.StreamURL,
-		TokenValue: session.TokenValue,
-	})
+	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
 	}
@@ -234,9 +224,9 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("marshal target: %w", err)
 	}
 
-	plug, err := exec.LookPath("session-manager-plugin")
+	plug, err := lookupSessionManagerPlugin()
 	if err != nil {
-		return errors.New("session-manager-plugin not found in PATH")
+		return err
 	}
 
 	if err = util.ExecCommand(plug, string(sessJSON), cfg.Region, "StartSession", cfg.Profile, string(targetJSON), fmt.Sprintf("https://ecs.%s.amazonaws.com", cfg.Region)); err != nil {
