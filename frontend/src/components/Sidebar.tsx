@@ -8,6 +8,7 @@ import { AwsIcons } from './icons/AwsIcons';
 import { Icons } from './icons/Icons';
 import { SERVICES } from '../lib/serviceMeta';
 import { useRegions } from '../api/queries';
+import { startSidebarResize } from '../lib/sidebarResize';
 import type { Profile } from '../types/common';
 import { ProfileSelect } from './ProfileSelect';
 
@@ -24,9 +25,6 @@ const SECTIONS: SidebarSection[] = [
   { label: 'Security', services: ['waf', 'iam', 'ssm', 'secrets'] },
   { label: 'Cost', services: ['costexplorer'] },
 ];
-
-const SIDEBAR_MIN_WIDTH = 160;
-const SIDEBAR_MAX_WIDTH = 480;
 
 export interface SidebarProps {
   profile: string;
@@ -53,25 +51,6 @@ export function Sidebar({
   // 取得前は現在選択中の region のみを単一オプションとして表示するフォールバックにする
   const { data: regions } = useRegions(profile);
   const regionOptions = regions && regions.length > 0 ? regions : [{ code: region, name: region }];
-
-  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const move = (ev: PointerEvent) => {
-      const width = Math.min(Math.max(ev.clientX, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
-      document.documentElement.style.setProperty('--sidebar-w', `${width}px`);
-      onWidthChange?.(width);
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-  };
 
   return (
     <aside className="sidebar">
@@ -113,7 +92,11 @@ export function Sidebar({
         </div>
       ))}
 
-      <div className="sidebar-resizer" onPointerDown={startResize} title="Drag to resize" />
+      <div
+        className="sidebar-resizer"
+        onPointerDown={startSidebarResize(onWidthChange)}
+        title="Drag to resize"
+      />
     </aside>
   );
 }

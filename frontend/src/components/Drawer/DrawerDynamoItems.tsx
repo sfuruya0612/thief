@@ -3,8 +3,9 @@
 // 検索時の負荷とコストを最小化するため、明示検索は必ず Query を使う (バックエンド側で保証)。
 // PK/SK に加えて、任意の属性名 + 値による絞り込み (FilterExpression) も PK/SK と併用できる。
 // 取得件数は LIMIT_OPTIONS から選択でき、未選択時は DEFAULT_LIMIT (10件)。
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useDynamoItems, useDynamoSchema } from '../../api/queries';
+import { useColumnResize } from '../../hooks/useColumnResize';
 
 const inputStyle = {
   height: 26,
@@ -18,9 +19,6 @@ const inputStyle = {
 
 const LIMIT_OPTIONS = [10, 50, 100] as const;
 const DEFAULT_LIMIT: (typeof LIMIT_OPTIONS)[number] = 10;
-
-// 列幅の最小値 (px)。これより小さくはリサイズできない
-const MIN_COL_WIDTH = 60;
 
 export interface DrawerDynamoItemsProps {
   profile: string;
@@ -73,37 +71,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
     );
   }, [rows, columns, colFilters]);
 
-  // ドラッグで変更した列幅 (px)。セッション内 (state) のみで保持し、永続化しない
-  const [colWidths, setColWidths] = useState<Record<string, number>>({});
-  const theadRowRef = useRef<HTMLTableRowElement>(null);
-
-  const startColResize = (key: string) => (e: React.PointerEvent<HTMLSpanElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const ths = theadRowRef.current?.querySelectorAll<HTMLTableCellElement>('th[data-col-key]');
-    const snapshot: Record<string, number> = {};
-    ths?.forEach((th) => {
-      const k = th.dataset.colKey;
-      if (k) snapshot[k] = Math.round(th.getBoundingClientRect().width);
-    });
-    const startWidth = snapshot[key] ?? MIN_COL_WIDTH;
-    const startX = e.clientX;
-    setColWidths((prev) => ({ ...snapshot, ...prev }));
-    const move = (ev: PointerEvent) => {
-      const next = Math.max(startWidth + (ev.clientX - startX), MIN_COL_WIDTH);
-      setColWidths((prev) => ({ ...prev, [key]: Math.round(next) }));
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  };
+  const { colWidths, theadRowRef, startColResize } = useColumnResize();
 
   const handleSearch = () => {
     setSubmittedPk(pkInput.trim());
