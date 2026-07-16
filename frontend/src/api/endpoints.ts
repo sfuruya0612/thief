@@ -27,11 +27,11 @@ import type {
 } from '../types/nonaws';
 import type { CloudRunResourceRaw, GcpProjectRaw, GcsBucketRaw, GcsObjectRaw } from '../types/gcp';
 import { GCP_SERVICE_TO_PATH, SERVICE_TO_PATH } from '../lib/serviceMeta';
-import { apiBaseUrl, apiGet, apiPost, apiPostForm } from './client';
+import { apiBaseUrl, apiGet, apiGetList, apiPost, apiPostForm } from './client';
 
 export function getProfiles(): Promise<ProfileRaw[]> {
   // バックエンドは users がない場合 null を返しうるので配列に正規化する
-  return apiGet<ProfileRaw[] | null>('/api/aws/profiles').then((v) => v ?? []);
+  return apiGetList<ProfileRaw>('/api/aws/profiles');
 }
 
 // 選択されたプロファイル 1 件だけ STS GetCallerIdentity で Account ID を確定する。
@@ -52,10 +52,10 @@ export function getResources<TRaw>(
   if (!seg) {
     return Promise.reject(new Error(`unknown service key: ${service}`));
   }
-  return apiGet<TRaw[] | null>(`/api/aws/profiles/${encodeURIComponent(profile)}/${seg}`, {
+  return apiGetList<TRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/${seg}`, {
     region,
     refresh: opts?.refresh ? true : undefined,
-  }).then((v) => v ?? []);
+  });
 }
 
 // Cost Explorer の検索条件。省略時のバックエンド側デフォルトは Granularity: DAILY /
@@ -76,7 +76,7 @@ export function getCost(
   region: string,
   opts?: CostQueryOptions,
 ): Promise<CostRaw[]> {
-  return apiGet<CostRaw[] | null>(`/api/aws/profiles/${encodeURIComponent(profile)}/cost`, {
+  return apiGetList<CostRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/cost`, {
     region,
     include_today: opts?.includeToday ? true : undefined,
     granularity: opts?.granularity,
@@ -84,14 +84,13 @@ export function getCost(
     start: opts?.startDate,
     end: opts?.endDate,
     months: opts?.months !== undefined ? String(opts.months) : undefined,
-  }).then((v) => v ?? []);
+  });
 }
 
 export function getCostForecast(profile: string, region: string): Promise<ForecastRaw[]> {
-  return apiGet<ForecastRaw[] | null>(
-    `/api/aws/profiles/${encodeURIComponent(profile)}/cost/forecast`,
-    { region },
-  ).then((v) => v ?? []);
+  return apiGetList<ForecastRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/cost/forecast`, {
+    region,
+  });
 }
 
 // SSO ログインを開始する (バックエンドが `aws sso login` を起動する)
@@ -103,9 +102,7 @@ export function postSSOLogin(profile: string): Promise<void> {
 // Region (DescribeRegions からの動的取得)
 // ============================================================
 export function getRegions(profile: string): Promise<RegionRaw[]> {
-  return apiGet<RegionRaw[] | null>(
-    `/api/aws/profiles/${encodeURIComponent(profile)}/regions`,
-  ).then((v) => v ?? []);
+  return apiGetList<RegionRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/regions`);
 }
 
 // ============================================================
@@ -117,10 +114,10 @@ export function getS3Objects(
   bucket: string,
   prefix?: string,
 ): Promise<S3ObjectRaw[]> {
-  return apiGet<S3ObjectRaw[] | null>(
+  return apiGetList<S3ObjectRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects`,
     { region, prefix },
-  ).then((v) => v ?? []);
+  );
 }
 
 export function uploadS3Object(
@@ -162,10 +159,10 @@ export function getECSServices(
   region: string,
   cluster: string,
 ): Promise<ECSServiceRaw[]> {
-  return apiGet<ECSServiceRaw[] | null>(
+  return apiGetList<ECSServiceRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/services`,
     { region },
-  ).then((v) => v ?? []);
+  );
 }
 
 export function getECSTasks(
@@ -174,10 +171,10 @@ export function getECSTasks(
   cluster: string,
   service?: string,
 ): Promise<ECSTaskRaw[]> {
-  return apiGet<ECSTaskRaw[] | null>(
+  return apiGetList<ECSTaskRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/tasks`,
     { region, service },
-  ).then((v) => v ?? []);
+  );
 }
 
 export function getECSContainers(
@@ -186,10 +183,10 @@ export function getECSContainers(
   cluster: string,
   task: string,
 ): Promise<ECSContainerRaw[]> {
-  return apiGet<ECSContainerRaw[] | null>(
+  return apiGetList<ECSContainerRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/tasks/${encodeURIComponent(task)}/containers`,
     { region },
-  ).then((v) => v ?? []);
+  );
 }
 
 // ============================================================
@@ -200,10 +197,10 @@ export function getECRImages(
   region: string,
   repo: string,
 ): Promise<ECRImageRaw[]> {
-  return apiGet<ECRImageRaw[] | null>(
+  return apiGetList<ECRImageRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecr/${encodeURIComponent(repo)}/images`,
     { region },
-  ).then((v) => v ?? []);
+  );
 }
 
 // ============================================================
@@ -214,10 +211,10 @@ export function getELBListeners(
   region: string,
   lbArn: string,
 ): Promise<ELBListenerRaw[]> {
-  return apiGet<ELBListenerRaw[] | null>(
+  return apiGetList<ELBListenerRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/elb/listeners`,
     { region, lb_arn: lbArn },
-  ).then((v) => v ?? []);
+  );
 }
 
 export function getELBRules(
@@ -225,10 +222,10 @@ export function getELBRules(
   region: string,
   listenerArn: string,
 ): Promise<ELBRuleRaw[]> {
-  return apiGet<ELBRuleRaw[] | null>(`/api/aws/profiles/${encodeURIComponent(profile)}/elb/rules`, {
+  return apiGetList<ELBRuleRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/elb/rules`, {
     region,
     listener_arn: listenerArn,
-  }).then((v) => v ?? []);
+  });
 }
 
 export function getELBTargetGroups(
@@ -236,10 +233,10 @@ export function getELBTargetGroups(
   region: string,
   lbArn: string,
 ): Promise<ELBTargetGroupRaw[]> {
-  return apiGet<ELBTargetGroupRaw[] | null>(
+  return apiGetList<ELBTargetGroupRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/elb/target-groups`,
     { region, lb_arn: lbArn },
-  ).then((v) => v ?? []);
+  );
 }
 
 export function getELBTargetHealth(
@@ -247,10 +244,10 @@ export function getELBTargetHealth(
   region: string,
   tgArn: string,
 ): Promise<ELBTargetHealthRaw[]> {
-  return apiGet<ELBTargetHealthRaw[] | null>(
+  return apiGetList<ELBTargetHealthRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/elb/target-health`,
     { region, tg_arn: tgArn },
-  ).then((v) => v ?? []);
+  );
 }
 
 // ============================================================
@@ -281,7 +278,7 @@ export function getDynamoItems(
   table: string,
   opts: DynamoItemQueryOptions = {},
 ): Promise<DynamoItemRaw[]> {
-  return apiGet<DynamoItemRaw[] | null>(
+  return apiGetList<DynamoItemRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/dynamo/${encodeURIComponent(table)}/items`,
     {
       region,
@@ -291,23 +288,20 @@ export function getDynamoItems(
       attr_val: opts.attrValue,
       limit: opts.limit !== undefined ? String(opts.limit) : undefined,
     },
-  ).then((v) => v ?? []);
+  );
 }
 
 // ============================================================
 // BigQuery
 // ============================================================
 export function getBQDatasets(projectId?: string): Promise<BQDatasetRaw[]> {
-  return apiGet<BQDatasetRaw[] | null>('/api/bigquery/datasets', { project_id: projectId }).then(
-    (v) => v ?? [],
-  );
+  return apiGetList<BQDatasetRaw>('/api/bigquery/datasets', { project_id: projectId });
 }
 
 export function getBQTables(dataset: string, projectId?: string): Promise<BQTableRaw[]> {
-  return apiGet<BQTableRaw[] | null>(
-    `/api/bigquery/datasets/${encodeURIComponent(dataset)}/tables`,
-    { project_id: projectId },
-  ).then((v) => v ?? []);
+  return apiGetList<BQTableRaw>(`/api/bigquery/datasets/${encodeURIComponent(dataset)}/tables`, {
+    project_id: projectId,
+  });
 }
 
 export function getBQSchema(
@@ -315,10 +309,10 @@ export function getBQSchema(
   table: string,
   projectId?: string,
 ): Promise<BQFieldRaw[]> {
-  return apiGet<BQFieldRaw[] | null>(
+  return apiGetList<BQFieldRaw>(
     `/api/bigquery/datasets/${encodeURIComponent(dataset)}/tables/${encodeURIComponent(table)}/schema`,
     { project_id: projectId },
-  ).then((v) => v ?? []);
+  );
 }
 
 export function postBQQuery(sql: string, projectId?: string): Promise<BQQueryResult> {
@@ -333,11 +327,11 @@ export function getDatadogHistorical(
   endMonth?: string,
   view?: string,
 ): Promise<DatadogCostRaw[]> {
-  return apiGet<DatadogCostRaw[] | null>('/api/datadog/cost/historical', {
+  return apiGetList<DatadogCostRaw>('/api/datadog/cost/historical', {
     start_month: startMonth,
     end_month: endMonth,
     view,
-  }).then((v) => v ?? []);
+  });
 }
 
 export function getDatadogEstimated(
@@ -345,24 +339,22 @@ export function getDatadogEstimated(
   endMonth?: string,
   view?: string,
 ): Promise<DatadogCostRaw[]> {
-  return apiGet<DatadogCostRaw[] | null>('/api/datadog/cost/estimated', {
+  return apiGetList<DatadogCostRaw>('/api/datadog/cost/estimated', {
     start_month: startMonth,
     end_month: endMonth,
     view,
-  }).then((v) => v ?? []);
+  });
 }
 
 // ============================================================
 // TiDB
 // ============================================================
 export function getTiDBProjects(): Promise<TiDBProjectRaw[]> {
-  return apiGet<TiDBProjectRaw[] | null>('/api/tidb/projects').then((v) => v ?? []);
+  return apiGetList<TiDBProjectRaw>('/api/tidb/projects');
 }
 
 export function getTiDBClusters(projectId: string): Promise<TiDBClusterRaw[]> {
-  return apiGet<TiDBClusterRaw[] | null>(
-    `/api/tidb/projects/${encodeURIComponent(projectId)}/clusters`,
-  ).then((v) => v ?? []);
+  return apiGetList<TiDBClusterRaw>(`/api/tidb/projects/${encodeURIComponent(projectId)}/clusters`);
 }
 
 // TiDB Cloud の billing API は月単位でしか取得できないため、start/end (YYYY-MM) で
@@ -373,10 +365,10 @@ export interface TiDBCostQueryOptions {
 }
 
 export function getTiDBCost(opts?: TiDBCostQueryOptions): Promise<TiDBCostRaw[]> {
-  return apiGet<TiDBCostRaw[] | null>('/api/tidb/cost', {
+  return apiGetList<TiDBCostRaw>('/api/tidb/cost', {
     start: opts?.start,
     end: opts?.end,
-  }).then((v) => v ?? []);
+  });
 }
 
 // ============================================================
@@ -385,9 +377,9 @@ export function getTiDBCost(opts?: TiDBCostQueryOptions): Promise<TiDBCostRaw[]>
 // GCP プロジェクト一覧。バックエンドはローカルディスクキャッシュ (~/.config/thief/gcp-projects.json)
 // を返す。refresh=true を渡すと Cloud Resource Manager から再取得しキャッシュを更新する (手動更新)。
 export function getGcpProjects(opts?: { refresh?: boolean }): Promise<GcpProjectRaw[]> {
-  return apiGet<GcpProjectRaw[] | null>('/api/gcp/projects', {
+  return apiGetList<GcpProjectRaw>('/api/gcp/projects', {
     refresh: opts?.refresh ? true : undefined,
-  }).then((v) => v ?? []);
+  });
 }
 
 // service (cloudrun / gcs) 単位で GCP リソース一覧を取得する。
@@ -398,7 +390,7 @@ export function getGcpResources<TRaw>(service: string, projectId: string): Promi
   if (!seg) {
     return Promise.reject(new Error(`unknown gcp service key: ${service}`));
   }
-  return apiGet<TRaw[] | null>(`/api/gcp/${seg}`, { project_id: projectId }).then((v) => v ?? []);
+  return apiGetList<TRaw>(`/api/gcp/${seg}`, { project_id: projectId });
 }
 
 // 型を明示したい呼び出し側向けのエイリアス (使わなくても可)
@@ -416,10 +408,10 @@ export function getGcsObjects(
   bucket: string,
   prefix?: string,
 ): Promise<GcsObjectRaw[]> {
-  return apiGet<GcsObjectRaw[] | null>(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects`, {
+  return apiGetList<GcsObjectRaw>(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects`, {
     project_id: projectId,
     prefix,
-  }).then((v) => v ?? []);
+  });
 }
 
 export function uploadGcsObject(
