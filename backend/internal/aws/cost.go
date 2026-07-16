@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -71,6 +72,19 @@ func costGroupByDimension(dim string) string {
 	default:
 		return CostGroupByService
 	}
+}
+
+// costAmount は Cost Explorer が返す金額文字列を float64 に変換する。
+// nil またはパース不能な文字列は 0 として扱う (fmt.Sscanf と異なり部分一致は受理しない)。
+func costAmount(s *string) float64 {
+	if s == nil {
+		return 0
+	}
+	v, err := strconv.ParseFloat(*s, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // costDateRange は CostQueryOptions から Cost Explorer に渡す期間 (YYYY-MM-DD) を決める。
@@ -146,15 +160,11 @@ func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions)
 			netAmortized := 0.0
 			unit := ""
 			if m, ok := group.Metrics["UnblendedCost"]; ok {
-				if m.Amount != nil {
-					fmt.Sscanf(*m.Amount, "%f", &unblended)
-				}
+				unblended = costAmount(m.Amount)
 				unit = ptrStr(m.Unit)
 			}
 			if m, ok := group.Metrics["NetAmortizedCost"]; ok {
-				if m.Amount != nil {
-					fmt.Sscanf(*m.Amount, "%f", &netAmortized)
-				}
+				netAmortized = costAmount(m.Amount)
 				if unit == "" {
 					unit = ptrStr(m.Unit)
 				}
@@ -202,11 +212,8 @@ func GetForecast(ctx context.Context, profile, _ string) ([]ForecastResource, er
 		if result.TimePeriod != nil {
 			period = ptrStr(result.TimePeriod.Start)
 		}
-		amount := 0.0
+		amount := costAmount(result.MeanValue)
 		unit := ""
-		if result.MeanValue != nil {
-			fmt.Sscanf(*result.MeanValue, "%f", &amount)
-		}
 		if out.Total != nil {
 			unit = ptrStr(out.Total.Unit)
 		}

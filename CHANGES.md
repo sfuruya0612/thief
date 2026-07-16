@@ -146,3 +146,5 @@
   - @sfuruya0612
 - API クライアント層で 22 箇所に反復していた null レスポンスの空配列正規化を apiGetList に、URL 組み立て・ネットワークエラー正規化・非 2xx 変換・POST 空ボディ処理の重複を内部ヘルパに共通化する
   - @sfuruya0612
+- Cost Explorer の金額パースを fmt.Sscanf から strconv.ParseFloat ベースの costAmount ヘルパに統一する (部分一致を受理しない厳密なパースにする)
+  - @sfuruya0612
