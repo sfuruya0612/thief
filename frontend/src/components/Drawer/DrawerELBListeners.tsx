@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useELBListeners, useELBRules } from '../../api/queries';
 import { elbListenerColumns, elbRuleColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
+import { DrawerLoading } from './DrawerLoading';
 import type { ELBListenerRow, ELBRuleRow } from '../../types/aws';
 
 export interface DrawerELBListenersProps {
@@ -37,7 +38,7 @@ function ListenerRules({
     >
       <h3>Rules ({rows.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <DataTable rows={rows} columns={elbRuleColumns} onSelect={() => {}} selectedId={null} />
       )}
@@ -57,7 +58,7 @@ export function DrawerELBListeners({ profile, region, lbArn }: DrawerELBListener
     <div className="section">
       <h3>Listeners ({rows.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <>
           <DataTable

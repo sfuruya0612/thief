@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useECSTasks } from '../../api/queries';
 import { ecsTaskColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
+import { DrawerLoading } from './DrawerLoading';
 import { FacetBar } from '../FacetBar';
 import type { Filters } from '../FacetBar';
 import { StatusBadge } from '../primitives';
@@ -127,7 +128,7 @@ export function DrawerECSTasks({ profile, region, cluster }: DrawerECSTasksProps
     <div className="section">
       <h3>Tasks ({filtered.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <>
           <FacetBar rows={rows} filters={filters} setFilters={setFilters} />

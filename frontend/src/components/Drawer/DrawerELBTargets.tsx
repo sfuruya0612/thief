@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useELBTargetGroups, useELBTargetHealth } from '../../api/queries';
 import { elbTargetGroupColumns, elbTargetHealthColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
+import { DrawerLoading } from './DrawerLoading';
 import type { ELBTargetGroupRow, ELBTargetHealthRow } from '../../types/aws';
 
 export interface DrawerELBTargetsProps {
@@ -37,7 +38,7 @@ function TargetGroupHealth({
     >
       <h3>Targets ({rows.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <DataTable
           rows={rows}
@@ -62,7 +63,7 @@ export function DrawerELBTargets({ profile, region, lbArn }: DrawerELBTargetsPro
     <div className="section">
       <h3>Target groups ({rows.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <>
           <DataTable
