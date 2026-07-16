@@ -51,6 +51,32 @@ func TestCostGroupByDimension(t *testing.T) {
 	}
 }
 
+func TestCostAmount(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	tests := []struct {
+		name string
+		in   *string
+		want float64
+	}{
+		{name: "decimal", in: strPtr("12.34"), want: 12.34},
+		{name: "zero", in: strPtr("0"), want: 0},
+		{name: "negative", in: strPtr("-0.5"), want: -0.5},
+		{name: "exponent", in: strPtr("1.5e2"), want: 150},
+		{name: "nil is zero", in: nil, want: 0},
+		{name: "empty is zero", in: strPtr(""), want: 0},
+		{name: "trailing garbage is zero", in: strPtr("12.34abc"), want: 0},
+		{name: "non numeric is zero", in: strPtr("abc"), want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := costAmount(tt.in)
+			if got != tt.want {
+				t.Errorf("costAmount(%v) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCostDateRange(t *testing.T) {
 	t.Run("StartDate/EndDate 両方指定時はそれを優先する", func(t *testing.T) {
 		start, end := costDateRange(CostQueryOptions{
