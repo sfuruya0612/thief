@@ -33,27 +33,17 @@ func ListECSResources(ctx context.Context, profile, region string) ([]ECSResourc
 		return nil, err
 	}
 
-	// List cluster ARNs.
-	var arns []string
-	paginator := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list ecs clusters: %w", err)
-		}
-		arns = append(arns, page.ClusterArns...)
+	arns, err := listECSClusterArnsWith(ctx, client)
+	if err != nil {
+		return nil, err
 	}
 	if len(arns) == 0 {
 		return nil, nil
 	}
 
-	// Describe in batches of 100 (API limit).
 	var resources []ECSResource
-	for i := 0; i < len(arns); i += 100 {
-		end := i + 100
-		if end > len(arns) {
-			end = len(arns)
-		}
+	for i := 0; i < len(arns); i += ecsDescribeClustersBatchSize {
+		end := min(i+ecsDescribeClustersBatchSize, len(arns))
 		out, err := client.DescribeClusters(ctx, &ecs.DescribeClustersInput{
 			Clusters: arns[i:end],
 			Include:  []ecstypes.ClusterField{ecstypes.ClusterFieldTags},
@@ -66,6 +56,21 @@ func ListECSResources(ctx context.Context, profile, region string) ([]ECSResourc
 		}
 	}
 	return resources, nil
+}
+
+// listECSClusterArnsWith は ECS クラスタの ARN 一覧をページネーションで取得する。
+// ListECSResources と ListECSClusterArns の両方から使う共通コア。
+func listECSClusterArnsWith(ctx context.Context, client *ecs.Client) ([]string, error) {
+	var arns []string
+	paginator := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list ecs clusters: %w", err)
+		}
+		arns = append(arns, page.ClusterArns...)
+	}
+	return arns, nil
 }
 
 func ecsFromCluster(c ecstypes.Cluster) ECSResource {

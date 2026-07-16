@@ -122,3 +122,5 @@
   - @sfuruya0612
 - SDK Tag 型ごとに重複していた tagsToMap 4 実装と WAF のインラインループをジェネリクスの tagsToMapFunc に統合する
   - @sfuruya0612
+- ECS クラスタ ARN 列挙の重複 2 実装を共通コアに集約し、バッチ分割の手書き上限 clamp を min() とバッチサイズ定数に統一する
+  - @sfuruya0612
