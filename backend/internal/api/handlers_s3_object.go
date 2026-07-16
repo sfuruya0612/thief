@@ -23,16 +23,9 @@ func (s *Server) handleS3Objects(w http.ResponseWriter, r *http.Request) {
 	}
 	prefix := r.URL.Query().Get("prefix")
 
-	key := cacheKey("s3-objects", profile, region, bucket, prefix)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("s3-objects", profile, region, bucket, prefix), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListS3Objects(r.Context(), profile, region, bucket, prefix)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleS3ObjectDownload は S3 オブジェクトをストリーミングでダウンロードする。

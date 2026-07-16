@@ -13,16 +13,9 @@ func (s *Server) handleBQDatasets(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key := cacheKey("bq-datasets", projectID)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("bq-datasets", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
 		return client.ListDatasets(r.Context())
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleBQTables(w http.ResponseWriter, r *http.Request) {
@@ -32,16 +25,9 @@ func (s *Server) handleBQTables(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key := cacheKey("bq-tables", projectID, dataset)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("bq-tables", projectID, dataset), cacheTTL, writeInternalFromError, func() (any, error) {
 		return client.ListTables(r.Context(), dataset)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleBQSchema(w http.ResponseWriter, r *http.Request) {
@@ -52,16 +38,9 @@ func (s *Server) handleBQSchema(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key := cacheKey("bq-schema", projectID, dataset, table)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("bq-schema", projectID, dataset, table), cacheTTL, writeInternalFromError, func() (any, error) {
 		return client.GetTableSchema(r.Context(), dataset, table)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleBQQuery(w http.ResponseWriter, r *http.Request) {

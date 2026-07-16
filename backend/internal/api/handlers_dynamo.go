@@ -10,16 +10,9 @@ import (
 func (s *Server) handleDynamoSchema(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	table := r.PathValue("table")
-	key := cacheKey("dynamo-schema", profile, region, table)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("dynamo-schema", profile, region, table), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.DescribeDynamoTable(r.Context(), profile, region, table)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleDynamoItems(w http.ResponseWriter, r *http.Request) {
@@ -35,13 +28,7 @@ func (s *Server) handleDynamoItems(w http.ResponseWriter, r *http.Request) {
 	}
 	// PK/SK/属性フィルタ/件数の値そのものをキャッシュキーに含める (Query/Scan 結果は入力ごとに変わる)。
 	key := cacheKey("dynamo-items", profile, region, table, req.PKValue, req.SKValue, req.AttrName, req.AttrValue, r.URL.Query().Get("limit"))
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, key, cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.QueryDynamoItems(r.Context(), profile, region, table, req)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }

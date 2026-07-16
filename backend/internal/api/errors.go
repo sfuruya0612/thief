@@ -34,6 +34,12 @@ func writeGCPNotConfigured(w http.ResponseWriter) {
 		"GCP is not configured; provide ?project_id= or set GOOGLE_CLOUD_PROJECT")
 }
 
+// writeInternalFromError は err を 500 INTERNAL_ERROR として書き込む。
+// serveCached のエラー writer として writeAWSError と対で使う。
+func writeInternalFromError(w http.ResponseWriter, err error) {
+	writeInternalError(w, err.Error())
+}
+
 // writeAWSError writes the appropriate HTTP error based on whether err is an
 // SSO token expiry (401 SSO_TOKEN_EXPIRED) or a generic AWS error (500).
 func writeAWSError(w http.ResponseWriter, err error) {

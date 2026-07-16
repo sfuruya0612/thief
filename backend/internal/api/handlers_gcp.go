@@ -41,8 +41,7 @@ func (s *Server) handleGCPProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	refresh := s.refresh(r)
-	key := cacheKey("gcp-projects")
-	entry, hit, err := s.resourceCache.Load(key, regionsCacheTTL, refresh, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-projects"), regionsCacheTTL, writeInternalFromError, func() (any, error) {
 		if !refresh {
 			if projects, _, ok, err := gcp.LoadProjectsFromDisk(dir); err != nil {
 				return nil, err
@@ -52,12 +51,6 @@ func (s *Server) handleGCPProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		return gcp.RefreshProjectsOnDisk(r.Context(), dir)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleGCPCloudRun は指定プロジェクトの Cloud Run サービス / ジョブを返す。
@@ -66,16 +59,9 @@ func (s *Server) handleGCPCloudRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key := cacheKey("gcp-cloudrun", projectID)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-cloudrun", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
 		return gcp.ListCloudRun(r.Context(), projectID)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleGCPGCS は指定プロジェクトの Cloud Storage バケット一覧を返す。
@@ -84,16 +70,9 @@ func (s *Server) handleGCPGCS(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key := cacheKey("gcp-gcs", projectID)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-gcs", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
 		return gcp.ListBuckets(r.Context(), projectID)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleGCPGCSObjects は指定バケット配下のオブジェクトを prefix 絞り込みで返す。
@@ -104,16 +83,9 @@ func (s *Server) handleGCPGCSObjects(w http.ResponseWriter, r *http.Request) {
 	}
 	bucket := r.PathValue("bucket")
 	prefix := r.URL.Query().Get("prefix")
-	key := cacheKey("gcp-gcs-objects", projectID, bucket, prefix)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-gcs-objects", projectID, bucket, prefix), cacheTTL, writeInternalFromError, func() (any, error) {
 		return gcp.ListObjects(r.Context(), projectID, bucket, prefix)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleGCPGCSObjectDownload は GCS オブジェクトをストリーミングでダウンロードする。
@@ -163,16 +135,9 @@ func (s *Server) handleGCPIAM(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key := cacheKey("gcp-iam", projectID)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-iam", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
 		return gcp.ListIAMBindings(r.Context(), projectID)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleGCPServiceAccounts は指定プロジェクトの Service Account 一覧を返す。
@@ -181,16 +146,9 @@ func (s *Server) handleGCPServiceAccounts(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	key := cacheKey("gcp-serviceaccounts", projectID)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-serviceaccounts", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
 		return gcp.ListServiceAccounts(r.Context(), projectID)
 	})
-	if err != nil {
-		writeInternalError(w, err.Error())
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 // handleGCPGCSObjectUpload は multipart/form-data の file パートを読み込んで GCS に書き込む。
