@@ -10,14 +10,7 @@ import (
 // キャッシュは長期 (24 時間)、プロファイル単位でキーを分ける。
 func (s *Server) handleRegions(w http.ResponseWriter, r *http.Request) {
 	profile := r.PathValue("profile")
-	key := cacheKey("regions", profile)
-	entry, hit, err := s.resourceCache.Load(key, regionsCacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("regions", profile), regionsCacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListRegions(r.Context(), profile)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }

@@ -116,3 +116,5 @@
 
 - モノレポ移行以前の旧 CLI 単体モジュール (ルート `cmd/` / `internal/` / `main.go` / `go.mod`) とそのドキュメント生成ツール (`docs/`) を削除する
   - @sfuruya0612
+- API サーバのキャッシュ応答ハンドラ約 40 箇所のボイラープレート (Load → エラー → キャッシュヘッダ → JSON) を serveCached ヘルパに共通化する
+  - @sfuruya0612

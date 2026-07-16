@@ -62,205 +62,106 @@ func (s *Server) handleProfileIdentity(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEC2(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	refresh := s.refresh(r)
-	key := cacheKey("ec2", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, refresh, func() (any, error) {
+	s.serveCached(w, r, cacheKey("ec2", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListEC2Resources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleRDS(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("rds", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("rds", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListRDSResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleElastiCache(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("elasticache", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("elasticache", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListElastiCacheResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleLambda(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("lambda", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("lambda", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListLambdaResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleECS(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("ecs", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ecs", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListECSResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleECSServices(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	cluster := r.PathValue("cluster")
-	key := cacheKey("ecs-services", profile, region, cluster)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ecs-services", profile, region, cluster), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListECSServices(r.Context(), profile, region, cluster)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleECSTasks(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	cluster := r.PathValue("cluster")
 	service := r.URL.Query().Get("service")
-	key := cacheKey("ecs-tasks", profile, region, cluster, service)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ecs-tasks", profile, region, cluster, service), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListECSTasks(r.Context(), profile, region, cluster, service)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleECSContainers(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	cluster := r.PathValue("cluster")
 	task := r.PathValue("task")
-	key := cacheKey("ecs-containers", profile, region, cluster, task)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ecs-containers", profile, region, cluster, task), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListECSContainers(r.Context(), profile, region, cluster, task)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleECR(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("ecr", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ecr", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListECRResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleECRImages(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	repo := r.PathValue("repo")
-	key := cacheKey("ecr-images", profile, region, repo)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ecr-images", profile, region, repo), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListECRImages(r.Context(), profile, region, repo)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleS3(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("s3", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("s3", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListS3Resources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleIAM(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("iam", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("iam", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListIAMResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleSSO(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("sso", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("sso", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListSSOAccounts(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleSSMList(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("ssm-list", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("ssm-list", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListSSMParameters(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleSSMGet(w http.ResponseWriter, r *http.Request) {
@@ -278,58 +179,30 @@ func (s *Server) handleSSMGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSecretsList(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("secretsmanager-list", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("secretsmanager-list", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListSecretResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleCFN(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("cfn", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("cfn", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListCFNStacks(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleKinesis(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("kinesis", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("kinesis", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListKinesisResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleCloudFront(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("cloudfront", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("cloudfront", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListCloudFrontResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleCloudFrontInvalidation(w http.ResponseWriter, r *http.Request) {
@@ -352,16 +225,9 @@ func (s *Server) handleCloudFrontInvalidation(w http.ResponseWriter, r *http.Req
 
 func (s *Server) handleELB(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("elb", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("elb", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListELBResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleELBListeners(w http.ResponseWriter, r *http.Request) {
@@ -371,16 +237,9 @@ func (s *Server) handleELBListeners(w http.ResponseWriter, r *http.Request) {
 		writeBadRequest(w, "lb_arn query parameter is required")
 		return
 	}
-	key := cacheKey("elb-listeners", profile, region, lbArn)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("elb-listeners", profile, region, lbArn), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListELBListeners(r.Context(), profile, region, lbArn)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleELBRules(w http.ResponseWriter, r *http.Request) {
@@ -390,16 +249,9 @@ func (s *Server) handleELBRules(w http.ResponseWriter, r *http.Request) {
 		writeBadRequest(w, "listener_arn query parameter is required")
 		return
 	}
-	key := cacheKey("elb-rules", profile, region, listenerArn)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("elb-rules", profile, region, listenerArn), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListELBRules(r.Context(), profile, region, listenerArn)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleELBTargetGroups(w http.ResponseWriter, r *http.Request) {
@@ -409,16 +261,9 @@ func (s *Server) handleELBTargetGroups(w http.ResponseWriter, r *http.Request) {
 		writeBadRequest(w, "lb_arn query parameter is required")
 		return
 	}
-	key := cacheKey("elb-target-groups", profile, region, lbArn)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("elb-target-groups", profile, region, lbArn), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListELBTargetGroups(r.Context(), profile, region, lbArn)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleELBTargetHealth(w http.ResponseWriter, r *http.Request) {
@@ -428,86 +273,44 @@ func (s *Server) handleELBTargetHealth(w http.ResponseWriter, r *http.Request) {
 		writeBadRequest(w, "tg_arn query parameter is required")
 		return
 	}
-	key := cacheKey("elb-target-health", profile, region, tgArn)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("elb-target-health", profile, region, tgArn), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.DescribeELBTargetHealth(r.Context(), profile, region, tgArn)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleDynamo(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("dynamo", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("dynamo", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListDynamoResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleAPIGW(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("apigw", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("apigw", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListAPIGatewayResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleNATGW(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("natgw", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("natgw", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListNATGatewayResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleSQS(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("sqs", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("sqs", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListSQSResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func (s *Server) handleWAF(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	key := cacheKey("waf", profile, region)
-	entry, hit, err := s.resourceCache.Load(key, cacheTTL, s.refresh(r), func() (any, error) {
+	s.serveCached(w, r, cacheKey("waf", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListWAFResources(r.Context(), profile, region)
 	})
-	if err != nil {
-		writeAWSError(w, err)
-		return
-	}
-	writeCacheHeaders(w, cacheHeadersFrom(hit, entry))
-	writeJSON(w, entry.Value)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
