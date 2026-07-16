@@ -182,12 +182,7 @@ func printGCPProjects(cfg *config.Config, projects []gcp.ProjectInfo) error {
 		{Header: "State"},
 		{Header: "CreateTime"},
 	}
-	f := util.NewTableFormatter(cols, cfg.Output)
-	if !cfg.NoHeader {
-		f.PrintHeader()
-	}
-	f.PrintRows(rows)
-	return nil
+	return printRowsOrGroupBy(cfg, cols, rows)
 }
 
 func gcpRunCloudRun(cmd *cobra.Command) error {
@@ -215,12 +210,7 @@ func gcpRunCloudRun(cmd *cobra.Command) error {
 		{Header: "CreateTime"},
 		{Header: "UpdateTime"},
 	}
-	f := util.NewTableFormatter(cols, cfg.Output)
-	if !cfg.NoHeader {
-		f.PrintHeader()
-	}
-	f.PrintRows(rows)
-	return nil
+	return printRowsOrGroupBy(cfg, cols, rows)
 }
 
 func gcpRunBuckets(cmd *cobra.Command) error {
@@ -247,12 +237,7 @@ func gcpRunBuckets(cmd *cobra.Command) error {
 		{Header: "CreateTime"},
 		{Header: "UpdateTime"},
 	}
-	f := util.NewTableFormatter(cols, cfg.Output)
-	if !cfg.NoHeader {
-		f.PrintHeader()
-	}
-	f.PrintRows(rows)
-	return nil
+	return printRowsOrGroupBy(cfg, cols, rows)
 }
 
 func gcpRunIAMBindings(cmd *cobra.Command) error {
@@ -278,12 +263,7 @@ func gcpRunIAMBindings(cmd *cobra.Command) error {
 		{Header: "ProjectID"},
 		{Header: "ConditionTitle"},
 	}
-	f := util.NewTableFormatter(cols, cfg.Output)
-	if !cfg.NoHeader {
-		f.PrintHeader()
-	}
-	f.PrintRows(rows)
-	return nil
+	return printRowsOrGroupBy(cfg, cols, rows)
 }
 
 func gcpRunServiceAccounts(cmd *cobra.Command) error {
@@ -309,12 +289,7 @@ func gcpRunServiceAccounts(cmd *cobra.Command) error {
 		{Header: "Description"},
 		{Header: "Disabled"},
 	}
-	f := util.NewTableFormatter(cols, cfg.Output)
-	if !cfg.NoHeader {
-		f.PrintHeader()
-	}
-	f.PrintRows(rows)
-	return nil
+	return printRowsOrGroupBy(cfg, cols, rows)
 }
 
 func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
@@ -342,10 +317,5 @@ func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
 		{Header: "StorageClass"},
 		{Header: "Updated"},
 	}
-	f := util.NewTableFormatter(cols, cfg.Output)
-	if !cfg.NoHeader {
-		f.PrintHeader()
-	}
-	f.PrintRows(rows)
-	return nil
+	return printRowsOrGroupBy(cfg, cols, rows)
 }

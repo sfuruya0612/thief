@@ -111,6 +111,8 @@
   - @sfuruya0612
 - [FIX] Bottom 配置の Drawer がウィンドウサイズ次第で画面全体を覆い操作不能になる不具合を修正する (永続化サイズを現在のビューポートで再クランプし、CSS の max-height/max-width ガードレールと ESC キーで閉じる操作を追加)
   - @sfuruya0612
+- [FIX] gcp サブコマンドで --group-by (-g) フラグが無視されていた不具合を修正する (テーブル出力を printRowsOrGroupBy に共通化)
+  - @sfuruya0612
 
 ### misc
 
