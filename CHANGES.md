@@ -138,3 +138,5 @@
   - @sfuruya0612
 - 約 95% 同一だった DrawerS3Objects / DrawerGCSObjects を DrawerObjectBrowser コンポーネントに共通化する
   - @sfuruya0612
+- 3 箇所に重複していたテーブル列幅リサイズを useColumnResize フックに、2 箇所に重複していたサイドバー幅リサイズを startSidebarResize ヘルパに共通化する
+  - @sfuruya0612

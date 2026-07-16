@@ -5,6 +5,7 @@
 // (Sidebar.tsx と同じ方針)。
 import { useQuery } from '@tanstack/react-query';
 import { GCP_SERVICES } from '../lib/serviceMeta';
+import { startSidebarResize } from '../lib/sidebarResize';
 import type { GcpProject } from '../types/gcp';
 import { Icons } from '../components/icons/Icons';
 import { GcpIcons } from '../components/icons/GcpIcons';
@@ -21,9 +22,6 @@ const SECTIONS: SidebarSection[] = [
   { label: 'Data', services: ['bigquery', 'gcs'] },
   { label: 'Security', services: ['gcpiam', 'gcpserviceaccounts'] },
 ];
-
-const SIDEBAR_MIN_WIDTH = 160;
-const SIDEBAR_MAX_WIDTH = 480;
 
 export interface GcpSidebarProps {
   project: string;
@@ -43,25 +41,6 @@ export function GcpSidebar({
   onWidthChange,
 }: GcpSidebarProps) {
   const refreshProjects = useRefreshGcpProjects();
-
-  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const move = (ev: PointerEvent) => {
-      const width = Math.min(Math.max(ev.clientX, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
-      document.documentElement.style.setProperty('--sidebar-w', `${width}px`);
-      onWidthChange?.(width);
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-  };
 
   return (
     <aside className="sidebar">
@@ -102,7 +81,11 @@ export function GcpSidebar({
         </div>
       ))}
 
-      <div className="sidebar-resizer" onPointerDown={startResize} title="Drag to resize" />
+      <div
+        className="sidebar-resizer"
+        onPointerDown={startSidebarResize(onWidthChange)}
+        title="Drag to resize"
+      />
     </aside>
   );
 }

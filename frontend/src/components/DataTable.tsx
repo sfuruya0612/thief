@@ -1,7 +1,8 @@
 // tables.jsx DataTable の汎用化移植
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ColumnDef } from './tables/columns';
 import { Loading } from './Loading';
+import { useColumnResize } from '../hooks/useColumnResize';
 
 export interface DataTableProps<T extends { id: string; state?: string }> {
   rows: T[];
@@ -33,9 +34,6 @@ function filterText<T>(c: ColumnDef<T>, row: T): string {
   return v == null ? '' : String(v);
 }
 
-// 列幅の最小値 (px)。これより小さくはリサイズできない
-const MIN_COL_WIDTH = 60;
-
 export function DataTable<T extends { id: string; state?: string }>({
   rows,
   columns,
@@ -46,12 +44,12 @@ export function DataTable<T extends { id: string; state?: string }>({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  // ドラッグで変更した列幅 (px)。セッション内 (state) のみで保持し、永続化しない
-  const [colWidths, setColWidths] = useState<Record<string, number>>({});
   // 列リサイズが一度でも行われたか。true になると table を colgroup の px 合計幅で
   // 描画し、はみ出した分は .table-wrap の横スクロールに委ねる (dt-resized クラス)
   const [resized, setResized] = useState(false);
-  const theadRowRef = useRef<HTMLTableRowElement>(null);
+  const { colWidths, theadRowRef, startColResize } = useColumnResize({
+    onResizeStart: () => setResized(true),
+  });
   // 列ごとのフィルター入力値 (key -> 入力文字列)
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
 
@@ -94,39 +92,6 @@ export function DataTable<T extends { id: string; state?: string }>({
       else n.delete(id);
       return n;
     });
-  };
-
-  // th 右端のハンドルをドラッグして列幅を変更する (Drawer.tsx の startResize と同型)。
-  // 初期幅は % 指定のため、ドラッグ開始時に全列の実描画幅 (px) を確定させる。
-  // 対象列だけを px 化すると他の列が % のまま残り幅計算が不定になるため、
-  // ここで一括してスナップショットを取り colWidths に反映する (dt-resized クラスで有効化)
-  const startColResize = (key: string) => (e: React.PointerEvent<HTMLSpanElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const ths = theadRowRef.current?.querySelectorAll<HTMLTableCellElement>('th[data-col-key]');
-    const snapshot: Record<string, number> = {};
-    ths?.forEach((th) => {
-      const k = th.dataset.colKey;
-      if (k) snapshot[k] = Math.round(th.getBoundingClientRect().width);
-    });
-    const startWidth = snapshot[key] ?? MIN_COL_WIDTH;
-    const startX = e.clientX;
-    setColWidths((prev) => ({ ...snapshot, ...prev }));
-    setResized(true);
-    const move = (ev: PointerEvent) => {
-      const next = Math.max(startWidth + (ev.clientX - startX), MIN_COL_WIDTH);
-      setColWidths((prev) => ({ ...prev, [key]: Math.round(next) }));
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
   };
 
   if (isLoading) {
