@@ -31,15 +31,11 @@ func (r APIGatewayResource) ServiceName() string   { return "apigw" }
 // ListAPIGatewayResources returns all API Gateway APIs (REST v1 + HTTP/WebSocket v2)
 // for the given profile/region.
 func ListAPIGatewayResources(ctx context.Context, profile, region string) ([]APIGatewayResource, error) {
-	restClient, err := NewClient(ctx, profile, region, func(cfg aws.Config) *apigateway.Client {
-		return apigateway.NewFromConfig(cfg)
-	})
+	restClient, err := newAPIGatewayClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
-	v2Client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *apigatewayv2.Client {
-		return apigatewayv2.NewFromConfig(cfg)
-	})
+	v2Client, err := newAPIGatewayV2Client(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -108,4 +104,18 @@ func apigwFromV2Api(a apigwv2types.Api) APIGatewayResource {
 		Endpoint: ptrStr(a.ApiEndpoint),
 		Tags:     a.Tags,
 	}
+}
+
+// newAPIGatewayClient は API Gateway (REST) API クライアントを生成する。
+func newAPIGatewayClient(ctx context.Context, profile, region string) (*apigateway.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *apigateway.Client {
+		return apigateway.NewFromConfig(cfg)
+	})
+}
+
+// newAPIGatewayV2Client は API Gateway (HTTP/WebSocket) API クライアントを生成する。
+func newAPIGatewayV2Client(ctx context.Context, profile, region string) (*apigatewayv2.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *apigatewayv2.Client {
+		return apigatewayv2.NewFromConfig(cfg)
+	})
 }

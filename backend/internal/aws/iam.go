@@ -32,9 +32,7 @@ func (r IAMResource) ServiceName() string   { return "iam" }
 // ListIAMResources returns all IAM users and roles for the given profile.
 // IAM is a global service; region is ignored.
 func ListIAMResources(ctx context.Context, profile, _ string) ([]IAMResource, error) {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *iam.Client {
-		return iam.NewFromConfig(cfg)
-	})
+	client, err := newIAMClient(ctx, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -176,9 +174,7 @@ func (u IAMUserInfo) ToRow() []string {
 // ListIAMUserInfos は全 IAM ユーザーを所属グループ・アタッチ済みポリシーとともに返す。
 // ListIAMResources と異なりユーザーのみを対象とし、取得失敗はエラーとして伝播する。
 func ListIAMUserInfos(ctx context.Context, profile string) ([]IAMUserInfo, error) {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *iam.Client {
-		return iam.NewFromConfig(cfg)
-	})
+	client, err := newIAMClient(ctx, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -254,4 +250,11 @@ func listIAMAttachedPolicyNamesForUser(ctx context.Context, client *iam.Client, 
 		}
 	}
 	return names, nil
+}
+
+// newIAMClient は IAM API クライアントを生成する。IAM はグローバルサービスのため us-east-1 を使う。
+func newIAMClient(ctx context.Context, profile string) (*iam.Client, error) {
+	return NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *iam.Client {
+		return iam.NewFromConfig(cfg)
+	})
 }

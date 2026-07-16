@@ -20,9 +20,7 @@ type CallerIdentity struct {
 // (which only reads ~/.aws/config statically), this makes a live AWS call
 // and therefore requires valid credentials for profile.
 func GetCallerIdentity(ctx context.Context, profile string) (*CallerIdentity, error) {
-	client, err := NewClient(ctx, profile, "", func(cfg aws.Config) *sts.Client {
-		return sts.NewFromConfig(cfg)
-	})
+	client, err := newSTSClient(ctx, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -37,4 +35,11 @@ func GetCallerIdentity(ctx context.Context, profile string) (*CallerIdentity, er
 		ARN:       ptrStr(out.Arn),
 		UserID:    ptrStr(out.UserId),
 	}, nil
+}
+
+// newSTSClient は STS API クライアントを生成する。リージョンは SDK のデフォルト解決に委ねる。
+func newSTSClient(ctx context.Context, profile string) (*sts.Client, error) {
+	return NewClient(ctx, profile, "", func(cfg aws.Config) *sts.Client {
+		return sts.NewFromConfig(cfg)
+	})
 }

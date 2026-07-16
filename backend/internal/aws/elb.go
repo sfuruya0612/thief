@@ -30,9 +30,7 @@ func (r ELBResource) ServiceName() string   { return "elb" }
 
 // ListELBResources returns all ALB/NLB/Gateway load balancers for the given profile/region.
 func ListELBResources(ctx context.Context, profile, region string) ([]ELBResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elbv2.Client {
-		return elbv2.NewFromConfig(cfg)
-	})
+	client, err := newELBClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -86,9 +84,7 @@ type ELBListenerResource struct {
 
 // ListELBListeners returns all listeners attached to the given load balancer.
 func ListELBListeners(ctx context.Context, profile, region, lbArn string) ([]ELBListenerResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elbv2.Client {
-		return elbv2.NewFromConfig(cfg)
-	})
+	client, err := newELBClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -142,9 +138,7 @@ type ELBRuleResource struct {
 
 // ListELBRules returns all rules on the given listener.
 func ListELBRules(ctx context.Context, profile, region, listenerArn string) ([]ELBRuleResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elbv2.Client {
-		return elbv2.NewFromConfig(cfg)
-	})
+	client, err := newELBClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -223,9 +217,7 @@ type ELBTargetGroupResource struct {
 
 // ListELBTargetGroups returns all target groups attached to the given load balancer.
 func ListELBTargetGroups(ctx context.Context, profile, region, lbArn string) ([]ELBTargetGroupResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elbv2.Client {
-		return elbv2.NewFromConfig(cfg)
-	})
+	client, err := newELBClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -271,9 +263,7 @@ type ELBTargetHealthResource struct {
 
 // DescribeELBTargetHealth returns the health of every target registered with the given target group.
 func DescribeELBTargetHealth(ctx context.Context, profile, region, tgArn string) ([]ELBTargetHealthResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elbv2.Client {
-		return elbv2.NewFromConfig(cfg)
-	})
+	client, err := newELBClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -317,4 +307,11 @@ func elbTargetHealthFromSDK(d elbv2types.TargetHealthDescription) ELBTargetHealt
 		Reason:           reason,
 		Description:      description,
 	}
+}
+
+// newELBClient は ELBv2 API クライアントを生成する。
+func newELBClient(ctx context.Context, profile, region string) (*elbv2.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *elbv2.Client {
+		return elbv2.NewFromConfig(cfg)
+	})
 }

@@ -31,9 +31,7 @@ func (r SQSResource) ServiceName() string   { return "sqs" }
 
 // ListSQSResources returns all SQS queues for the given profile/region.
 func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *sqs.Client {
-		return sqs.NewFromConfig(cfg)
-	})
+	client, err := newSQSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -96,4 +94,11 @@ func sqsFromAttributes(url string, attrs map[string]string, tags map[string]stri
 		RetentionDays:     retentionDays,
 		Tags:              tags,
 	}
+}
+
+// newSQSClient は SQS API クライアントを生成する。
+func newSQSClient(ctx context.Context, profile, region string) (*sqs.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *sqs.Client {
+		return sqs.NewFromConfig(cfg)
+	})
 }

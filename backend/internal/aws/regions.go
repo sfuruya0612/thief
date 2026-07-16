@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
@@ -71,9 +70,7 @@ func regionResourceFromCode(code string) RegionResource {
 // DescribeRegions は us-east-1 固定で呼び出す (どのリージョンでも同結果を返すが、
 // プロファイルのデフォルトリージョン未設定でも動く汎用な選択として)。
 func ListRegions(ctx context.Context, profile string) ([]RegionResource, error) {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *ec2.Client {
-		return ec2.NewFromConfig(cfg)
-	})
+	client, err := newEC2Client(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}

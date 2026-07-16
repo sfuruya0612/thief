@@ -31,9 +31,7 @@ func (r S3Resource) ServiceName() string   { return "s3" }
 // ListBuckets is called against us-east-1; per-bucket region is resolved with GetBucketLocation.
 func ListS3Resources(ctx context.Context, profile, _ string) ([]S3Resource, error) {
 	// S3 ListBuckets is a global operation; us-east-1 is the canonical endpoint.
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *s3.Client {
-		return s3.NewFromConfig(cfg)
-	})
+	client, err := newS3Client(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}
@@ -125,9 +123,7 @@ func (b S3BucketInfo) ToRow() []string {
 // ListS3BucketInfos は S3 バケット一覧を返す。
 // ListS3Resources と異なりバケットごとのリージョン・暗号化・公開設定の解決を行わない (軽量)。
 func ListS3BucketInfos(ctx context.Context, profile string) ([]S3BucketInfo, error) {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *s3.Client {
-		return s3.NewFromConfig(cfg)
-	})
+	client, err := newS3Client(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}
@@ -149,4 +145,11 @@ func ListS3BucketInfos(ctx context.Context, profile string) ([]S3BucketInfo, err
 		})
 	}
 	return buckets, nil
+}
+
+// newS3Client は S3 API クライアントを生成する。
+func newS3Client(ctx context.Context, profile, region string) (*s3.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *s3.Client {
+		return s3.NewFromConfig(cfg)
+	})
 }

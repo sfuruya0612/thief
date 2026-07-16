@@ -35,9 +35,7 @@ const (
 
 // getCostDetails は Cost Explorer GetCostAndUsage を呼び、明細一覧を返す。
 func getCostDetails(ctx context.Context, profile, region, startDate, endDate string, granularity cetypes.Granularity, groupBy []cetypes.GroupDefinition, metric CostMetric) ([]CostDetail, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *costexplorer.Client {
-		return costexplorer.NewFromConfig(cfg)
-	})
+	client, err := newCostExplorerClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
@@ -29,9 +28,7 @@ func (r ECSResource) ServiceName() string   { return "ecs" }
 
 // ListECSResources returns all ECS clusters for the given profile/region.
 func ListECSResources(ctx context.Context, profile, region string) ([]ECSResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecs.Client {
-		return ecs.NewFromConfig(cfg)
-	})
+	client, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}

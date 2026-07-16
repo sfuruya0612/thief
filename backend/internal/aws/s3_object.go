@@ -96,9 +96,7 @@ func PutS3Object(ctx context.Context, profile, region, bucket, key string, body 
 // S3 は署名 (SigV4) のためリージョン一致が必要で、us-east-1 固定では別リージョンのバケットに
 // 対する GetObject が 301 でリダイレクトする。
 func newS3ClientForBucket(ctx context.Context, profile, region, bucket string) (*s3.Client, error) {
-	base, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *s3.Client {
-		return s3.NewFromConfig(cfg)
-	})
+	base, err := newS3Client(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}
@@ -110,9 +108,7 @@ func newS3ClientForBucket(ctx context.Context, profile, region, bucket string) (
 			resolved = "us-east-1"
 		}
 	}
-	client, err := NewClient(ctx, profile, resolved, func(cfg aws.Config) *s3.Client {
-		return s3.NewFromConfig(cfg)
-	})
+	client, err := newS3Client(ctx, profile, resolved)
 	if err != nil {
 		return nil, err
 	}

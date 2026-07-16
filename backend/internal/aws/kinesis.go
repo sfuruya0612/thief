@@ -28,9 +28,7 @@ func (r KinesisResource) ServiceName() string   { return "kinesis" }
 
 // ListKinesisResources returns all Kinesis Data Streams for the given profile/region.
 func ListKinesisResources(ctx context.Context, profile, region string) ([]KinesisResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *kinesis.Client {
-		return kinesis.NewFromConfig(cfg)
-	})
+	client, err := newKinesisClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -70,4 +68,11 @@ func kinesisFromSummary(s *kinesistypes.StreamDescriptionSummary) KinesisResourc
 		RetentionHours: ptrInt32(s.RetentionPeriodHours),
 		EncryptionType: string(s.EncryptionType),
 	}
+}
+
+// newKinesisClient は Kinesis API クライアントを生成する。
+func newKinesisClient(ctx context.Context, profile, region string) (*kinesis.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *kinesis.Client {
+		return kinesis.NewFromConfig(cfg)
+	})
 }

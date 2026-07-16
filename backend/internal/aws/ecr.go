@@ -40,9 +40,7 @@ type ECRImageResource struct {
 
 // ListECRResources returns all ECR repositories for the given profile/region.
 func ListECRResources(ctx context.Context, profile, region string) ([]ECRRepoResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
-		return ecr.NewFromConfig(cfg)
-	})
+	client, err := newECRClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +61,7 @@ func ListECRResources(ctx context.Context, profile, region string) ([]ECRRepoRes
 
 // ListECRImages returns all images in the given ECR repository.
 func ListECRImages(ctx context.Context, profile, region, repoName string) ([]ECRImageResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
-		return ecr.NewFromConfig(cfg)
-	})
+	client, err := newECRClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -164,9 +160,7 @@ func (i ECRImageInfo) ToRow() []string {
 
 // ListECRRepoInfos は全 ECR リポジトリをレガシー CLI 互換フィールドで返す。
 func ListECRRepoInfos(ctx context.Context, profile, region string) ([]ECRRepoInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
-		return ecr.NewFromConfig(cfg)
-	})
+	client, err := newECRClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -196,9 +190,7 @@ func ListECRRepoInfos(ctx context.Context, profile, region string) ([]ECRRepoInf
 // ListECRImageInfos は指定リポジトリのイメージ一覧を PushedAt 降順で返す。
 // all が false のときはタグ付きイメージの先頭ページのみ、true のときは全ページを取得する。
 func ListECRImageInfos(ctx context.Context, profile, region, repoName string, all bool) ([]ECRImageInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
-		return ecr.NewFromConfig(cfg)
-	})
+	client, err := newECRClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -256,4 +248,11 @@ func ListECRImageInfos(ctx context.Context, profile, region, repoName string, al
 	})
 
 	return images, nil
+}
+
+// newECRClient は ECR API クライアントを生成する。
+func newECRClient(ctx context.Context, profile, region string) (*ecr.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
+		return ecr.NewFromConfig(cfg)
+	})
 }

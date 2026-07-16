@@ -28,9 +28,7 @@ func (r CFNStackResource) ServiceName() string   { return "cfn" }
 
 // ListCFNStacks returns all non-deleted CloudFormation stacks for the given profile/region.
 func ListCFNStacks(ctx context.Context, profile, region string) ([]CFNStackResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *cloudformation.Client {
-		return cloudformation.NewFromConfig(cfg)
-	})
+	client, err := newCfnClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}

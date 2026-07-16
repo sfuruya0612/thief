@@ -33,9 +33,7 @@ func (r EC2Resource) ServiceName() string   { return "ec2" }
 
 // ListEC2Resources returns all EC2 instances for the given profile/region.
 func ListEC2Resources(ctx context.Context, profile, region string) ([]EC2Resource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ec2.Client {
-		return ec2.NewFromConfig(cfg)
-	})
+	client, err := newEC2Client(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +111,7 @@ func (i EC2InstanceInfo) ToRow() []string {
 // ListEC2Instances はレガシー CLI 互換のフィールドで EC2 インスタンス一覧を返す。
 // ListEC2Resources と異なり terminated を除外せず、running / instance-id フィルタに対応する。
 func ListEC2Instances(ctx context.Context, profile, region string, opts EC2ListOptions) ([]EC2InstanceInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ec2.Client {
-		return ec2.NewFromConfig(cfg)
-	})
+	client, err := newEC2Client(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -242,4 +238,11 @@ func ptrBool(b *bool) bool {
 		return false
 	}
 	return *b
+}
+
+// newEC2Client は EC2 API クライアントを生成する。
+func newEC2Client(ctx context.Context, profile, region string) (*ec2.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *ec2.Client {
+		return ec2.NewFromConfig(cfg)
+	})
 }

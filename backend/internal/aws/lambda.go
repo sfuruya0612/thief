@@ -30,9 +30,7 @@ func (r LambdaResource) ServiceName() string   { return "lambda" }
 
 // ListLambdaResources returns all Lambda functions for the given profile/region.
 func ListLambdaResources(ctx context.Context, profile, region string) ([]LambdaResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *lambda.Client {
-		return lambda.NewFromConfig(cfg)
-	})
+	client, err := newLambdaClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -74,4 +72,11 @@ func lambdaFromFunction(fn lambdatypes.FunctionConfiguration) LambdaResource {
 		Handler:    ptrStr(fn.Handler),
 		Role:       ptrStr(fn.Role),
 	}
+}
+
+// newLambdaClient は Lambda API クライアントを生成する。
+func newLambdaClient(ctx context.Context, profile, region string) (*lambda.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *lambda.Client {
+		return lambda.NewFromConfig(cfg)
+	})
 }

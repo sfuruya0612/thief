@@ -32,9 +32,7 @@ func (r SecretResource) ServiceName() string   { return "secrets" }
 // ListSecretResources returns all Secrets Manager secrets for the given profile/region.
 // 一覧には復号済みの値を含める (シークレットごとに GetSecretValue を呼び出す)。
 func ListSecretResources(ctx context.Context, profile, region string) ([]SecretResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *secretsmanager.Client {
-		return secretsmanager.NewFromConfig(cfg)
-	})
+	client, err := newSecretsManagerClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -83,4 +81,11 @@ func secretFromEntry(s smtypes.SecretListEntry) SecretResource {
 		Description: ptrStr(s.Description),
 		LastChanged: lastChanged,
 	}
+}
+
+// newSecretsManagerClient は Secrets Manager API クライアントを生成する。
+func newSecretsManagerClient(ctx context.Context, profile, region string) (*secretsmanager.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *secretsmanager.Client {
+		return secretsmanager.NewFromConfig(cfg)
+	})
 }

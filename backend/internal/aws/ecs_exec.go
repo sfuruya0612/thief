@@ -63,9 +63,7 @@ type ECSContainerResource struct {
 
 // ListECSServices returns all services in the given ECS cluster.
 func ListECSServices(ctx context.Context, profile, region, cluster string) ([]ECSServiceResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecs.Client {
-		return ecs.NewFromConfig(cfg)
-	})
+	client, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -118,9 +116,7 @@ func ecsServiceFromSDK(s ecstypes.Service) ECSServiceResource {
 
 // ListECSTasks returns all tasks in the given ECS cluster, optionally filtered by service.
 func ListECSTasks(ctx context.Context, profile, region, cluster, service string) ([]ECSTaskResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecs.Client {
-		return ecs.NewFromConfig(cfg)
-	})
+	client, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -204,9 +200,7 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 
 // ListECSContainers returns all containers within the given ECS task.
 func ListECSContainers(ctx context.Context, profile, region, cluster, task string) ([]ECSContainerResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecs.Client {
-		return ecs.NewFromConfig(cfg)
-	})
+	client, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -239,9 +233,7 @@ func ListECSContainers(ctx context.Context, profile, region, cluster, task strin
 // ExecuteECSCommand runs command interactively on the given container within the given task
 // and returns the data channel connection info for the resulting SSM session.
 func ExecuteECSCommand(ctx context.Context, profile, region, cluster, task, container, command string) (*StartSessionResult, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecs.Client {
-		return ecs.NewFromConfig(cfg)
-	})
+	client, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
