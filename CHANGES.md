@@ -128,3 +128,5 @@
   - @sfuruya0612
 - gcp サブコマンドで config ファイルの読み込みと YAML パースが 1 コマンドにつき 2 回走っていた無駄を解消する
   - @sfuruya0612
+- ec2 session / ecs exec で重複していた session-manager-plugin 起動定型 (Session JSON 組み立てとプラグイン探索) を共通ヘルパに集約する
+  - @sfuruya0612
