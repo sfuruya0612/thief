@@ -134,3 +134,5 @@
   - @sfuruya0612
 - frontend の cost 集計 3 実装 (AWS / Datadog / TiDB) を共通コア aggregateCostRows に統合し、グループ数 x 行数の二重走査を単一パスの Map 構築に置き換える
   - @sfuruya0612
+- Datadog / TiDB の Cost タブでほぼ逐語的に重複していた月次コスト表示 UI (Total / 期間・グループ選択 / グラフ / クロス表) を MonthlyCostPanel コンポーネントと lib/monthRange.ts に共通化する
+  - @sfuruya0612
