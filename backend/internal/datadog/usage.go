@@ -41,21 +41,7 @@ func GetHistoricalCost(ctx context.Context, api *UsageMeteringV2API, startMonth,
 		return nil, fmt.Errorf("get datadog historical cost: %w", err)
 	}
 
-	result := []CostInfo{}
-	for _, item := range resp.GetData() {
-		attrs := item.GetAttributes()
-		for _, charge := range attrs.GetCharges() {
-			result = append(result, CostInfo{
-				Month:       attrs.GetDate().Format("2006-01"),
-				AccountName: attrs.GetAccountName(),
-				OrgName:     attrs.GetOrgName(),
-				ProductName: charge.GetProductName(),
-				ChargeType:  charge.GetChargeType(),
-				Cost:        charge.GetCost(),
-			})
-		}
-	}
-	return result, nil
+	return costInfosFromResponse(resp), nil
 }
 
 // GetEstimatedCost returns estimated cost data for the current and/or previous
@@ -82,6 +68,12 @@ func GetEstimatedCost(ctx context.Context, api *UsageMeteringV2API, startMonth, 
 		return nil, fmt.Errorf("get datadog estimated cost: %w", err)
 	}
 
+	return costInfosFromResponse(resp), nil
+}
+
+// costInfosFromResponse は CostByOrgResponse の月次データを charge 単位の CostInfo に展開する。
+// GetHistoricalCostByOrg と GetEstimatedCostByOrg は同じレスポンス型を返すため両方から使う。
+func costInfosFromResponse(resp datadogV2.CostByOrgResponse) []CostInfo {
 	result := []CostInfo{}
 	for _, item := range resp.GetData() {
 		attrs := item.GetAttributes()
@@ -96,7 +88,7 @@ func GetEstimatedCost(ctx context.Context, api *UsageMeteringV2API, startMonth, 
 			})
 		}
 	}
-	return result, nil
+	return result
 }
 
 func parseMonth(s string) (time.Time, error) {

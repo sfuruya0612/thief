@@ -130,3 +130,5 @@
   - @sfuruya0612
 - ec2 session / ecs exec で重複していた session-manager-plugin 起動定型 (Session JSON 組み立てとプラグイン探索) を共通ヘルパに集約する
   - @sfuruya0612
+- Datadog の historical / estimated cost で重複していた CostInfo 組み立てループを costInfosFromResponse に共通化する
+  - @sfuruya0612
