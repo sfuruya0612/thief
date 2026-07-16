@@ -132,3 +132,5 @@
   - @sfuruya0612
 - Datadog の historical / estimated cost で重複していた CostInfo 組み立てループを costInfosFromResponse に共通化する
   - @sfuruya0612
+- frontend の cost 集計 3 実装 (AWS / Datadog / TiDB) を共通コア aggregateCostRows に統合し、グループ数 x 行数の二重走査を単一パスの Map 構築に置き換える
+  - @sfuruya0612
