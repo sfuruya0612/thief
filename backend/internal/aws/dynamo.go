@@ -137,7 +137,12 @@ func DescribeDynamoTable(ctx context.Context, profile, region, table string) (Dy
 	if err != nil {
 		return DynamoTableSchema{}, err
 	}
+	return describeDynamoTableWith(ctx, client, table)
+}
 
+// describeDynamoTableWith は生成済みクライアントでキースキーマを取得するコア。
+// QueryDynamoItems が自前のクライアントを再利用して config の二重ロードを避けるために分離している。
+func describeDynamoTableWith(ctx context.Context, client *dynamodb.Client, table string) (DynamoTableSchema, error) {
 	desc, err := client.DescribeTable(ctx, &dynamodb.DescribeTableInput{
 		TableName: aws.String(table),
 	})
@@ -243,7 +248,7 @@ func QueryDynamoItems(ctx context.Context, profile, region, table string, req Dy
 		return dynamoUnmarshalItems(out.Items)
 	}
 
-	schema, err := DescribeDynamoTable(ctx, profile, region, table)
+	schema, err := describeDynamoTableWith(ctx, client, table)
 	if err != nil {
 		return nil, err
 	}
