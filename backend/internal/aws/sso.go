@@ -31,9 +31,7 @@ func ListSSOAccounts(ctx context.Context, profile, region string) ([]SSOAccountR
 		return nil, fmt.Errorf("load sso token for profile %s: %w", profile, err)
 	}
 
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *sso.Client {
-		return sso.NewFromConfig(cfg)
-	})
+	client, err := newSSOClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -80,4 +78,11 @@ func ssoFromAccount(a ssotypes.AccountInfo, roles []string) SSOAccountResource {
 		EmailAddress: ptrStr(a.EmailAddress),
 		Roles:        roles,
 	}
+}
+
+// newSSOClient は SSO API クライアントを生成する。
+func newSSOClient(ctx context.Context, profile, region string) (*sso.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *sso.Client {
+		return sso.NewFromConfig(cfg)
+	})
 }

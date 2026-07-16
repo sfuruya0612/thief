@@ -98,9 +98,7 @@ func costDateRange(opts CostQueryOptions) (start, end string) {
 // If includeToday is false, the end date is yesterday.
 func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions) ([]CostResource, error) {
 	// Cost Explorer is a global service; us-east-1 is the standard endpoint.
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *costexplorer.Client {
-		return costexplorer.NewFromConfig(cfg)
-	})
+	client, err := newCostExplorerClient(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}
@@ -175,9 +173,7 @@ func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions)
 
 // GetForecast returns the cost forecast for the current month.
 func GetForecast(ctx context.Context, profile, _ string) ([]ForecastResource, error) {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *costexplorer.Client {
-		return costexplorer.NewFromConfig(cfg)
-	})
+	client, err := newCostExplorerClient(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}
@@ -221,4 +217,11 @@ func GetForecast(ctx context.Context, profile, _ string) ([]ForecastResource, er
 		})
 	}
 	return resources, nil
+}
+
+// newCostExplorerClient は Cost Explorer API クライアントを生成する。
+func newCostExplorerClient(ctx context.Context, profile, region string) (*costexplorer.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *costexplorer.Client {
+		return costexplorer.NewFromConfig(cfg)
+	})
 }

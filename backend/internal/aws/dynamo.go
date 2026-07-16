@@ -39,9 +39,7 @@ func (r DynamoResource) ServiceName() string   { return "dynamo" }
 
 // ListDynamoResources returns all DynamoDB tables for the given profile/region.
 func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *dynamodb.Client {
-		return dynamodb.NewFromConfig(cfg)
-	})
+	client, err := newDynamoClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +137,7 @@ type DynamoTableSchema struct {
 // DescribeDynamoTable はテーブルのキースキーマ (PK/SK 名と型) と GSI 一覧を返す。
 // UI 側が Key-Value 検索フォームを組み立てるために使う。
 func DescribeDynamoTable(ctx context.Context, profile, region, table string) (DynamoTableSchema, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *dynamodb.Client {
-		return dynamodb.NewFromConfig(cfg)
-	})
+	client, err := newDynamoClient(ctx, profile, region)
 	if err != nil {
 		return DynamoTableSchema{}, err
 	}
@@ -224,9 +220,7 @@ func resolveDynamoItemLimit(requested int32) int32 {
 // FilterExpression は Query/Scan が返した Limit 件に対して適用されるため、フィルタ後の件数が
 // Limit より少なくなることがある (DynamoDB の仕様通り)。
 func QueryDynamoItems(ctx context.Context, profile, region, table string, req DynamoItemQuery) ([]map[string]any, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *dynamodb.Client {
-		return dynamodb.NewFromConfig(cfg)
-	})
+	client, err := newDynamoClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -334,4 +328,11 @@ func dynamoUnmarshalItems(items []map[string]dynamodbtypes.AttributeValue) ([]ma
 		return nil, fmt.Errorf("unmarshal dynamodb items: %w", err)
 	}
 	return result, nil
+}
+
+// newDynamoClient は DynamoDB API クライアントを生成する。
+func newDynamoClient(ctx context.Context, profile, region string) (*dynamodb.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *dynamodb.Client {
+		return dynamodb.NewFromConfig(cfg)
+	})
 }

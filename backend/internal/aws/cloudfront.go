@@ -29,9 +29,7 @@ func (r CloudFrontResource) ServiceName() string   { return "cloudfront" }
 // ListCloudFrontResources returns all CloudFront distributions.
 // CloudFront is a global service; us-east-1 is used.
 func ListCloudFrontResources(ctx context.Context, profile, _ string) ([]CloudFrontResource, error) {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *cloudfront.Client {
-		return cloudfront.NewFromConfig(cfg)
-	})
+	client, err := newCloudFrontClient(ctx, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -55,9 +53,7 @@ func ListCloudFrontResources(ctx context.Context, profile, _ string) ([]CloudFro
 
 // CreateCloudFrontInvalidation submits a cache invalidation for the given distribution.
 func CreateCloudFrontInvalidation(ctx context.Context, profile, distributionID string, paths []string) error {
-	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *cloudfront.Client {
-		return cloudfront.NewFromConfig(cfg)
-	})
+	client, err := newCloudFrontClient(ctx, profile)
 	if err != nil {
 		return err
 	}
@@ -98,4 +94,11 @@ func cloudfrontFromSummary(d cftypes.DistributionSummary) CloudFrontResource {
 		Enabled:    ptrBool(d.Enabled),
 		PriceClass: string(d.PriceClass),
 	}
+}
+
+// newCloudFrontClient は CloudFront API クライアントを生成する。CloudFront はグローバルサービスのため us-east-1 を使う。
+func newCloudFrontClient(ctx context.Context, profile string) (*cloudfront.Client, error) {
+	return NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *cloudfront.Client {
+		return cloudfront.NewFromConfig(cfg)
+	})
 }

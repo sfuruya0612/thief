@@ -37,9 +37,7 @@ func (r SSMParameterResource) ServiceName() string   { return "ssm" }
 // ListSSMParameters returns all SSM Parameter Store parameters for the given profile/region.
 // 一覧には復号済みの値を含める (GetParameters を最大 10 件ずつのバッチで呼び出す)。
 func ListSSMParameters(ctx context.Context, profile, region string) ([]SSMParameterResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -97,9 +95,7 @@ func fillSSMValues(ctx context.Context, client *ssm.Client, resources []SSMParam
 // GetSSMParameter fetches the value of a single SSM parameter.
 // Set decrypt=true for SecureString parameters.
 func GetSSMParameter(ctx context.Context, profile, region, name string, decrypt bool) (string, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return "", err
 	}
@@ -160,9 +156,7 @@ func (p SSMParameterValue) ToRow() []string {
 // ListSSMParameterInfos は SSM パラメータのメタデータ一覧を返す。
 // path が非空のときは名前の前方一致 (BeginsWith) で絞り込む。値は取得しない。
 func ListSSMParameterInfos(ctx context.Context, profile, region, path string) ([]SSMParameterInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -205,9 +199,7 @@ func ListSSMParameterInfos(ctx context.Context, profile, region, path string) ([
 // GetSSMParameterDetail は単一 SSM パラメータの値と属性 (Name/Type/Value/Version/ARN) を返す。
 // withDecryption が true のとき SecureString を復号する。
 func GetSSMParameterDetail(ctx context.Context, profile, region, name string, withDecryption bool) (*SSMParameterValue, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -237,9 +229,7 @@ func GetSSMParameterDetail(ctx context.Context, profile, region, name string, wi
 // ListSSMOnlineInstanceIDs は SSM Session Manager で接続可能な (PingStatus=Online の)
 // EC2 インスタンス ID 一覧を返す。
 func ListSSMOnlineInstanceIDs(ctx context.Context, profile, region string) ([]string, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -280,4 +270,11 @@ func ssmFromMeta(p ssmtypes.ParameterMetadata) SSMParameterResource {
 		Version:      p.Version,
 		LastModified: lastMod,
 	}
+}
+
+// newSSMClient は SSM API クライアントを生成する。
+func newSSMClient(ctx context.Context, profile, region string) (*ssm.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
+		return ssm.NewFromConfig(cfg)
+	})
 }

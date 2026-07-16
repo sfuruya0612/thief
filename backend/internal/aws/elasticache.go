@@ -30,9 +30,7 @@ func (r ElastiCacheResource) ServiceName() string   { return "elasticache" }
 
 // ListElastiCacheResources returns all ElastiCache clusters for the given profile/region.
 func ListElastiCacheResources(ctx context.Context, profile, region string) ([]ElastiCacheResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elasticache.Client {
-		return elasticache.NewFromConfig(cfg)
-	})
+	client, err := newElastiCacheClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +89,7 @@ func (c ElastiCacheClusterInfo) ToRow() []string {
 
 // ListElastiCacheClusterInfos は ElastiCache クラスタ一覧をレガシー CLI 互換フィールドで返す。
 func ListElastiCacheClusterInfos(ctx context.Context, profile, region string) ([]ElastiCacheClusterInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elasticache.Client {
-		return elasticache.NewFromConfig(cfg)
-	})
+	client, err := newElastiCacheClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -117,4 +113,11 @@ func ListElastiCacheClusterInfos(ctx context.Context, profile, region string) ([
 		}
 	}
 	return clusters, nil
+}
+
+// newElastiCacheClient は ElastiCache API クライアントを生成する。
+func newElastiCacheClient(ctx context.Context, profile, region string) (*elasticache.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *elasticache.Client {
+		return elasticache.NewFromConfig(cfg)
+	})
 }

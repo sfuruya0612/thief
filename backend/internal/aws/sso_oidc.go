@@ -45,12 +45,6 @@ func newSSOOidcClient(ctx context.Context, region string) (*ssooidc.Client, erro
 	})
 }
 
-func newSSOClient(ctx context.Context, region string) (*sso.Client, error) {
-	return NewClient(ctx, "", region, func(cfg awssdk.Config) *sso.Client {
-		return sso.NewFromConfig(cfg)
-	})
-}
-
 // RegisterSSOClient は SSO OIDC クライアントを登録し、クライアント ID とシークレットを返す。
 func RegisterSSOClient(ctx context.Context, region, clientName, clientType string) (*SSOClientRegistration, error) {
 	client, err := newSSOOidcClient(ctx, region)
@@ -152,7 +146,7 @@ type SSOAccountInfo struct {
 
 // ListSSOAccountInfos は指定アクセストークンで参照可能な SSO アカウント一覧を返す。
 func ListSSOAccountInfos(ctx context.Context, region, accessToken string) ([]SSOAccountInfo, error) {
-	client, err := newSSOClient(ctx, region)
+	client, err := newSSOClient(ctx, "", region)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +172,7 @@ func ListSSOAccountInfos(ctx context.Context, region, accessToken string) ([]SSO
 
 // ListSSOAccountRoleNames は指定アカウントで利用可能なロール名一覧を返す。
 func ListSSOAccountRoleNames(ctx context.Context, region, accessToken, accountID string) ([]string, error) {
-	client, err := newSSOClient(ctx, region)
+	client, err := newSSOClient(ctx, "", region)
 	if err != nil {
 		return nil, err
 	}

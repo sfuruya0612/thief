@@ -29,16 +29,12 @@ func (r WAFResource) ServiceName() string   { return "waf" }
 // ListWAFResources returns all WAFv2 Web ACLs (REGIONAL for the given region and
 // CLOUDFRONT scope from us-east-1) for the given profile.
 func ListWAFResources(ctx context.Context, profile, region string) ([]WAFResource, error) {
-	regionalClient, err := NewClient(ctx, profile, region, func(cfg aws.Config) *wafv2.Client {
-		return wafv2.NewFromConfig(cfg)
-	})
+	regionalClient, err := newWAFClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
 	// CloudFront スコープは us-east-1 必須
-	globalClient, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *wafv2.Client {
-		return wafv2.NewFromConfig(cfg)
-	})
+	globalClient, err := newWAFClient(ctx, profile, "us-east-1")
 	if err != nil {
 		return nil, err
 	}
@@ -126,4 +122,11 @@ func newWAFResource(id, name string, scope waftypes.Scope, ruleCount, associated
 		AssociatedCount: associatedCount,
 		Tags:            tags,
 	}
+}
+
+// newWAFClient は WAFv2 API クライアントを生成する。
+func newWAFClient(ctx context.Context, profile, region string) (*wafv2.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *wafv2.Client {
+		return wafv2.NewFromConfig(cfg)
+	})
 }

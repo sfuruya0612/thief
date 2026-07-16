@@ -118,3 +118,5 @@
   - @sfuruya0612
 - API サーバのキャッシュ応答ハンドラ約 40 箇所のボイラープレート (Load → エラー → キャッシュヘッダ → JSON) を serveCached ヘルパに共通化する
   - @sfuruya0612
+- AWS クライアント生成クロージャ約 50 箇所のコピペをサービス別 newXxxClient ヘルパに集約する
+  - @sfuruya0612

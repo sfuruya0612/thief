@@ -34,9 +34,7 @@ func (r RDSResource) ServiceName() string   { return "rds" }
 
 // ListRDSResources returns all RDS DB instances for the given profile/region.
 func ListRDSResources(ctx context.Context, profile, region string) ([]RDSResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *rds.Client {
-		return rds.NewFromConfig(cfg)
-	})
+	client, err := newRDSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -126,9 +124,7 @@ func (c RDSClusterInfo) ToRow() []string {
 
 // ListRDSInstanceInfos は RDS DB インスタンス一覧をレガシー CLI 互換フィールドで返す。
 func ListRDSInstanceInfos(ctx context.Context, profile, region string) ([]RDSInstanceInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *rds.Client {
-		return rds.NewFromConfig(cfg)
-	})
+	client, err := newRDSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +153,7 @@ func ListRDSInstanceInfos(ctx context.Context, profile, region string) ([]RDSIns
 
 // ListRDSClusterInfos は RDS DB クラスタ一覧をレガシー CLI 互換フィールドで返す。
 func ListRDSClusterInfos(ctx context.Context, profile, region string) ([]RDSClusterInfo, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *rds.Client {
-		return rds.NewFromConfig(cfg)
-	})
+	client, err := newRDSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -182,4 +176,11 @@ func ListRDSClusterInfos(ctx context.Context, profile, region string) ([]RDSClus
 		}
 	}
 	return clusters, nil
+}
+
+// newRDSClient は RDS API クライアントを生成する。
+func newRDSClient(ctx context.Context, profile, region string) (*rds.Client, error) {
+	return NewClient(ctx, profile, region, func(cfg aws.Config) *rds.Client {
+		return rds.NewFromConfig(cfg)
+	})
 }

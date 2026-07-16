@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
@@ -30,9 +29,7 @@ func (r NATGatewayResource) ServiceName() string   { return "natgw" }
 
 // ListNATGatewayResources returns all NAT Gateways for the given profile/region.
 func ListNATGatewayResources(ctx context.Context, profile, region string) ([]NATGatewayResource, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ec2.Client {
-		return ec2.NewFromConfig(cfg)
-	})
+	client, err := newEC2Client(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}

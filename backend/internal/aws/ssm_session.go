@@ -19,9 +19,7 @@ type StartSessionResult struct {
 // StartSSMSession starts an SSM Session Manager session against the given managed node target
 // (typically an EC2 instance ID) and returns the data channel connection info.
 func StartSSMSession(ctx context.Context, profile, region, target string) (*StartSessionResult, error) {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +42,7 @@ func StartSSMSession(ctx context.Context, profile, region, target string) (*Star
 // Callers should invoke this with a short-lived context (e.g. detached from the
 // original request context) since it runs as bridge cleanup.
 func TerminateSSMSession(ctx context.Context, profile, region, sessionID string) error {
-	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
-		return ssm.NewFromConfig(cfg)
-	})
+	client, err := newSSMClient(ctx, profile, region)
 	if err != nil {
 		return err
 	}
