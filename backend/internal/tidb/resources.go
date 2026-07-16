@@ -30,6 +30,7 @@ type Cluster struct {
 }
 
 // Cost represents TiDB Cloud billing cost.
+// *Raw フィールドは API レスポンスの金額文字列をそのまま保持する (CLI 表示用、JSON には含めない)。
 type Cost struct {
 	BilledDate      string  `json:"billed_date"`
 	ProjectName     string  `json:"project_name"`
@@ -39,6 +40,10 @@ type Cost struct {
 	Discounts       float64 `json:"discounts"`
 	RunningTotal    float64 `json:"running_total"`
 	TotalCost       float64 `json:"total_cost"`
+	CreditsRaw      string  `json:"-"`
+	DiscountsRaw    string  `json:"-"`
+	RunningTotalRaw string  `json:"-"`
+	TotalCostRaw    string  `json:"-"`
 }
 
 type projectsResponse struct {
@@ -196,6 +201,10 @@ func (c *Client) GetCost(month string) ([]Cost, error) {
 			Discounts:       parseFloat(item.Discounts),
 			RunningTotal:    parseFloat(item.RunningTotal),
 			TotalCost:       parseFloat(item.TotalCost),
+			CreditsRaw:      item.Credits,
+			DiscountsRaw:    item.Discounts,
+			RunningTotalRaw: item.RunningTotal,
+			TotalCostRaw:    item.TotalCost,
 		})
 	}
 	return costs, nil

@@ -90,3 +90,96 @@ func rdsTagsToMap(tags []rdstypes.Tag) map[string]string {
 	}
 	return m
 }
+
+// RDSInstanceInfo はレガシー CLI 互換の RDS インスタンス表示用フィールドを保持する。
+type RDSInstanceInfo struct {
+	Name            string
+	DBInstanceClass string
+	Engine          string
+	EngineVersion   string
+	Storage         string
+	StorageType     string
+	Status          string
+}
+
+// ToRow converts RDSInstanceInfo to a string slice suitable for table formatting.
+func (i RDSInstanceInfo) ToRow() []string {
+	return []string{
+		i.Name, i.DBInstanceClass, i.Engine, i.EngineVersion,
+		i.Storage, i.StorageType, i.Status,
+	}
+}
+
+// RDSClusterInfo はレガシー CLI 互換の RDS クラスタ表示用フィールドを保持する。
+type RDSClusterInfo struct {
+	Name          string
+	Engine        string
+	EngineVersion string
+	EngineMode    string
+	Status        string
+}
+
+// ToRow converts RDSClusterInfo to a string slice suitable for table formatting.
+func (c RDSClusterInfo) ToRow() []string {
+	return []string{c.Name, c.Engine, c.EngineVersion, c.EngineMode, c.Status}
+}
+
+// ListRDSInstanceInfos は RDS DB インスタンス一覧をレガシー CLI 互換フィールドで返す。
+func ListRDSInstanceInfos(ctx context.Context, profile, region string) ([]RDSInstanceInfo, error) {
+	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *rds.Client {
+		return rds.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var instances []RDSInstanceInfo
+	paginator := rds.NewDescribeDBInstancesPaginator(client, &rds.DescribeDBInstancesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe rds instances: %w", err)
+		}
+		for _, db := range page.DBInstances {
+			instances = append(instances, RDSInstanceInfo{
+				Name:            ptrStr(db.DBInstanceIdentifier),
+				DBInstanceClass: ptrStr(db.DBInstanceClass),
+				Engine:          ptrStr(db.Engine),
+				EngineVersion:   ptrStr(db.EngineVersion),
+				Storage:         fmt.Sprintf("%dGB", ptrInt32(db.AllocatedStorage)),
+				StorageType:     ptrStr(db.StorageType),
+				Status:          ptrStr(db.DBInstanceStatus),
+			})
+		}
+	}
+	return instances, nil
+}
+
+// ListRDSClusterInfos は RDS DB クラスタ一覧をレガシー CLI 互換フィールドで返す。
+func ListRDSClusterInfos(ctx context.Context, profile, region string) ([]RDSClusterInfo, error) {
+	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *rds.Client {
+		return rds.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var clusters []RDSClusterInfo
+	paginator := rds.NewDescribeDBClustersPaginator(client, &rds.DescribeDBClustersInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe rds clusters: %w", err)
+		}
+		for _, c := range page.DBClusters {
+			clusters = append(clusters, RDSClusterInfo{
+				Name:          ptrStr(c.DBClusterIdentifier),
+				Engine:        ptrStr(c.Engine),
+				EngineVersion: ptrStr(c.EngineVersion),
+				EngineMode:    ptrStr(c.EngineMode),
+				Status:        ptrStr(c.Status),
+			})
+		}
+	}
+	return clusters, nil
+}

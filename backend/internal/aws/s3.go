@@ -110,3 +110,43 @@ func resolveS3Public(ctx context.Context, client *s3.Client, bucket string) bool
 	return !(ptrBool(cfg.BlockPublicAcls) && ptrBool(cfg.BlockPublicPolicy) &&
 		ptrBool(cfg.IgnorePublicAcls) && ptrBool(cfg.RestrictPublicBuckets))
 }
+
+// S3BucketInfo はレガシー CLI 互換の S3 バケット表示用フィールドを保持する。
+type S3BucketInfo struct {
+	Name         string
+	CreationDate string
+}
+
+// ToRow converts S3BucketInfo to a string slice suitable for table formatting.
+func (b S3BucketInfo) ToRow() []string {
+	return []string{b.Name, b.CreationDate}
+}
+
+// ListS3BucketInfos は S3 バケット一覧を返す。
+// ListS3Resources と異なりバケットごとのリージョン・暗号化・公開設定の解決を行わない (軽量)。
+func ListS3BucketInfos(ctx context.Context, profile string) ([]S3BucketInfo, error) {
+	client, err := NewClient(ctx, profile, "us-east-1", func(cfg aws.Config) *s3.Client {
+		return s3.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
+	if err != nil {
+		return nil, fmt.Errorf("list buckets: %w", err)
+	}
+
+	var buckets []S3BucketInfo
+	for _, b := range out.Buckets {
+		creationDate := ""
+		if b.CreationDate != nil {
+			creationDate = b.CreationDate.Format("2006-01-02 15:04:05")
+		}
+		buckets = append(buckets, S3BucketInfo{
+			Name:         ptrStr(b.Name),
+			CreationDate: creationDate,
+		})
+	}
+	return buckets, nil
+}

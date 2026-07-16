@@ -148,6 +148,10 @@ func TestGetCostReturnsCosts(t *testing.T) {
 		Discounts:       0.5,
 		RunningTotal:    10,
 		TotalCost:       11,
+		CreditsRaw:      "1.5",
+		DiscountsRaw:    "0.5",
+		RunningTotalRaw: "10",
+		TotalCostRaw:    "11",
 	}
 	if got != want {
 		t.Errorf("costs[0] = %+v, want %+v", got, want)

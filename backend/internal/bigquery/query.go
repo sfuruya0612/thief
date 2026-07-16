@@ -50,6 +50,21 @@ func (c *Client) ExecuteQuery(ctx context.Context, sql string) (*QueryResult, er
 
 	// Actual execution.
 	q.DryRun = false
+	return c.readQuery(ctx, q)
+}
+
+// ExecuteQueryUnrestricted runs any SQL query without the read-only validation
+// and without a dry-run check. レガシー CLI (thief bq query) 互換の実行経路で、
+// ローカルユーザー自身の認証情報で任意の SQL (DML/DDL を含む) を実行する。
+// API サーバからは呼ばないこと (サーバ経路は ExecuteQuery の read-only 検証を維持する)。
+func (c *Client) ExecuteQueryUnrestricted(ctx context.Context, sql string) (*QueryResult, error) {
+	q := c.bq.Query(sql)
+	q.UseLegacySQL = false
+	return c.readQuery(ctx, q)
+}
+
+// readQuery はクエリを実行し、結果を文字列テーブルへ変換して返す。
+func (c *Client) readQuery(ctx context.Context, q *bigquery.Query) (*QueryResult, error) {
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("execute bigquery query: %w", err)
