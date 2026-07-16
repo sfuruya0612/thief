@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { useDynamoItems, useDynamoSchema } from '../../api/queries';
 import { useColumnResize } from '../../hooks/useColumnResize';
+import { DrawerLoading } from './DrawerLoading';
 
 const inputStyle = {
   height: 26,
@@ -98,7 +99,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
     <div className="section">
       <h3>Items</h3>
       {schemaLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -162,7 +163,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
               : `${submittedPk ? 'Query' : 'Scan'} 結果 (最大 ${rows.length} 件)`}
           </div>
           {itemsLoading ? (
-            <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+            <DrawerLoading />
           ) : (
             <div className="table-wrap">
               <table className="dt">

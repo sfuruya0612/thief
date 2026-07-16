@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useECRImages } from '../../api/queries';
 import { ecrImageColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
+import { DrawerLoading } from './DrawerLoading';
 
 export interface DrawerECRImagesProps {
   profile: string;
@@ -18,7 +19,7 @@ export function DrawerECRImages({ profile, region, repo }: DrawerECRImagesProps)
     <div className="section">
       <h3>Images ({images.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <DataTable rows={images} columns={ecrImageColumns} onSelect={() => {}} selectedId={null} />
       )}

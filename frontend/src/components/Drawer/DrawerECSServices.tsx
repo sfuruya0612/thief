@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useECSServices } from '../../api/queries';
 import { ecsServiceColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
+import { DrawerLoading } from './DrawerLoading';
 import { FacetBar } from '../FacetBar';
 import type { Filters } from '../FacetBar';
 import type { ECSServiceRow } from '../../types/aws';
@@ -35,7 +36,7 @@ export function DrawerECSServices({ profile, region, cluster }: DrawerECSService
     <div className="section">
       <h3>Services ({filtered.length})</h3>
       {isLoading ? (
-        <div style={{ padding: 20, color: 'var(--text-3)' }}>Loading…</div>
+        <DrawerLoading />
       ) : (
         <>
           <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
