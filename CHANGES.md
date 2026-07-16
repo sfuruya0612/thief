@@ -105,6 +105,8 @@
   - @sfuruya0612
 - [FIX] CloudFormation スタック一覧で DriftInformation が nil のときに backend がパニックする可能性がある不具合を修正する
   - @sfuruya0612
+- [FIX] EC2/ECS ターミナルで送信シーケンス番号のデータ競合によりキー入力が間欠的に効かなくなる不具合を修正し、AWS 公式実装に合わせてハンドシェイク完了前の入力送信の抑止と初回メッセージへの SYN フラグ付与を行うようにする
+  - @sfuruya0612
 
 ### misc
 
