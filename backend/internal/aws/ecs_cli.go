@@ -118,17 +118,7 @@ func ListECSClusterArns(ctx context.Context, profile, region string) ([]string, 
 	if err != nil {
 		return nil, err
 	}
-
-	var arns []string
-	paginator := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list ecs clusters: %w", err)
-		}
-		arns = append(arns, page.ClusterArns...)
-	}
-	return arns, nil
+	return listECSClusterArnsWith(ctx, client)
 }
 
 // GetECSClusterInfos は指定クラスタ群の詳細をレガシー CLI 互換フィールドで返す。

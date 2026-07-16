@@ -82,11 +82,8 @@ func ListECSServices(ctx context.Context, profile, region, cluster string) ([]EC
 	}
 
 	var resources []ECSServiceResource
-	for i := 0; i < len(arns); i += 10 {
-		end := i + 10
-		if end > len(arns) {
-			end = len(arns)
-		}
+	for i := 0; i < len(arns); i += ecsDescribeServicesBatchSize {
+		end := min(i+ecsDescribeServicesBatchSize, len(arns))
 		out, err := client.DescribeServices(ctx, &ecs.DescribeServicesInput{
 			Cluster:  aws.String(cluster),
 			Services: arns[i:end],
@@ -140,11 +137,8 @@ func ListECSTasks(ctx context.Context, profile, region, cluster, service string)
 	}
 
 	var resources []ECSTaskResource
-	for i := 0; i < len(arns); i += 100 {
-		end := i + 100
-		if end > len(arns) {
-			end = len(arns)
-		}
+	for i := 0; i < len(arns); i += ecsDescribeTasksBatchSize {
+		end := min(i+ecsDescribeTasksBatchSize, len(arns))
 		out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{
 			Cluster: aws.String(cluster),
 			Tasks:   arns[i:end],
