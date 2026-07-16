@@ -2,52 +2,81 @@ package cli
 
 import (
 	"context"
-	"fmt"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
 )
 
+var ssmParamListColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "Type"},
+	{Header: "LastModifiedDate"},
+	{Header: "Version"},
+	{Header: "DataType"},
+}
+
+var ssmParamGetColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "Type"},
+	{Header: "Value"},
+	{Header: "Version"},
+	{Header: "ARN"},
+}
+
 func newSSMCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	ssmCmd := &cobra.Command{
 		Use:   "ssm",
-		Short: "Manage SSM Parameter Store",
+		Short: "SSM commands",
 	}
 
-	listCmd := &cobra.Command{
-		Use:   "ls",
-		Short: "List SSM parameters",
+	paramCmd := &cobra.Command{
+		Use:   "param",
+		Short: "Parameter Store commands",
+	}
+
+	lsCmd := &cobra.Command{
+		Use:     "ls",
+		Aliases: []string{"list"},
+		Short:   "List SSM parameters",
+		Long:    "Retrieves and displays a list of SSM Parameter Store parameters.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd,
-				[]util.Column{{Header: "Name"}, {Header: "Type"}, {Header: "Tier"}, {Header: "Version"}, {Header: "LastModified"}},
-				func(ctx context.Context, profile, region string) ([]awsinternal.SSMParameterResource, error) {
-					return awsinternal.ListSSMParameters(ctx, profile, region)
+			path, _ := cmd.Flags().GetString("path")
+			return runList(cmd, ListConfig[awsinternal.SSMParameterInfo]{
+				Columns:  ssmParamListColumns,
+				EmptyMsg: "No SSM parameters found",
+				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.SSMParameterInfo, error) {
+					return awsinternal.ListSSMParameterInfos(ctx, cfg.Profile, cfg.Region, path)
 				},
-			)
+			})
 		},
 	}
+	lsCmd.Flags().StringP("path", "", "", "Filter parameters by path prefix (e.g. /myapp/)")
 
 	getCmd := &cobra.Command{
 		Use:   "get <name>",
 		Short: "Get SSM parameter value",
+		Long:  "Retrieves the value of a single SSM Parameter Store parameter.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
 			}
-			decrypt, _ := cmd.Flags().GetBool("decrypt")
-			value, err := awsinternal.GetSSMParameter(context.Background(), cfg.Profile, cfg.Region, args[0], decrypt)
+			withDecryption, _ := cmd.Flags().GetBool("with-decryption")
+
+			param, err := awsinternal.GetSSMParameterDetail(context.Background(), cfg.Profile, cfg.Region, args[0], withDecryption)
 			if err != nil {
 				return err
 			}
-			fmt.Println(value)
-			return nil
+
+			return printRowsOrGroupBy(cfg, ssmParamGetColumns, [][]string{param.ToRow()})
 		},
 	}
-	getCmd.Flags().Bool("decrypt", false, "Decrypt SecureString value")
+	getCmd.Flags().BoolP("with-decryption", "", false, "Decrypt SecureString parameter values")
 
-	cmd.AddCommand(listCmd, getCmd)
-	return cmd
+	paramCmd.AddCommand(lsCmd, getCmd)
+	ssmCmd.AddCommand(paramCmd)
+	return ssmCmd
 }

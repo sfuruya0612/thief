@@ -158,11 +158,12 @@ func applyFile(cfg *Config, fc fileConfig) {
 }
 
 func applyEnv(cfg *Config) {
-	// AWS: use official AWS env vars only (THIEF_PROFILE/THIEF_REGION removed).
-	if v := firstEnv("AWS_PROFILE"); v != "" {
+	// AWS: 公式 env に加え、レガシー CLI (ルート cmd/) 互換の THIEF_PROFILE/THIEF_REGION を解決する。
+	// THIEF_REGION はレガシー CLI で唯一のリージョン env だったため AWS_REGION より優先する。
+	if v := firstEnv("AWS_PROFILE", "THIEF_PROFILE"); v != "" {
 		cfg.Profile = v
 	}
-	if v := firstEnv("AWS_REGION", "AWS_DEFAULT_REGION"); v != "" {
+	if v := firstEnv("THIEF_REGION", "AWS_REGION", "AWS_DEFAULT_REGION"); v != "" {
 		cfg.Region = v
 	}
 	if v := os.Getenv("THIEF_OUTPUT"); v != "" {
@@ -248,6 +249,15 @@ func firstEnv(keys ...string) string {
 	}
 	return ""
 }
+
+// SetDatadogAPIKey は Datadog API key を上書きする (CLI フラグからの注入用)。
+func (c *Config) SetDatadogAPIKey(v string) { c.Datadog.APIKey = redacted(v) }
+
+// SetDatadogAppKey は Datadog App key を上書きする (CLI フラグからの注入用)。
+func (c *Config) SetDatadogAppKey(v string) { c.Datadog.AppKey = redacted(v) }
+
+// SetTiDBPrivateKey は TiDB private key を上書きする (CLI フラグからの注入用)。
+func (c *Config) SetTiDBPrivateKey(v string) { c.TiDB.PrivateKey = redacted(v) }
 
 // DatadogAPIKey returns the plaintext Datadog API key.
 func (c *Config) DatadogAPIKey() string { return c.Datadog.APIKey.value() }

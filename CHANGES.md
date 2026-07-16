@@ -4,6 +4,8 @@
 
 - [UPDATE] backend の listen アドレスと WebSocket 許可オリジンを環境変数 (`THIEF_LISTEN_ADDR` / `THIEF_WEB_ORIGINS`) で設定可能にする
   - @sfuruya0612
+- [UPDATE] backend の設定解決でレガシー CLI 互換の環境変数 `THIEF_PROFILE` / `THIEF_REGION` を解決するようにする
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
@@ -46,7 +48,16 @@
   - @sfuruya0612
 - [ADD] Cost Explorer のクロス集計表の列幅をドラッグでリサイズできるようにする
   - @sfuruya0612
-- [CHANGE] Drawer のタブ構成を Overview / Tags のみに統一し、EC2 と ECS にのみ Terminal タブを追加する
+- [ADD] backend CLI に全コマンド共通の `-g/--group-by` フラグを追加し、指定列の値ごとの件数集計を出力できるようにする
+  - @sfuruya0612
+- [ADD] backend CLI に AWS SSO のデバイス認可ログインと `~/.aws/config` 生成 (`sso login` / `sso logout` / `sso generate-config`) を追加する
+  - @sfuruya0612
+- [ADD] backend CLI に session-manager-plugin 連携のターミナル接続 (`ec2 session` / `ecs exec`) を追加する
+  - @sfuruya0612
+- [ADD] backend CLI に Cost Explorer のクロス集計 (`cost service` / `cost account` / `cost usage-type` / `cost overview`) を追加する
+  - @sfuruya0612
+- [ADD] backend CLI に `ecs services` / `ecs tasks` / `rds cluster` / `cfn describe` / `cfn changeset` / `ecr images` / `bq table info` / `datadog estimated` を追加する
+  - @sfuruya0612
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
@@ -74,6 +85,8 @@
   - @sfuruya0612
 - [CHANGE] backend が返す各 AWS サービスの state を小文字・ハイフン表記に統一する
   - @sfuruya0612
+- [CHANGE] backend CLI のコマンド体系・フラグ・出力列をレガシー CLI (ルート cmd/) のインターフェースに一致させる (`ec2` → `ec2 ls`、`ssm ls` → `ssm param ls`、`datadog cost historical` → `datadog historical`、`tidb cost --month` → `tidb cost --billed-month`、`bq table ls <dataset>` → `bq table ls --dataset` 等)
+  - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
   - @sfuruya0612
 - [FIX] ECS Service / Task / Container の state が SDK 生値の大文字表記のままで StatusBadge が未知 state 扱いになる不具合を修正する
@@ -89,4 +102,11 @@
 - [FIX] StrictMode の再マウント時に xterm.js 内部の未キャンセル setTimeout が dispose 後に発火し Terminal タブがクラッシュする不具合を修正する
   - @sfuruya0612
 - [FIX] Drawer 内の表 (S3・GCS のオブジェクト一覧等) で列幅ドラッグリサイズが `table-layout: fixed` + 幅 100% 固定により実質効かない不具合を修正する
+  - @sfuruya0612
+- [FIX] CloudFormation スタック一覧で DriftInformation が nil のときに backend がパニックする可能性がある不具合を修正する
+  - @sfuruya0612
+
+### misc
+
+- モノレポ移行以前の旧 CLI 単体モジュール (ルート `cmd/` / `internal/` / `main.go` / `go.mod`) とそのドキュメント生成ツール (`docs/`) を削除する
   - @sfuruya0612

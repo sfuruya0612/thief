@@ -80,6 +80,126 @@ func ec2FromInstance(inst ec2types.Instance) EC2Resource {
 	return r
 }
 
+// EC2ListOptions は CLI 向け EC2 一覧のフィルタ条件。
+type EC2ListOptions struct {
+	// Running が true のとき running 状態のインスタンスのみ返す。
+	Running bool
+	// InstanceIDs が非空のとき指定 ID のインスタンスのみ返す。
+	InstanceIDs []string
+}
+
+// EC2InstanceInfo はレガシー CLI 互換の EC2 表示用フィールドを保持する。
+type EC2InstanceInfo struct {
+	Name         string
+	InstanceID   string
+	InstanceType string
+	Lifecycle    string
+	PrivateIP    string
+	PublicIP     string
+	State        string
+	KeyName      string
+	AZ           string
+	LaunchTime   string
+}
+
+// ToRow converts EC2InstanceInfo to a string slice suitable for table formatting.
+func (i EC2InstanceInfo) ToRow() []string {
+	return []string{
+		i.Name, i.InstanceID, i.InstanceType, i.Lifecycle,
+		i.PrivateIP, i.PublicIP, i.State, i.KeyName, i.AZ, i.LaunchTime,
+	}
+}
+
+// ListEC2Instances はレガシー CLI 互換のフィールドで EC2 インスタンス一覧を返す。
+// ListEC2Resources と異なり terminated を除外せず、running / instance-id フィルタに対応する。
+func ListEC2Instances(ctx context.Context, profile, region string, opts EC2ListOptions) ([]EC2InstanceInfo, error) {
+	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ec2.Client {
+		return ec2.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	input := &ec2.DescribeInstancesInput{}
+	if opts.Running {
+		input.Filters = append(input.Filters, ec2types.Filter{
+			Name:   aws.String("instance-state-name"),
+			Values: []string{"running"},
+		})
+	}
+	if len(opts.InstanceIDs) > 0 {
+		input.Filters = append(input.Filters, ec2types.Filter{
+			Name:   aws.String("instance-id"),
+			Values: opts.InstanceIDs,
+		})
+	}
+
+	var instances []EC2InstanceInfo
+	paginator := ec2.NewDescribeInstancesPaginator(client, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe ec2 instances: %w", err)
+		}
+		for _, r := range page.Reservations {
+			for _, inst := range r.Instances {
+				instances = append(instances, ec2InstanceInfoFromSDK(inst))
+			}
+		}
+	}
+	return instances, nil
+}
+
+func ec2InstanceInfoFromSDK(inst ec2types.Instance) EC2InstanceInfo {
+	lifecycle := "OnDemand"
+	if inst.InstanceLifecycle != "" {
+		lifecycle = string(inst.InstanceLifecycle)
+	}
+
+	privateIP := "None"
+	if inst.PrivateIpAddress != nil {
+		privateIP = *inst.PrivateIpAddress
+	}
+
+	publicIP := "None"
+	if inst.PublicIpAddress != nil {
+		publicIP = *inst.PublicIpAddress
+	}
+
+	keyName := "None"
+	if inst.KeyName != nil {
+		keyName = *inst.KeyName
+	}
+
+	state := ""
+	if inst.State != nil {
+		state = string(inst.State.Name)
+	}
+
+	az := ""
+	if inst.Placement != nil {
+		az = ptrStr(inst.Placement.AvailabilityZone)
+	}
+
+	launchTime := ""
+	if inst.LaunchTime != nil {
+		launchTime = inst.LaunchTime.String()
+	}
+
+	return EC2InstanceInfo{
+		Name:         tagsToMap(inst.Tags)["Name"],
+		InstanceID:   ptrStr(inst.InstanceId),
+		InstanceType: string(inst.InstanceType),
+		Lifecycle:    lifecycle,
+		PrivateIP:    privateIP,
+		PublicIP:     publicIP,
+		State:        state,
+		KeyName:      keyName,
+		AZ:           az,
+		LaunchTime:   launchTime,
+	}
+}
+
 func tagsToMap(tags []ec2types.Tag) map[string]string {
 	m := make(map[string]string, len(tags))
 	for _, t := range tags {

@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# ビルド済み CLI バイナリ (go build ./cmd/thief の成果物)
+/backend/thief
+
 # Test binary, built with `go test -c`
 *.test
 

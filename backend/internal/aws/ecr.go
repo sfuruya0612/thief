@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -124,4 +126,134 @@ func ecrImageFromDetail(repoName string, img ecrtypes.ImageDetail) ECRImageResou
 		LastPulledAt:   lastPulledAt,
 		ImageSizeBytes: ptrInt64(img.ImageSizeInBytes),
 	}
+}
+
+// ecrImagesPageSizeAll / ecrImagesPageSizeTagged は DescribeImages の 1 ページあたり取得件数。
+// 全件取得時は最大値、既定 (タグ付きのみ) は直近の把握に十分な件数に絞る。
+const (
+	ecrImagesPageSizeAll    = 1000
+	ecrImagesPageSizeTagged = 30
+)
+
+// ECRRepoInfo はレガシー CLI 互換の ECR リポジトリ表示用フィールドを保持する。
+type ECRRepoInfo struct {
+	RepositoryName string
+	RepositoryUri  string
+	CreatedAt      string
+}
+
+// ToRow converts ECRRepoInfo to a string slice suitable for table formatting.
+func (r ECRRepoInfo) ToRow() []string {
+	return []string{r.RepositoryName, r.RepositoryUri, r.CreatedAt}
+}
+
+// ECRImageInfo はレガシー CLI 互換の ECR イメージ表示用フィールドを保持する。
+type ECRImageInfo struct {
+	RepositoryName string
+	ImageTag       string
+	ImageDigest    string
+	PushedAt       string
+	LastPulledAt   string
+	ImageSizeBytes string
+}
+
+// ToRow converts ECRImageInfo to a string slice suitable for table formatting.
+func (i ECRImageInfo) ToRow() []string {
+	return []string{i.RepositoryName, i.ImageTag, i.ImageDigest, i.PushedAt, i.LastPulledAt, i.ImageSizeBytes}
+}
+
+// ListECRRepoInfos は全 ECR リポジトリをレガシー CLI 互換フィールドで返す。
+func ListECRRepoInfos(ctx context.Context, profile, region string) ([]ECRRepoInfo, error) {
+	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
+		return ecr.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var repos []ECRRepoInfo
+	paginator := ecr.NewDescribeRepositoriesPaginator(client, &ecr.DescribeRepositoriesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe ecr repositories: %w", err)
+		}
+		for _, repo := range page.Repositories {
+			createdAt := ""
+			if repo.CreatedAt != nil {
+				createdAt = repo.CreatedAt.String()
+			}
+			repos = append(repos, ECRRepoInfo{
+				RepositoryName: ptrStr(repo.RepositoryName),
+				RepositoryUri:  ptrStr(repo.RepositoryUri),
+				CreatedAt:      createdAt,
+			})
+		}
+	}
+	return repos, nil
+}
+
+// ListECRImageInfos は指定リポジトリのイメージ一覧を PushedAt 降順で返す。
+// all が false のときはタグ付きイメージの先頭ページのみ、true のときは全ページを取得する。
+func ListECRImageInfos(ctx context.Context, profile, region, repoName string, all bool) ([]ECRImageInfo, error) {
+	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *ecr.Client {
+		return ecr.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var images []ECRImageInfo
+	var nextToken *string
+	for {
+		input := &ecr.DescribeImagesInput{
+			RepositoryName: aws.String(repoName),
+			NextToken:      nextToken,
+		}
+		if all {
+			input.MaxResults = aws.Int32(ecrImagesPageSizeAll)
+		} else {
+			input.MaxResults = aws.Int32(ecrImagesPageSizeTagged)
+			input.Filter = &ecrtypes.DescribeImagesFilter{TagStatus: ecrtypes.TagStatusTagged}
+		}
+
+		o, err := client.DescribeImages(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("describe images for %s: %w", repoName, err)
+		}
+
+		for _, img := range o.ImageDetails {
+			pushedAt := ""
+			if img.ImagePushedAt != nil {
+				pushedAt = img.ImagePushedAt.Format("2006-01-02 15:04:05")
+			}
+			lastPulledAt := ""
+			if img.LastRecordedPullTime != nil {
+				lastPulledAt = img.LastRecordedPullTime.Format("2006-01-02 15:04:05")
+			}
+			sizeBytes := ""
+			if img.ImageSizeInBytes != nil {
+				sizeBytes = fmt.Sprintf("%d", *img.ImageSizeInBytes)
+			}
+			images = append(images, ECRImageInfo{
+				RepositoryName: repoName,
+				ImageTag:       strings.Join(img.ImageTags, ","),
+				ImageDigest:    ptrStr(img.ImageDigest),
+				PushedAt:       pushedAt,
+				LastPulledAt:   lastPulledAt,
+				ImageSizeBytes: sizeBytes,
+			})
+		}
+
+		if !all || o.NextToken == nil {
+			break
+		}
+		nextToken = o.NextToken
+	}
+
+	sort.Slice(images, func(i, j int) bool {
+		return images[i].PushedAt > images[j].PushedAt
+	})
+
+	return images, nil
 }

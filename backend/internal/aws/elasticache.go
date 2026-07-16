@@ -70,3 +70,51 @@ func elastiCacheFromCluster(c ectypes.CacheCluster) ElastiCacheResource {
 		Port:          port,
 	}
 }
+
+// ElastiCacheClusterInfo はレガシー CLI 互換の ElastiCache 表示用フィールドを保持する。
+type ElastiCacheClusterInfo struct {
+	ReplicationGroupID string
+	CacheClusterID     string
+	CacheNodeType      string
+	Engine             string
+	EngineVersion      string
+	Status             string
+}
+
+// ToRow converts ElastiCacheClusterInfo to a string slice suitable for table formatting.
+func (c ElastiCacheClusterInfo) ToRow() []string {
+	return []string{
+		c.ReplicationGroupID, c.CacheClusterID, c.CacheNodeType,
+		c.Engine, c.EngineVersion, c.Status,
+	}
+}
+
+// ListElastiCacheClusterInfos は ElastiCache クラスタ一覧をレガシー CLI 互換フィールドで返す。
+func ListElastiCacheClusterInfos(ctx context.Context, profile, region string) ([]ElastiCacheClusterInfo, error) {
+	client, err := NewClient(ctx, profile, region, func(cfg aws.Config) *elasticache.Client {
+		return elasticache.NewFromConfig(cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var clusters []ElastiCacheClusterInfo
+	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe elasticache clusters: %w", err)
+		}
+		for _, c := range page.CacheClusters {
+			clusters = append(clusters, ElastiCacheClusterInfo{
+				ReplicationGroupID: ptrStr(c.ReplicationGroupId),
+				CacheClusterID:     ptrStr(c.CacheClusterId),
+				CacheNodeType:      ptrStr(c.CacheNodeType),
+				Engine:             ptrStr(c.Engine),
+				EngineVersion:      ptrStr(c.EngineVersion),
+				Status:             ptrStr(c.CacheClusterStatus),
+			})
+		}
+	}
+	return clusters, nil
+}
