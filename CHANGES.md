@@ -136,3 +136,5 @@
   - @sfuruya0612
 - Datadog / TiDB の Cost タブでほぼ逐語的に重複していた月次コスト表示 UI (Total / 期間・グループ選択 / グラフ / クロス表) を MonthlyCostPanel コンポーネントと lib/monthRange.ts に共通化する
   - @sfuruya0612
+- 約 95% 同一だった DrawerS3Objects / DrawerGCSObjects を DrawerObjectBrowser コンポーネントに共通化する
+  - @sfuruya0612
