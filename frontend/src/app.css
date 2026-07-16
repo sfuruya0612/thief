@@ -1143,6 +1143,8 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   right: 8px;
   bottom: 8px;
   width: min(600px, 52vw);
+  /* インラインの px 指定 (永続化されたリサイズ値) が描画後のウィンドウ縮小を追い越さないためのガードレール */
+  max-width: 85vw;
   background: var(--bg-1);
   border: 1px solid var(--line-2);
   border-radius: 12px;
@@ -1165,7 +1167,10 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   right: 8px;
   bottom: 8px;
   width: auto;
+  max-width: none;
   height: min(46vh, 520px);
+  /* インラインの px 指定が現在のビューポートを超えて画面全体を覆わないためのガードレール */
+  max-height: 85vh;
   transform: translateY(calc(100% + 16px));
 }
 .drawer.pos-bottom.open {
