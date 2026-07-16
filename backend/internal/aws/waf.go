@@ -103,9 +103,7 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 			ResourceARN: s.ARN,
 		})
 		if tagErr == nil && tagsOut != nil && tagsOut.TagInfoForResource != nil {
-			for _, t := range tagsOut.TagInfoForResource.TagList {
-				tags[ptrStr(t.Key)] = ptrStr(t.Value)
-			}
+			tags = tagsToMapFunc(tagsOut.TagInfoForResource.TagList, func(t waftypes.Tag) (*string, *string) { return t.Key, t.Value })
 		}
 		resources = append(resources, newWAFResource(ptrStr(s.Id), ptrStr(s.Name), scope, ruleCount, associatedCount, tags))
 	}

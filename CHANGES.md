@@ -120,3 +120,5 @@
   - @sfuruya0612
 - AWS クライアント生成クロージャ約 50 箇所のコピペをサービス別 newXxxClient ヘルパに集約する
   - @sfuruya0612
+- SDK Tag 型ごとに重複していた tagsToMap 4 実装と WAF のインラインループをジェネリクスの tagsToMapFunc に統合する
+  - @sfuruya0612

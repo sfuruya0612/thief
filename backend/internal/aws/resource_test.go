@@ -25,3 +25,37 @@ func TestDisplayState(t *testing.T) {
 		})
 	}
 }
+
+func TestTagsToMapFunc(t *testing.T) {
+	type tag struct {
+		Key   *string
+		Value *string
+	}
+	str := func(s string) *string { return &s }
+	kv := func(tg tag) (*string, *string) { return tg.Key, tg.Value }
+
+	tests := []struct {
+		name string
+		in   []tag
+		want map[string]string
+	}{
+		{name: "empty", in: nil, want: map[string]string{}},
+		{name: "single", in: []tag{{Key: str("Name"), Value: str("web")}}, want: map[string]string{"Name": "web"}},
+		{name: "multiple", in: []tag{{Key: str("a"), Value: str("1")}, {Key: str("b"), Value: str("2")}}, want: map[string]string{"a": "1", "b": "2"}},
+		{name: "nil key and value", in: []tag{{Key: nil, Value: nil}}, want: map[string]string{"": ""}},
+		{name: "duplicate key last wins", in: []tag{{Key: str("a"), Value: str("1")}, {Key: str("a"), Value: str("2")}}, want: map[string]string{"a": "2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tagsToMapFunc(tt.in, kv)
+			if len(got) != len(tt.want) {
+				t.Fatalf("tagsToMapFunc() = %v, want %v", got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("tagsToMapFunc()[%q] = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}

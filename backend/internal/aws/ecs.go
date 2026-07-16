@@ -83,9 +83,5 @@ func ecsFromCluster(c ecstypes.Cluster) ECSResource {
 }
 
 func ecsTagsToMap(tags []ecstypes.Tag) map[string]string {
-	m := make(map[string]string, len(tags))
-	for _, t := range tags {
-		m[ptrStr(t.Key)] = ptrStr(t.Value)
-	}
-	return m
+	return tagsToMapFunc(tags, func(t ecstypes.Tag) (*string, *string) { return t.Key, t.Value })
 }

@@ -107,11 +107,7 @@ func dynamoFromDescription(t *dynamodbtypes.TableDescription) DynamoResource {
 }
 
 func dynamoTagsToMap(tags []dynamodbtypes.Tag) map[string]string {
-	m := make(map[string]string, len(tags))
-	for _, t := range tags {
-		m[ptrStr(t.Key)] = ptrStr(t.Value)
-	}
-	return m
+	return tagsToMapFunc(tags, func(t dynamodbtypes.Tag) (*string, *string) { return t.Key, t.Value })
 }
 
 // DynamoKeyAttribute はテーブル/GSI のキー属性名と型 (S/N/B) を表す。

@@ -32,6 +32,17 @@ func NormalizeState(raw string) string {
 	}
 }
 
+// tagsToMapFunc は SDK ごとに型が異なる Tag スライスを map[string]string へ変換する。
+// kv は各 Tag からキーと値のポインタを取り出すアクセサ。nil は空文字として扱う。
+func tagsToMapFunc[T any](tags []T, kv func(T) (key, value *string)) map[string]string {
+	m := make(map[string]string, len(tags))
+	for _, t := range tags {
+		k, v := kv(t)
+		m[ptrStr(k)] = ptrStr(v)
+	}
+	return m
+}
+
 // DisplayState は SDK 由来の state 文字列を JSON/UI 表示用に小文字・ハイフン正規化する。
 // 意味は丸めない (available と running は別値のまま保持する)。
 func DisplayState(raw string) string {

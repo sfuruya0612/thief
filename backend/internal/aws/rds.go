@@ -82,11 +82,7 @@ func rdsFromInstance(db rdstypes.DBInstance) RDSResource {
 }
 
 func rdsTagsToMap(tags []rdstypes.Tag) map[string]string {
-	m := make(map[string]string, len(tags))
-	for _, t := range tags {
-		m[ptrStr(t.Key)] = ptrStr(t.Value)
-	}
-	return m
+	return tagsToMapFunc(tags, func(t rdstypes.Tag) (*string, *string) { return t.Key, t.Value })
 }
 
 // RDSInstanceInfo はレガシー CLI 互換の RDS インスタンス表示用フィールドを保持する。

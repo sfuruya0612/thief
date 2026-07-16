@@ -197,11 +197,7 @@ func ec2InstanceInfoFromSDK(inst ec2types.Instance) EC2InstanceInfo {
 }
 
 func tagsToMap(tags []ec2types.Tag) map[string]string {
-	m := make(map[string]string, len(tags))
-	for _, t := range tags {
-		m[ptrStr(t.Key)] = ptrStr(t.Value)
-	}
-	return m
+	return tagsToMapFunc(tags, func(t ec2types.Tag) (*string, *string) { return t.Key, t.Value })
 }
 
 func tagMapStr(tags map[string]string) string {
