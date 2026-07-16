@@ -126,3 +126,5 @@
   - @sfuruya0612
 - DynamoDB Item 検索 (PK 指定) で AWS config と認証情報の解決が 1 リクエストにつき 2 回走っていた無駄を解消する
   - @sfuruya0612
+- gcp サブコマンドで config ファイルの読み込みと YAML パースが 1 コマンドにつき 2 回走っていた無駄を解消する
+  - @sfuruya0612

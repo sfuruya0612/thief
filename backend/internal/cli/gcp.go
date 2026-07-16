@@ -115,11 +115,8 @@ func gcpProjectID(cmd *cobra.Command) string {
 }
 
 // gcpRequireProjectID は project ID の解決と必須チェックを一括で行う。
-func gcpRequireProjectID(cmd *cobra.Command) (string, error) {
-	cfg, err := loadConfig(cmd)
-	if err != nil {
-		return "", err
-	}
+// cfg は呼び出し側でロード済みのものを受け取り、config ファイルの二重ロードを避ける。
+func gcpRequireProjectID(cmd *cobra.Command, cfg *config.Config) (string, error) {
 	projectID := gcpProjectID(cmd)
 	if projectID == "" {
 		projectID = cfg.BigQuery.ProjectID
@@ -194,11 +191,11 @@ func printGCPProjects(cfg *config.Config, projects []gcp.ProjectInfo) error {
 }
 
 func gcpRunCloudRun(cmd *cobra.Command) error {
-	projectID, err := gcpRequireProjectID(cmd)
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cmd)
+	projectID, err := gcpRequireProjectID(cmd, cfg)
 	if err != nil {
 		return err
 	}
@@ -227,11 +224,11 @@ func gcpRunCloudRun(cmd *cobra.Command) error {
 }
 
 func gcpRunBuckets(cmd *cobra.Command) error {
-	projectID, err := gcpRequireProjectID(cmd)
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cmd)
+	projectID, err := gcpRequireProjectID(cmd, cfg)
 	if err != nil {
 		return err
 	}
@@ -259,11 +256,11 @@ func gcpRunBuckets(cmd *cobra.Command) error {
 }
 
 func gcpRunIAMBindings(cmd *cobra.Command) error {
-	projectID, err := gcpRequireProjectID(cmd)
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cmd)
+	projectID, err := gcpRequireProjectID(cmd, cfg)
 	if err != nil {
 		return err
 	}
@@ -290,11 +287,11 @@ func gcpRunIAMBindings(cmd *cobra.Command) error {
 }
 
 func gcpRunServiceAccounts(cmd *cobra.Command) error {
-	projectID, err := gcpRequireProjectID(cmd)
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cmd)
+	projectID, err := gcpRequireProjectID(cmd, cfg)
 	if err != nil {
 		return err
 	}
@@ -321,11 +318,11 @@ func gcpRunServiceAccounts(cmd *cobra.Command) error {
 }
 
 func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
-	projectID, err := gcpRequireProjectID(cmd)
+	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := loadConfig(cmd)
+	projectID, err := gcpRequireProjectID(cmd, cfg)
 	if err != nil {
 		return err
 	}
