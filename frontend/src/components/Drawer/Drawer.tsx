@@ -111,6 +111,16 @@ export function Drawer({
     if (resource) setTab('Overview');
   }, [resource?.id]);
 
+  // レイアウト崩れ等で閉じるボタンに届かない場合の復旧手段として ESC でも閉じられるようにする
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     const move = (ev: PointerEvent) => {
@@ -150,10 +160,12 @@ export function Drawer({
     SERVICES.find((s) => s.key === service) ?? GCP_SERVICES.find((s) => s.key === service);
   const IconEl = AwsIcons[service] ?? GcpIcons[service];
 
+  // 永続化されたサイズは保存時点のウィンドウサイズ基準の px 絶対値のため、
+  // 現在のウィンドウサイズで再クランプする (ドラッグ時クランプと同じ 0.85 係数)。
   const sizeStyle: React.CSSProperties =
     position === 'bottom'
       ? size.height
-        ? { height: size.height }
+        ? { height: Math.min(size.height, window.innerHeight * 0.85) }
         : {}
       : size.width
         ? { width: Math.min(size.width, window.innerWidth * 0.85) }

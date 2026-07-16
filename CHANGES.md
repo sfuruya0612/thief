@@ -109,6 +109,8 @@
   - @sfuruya0612
 - [FIX] Tweaks の Detail panel 切り替えがブラウザリロードまで Drawer に反映されない不具合を修正する (useTweaks を共有ストア化し、テーマ切替時に Cost Explorer チャートの文字色が追従しない問題も合わせて解消)
   - @sfuruya0612
+- [FIX] Bottom 配置の Drawer がウィンドウサイズ次第で画面全体を覆い操作不能になる不具合を修正する (永続化サイズを現在のビューポートで再クランプし、CSS の max-height/max-width ガードレールと ESC キーで閉じる操作を追加)
+  - @sfuruya0612
 
 ### misc
 
