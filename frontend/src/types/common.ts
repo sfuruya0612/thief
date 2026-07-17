@@ -98,3 +98,17 @@ export interface BaseRow {
   region?: string;
   tags?: Record<string, string>;
 }
+
+// S3 / GCS オブジェクトプレビュー API の共通レスポンス形状
+// (GET .../objects/preview、backend の PreviewResponse に対応)。
+export interface ObjectPreviewRaw {
+  content: string;
+  content_type: string;
+  size: number;
+}
+
+export interface ObjectPreviewRow {
+  content: string;
+  contentType: string;
+  size: number;
+}

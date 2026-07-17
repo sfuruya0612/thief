@@ -199,4 +199,82 @@ describe('DrawerS3Objects', () => {
     expect(uploadCall[0]).toContain('/objects/upload');
     expect(uploadCall[0]).toContain('key=logs%2Fhello.txt');
   });
+
+  it('対象外拡張子や 5 MB 以上のオブジェクトは Preview ボタンを無効化する', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => [
+        { key: 'ok.csv', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+        { key: 'image.png', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '2' },
+        {
+          key: 'huge.txt',
+          size: 5 * 1024 * 1024,
+          last_modified: '',
+          storage_class: 'STANDARD',
+          etag: '3',
+        },
+      ],
+    } as Response);
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('ok.csv');
+    });
+
+    const previewButtons = Array.from(container.querySelectorAll('button')).filter(
+      (b) => b.textContent === 'Preview',
+    );
+    expect(previewButtons).toHaveLength(3);
+    const [okBtn, pngBtn, hugeBtn] = previewButtons;
+    expect(okBtn.disabled).toBe(false);
+    expect(pngBtn.disabled).toBe(true);
+    expect(pngBtn.title).toBe('csv / txt / json のみプレビューできます');
+    expect(hugeBtn.disabled).toBe(true);
+    expect(hugeBtn.title).toBe('5 MB 以上のオブジェクトはプレビューできません');
+  });
+
+  it('Preview ボタンをクリックするとプレビュー API を呼び中身を表示する', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => [
+          { key: 'notes.txt', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+        ],
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ content: 'hello preview', content_type: 'text/plain', size: 13 }),
+      } as Response);
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('notes.txt');
+    });
+
+    const previewBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Preview',
+    ) as HTMLButtonElement;
+    fireEvent.click(previewBtn);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('hello preview');
+    });
+
+    const previewCall = fetchMock.mock.calls[1];
+    expect(previewCall[0]).toContain('/objects/preview');
+    expect(previewCall[0]).toContain('key=notes.txt');
+  });
 });

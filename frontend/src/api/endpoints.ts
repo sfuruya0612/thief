@@ -17,7 +17,7 @@ import type {
   RegionRaw,
   S3ObjectRaw,
 } from '../types/aws';
-import type { CallerIdentityRaw, ProfileRaw } from '../types/common';
+import type { CallerIdentityRaw, ObjectPreviewRaw, ProfileRaw } from '../types/common';
 import type {
   BQDatasetRaw,
   BQFieldRaw,
@@ -165,6 +165,18 @@ export function s3DownloadUrl(
   url.searchParams.set('region', region);
   url.searchParams.set('key', key);
   return url.toString();
+}
+
+export function getS3ObjectPreview(
+  profile: string,
+  region: string,
+  bucket: string,
+  key: string,
+): Promise<ObjectPreviewRaw> {
+  return apiGet<ObjectPreviewRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects/preview`,
+    { region, key },
+  );
 }
 
 // ============================================================
@@ -639,6 +651,17 @@ export function gcsDownloadUrl(projectId: string, bucket: string, key: string): 
   url.searchParams.set('project_id', projectId);
   url.searchParams.set('key', key);
   return url.toString();
+}
+
+export function getGcsObjectPreview(
+  projectId: string,
+  bucket: string,
+  key: string,
+): Promise<ObjectPreviewRaw> {
+  return apiGet<ObjectPreviewRaw>(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects/preview`, {
+    project_id: projectId,
+    key,
+  });
 }
 
 // ============================================================

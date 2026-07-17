@@ -66,6 +66,49 @@ func (s *Server) handleS3ObjectDownload(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// handleS3ObjectPreview は S3 オブジェクトの中身をプレビュー用 JSON エンベロープで返す。
+// csv/txt/json のみ、5 MB 未満のオブジェクトのみを対象とする。
+func (s *Server) handleS3ObjectPreview(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	bucket := r.PathValue("bucket")
+	if bucket == "" {
+		writeBadRequest(w, "bucket is required")
+		return
+	}
+	objectKey := r.URL.Query().Get("key")
+	if objectKey == "" {
+		writeBadRequest(w, "key is required")
+		return
+	}
+	if !previewExtensionAllowed(objectKey) {
+		writePreviewUnsupportedType(w)
+		return
+	}
+
+	out, err := awsinternal.GetS3Object(r.Context(), profile, region, bucket, objectKey)
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	defer out.Body.Close()
+
+	if out.ContentLength != nil && !previewSizeAllowed(*out.ContentLength) {
+		writePreviewTooLarge(w)
+		return
+	}
+
+	contentType := ""
+	if out.ContentType != nil {
+		contentType = *out.ContentType
+	}
+	resp, err := buildPreviewResponse(out.Body, contentType)
+	if err != nil {
+		writePreviewError(w, err)
+		return
+	}
+	writeJSON(w, resp)
+}
+
 // maxS3UploadSize は handleS3ObjectUpload が受け付けるアップロードの上限サイズ。
 // S3 PutObject は Content-Length が必須で、multipart.Part は io.Seeker を実装しないため
 // アップロード前にメモリへ読み込んでサイズを確定する。無制限に読み込むとメモリを圧迫するため

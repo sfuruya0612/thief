@@ -129,6 +129,48 @@ func (s *Server) handleGCPGCSObjectDownload(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// handleGCPGCSObjectPreview は GCS オブジェクトの中身をプレビュー用 JSON エンベロープで返す。
+// csv/txt/json のみ、5 MB 未満のオブジェクトのみを対象とする。
+func (s *Server) handleGCPGCSObjectPreview(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := s.gcpProjectIDFromQuery(w, r)
+	if !ok {
+		return
+	}
+	bucket := r.PathValue("bucket")
+	if bucket == "" {
+		writeBadRequest(w, "bucket is required")
+		return
+	}
+	objectKey := r.URL.Query().Get("key")
+	if objectKey == "" {
+		writeBadRequest(w, "key is required")
+		return
+	}
+	if !previewExtensionAllowed(objectKey) {
+		writePreviewUnsupportedType(w)
+		return
+	}
+
+	obj, err := gcp.GetObject(r.Context(), projectID, bucket, objectKey)
+	if err != nil {
+		writeInternalError(w, err.Error())
+		return
+	}
+	defer obj.Close()
+
+	if !previewSizeAllowed(obj.Size) {
+		writePreviewTooLarge(w)
+		return
+	}
+
+	resp, err := buildPreviewResponse(obj, obj.ContentType)
+	if err != nil {
+		writePreviewError(w, err)
+		return
+	}
+	writeJSON(w, resp)
+}
+
 // handleGCPIAM は指定プロジェクトの IAM ポリシーをメンバー単位に展開して返す。
 func (s *Server) handleGCPIAM(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := s.gcpProjectIDFromQuery(w, r)

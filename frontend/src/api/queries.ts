@@ -35,6 +35,7 @@ import {
   elbRuleFromRaw,
   elbTargetGroupFromRaw,
   elbTargetHealthFromRaw,
+  objectPreviewFromRaw,
   profileFromRaw,
   s3ObjectFromRaw,
 } from '../lib/normalize';
@@ -77,11 +78,13 @@ import {
   getELBTargetHealth,
   getGcpProjects,
   getGcpResources,
+  getGcsObjectPreview,
   getGcsObjects,
   getProfileIdentity,
   getProfiles,
   getRegions,
   getResources,
+  getS3ObjectPreview,
   getS3Objects,
   getSnippets,
   getTiDBClusters,
@@ -223,6 +226,22 @@ export function useS3Upload(profile: string, region: string, bucket: string, pre
         queryKey: ['aws', 's3-objects', profile, region, bucket],
       });
     },
+  });
+}
+
+// enabled: !!key でプレビュー対象確定時 (行の Preview アクションをクリックした後) のみ取得する。
+// プレビューは開くたびに最新の中身を読みたい取得系のため staleTime は設けない。
+export function useS3ObjectPreview(
+  profile: string,
+  region: string,
+  bucket: string,
+  key: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['aws', 's3-object-preview', profile, region, bucket, key],
+    queryFn: async () =>
+      objectPreviewFromRaw(await getS3ObjectPreview(profile, region, bucket, key!)),
+    enabled: !!profile && !!bucket && !!key,
   });
 }
 
@@ -742,5 +761,14 @@ export function useGcsUpload(projectId: string, bucket: string, prefix?: string)
         queryKey: ['gcp', 'gcs-objects', projectId, bucket],
       });
     },
+  });
+}
+
+// enabled: !!key でプレビュー対象確定時のみ取得する。useS3ObjectPreview と対称。
+export function useGcsObjectPreview(projectId: string, bucket: string, key: string | undefined) {
+  return useQuery({
+    queryKey: ['gcp', 'gcs-object-preview', projectId, bucket, key],
+    queryFn: async () => objectPreviewFromRaw(await getGcsObjectPreview(projectId, bucket, key!)),
+    enabled: !!projectId && !!bucket && !!key,
   });
 }
