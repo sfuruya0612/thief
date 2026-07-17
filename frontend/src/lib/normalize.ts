@@ -3,6 +3,8 @@ import { formatUptime } from './format';
 import type {
   CallerIdentity,
   CallerIdentityRaw,
+  ObjectPreviewRaw,
+  ObjectPreviewRow,
   Profile,
   ProfileAuthType,
   ProfileRaw,
@@ -418,6 +420,14 @@ export function s3ObjectFromRaw(raw: S3ObjectRaw): S3ObjectRow {
     lastModified: raw.last_modified,
     storageClass: raw.storage_class,
     etag: raw.etag,
+  };
+}
+
+export function objectPreviewFromRaw(raw: ObjectPreviewRaw): ObjectPreviewRow {
+  return {
+    content: raw.content,
+    contentType: raw.content_type,
+    size: raw.size,
   };
 }
 

@@ -3,7 +3,7 @@
 // フック・キー射影・ダウンロード URL のみを注入する。
 import { useCallback } from 'react';
 import { gcsDownloadUrl } from '../../api/endpoints';
-import { useGcsObjects, useGcsUpload } from '../../api/queries';
+import { useGcsObjectPreview, useGcsObjects, useGcsUpload } from '../../api/queries';
 import { gcsObjectColumns } from '../tables/gcpColumns';
 import type { ColumnDef } from '../tables/columns';
 import { DrawerObjectBrowser } from './DrawerObjectBrowser';
@@ -20,11 +20,14 @@ type GcsObjectTableRow = GcsObjectRow & { state: string };
 const keyOf = (r: GcsObjectRow): string => r.name;
 const toTableRow = (r: GcsObjectRow): GcsObjectTableRow => ({ ...r, state: '' });
 const baseColumns = gcsObjectColumns as ColumnDef<GcsObjectTableRow>[];
+const previewKeyOf = (r: GcsObjectTableRow): string => r.name;
+const sizeOf = (r: GcsObjectTableRow): number => r.size;
 
 export function DrawerGCSObjects({ projectId, bucket }: DrawerGCSObjectsProps) {
   const { data, isLoading, error } = useGcsObjects(projectId, bucket);
   const useUpload = (uploadPrefix: string | undefined) =>
     useGcsUpload(projectId, bucket, uploadPrefix);
+  const usePreview = (key: string | undefined) => useGcsObjectPreview(projectId, bucket, key);
   const downloadHref = useCallback(
     (r: GcsObjectTableRow) => gcsDownloadUrl(projectId, bucket, r.name),
     [projectId, bucket],
@@ -40,6 +43,9 @@ export function DrawerGCSObjects({ projectId, bucket }: DrawerGCSObjectsProps) {
       baseColumns={baseColumns}
       downloadHref={downloadHref}
       useUpload={useUpload}
+      previewKeyOf={previewKeyOf}
+      sizeOf={sizeOf}
+      usePreview={usePreview}
     />
   );
 }

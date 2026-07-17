@@ -8,6 +8,7 @@ import {
   dynamoTableSchemaFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
+  objectPreviewFromRaw,
   profileFromRaw,
   s3ObjectFromRaw,
 } from './normalize';
@@ -206,6 +207,21 @@ describe('s3ObjectFromRaw', () => {
     expect(row.key).toBe('');
     expect(row.size).toBe(0);
     expect(row.storageClass).toBe('');
+  });
+});
+
+describe('objectPreviewFromRaw', () => {
+  it('snake_case を camelCase に変換する', () => {
+    const row = objectPreviewFromRaw({
+      content: 'a,b\n1,2\n',
+      content_type: 'text/csv',
+      size: 8,
+    });
+    expect(row).toEqual({
+      content: 'a,b\n1,2\n',
+      contentType: 'text/csv',
+      size: 8,
+    });
   });
 });
 

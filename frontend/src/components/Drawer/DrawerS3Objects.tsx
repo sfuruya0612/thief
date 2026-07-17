@@ -3,7 +3,7 @@
 // フック・キー射影・ダウンロード URL のみを注入する。
 import { useCallback } from 'react';
 import { s3DownloadUrl } from '../../api/endpoints';
-import { useS3Objects, useS3Upload } from '../../api/queries';
+import { useS3ObjectPreview, useS3Objects, useS3Upload } from '../../api/queries';
 import { s3ObjectColumns, type ColumnDef } from '../tables/columns';
 import { DrawerObjectBrowser } from './DrawerObjectBrowser';
 import type { S3ObjectRow } from '../../types/aws';
@@ -20,11 +20,14 @@ type S3ObjectTableRow = S3ObjectRow & { id: string; state: string };
 const keyOf = (r: S3ObjectRow): string => r.key;
 const toTableRow = (r: S3ObjectRow): S3ObjectTableRow => ({ ...r, id: r.key, state: '' });
 const baseColumns = s3ObjectColumns as ColumnDef<S3ObjectTableRow>[];
+const previewKeyOf = (r: S3ObjectTableRow): string => r.key;
+const sizeOf = (r: S3ObjectTableRow): number => r.size;
 
 export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProps) {
   const { data, isLoading, error } = useS3Objects(profile, region, bucket);
   const useUpload = (uploadPrefix: string | undefined) =>
     useS3Upload(profile, region, bucket, uploadPrefix);
+  const usePreview = (key: string | undefined) => useS3ObjectPreview(profile, region, bucket, key);
   const downloadHref = useCallback(
     (r: S3ObjectTableRow) => s3DownloadUrl(profile, region, bucket, r.key),
     [profile, region, bucket],
@@ -40,6 +43,9 @@ export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProp
       baseColumns={baseColumns}
       downloadHref={downloadHref}
       useUpload={useUpload}
+      previewKeyOf={previewKeyOf}
+      sizeOf={sizeOf}
+      usePreview={usePreview}
     />
   );
 }
