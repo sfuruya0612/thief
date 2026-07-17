@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,13 @@ type Config struct {
 
 	// SnippetsDir はクエリスニペット (.sql ファイル) の保存ディレクトリ。API サーバ専用。
 	SnippetsDir string `yaml:"snippets-dir"`
+
+	// S3PathStyle は S3 クライアントを path-style アクセス (http://host:port/bucket/key) で
+	// 構成するかどうかを示す。floci 等の S3 互換エミュレータ向けの opt-in で、既定は false
+	// (virtual-hosted style)。実際の S3 クライアント生成は internal/aws パッケージが
+	// THIEF_S3_PATH_STYLE 環境変数を直接参照して行う (internal/aws/s3.go 参照)ため、
+	// このフィールド自体は設定値の保持・可視化のために存在する。
+	S3PathStyle bool `yaml:"-"`
 
 	BigQuery BigQueryConfig
 	Datadog  DatadogConfig `yaml:"datadog"`
@@ -182,6 +190,11 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("THIEF_SNIPPETS_DIR"); v != "" {
 		cfg.SnippetsDir = v
+	}
+	if v := os.Getenv("THIEF_S3_PATH_STYLE"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.S3PathStyle = b
+		}
 	}
 	if v := os.Getenv("THIEF_WEB_ORIGINS"); v != "" {
 		origins := strings.Split(v, ",")

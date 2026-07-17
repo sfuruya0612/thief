@@ -76,6 +76,8 @@
   - @sfuruya0612
 - [ADD] Google Cloud サービス一覧に Cloud Logging を追加し、期間指定 / Logging query language フィルターでのログ取得と Live Tail によるリアルタイム閲覧をできるようにする
   - @sfuruya0612
+- [ADD] floci (AWS エミュレータ) を使ったローカル動作確認環境を `example/` に追加し、backend に S3 path-style アクセスの opt-in (`THIEF_S3_PATH_STYLE`) を追加する
+  - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
 - [CHANGE] Monthly Cost の統計に表示していた実データと無関係な spark ミニチャートを削除する
