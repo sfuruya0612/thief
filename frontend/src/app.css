@@ -92,6 +92,7 @@
   --svc-gcs: #4285f4;
   --svc-gcpiam: #de5d9c;
   --svc-gcpserviceaccounts: #de5d9c;
+  --svc-cloudlogging: #4285f4;
 
   /* Spacing */
   --sp-1: 4px;

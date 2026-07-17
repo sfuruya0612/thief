@@ -4,12 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/gcp"
 	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
 )
+
+// gcpLoggingDefaultLimit は `gcp logging ls` の既定取得件数上限。CLI での Live Tail
+// (follow) はスコープ外であり、期間指定の 1 回取得のみをサポートするため、
+// ページングによる続き取得は行わず 1 ページ分をそのまま出力する。
+const gcpLoggingDefaultLimit = 200
 
 // newGCPCmd は Google Cloud 操作のルートコマンドを返す。
 func newGCPCmd() *cobra.Command {
@@ -102,7 +108,28 @@ func newGCPCmd() *cobra.Command {
 		},
 	})
 
-	cmd.AddCommand(projectsCmd, runCmd, gcsCmd, iamCmd, serviceAccountsCmd)
+	// logging サブコマンド (Cloud Logging)。期間指定の一覧取得のみ対応する。Live Tail
+	// (follow) は WebSocket 前提のためスコープ外とする (issues/0022 参照)。
+	loggingCmd := &cobra.Command{
+		Use:   "logging",
+		Short: "Cloud Logging operations",
+	}
+	loggingLsCmd := &cobra.Command{
+		Use:   "ls",
+		Short: "List log entries within a time range (no follow)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			filter, _ := cmd.Flags().GetString("filter")
+			since, _ := cmd.Flags().GetDuration("since")
+			limit, _ := cmd.Flags().GetInt("limit")
+			return gcpRunLoggingList(cmd, filter, since, limit)
+		},
+	}
+	loggingLsCmd.Flags().String("filter", "", "Logging query language filter expression")
+	loggingLsCmd.Flags().Duration("since", time.Hour, "How far back to look (e.g. 15m, 1h, 6h, 24h, 168h for 7d)")
+	loggingLsCmd.Flags().Int("limit", gcpLoggingDefaultLimit, "Maximum number of entries to fetch (single page; does not paginate)")
+	loggingCmd.AddCommand(loggingLsCmd)
+
+	cmd.AddCommand(projectsCmd, runCmd, gcsCmd, iamCmd, serviceAccountsCmd, loggingCmd)
 	return cmd
 }
 
@@ -288,6 +315,34 @@ func gcpRunServiceAccounts(cmd *cobra.Command) error {
 		{Header: "DisplayName"},
 		{Header: "Description"},
 		{Header: "Disabled"},
+	}
+	return printRowsOrGroupBy(cfg, cols, rows)
+}
+
+func gcpRunLoggingList(cmd *cobra.Command, filter string, since time.Duration, limit int) error {
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	projectID, err := gcpRequireProjectID(cmd, cfg)
+	if err != nil {
+		return err
+	}
+	start := time.Now().Add(-since).UTC().Format(time.RFC3339)
+	page, err := gcp.ListLogEntries(context.Background(), projectID, filter, start, "", "", limit)
+	if err != nil {
+		return err
+	}
+	rows := make([][]string, len(page.Entries))
+	for i, e := range page.Entries {
+		rows[i] = []string{e.Timestamp, e.Severity, e.LogName, e.ResourceType, e.Payload}
+	}
+	cols := []util.Column{
+		{Header: "Timestamp"},
+		{Header: "Severity"},
+		{Header: "LogName"},
+		{Header: "ResourceType"},
+		{Header: "Payload"},
 	}
 	return printRowsOrGroupBy(cfg, cols, rows)
 }

@@ -74,6 +74,8 @@
   - @sfuruya0612
 - [ADD] S3 / GCS オブジェクト一覧に Preview ボタンを追加し、csv / txt / json (5 MB 未満) をブラウザ上でダウンロードせずに閲覧できるようにする
   - @sfuruya0612
+- [ADD] Google Cloud サービス一覧に Cloud Logging を追加し、期間指定 / Logging query language フィルターでのログ取得と Live Tail によるリアルタイム閲覧をできるようにする
+  - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
 - [CHANGE] Monthly Cost の統計に表示していた実データと無関係な spark ミニチャートを削除する

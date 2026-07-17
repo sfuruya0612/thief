@@ -41,7 +41,13 @@ import type {
   BQResultPageRaw,
   SnippetRaw,
 } from '../types/query';
-import type { CloudRunResourceRaw, GcpProjectRaw, GcsBucketRaw, GcsObjectRaw } from '../types/gcp';
+import type {
+  CloudRunResourceRaw,
+  GcpProjectRaw,
+  GcsBucketRaw,
+  GcsObjectRaw,
+  LogEntryPageRaw,
+} from '../types/gcp';
 import { GCP_SERVICE_TO_PATH, SERVICE_TO_PATH } from '../lib/serviceMeta';
 import { apiBaseUrl, apiDelete, apiGet, apiGetList, apiPost, apiPostForm } from './client';
 
@@ -661,6 +667,34 @@ export function getGcsObjectPreview(
   return apiGet<ObjectPreviewRaw>(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects/preview`, {
     project_id: projectId,
     key,
+  });
+}
+
+// ============================================================
+// Cloud Logging (期間指定 + フィルターでのログエントリ取得。Live Tail は api/terminal.ts の
+// gcpLoggingTailUrl 経由の WebSocket で別途行う)
+// ============================================================
+export interface GcpLogEntriesQuery {
+  filter?: string;
+  start?: string;
+  end?: string;
+  pageToken?: string;
+  pageSize?: number;
+}
+
+// クエリ実行のたびに結果が変わりうる読み取りのため、キャッシュ (serveCached) を経由しない
+// 専用エンドポイントを叩く (BigQuery クエリ実行と同じ方針)。
+export function getGcpLogEntries(
+  projectId: string,
+  opts: GcpLogEntriesQuery = {},
+): Promise<LogEntryPageRaw> {
+  return apiGet<LogEntryPageRaw>('/api/gcp/logging/entries', {
+    project_id: projectId,
+    filter: opts.filter || undefined,
+    start: opts.start || undefined,
+    end: opts.end || undefined,
+    page_token: opts.pageToken || undefined,
+    page_size: opts.pageSize !== undefined ? String(opts.pageSize) : undefined,
   });
 }
 

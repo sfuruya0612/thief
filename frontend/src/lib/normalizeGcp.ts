@@ -11,6 +11,8 @@ import type {
   IAMBindingRaw,
   IAMBindingRow,
   IAMMemberRow,
+  LogEntryRaw,
+  LogEntryRow,
   ServiceAccountRaw,
   ServiceAccountRow,
 } from '../types/gcp';
@@ -107,4 +109,42 @@ export function serviceAccountFromRaw(raw: ServiceAccountRaw): ServiceAccountRow
     uniqueId: raw.unique_id,
     disabled: raw.disabled,
   };
+}
+
+// ============================================================
+// Cloud Logging
+// ============================================================
+// insert_id はログエントリの一意な ID だが、同じ filter で複数ページ・複数回取得した
+// 結果を突き合わせると理論上衝突しうるため、呼び出し側の連番 (index) も id に含めて一意性を担保する。
+export function logEntryFromRaw(raw: LogEntryRaw, index: number): LogEntryRow {
+  return {
+    id: `${raw.insert_id || raw.timestamp}#${index}`,
+    timestamp: raw.timestamp,
+    severity: raw.severity,
+    logName: raw.log_name,
+    resourceType: raw.resource_type,
+    resourceLabels: raw.resource_labels ?? {},
+    labels: raw.labels ?? {},
+    payload: raw.payload,
+    insertId: raw.insert_id,
+    trace: raw.trace ?? '',
+  };
+}
+
+// logSeverityLevel は Cloud Logging の Severity 文字列 (Default/Debug/Info/Notice/
+// Warning/Error/Critical/Alert/Emergency、backend の logging.Severity.String() 準拠) を
+// app.css の .logbox 系クラス (.lvl-info/.lvl-warn/.lvl-err) に対応する 3 段階へ丸める。
+export function logSeverityLevel(severity: string): 'info' | 'warn' | 'err' {
+  switch (severity) {
+    case 'Error':
+    case 'Critical':
+    case 'Alert':
+    case 'Emergency':
+      return 'err';
+    case 'Warning':
+    case 'Notice':
+      return 'warn';
+    default:
+      return 'info';
+  }
 }

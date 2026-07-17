@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	cloud.google.com/go/bigquery v1.77.0
+	cloud.google.com/go/logging v1.18.0
 	cloud.google.com/go/run v1.21.0
 	cloud.google.com/go/storage v1.63.1
 	github.com/DataDog/datadog-api-client-go/v2 v2.55.0
@@ -12,6 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51
 	github.com/aws/aws-sdk-go-v2/service/apigateway v1.40.8
 	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.35.8
+	github.com/aws/aws-sdk-go-v2/service/athena v1.59.1
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.71.7
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.61.1
 	github.com/aws/aws-sdk-go-v2/service/costexplorer v1.63.3
@@ -30,14 +32,17 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.44.2
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.1
 	github.com/aws/aws-sdk-go-v2/service/sso v1.32.0
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/aws-sdk-go-v2/service/wafv2 v1.74.1
+	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/coder/websocket v1.8.15
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.21.0
 	google.golang.org/api v0.287.1
+	google.golang.org/genproto v0.0.0-20260519071638-aa98bba5eb94
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -62,7 +67,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.30 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.30 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.31 // indirect
-	github.com/aws/aws-sdk-go-v2/service/athena v1.59.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.23 // indirect
@@ -70,11 +74,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.30 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.31 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.4.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.1 // indirect
 	github.com/aws/smithy-go v1.27.3 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/charmbracelet/bubbletea v1.3.10 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect
@@ -130,7 +132,6 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
-	google.golang.org/genproto v0.0.0-20260519071638-aa98bba5eb94 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260630182238-925bb5da69e7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260630182238-925bb5da69e7 // indirect
 	google.golang.org/grpc v1.82.0 // indirect

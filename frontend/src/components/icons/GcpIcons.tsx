@@ -12,6 +12,7 @@ const GCP_ICON_FILES: Record<string, string> = {
   cloudrun: 'cloudrun.svg',
   bigquery: 'bigquery.svg',
   gcs: 'gcs.svg',
+  cloudlogging: 'cloudlogging.svg',
 };
 
 function GcpIcon(svc: string, { size = 16 }: GcpIconProps = {}) {

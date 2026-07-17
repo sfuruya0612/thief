@@ -1,4 +1,4 @@
-// EC2 Start Session / ECS Exec Command 用の WebSocket URL 構築ヘルパー
+// EC2 Start Session / ECS Exec Command / GCP Cloud Logging Live Tail 用の WebSocket URL 構築ヘルパー
 // apiGet/apiPost (client.ts) は fetch ベースのため WebSocket には使えず、別系統として用意する。
 import { apiBaseUrl } from './client';
 
@@ -36,4 +36,13 @@ export function ecsExecUrl(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/tasks/${encodeURIComponent(task)}/exec`,
     { region, container, command },
   );
+}
+
+// GCP Cloud Logging の Live Tail (フィルター適用状態のままの新着ログ受信) を開始する
+// WebSocket URL を組み立てる。
+export function gcpLoggingTailUrl(projectId: string, filter: string): string {
+  return buildWsUrl('/api/gcp/logging/tail', {
+    project_id: projectId,
+    filter: filter || undefined,
+  });
 }
