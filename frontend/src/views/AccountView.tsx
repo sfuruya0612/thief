@@ -75,6 +75,7 @@ import { FacetBar, type Filters } from '../components/FacetBar';
 import { DataTable } from '../components/DataTable';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { AthenaView } from './AthenaView';
 import { CostExplorerPanel } from './CostExplorerPanel';
 
 interface ServicePanelProps<TRaw, TRow extends BaseRow> {
@@ -439,6 +440,7 @@ export function AccountView({
           onSelectId={setSelectedId}
         />
       )}
+      {activeService === 'athena' && <AthenaView profile={profile} region={region} />}
       {activeService === 'costexplorer' && <CostExplorerPanel profile={profile} region={region} />}
     </div>
   );

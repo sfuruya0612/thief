@@ -38,8 +38,24 @@ type SSMValueResponse struct {
 	Value string `json:"value"`
 }
 
-// BigQueryQueryRequest is the body for POST /api/bigquery/query.
+// BigQueryQueryRequest is the body for POST /api/bigquery/query and
+// POST /api/bigquery/query/dryrun.
 type BigQueryQueryRequest struct {
 	ProjectID string `json:"project_id"`
 	SQL       string `json:"sql"`
+}
+
+// AthenaQueryRequest is the body for POST /api/aws/profiles/{profile}/athena/query.
+type AthenaQueryRequest struct {
+	SQL            string `json:"sql"`
+	Catalog        string `json:"catalog"`
+	Database       string `json:"database"`
+	Workgroup      string `json:"workgroup"`
+	OutputLocation string `json:"output_location"`
+}
+
+// SnippetRequest is the body for POST /api/snippets.
+type SnippetRequest struct {
+	Name string `json:"name"`
+	SQL  string `json:"sql"`
 }

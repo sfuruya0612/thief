@@ -1,7 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CostRow } from '../types/aws';
 import type { BaseRow } from '../types/common';
+import type { QueryStatusRow } from '../types/query';
 import { gcpProjectFromRaw, gcsObjectFromRaw } from '../lib/normalizeGcp';
+import {
+  athenaExecutionFromRaw,
+  athenaHistoryFromRaw,
+  athenaTableFromRaw,
+  bqHistoryFromRaw,
+  bqJobStatusFromRaw,
+  snippetFromRaw,
+} from '../lib/normalizeQuery';
+import type { QueryEditorService } from '../lib/queryEditorStorage';
 import {
   bqDatasetFromRaw,
   bqFieldFromRaw,
@@ -26,9 +36,23 @@ import {
   s3ObjectFromRaw,
 } from '../lib/normalize';
 import {
+  type AthenaQueryStartBody,
   type CostQueryOptions,
+  deleteAthenaQuery,
+  deleteBQQueryJob,
+  deleteSnippet,
   type DynamoItemQueryOptions,
+  getAthenaCatalogs,
+  getAthenaDatabases,
+  getAthenaQueryExecution,
+  getAthenaQueryHistory,
+  getAthenaQueryResults,
+  getAthenaTables,
+  getAthenaWorkgroups,
   getBQDatasets,
+  getBQQueryHistory,
+  getBQQueryJob,
+  getBQQueryResults,
   getBQSchema,
   getBQTables,
   getCost,
@@ -53,10 +77,14 @@ import {
   getRegions,
   getResources,
   getS3Objects,
+  getSnippets,
   getTiDBClusters,
   getTiDBCost,
   getTiDBProjects,
-  postBQQuery,
+  postAthenaQueryStart,
+  postBQDryRun,
+  postBQQueryStart,
+  postSnippet,
   postSSOLogin,
   type TiDBCostQueryOptions,
   uploadGcsObject,
@@ -351,10 +379,208 @@ export function useBQSchema(dataset: string, table: string, projectId?: string) 
   });
 }
 
-export function useBQQuery() {
+// ============================================================
+// BigQuery クエリエディタ (非同期ジョブ)
+// ============================================================
+
+// 結果取得 1 ページあたりの行数 (バックエンド既定と揃える)
+const QUERY_RESULT_PAGE_SIZE = 500;
+
+// 実行中ジョブのポーリング間隔 (ms)
+const QUERY_POLL_INTERVAL = 1000;
+
+// 実行履歴の staleTime。実行直後の再取得を優先して短めにする
+const QUERY_HISTORY_STALE_TIME = 15_000;
+
+// 実行中 / 待機中はポーリングを続け、終了状態になったら止める
+function pollWhileActive(data: QueryStatusRow | undefined): number | false {
+  return data && (data.state === 'queued' || data.state === 'running')
+    ? QUERY_POLL_INTERVAL
+    : false;
+}
+
+export function useBQStartQuery(projectId?: string) {
   return useMutation({
-    mutationFn: ({ sql, projectId }: { sql: string; projectId?: string }) =>
-      postBQQuery(sql, projectId),
+    mutationFn: async (sql: string) => {
+      const raw = await postBQQueryStart(sql, projectId);
+      return { jobId: raw.job_id, location: raw.location };
+    },
+  });
+}
+
+export function useBQDryRun(projectId?: string) {
+  return useMutation({
+    mutationFn: async (sql: string) => (await postBQDryRun(sql, projectId)).total_bytes_processed,
+  });
+}
+
+export function useBQQueryJob(jobId?: string, location?: string, projectId?: string) {
+  return useQuery({
+    queryKey: ['bigquery', 'query-job', projectId, jobId],
+    queryFn: async () => bqJobStatusFromRaw(await getBQQueryJob(jobId!, location ?? '', projectId)),
+    enabled: !!jobId,
+    refetchInterval: (query) => pollWhileActive(query.state.data),
+    staleTime: 0,
+  });
+}
+
+// 完了したジョブの結果をページ単位で取得する (fetchNextPage で追加読み込み)
+export function useBQQueryResults(
+  jobId: string | undefined,
+  location: string | undefined,
+  projectId: string | undefined,
+  enabled: boolean,
+) {
+  return useInfiniteQuery({
+    queryKey: ['bigquery', 'query-results', projectId, jobId],
+    queryFn: ({ pageParam }) =>
+      getBQQueryResults(jobId!, location ?? '', projectId, pageParam, QUERY_RESULT_PAGE_SIZE),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_page_token || undefined,
+    enabled: enabled && !!jobId,
+    // 完了ジョブの結果は不変
+    staleTime: Infinity,
+  });
+}
+
+export function useBQCancelJob(projectId?: string) {
+  return useMutation({
+    mutationFn: ({ jobId, location }: { jobId: string; location?: string }) =>
+      deleteBQQueryJob(jobId, location ?? '', projectId),
+  });
+}
+
+export function useBQQueryHistory(projectId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['bigquery', 'query-history', projectId],
+    queryFn: async () => (await getBQQueryHistory(projectId)).map(bqHistoryFromRaw),
+    staleTime: QUERY_HISTORY_STALE_TIME,
+    enabled,
+  });
+}
+
+// ============================================================
+// Athena クエリエディタ
+// ============================================================
+export function useAthenaCatalogs(profile: string, region: string) {
+  return useQuery({
+    queryKey: ['aws', 'athena-catalogs', profile, region],
+    queryFn: () => getAthenaCatalogs(profile, region),
+    staleTime: 60_000,
+    enabled: !!profile,
+  });
+}
+
+export function useAthenaDatabases(profile: string, region: string, catalog?: string) {
+  return useQuery({
+    queryKey: ['aws', 'athena-databases', profile, region, catalog],
+    queryFn: () => getAthenaDatabases(profile, region, catalog),
+    staleTime: 60_000,
+    enabled: !!profile,
+  });
+}
+
+export function useAthenaWorkgroups(profile: string, region: string) {
+  return useQuery({
+    queryKey: ['aws', 'athena-workgroups', profile, region],
+    queryFn: () => getAthenaWorkgroups(profile, region),
+    staleTime: 60_000,
+    enabled: !!profile,
+  });
+}
+
+export function useAthenaTables(
+  profile: string,
+  region: string,
+  database?: string,
+  catalog?: string,
+) {
+  return useQuery({
+    queryKey: ['aws', 'athena-tables', profile, region, catalog, database],
+    queryFn: async () =>
+      (await getAthenaTables(profile, region, database!, catalog)).map(athenaTableFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!database,
+  });
+}
+
+export function useAthenaStartQuery(profile: string, region: string) {
+  return useMutation({
+    mutationFn: async (body: AthenaQueryStartBody) =>
+      athenaExecutionFromRaw(await postAthenaQueryStart(profile, region, body)),
+  });
+}
+
+export function useAthenaExecution(profile: string, region: string, id?: string) {
+  return useQuery({
+    queryKey: ['aws', 'athena-execution', profile, region, id],
+    queryFn: async () =>
+      athenaExecutionFromRaw(await getAthenaQueryExecution(profile, region, id!)),
+    enabled: !!profile && !!id,
+    refetchInterval: (query) => pollWhileActive(query.state.data),
+    staleTime: 0,
+  });
+}
+
+export function useAthenaResults(profile: string, region: string, id?: string, enabled = false) {
+  return useInfiniteQuery({
+    queryKey: ['aws', 'athena-results', profile, region, id],
+    queryFn: ({ pageParam }) =>
+      getAthenaQueryResults(profile, region, id!, pageParam, QUERY_RESULT_PAGE_SIZE),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_token || undefined,
+    enabled: enabled && !!profile && !!id,
+    // 完了した実行の結果は不変
+    staleTime: Infinity,
+  });
+}
+
+export function useAthenaStopQuery(profile: string, region: string) {
+  return useMutation({
+    mutationFn: (id: string) => deleteAthenaQuery(profile, region, id),
+  });
+}
+
+export function useAthenaQueryHistory(
+  profile: string,
+  region: string,
+  workgroup?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['aws', 'athena-history', profile, region, workgroup],
+    queryFn: async () =>
+      (await getAthenaQueryHistory(profile, region, workgroup)).map(athenaHistoryFromRaw),
+    staleTime: QUERY_HISTORY_STALE_TIME,
+    enabled: enabled && !!profile,
+  });
+}
+
+// ============================================================
+// クエリスニペット (backend のサービス別ディレクトリへのファイル保存)
+// ============================================================
+export function useSnippets(service: QueryEditorService) {
+  return useQuery({
+    queryKey: ['snippets', service],
+    queryFn: async () => (await getSnippets(service)).map(snippetFromRaw),
+    // 保存ディレクトリへ手動配置した .sql も遅滞なく拾えるよう短めにする
+    staleTime: QUERY_HISTORY_STALE_TIME,
+  });
+}
+
+export function useSaveSnippet(service: QueryEditorService) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, sql }: { name: string; sql: string }) => postSnippet(service, name, sql),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['snippets', service] }),
+  });
+}
+
+export function useDeleteSnippet(service: QueryEditorService) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => deleteSnippet(service, name),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['snippets', service] }),
   });
 }
 

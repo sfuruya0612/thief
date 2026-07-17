@@ -18,16 +18,29 @@ import type { CallerIdentityRaw, ProfileRaw } from '../types/common';
 import type {
   BQDatasetRaw,
   BQFieldRaw,
-  BQQueryResult,
   BQTableRaw,
   DatadogCostRaw,
   TiDBClusterRaw,
   TiDBCostRaw,
   TiDBProjectRaw,
 } from '../types/nonaws';
+import type {
+  AthenaCatalogRaw,
+  AthenaDatabaseRaw,
+  AthenaExecutionRaw,
+  AthenaResultPageRaw,
+  AthenaTableRaw,
+  AthenaWorkgroupRaw,
+  BQDryRunRaw,
+  BQHistoryItemRaw,
+  BQJobInfoRaw,
+  BQJobStatusRaw,
+  BQResultPageRaw,
+  SnippetRaw,
+} from '../types/query';
 import type { CloudRunResourceRaw, GcpProjectRaw, GcsBucketRaw, GcsObjectRaw } from '../types/gcp';
 import { GCP_SERVICE_TO_PATH, SERVICE_TO_PATH } from '../lib/serviceMeta';
-import { apiBaseUrl, apiGet, apiGetList, apiPost, apiPostForm } from './client';
+import { apiBaseUrl, apiDelete, apiGet, apiGetList, apiPost, apiPostForm } from './client';
 
 export function getProfiles(): Promise<ProfileRaw[]> {
   // バックエンドは users がない場合 null を返しうるので配列に正規化する
@@ -315,8 +328,161 @@ export function getBQSchema(
   );
 }
 
-export function postBQQuery(sql: string, projectId?: string): Promise<BQQueryResult> {
-  return apiPost<BQQueryResult>('/api/bigquery/query', { project_id: projectId, sql });
+// ============================================================
+// BigQuery クエリエディタ (非同期ジョブ)
+// ============================================================
+export function postBQQueryStart(sql: string, projectId?: string): Promise<BQJobInfoRaw> {
+  return apiPost<BQJobInfoRaw>('/api/bigquery/query', { project_id: projectId, sql });
+}
+
+export function postBQDryRun(sql: string, projectId?: string): Promise<BQDryRunRaw> {
+  return apiPost<BQDryRunRaw>('/api/bigquery/query/dryrun', { project_id: projectId, sql });
+}
+
+export function getBQQueryJob(
+  jobId: string,
+  location: string,
+  projectId?: string,
+): Promise<BQJobStatusRaw> {
+  return apiGet<BQJobStatusRaw>(`/api/bigquery/query/jobs/${encodeURIComponent(jobId)}`, {
+    location: location || undefined,
+    project_id: projectId,
+  });
+}
+
+export function getBQQueryResults(
+  jobId: string,
+  location: string,
+  projectId?: string,
+  pageToken?: string,
+  pageSize?: number,
+): Promise<BQResultPageRaw> {
+  return apiGet<BQResultPageRaw>(`/api/bigquery/query/jobs/${encodeURIComponent(jobId)}/results`, {
+    location: location || undefined,
+    project_id: projectId,
+    page_token: pageToken || undefined,
+    page_size: pageSize !== undefined ? String(pageSize) : undefined,
+  });
+}
+
+export function deleteBQQueryJob(
+  jobId: string,
+  location: string,
+  projectId?: string,
+): Promise<void> {
+  return apiDelete(`/api/bigquery/query/jobs/${encodeURIComponent(jobId)}`, {
+    location: location || undefined,
+    project_id: projectId,
+  });
+}
+
+export function getBQQueryHistory(projectId?: string, max?: number): Promise<BQHistoryItemRaw[]> {
+  return apiGetList<BQHistoryItemRaw>('/api/bigquery/query/history', {
+    project_id: projectId,
+    max: max !== undefined ? String(max) : undefined,
+  });
+}
+
+// ============================================================
+// Athena クエリエディタ
+// ============================================================
+function athenaPath(profile: string, suffix: string): string {
+  return `/api/aws/profiles/${encodeURIComponent(profile)}/athena/${suffix}`;
+}
+
+export function getAthenaCatalogs(profile: string, region: string): Promise<AthenaCatalogRaw[]> {
+  return apiGetList<AthenaCatalogRaw>(athenaPath(profile, 'catalogs'), { region });
+}
+
+export function getAthenaDatabases(
+  profile: string,
+  region: string,
+  catalog?: string,
+): Promise<AthenaDatabaseRaw[]> {
+  return apiGetList<AthenaDatabaseRaw>(athenaPath(profile, 'databases'), {
+    region,
+    catalog: catalog || undefined,
+  });
+}
+
+export function getAthenaWorkgroups(
+  profile: string,
+  region: string,
+): Promise<AthenaWorkgroupRaw[]> {
+  return apiGetList<AthenaWorkgroupRaw>(athenaPath(profile, 'workgroups'), { region });
+}
+
+export function getAthenaTables(
+  profile: string,
+  region: string,
+  database: string,
+  catalog?: string,
+): Promise<AthenaTableRaw[]> {
+  return apiGetList<AthenaTableRaw>(athenaPath(profile, 'tables'), {
+    region,
+    database,
+    catalog: catalog || undefined,
+  });
+}
+
+export interface AthenaQueryStartBody {
+  sql: string;
+  catalog?: string;
+  database?: string;
+  workgroup?: string;
+  output_location?: string;
+}
+
+export function postAthenaQueryStart(
+  profile: string,
+  region: string,
+  body: AthenaQueryStartBody,
+): Promise<AthenaExecutionRaw> {
+  return apiPost<AthenaExecutionRaw>(athenaPath(profile, 'query'), body, { region });
+}
+
+export function getAthenaQueryExecution(
+  profile: string,
+  region: string,
+  id: string,
+): Promise<AthenaExecutionRaw> {
+  return apiGet<AthenaExecutionRaw>(athenaPath(profile, `query/${encodeURIComponent(id)}`), {
+    region,
+  });
+}
+
+export function getAthenaQueryResults(
+  profile: string,
+  region: string,
+  id: string,
+  nextToken?: string,
+  max?: number,
+): Promise<AthenaResultPageRaw> {
+  return apiGet<AthenaResultPageRaw>(
+    athenaPath(profile, `query/${encodeURIComponent(id)}/results`),
+    {
+      region,
+      next_token: nextToken || undefined,
+      max: max !== undefined ? String(max) : undefined,
+    },
+  );
+}
+
+export function deleteAthenaQuery(profile: string, region: string, id: string): Promise<void> {
+  return apiDelete(athenaPath(profile, `query/${encodeURIComponent(id)}`), { region });
+}
+
+export function getAthenaQueryHistory(
+  profile: string,
+  region: string,
+  workgroup?: string,
+  max?: number,
+): Promise<AthenaExecutionRaw[]> {
+  return apiGetList<AthenaExecutionRaw>(athenaPath(profile, 'query/history'), {
+    region,
+    workgroup: workgroup || undefined,
+    max: max !== undefined ? String(max) : undefined,
+  });
 }
 
 // ============================================================
@@ -434,4 +600,19 @@ export function gcsDownloadUrl(projectId: string, bucket: string, key: string): 
   url.searchParams.set('project_id', projectId);
   url.searchParams.set('key', key);
   return url.toString();
+}
+
+// ============================================================
+// クエリスニペット (backend のサービス別ディレクトリへのファイル保存)
+// ============================================================
+export function getSnippets(service: string): Promise<SnippetRaw[]> {
+  return apiGetList<SnippetRaw>(`/api/snippets/${encodeURIComponent(service)}`);
+}
+
+export function postSnippet(service: string, name: string, sql: string): Promise<SnippetRaw> {
+  return apiPost<SnippetRaw>(`/api/snippets/${encodeURIComponent(service)}`, { name, sql });
+}
+
+export function deleteSnippet(service: string, name: string): Promise<void> {
+  return apiDelete(`/api/snippets/${encodeURIComponent(service)}/${encodeURIComponent(name)}`);
 }

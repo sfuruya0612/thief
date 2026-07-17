@@ -1,4 +1,6 @@
 // Google Cloud 公式アイコン (public/assets/gcp-icons/*.svg) を表示するアイコンコンポーネント
+import { AssetIcon } from './AssetIcon';
+
 export interface GcpIconProps {
   size?: number;
 }
@@ -13,15 +15,7 @@ const GCP_ICON_FILES: Record<string, string> = {
 };
 
 function GcpIcon(svc: string, { size = 16 }: GcpIconProps = {}) {
-  return (
-    <img
-      src={`/assets/gcp-icons/${GCP_ICON_FILES[svc]}`}
-      width={size}
-      height={size}
-      alt={svc}
-      style={{ display: 'block', borderRadius: 3.5 }}
-    />
-  );
+  return <AssetIcon src={`/assets/gcp-icons/${GCP_ICON_FILES[svc]}`} alt={svc} size={size} />;
 }
 
 export const GcpIcons: Record<string, GcpIconComponent> = Object.fromEntries(

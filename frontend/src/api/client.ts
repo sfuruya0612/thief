@@ -86,8 +86,8 @@ export async function apiGetList<T>(path: string, params?: QueryParams): Promise
   return (await apiGet<T[] | null>(path, params)) ?? [];
 }
 
-export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  const res = await doFetch(buildUrl(path), {
+export async function apiPost<T>(path: string, body?: unknown, params?: QueryParams): Promise<T> {
+  const res = await doFetch(buildUrl(path, params), {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -96,6 +96,14 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   return parsePostResponse<T>(res);
+}
+
+// DELETE 用ヘルパー (クエリキャンセル等)。204 No Content を想定しボディは解釈しない
+export async function apiDelete(path: string, params?: QueryParams): Promise<void> {
+  await doFetch(buildUrl(path, params), {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
 }
 
 // multipart/form-data 用の POST ヘルパー (S3 アップロード等で使う)

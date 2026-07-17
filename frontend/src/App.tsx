@@ -92,6 +92,10 @@ export function App() {
 
   const handleRefresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [view] });
+    // BigQuery のクエリキーは歴史的経緯で 'gcp' ではなく 'bigquery' 始まりのため合わせて更新する
+    if (view === 'gcp') {
+      void queryClient.invalidateQueries({ queryKey: ['bigquery'] });
+    }
   }, [queryClient, view]);
 
   const handleToggleTheme = useCallback(() => {

@@ -2,18 +2,16 @@ package bigquery
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"regexp"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/sfuruya0612/thief/backend/internal/sqlguard"
 	"google.golang.org/api/iterator"
 )
 
 // ErrWriteNotAllowed is returned when a query contains DML/DDL statements.
-var ErrWriteNotAllowed = errors.New("DML/DDL not allowed: only SELECT/WITH queries are permitted")
-
-var ddlDmlRe = regexp.MustCompile(`(?i)\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE|GRANT|REVOKE)\b`)
+// 実体は sqlguard.ErrWriteNotAllowed で、既存の呼び出し側互換のため再公開する。
+var ErrWriteNotAllowed = sqlguard.ErrWriteNotAllowed
 
 // QueryResult holds the output of a BigQuery SELECT query.
 type QueryResult struct {
@@ -23,40 +21,13 @@ type QueryResult struct {
 
 // ValidateReadOnly returns ErrWriteNotAllowed if the SQL contains DML/DDL keywords.
 func ValidateReadOnly(sql string) error {
-	if ddlDmlRe.MatchString(sql) {
-		return ErrWriteNotAllowed
-	}
-	return nil
-}
-
-// ExecuteQuery runs a read-only SQL query.
-// It validates the SQL for DML/DDL first, then performs a dry-run cost check,
-// then executes the actual query.
-func (c *Client) ExecuteQuery(ctx context.Context, sql string) (*QueryResult, error) {
-	if err := ValidateReadOnly(sql); err != nil {
-		return nil, err
-	}
-
-	q := c.bq.Query(sql)
-	q.UseLegacySQL = false
-
-	// Dry run to validate query syntax and cost.
-	q.DryRun = true
-	job, err := q.Run(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("bigquery dry run: %w", err)
-	}
-	_ = job // dry run result is available in job.LastStatus()
-
-	// Actual execution.
-	q.DryRun = false
-	return c.readQuery(ctx, q)
+	return sqlguard.ValidateReadOnly(sql)
 }
 
 // ExecuteQueryUnrestricted runs any SQL query without the read-only validation
 // and without a dry-run check. レガシー CLI (thief bq query) 互換の実行経路で、
 // ローカルユーザー自身の認証情報で任意の SQL (DML/DDL を含む) を実行する。
-// API サーバからは呼ばないこと (サーバ経路は ExecuteQuery の read-only 検証を維持する)。
+// API サーバからは呼ばないこと (サーバ経路は StartQuery の read-only 検証を維持する)。
 func (c *Client) ExecuteQueryUnrestricted(ctx context.Context, sql string) (*QueryResult, error) {
 	q := c.bq.Query(sql)
 	q.UseLegacySQL = false

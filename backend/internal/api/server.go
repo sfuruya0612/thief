@@ -11,6 +11,7 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/cache"
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	ddclient "github.com/sfuruya0612/thief/backend/internal/datadog"
+	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	tidbclient "github.com/sfuruya0612/thief/backend/internal/tidb"
 )
 
@@ -27,6 +28,7 @@ type Server struct {
 	ddV2          *ddclient.UsageMeteringV2API
 	ddCtx         context.Context
 	tidb          *tidbclient.Client
+	snippets      *snippet.Store
 	resourceCache *cache.Cache[any]
 	mux           *http.ServeMux
 }
@@ -55,6 +57,9 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 
 	// TiDB
 	s.tidb = tidbclient.NewClient(cfg.TiDB.PublicKey, cfg.TiDBPrivateKey())
+
+	// クエリスニペット (ローカルファイル保存)
+	s.snippets = snippet.NewStore(cfg.SnippetsDir)
 
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
