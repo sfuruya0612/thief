@@ -1,4 +1,7 @@
 import type {
+  CFNStackDetailRaw,
+  CFNStackEventRaw,
+  CFNStackResourceRaw,
   CostRaw,
   DynamoItemRaw,
   DynamoTableSchemaRaw,
@@ -212,6 +215,42 @@ export function getECRImages(
 ): Promise<ECRImageRaw[]> {
   return apiGetList<ECRImageRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecr/${encodeURIComponent(repo)}/images`,
+    { region },
+  );
+}
+
+// ============================================================
+// CloudFormation (Drawer の Overview / Events / Resources タブ)
+// ============================================================
+export function getCFNStackDetail(
+  profile: string,
+  region: string,
+  stack: string,
+): Promise<CFNStackDetailRaw> {
+  return apiGet<CFNStackDetailRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/cfn/stacks/${encodeURIComponent(stack)}`,
+    { region },
+  );
+}
+
+export function getCFNStackEvents(
+  profile: string,
+  region: string,
+  stack: string,
+): Promise<CFNStackEventRaw[]> {
+  return apiGetList<CFNStackEventRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/cfn/stacks/${encodeURIComponent(stack)}/events`,
+    { region },
+  );
+}
+
+export function getCFNStackResources(
+  profile: string,
+  region: string,
+  stack: string,
+): Promise<CFNStackResourceRaw[]> {
+  return apiGetList<CFNStackResourceRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/cfn/stacks/${encodeURIComponent(stack)}/resources`,
     { region },
   );
 }

@@ -6,6 +6,10 @@ import { GcpIcons } from '../icons/GcpIcons';
 import { Icons } from '../icons/Icons';
 import { GCP_SERVICES, SERVICES } from '../../lib/serviceMeta';
 import { StatusBadge } from '../primitives';
+import { DrawerCFNEvents } from './DrawerCFNEvents';
+import { DrawerCFNOverviewExtra } from './DrawerCFNOverviewExtra';
+import { DrawerCFNResources } from './DrawerCFNResources';
+import { DrawerCFNTags } from './DrawerCFNTags';
 import { DrawerDynamoItems } from './DrawerDynamoItems';
 import { DrawerECRImages } from './DrawerECRImages';
 import { DrawerECSServices } from './DrawerECSServices';
@@ -37,6 +41,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   dynamo: ['Overview', 'Items', 'Tags'],
   ssm: ['Overview', 'Tags'],
   secrets: ['Overview', 'Tags'],
+  cfn: ['Overview', 'Events', 'Resources', 'Tags'],
   gcs: ['Overview', 'Objects'],
 };
 
@@ -244,8 +249,28 @@ export function Drawer({
             </div>
 
             <div className="dbody">
-              {tab === 'Overview' && <DrawerOverview rows={overviewRows} />}
-              {tab === 'Tags' && <DrawerTags tags={resource.tags} />}
+              {tab === 'Overview' && (
+                <>
+                  <DrawerOverview rows={overviewRows} />
+                  {service === 'cfn' && (
+                    <DrawerCFNOverviewExtra
+                      profile={profile}
+                      region={region}
+                      stack={resource.name}
+                    />
+                  )}
+                </>
+              )}
+              {tab === 'Tags' && service !== 'cfn' && <DrawerTags tags={resource.tags} />}
+              {tab === 'Tags' && service === 'cfn' && (
+                <DrawerCFNTags profile={profile} region={region} stack={resource.name} />
+              )}
+              {tab === 'Events' && service === 'cfn' && (
+                <DrawerCFNEvents profile={profile} region={region} stack={resource.name} />
+              )}
+              {tab === 'Resources' && service === 'cfn' && (
+                <DrawerCFNResources profile={profile} region={region} stack={resource.name} />
+              )}
               {tab === 'Terminal' && (
                 <DrawerTerminal
                   service={service}

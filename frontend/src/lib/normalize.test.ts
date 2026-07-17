@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   callerIdentityFromRaw,
+  cfnFromRaw,
+  cfnStackDetailFromRaw,
+  cfnStackEventFromRaw,
+  cfnStackResourceFromRaw,
   dynamoTableSchemaFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
@@ -245,5 +249,106 @@ describe('dynamoTableSchemaFromRaw', () => {
     });
     expect(row.table.sortKey).toBeUndefined();
     expect(row.gsis).toEqual([]);
+  });
+});
+
+describe('cfnFromRaw', () => {
+  it('snake_case を camelCase に変換する', () => {
+    const row = cfnFromRaw(
+      {
+        id: 'arn:aws:cloudformation:ap-northeast-1:111111111111:stack/my-stack/abc',
+        name: 'my-stack',
+        state: 'CREATE_COMPLETE',
+        creation_time: '2026-07-01T00:00:00Z',
+        last_updated_time: '2026-07-02T00:00:00Z',
+        drift_status: 'IN_SYNC',
+        tags: { env: 'prod' },
+      },
+      'ap-northeast-1',
+    );
+    expect(row).toEqual({
+      region: 'ap-northeast-1',
+      id: 'arn:aws:cloudformation:ap-northeast-1:111111111111:stack/my-stack/abc',
+      name: 'my-stack',
+      state: 'CREATE_COMPLETE',
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+      driftStatus: 'IN_SYNC',
+      tags: { env: 'prod' },
+    });
+  });
+});
+
+describe('cfnStackDetailFromRaw', () => {
+  it('parameters / outputs を含めて camelCase に変換する', () => {
+    const row = cfnStackDetailFromRaw({
+      stack_name: 'my-stack',
+      status: 'UPDATE_COMPLETE',
+      drift_status: 'NOT_CHECKED',
+      created_time: '2026-07-01T00:00:00Z',
+      updated_time: '2026-07-02T00:00:00Z',
+      description: 'test stack',
+      parameters: [{ key: 'Env', value: 'prod', resolved_value: 'prod' }],
+      outputs: [
+        { key: 'BucketName', value: 'my-bucket', export_name: 'my-export', description: 'desc' },
+      ],
+      tags: { owner: 'team-a' },
+    });
+    expect(row).toEqual({
+      stackName: 'my-stack',
+      status: 'UPDATE_COMPLETE',
+      driftStatus: 'NOT_CHECKED',
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+      description: 'test stack',
+      parameters: [{ key: 'Env', value: 'prod', resolvedValue: 'prod' }],
+      outputs: [
+        { key: 'BucketName', value: 'my-bucket', exportName: 'my-export', description: 'desc' },
+      ],
+      tags: { owner: 'team-a' },
+    });
+  });
+});
+
+describe('cfnStackEventFromRaw', () => {
+  it('idx を含む一意な id を生成し camelCase に変換する', () => {
+    const row = cfnStackEventFromRaw(
+      {
+        timestamp: '2026-07-01T00:00:00Z',
+        logical_resource_id: 'MyBucket',
+        resource_type: 'AWS::S3::Bucket',
+        resource_status: 'CREATE_FAILED',
+        resource_status_reason: 'Bucket already exists',
+      },
+      2,
+    );
+    expect(row).toEqual({
+      id: '2026-07-01T00:00:00Z-MyBucket-2',
+      timestamp: '2026-07-01T00:00:00Z',
+      logicalResourceId: 'MyBucket',
+      resourceType: 'AWS::S3::Bucket',
+      resourceStatus: 'CREATE_FAILED',
+      resourceStatusReason: 'Bucket already exists',
+    });
+  });
+});
+
+describe('cfnStackResourceFromRaw', () => {
+  it('logical_resource_id を id として camelCase に変換する', () => {
+    const row = cfnStackResourceFromRaw({
+      logical_resource_id: 'MyBucket',
+      physical_resource_id: 'my-bucket-abc123',
+      resource_type: 'AWS::S3::Bucket',
+      resource_status: 'UPDATE_COMPLETE',
+      last_updated_time: '2026-07-02T00:00:00Z',
+    });
+    expect(row).toEqual({
+      id: 'MyBucket',
+      logicalResourceId: 'MyBucket',
+      physicalResourceId: 'my-bucket-abc123',
+      resourceType: 'AWS::S3::Bucket',
+      resourceStatus: 'UPDATE_COMPLETE',
+      lastUpdatedTime: '2026-07-02T00:00:00Z',
+    });
   });
 });

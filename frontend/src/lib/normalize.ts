@@ -13,6 +13,14 @@ import type {
   APIGWRow,
   CacheRaw,
   CacheRow,
+  CFNStackDetailRaw,
+  CFNStackDetailRow,
+  CFNStackEventRaw,
+  CFNStackEventRow,
+  CFNStackRaw,
+  CFNStackResourceRaw,
+  CFNStackResourceRow,
+  CFNStackRow,
   CloudFrontRaw,
   CloudFrontRow,
   DynamoIndexSchemaRaw,
@@ -301,6 +309,64 @@ export function ecrImageFromRaw(raw: ECRImageRaw): ECRImageRow {
     pushedAt: raw.pushed_at,
     lastPulledAt: raw.last_pulled_at,
     imageSizeBytes: raw.image_size_bytes,
+  };
+}
+
+export function cfnFromRaw(raw: CFNStackRaw, region: string): CFNStackRow {
+  return {
+    region,
+    id: raw.id,
+    name: raw.name,
+    state: raw.state,
+    createdAt: raw.creation_time,
+    updatedAt: raw.last_updated_time,
+    driftStatus: raw.drift_status,
+    tags: raw.tags,
+  };
+}
+
+export function cfnStackDetailFromRaw(raw: CFNStackDetailRaw): CFNStackDetailRow {
+  return {
+    stackName: raw.stack_name,
+    status: raw.status,
+    driftStatus: raw.drift_status,
+    createdAt: raw.created_time,
+    updatedAt: raw.updated_time,
+    description: raw.description,
+    parameters: raw.parameters.map((p) => ({
+      key: p.key,
+      value: p.value,
+      resolvedValue: p.resolved_value,
+    })),
+    outputs: raw.outputs.map((o) => ({
+      key: o.key,
+      value: o.value,
+      exportName: o.export_name,
+      description: o.description,
+    })),
+    tags: raw.tags,
+  };
+}
+
+export function cfnStackEventFromRaw(raw: CFNStackEventRaw, idx: number): CFNStackEventRow {
+  return {
+    id: `${raw.timestamp}-${raw.logical_resource_id}-${idx}`,
+    timestamp: raw.timestamp,
+    logicalResourceId: raw.logical_resource_id,
+    resourceType: raw.resource_type,
+    resourceStatus: raw.resource_status,
+    resourceStatusReason: raw.resource_status_reason,
+  };
+}
+
+export function cfnStackResourceFromRaw(raw: CFNStackResourceRaw): CFNStackResourceRow {
+  return {
+    id: raw.logical_resource_id,
+    logicalResourceId: raw.logical_resource_id,
+    physicalResourceId: raw.physical_resource_id,
+    resourceType: raw.resource_type,
+    resourceStatus: raw.resource_status,
+    lastUpdatedTime: raw.last_updated_time,
   };
 }
 

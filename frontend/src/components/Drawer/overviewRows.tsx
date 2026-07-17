@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type {
   APIGWRow,
   CacheRow,
+  CFNStackRow,
   CloudFrontRow,
   DynamoRow,
   EC2Row,
@@ -116,6 +117,17 @@ export function ecrOverviewRows(r: ECRRepoRow): OverviewEntry[] {
     ['Tag mutability', r.imageTagMutability],
     ['Scan on push', r.scanOnPush ? 'enabled' : 'disabled'],
     ['Created', r.createdAt || dash],
+    ['Region', r.region],
+  ];
+}
+
+export function cfnOverviewRows(r: CFNStackRow): OverviewEntry[] {
+  return [
+    ['Stack ID', r.id],
+    ['State', r.state],
+    ['Drift status', r.driftStatus],
+    ['Created', r.createdAt || dash],
+    ['Updated', r.updatedAt || dash],
     ['Region', r.region],
   ];
 }

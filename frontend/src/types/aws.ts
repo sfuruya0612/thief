@@ -783,3 +783,101 @@ export interface ForecastRow {
   amount: number;
   unit: string;
 }
+
+// ============================================================
+// CloudFormation
+// ============================================================
+export interface CFNStackRaw {
+  id: string;
+  name: string;
+  state: string;
+  creation_time: string;
+  last_updated_time: string;
+  drift_status: string;
+  tags: Record<string, string>;
+}
+
+export interface CFNStackRow {
+  region: string;
+  id: string;
+  name: string;
+  state: string;
+  createdAt: string;
+  updatedAt: string;
+  driftStatus: string;
+  tags: Record<string, string>;
+}
+
+// スタック詳細 (Drawer の Overview / Tags タブ)
+export interface CFNStackDetailRaw {
+  stack_name: string;
+  status: string;
+  drift_status: string;
+  created_time: string;
+  updated_time: string;
+  description: string;
+  parameters: CFNParameterRaw[];
+  outputs: CFNOutputRaw[];
+  tags: Record<string, string>;
+}
+
+export interface CFNParameterRaw {
+  key: string;
+  value: string;
+  resolved_value: string;
+}
+
+export interface CFNOutputRaw {
+  key: string;
+  value: string;
+  export_name: string;
+  description: string;
+}
+
+export interface CFNStackDetailRow {
+  stackName: string;
+  status: string;
+  driftStatus: string;
+  createdAt: string;
+  updatedAt: string;
+  description: string;
+  parameters: { key: string; value: string; resolvedValue: string }[];
+  outputs: { key: string; value: string; exportName: string; description: string }[];
+  tags: Record<string, string>;
+}
+
+// スタックイベント (Drawer の Events タブ)
+export interface CFNStackEventRaw {
+  timestamp: string;
+  logical_resource_id: string;
+  resource_type: string;
+  resource_status: string;
+  resource_status_reason: string;
+}
+
+export interface CFNStackEventRow {
+  id: string;
+  timestamp: string;
+  logicalResourceId: string;
+  resourceType: string;
+  resourceStatus: string;
+  resourceStatusReason: string;
+}
+
+// スタックが管理するリソース (Drawer の Resources タブ)
+export interface CFNStackResourceRaw {
+  logical_resource_id: string;
+  physical_resource_id: string;
+  resource_type: string;
+  resource_status: string;
+  last_updated_time: string;
+}
+
+export interface CFNStackResourceRow {
+  id: string;
+  logicalResourceId: string;
+  physicalResourceId: string;
+  resourceType: string;
+  resourceStatus: string;
+  lastUpdatedTime: string;
+}

@@ -58,6 +58,7 @@ export const SERVICES: ServiceMeta[] = [
     color: 'var(--svc-costexplorer)',
     group: 'cost',
   },
+  { key: 'cfn', name: 'CloudFormation', sub: 'Stacks', color: 'var(--svc-cfn)', group: 'compute' },
 ];
 
 // GCP サービス一覧
@@ -122,4 +123,5 @@ export const SERVICE_TO_PATH: Record<string, string> = {
   waf: 'waf',
   ssm: 'ssm/parameters',
   secrets: 'secretsmanager',
+  cfn: 'cfn/stacks',
 };
