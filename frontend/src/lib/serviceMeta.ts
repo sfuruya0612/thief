@@ -20,6 +20,7 @@ export const GCP_SERVICE_GROUPS: ServiceGroupMeta[] = [
   { key: 'analytics', label: 'Data Analytics' },
   { key: 'storage', label: 'Storage' },
   { key: 'security', label: 'Security & Identity' },
+  { key: 'observability', label: 'Observability' },
 ];
 
 // data.jsx SERVICES を移植。色は app.css の --svc-* CSS 変数を参照する
@@ -138,15 +139,26 @@ export const GCP_SERVICES: ServiceMeta[] = [
     color: 'var(--svc-gcpserviceaccounts)',
     group: 'security',
   },
+  {
+    key: 'cloudlogging',
+    name: 'Cloud Logging',
+    sub: 'Log entries',
+    color: 'var(--svc-cloudlogging)',
+    group: 'observability',
+  },
 ];
 
 // GCP サービスキー → バックエンド URL パスセグメント
-// bigquery は埋め込みビュー (既存 useBQDatasets 等を再利用) のためパスなし
+// bigquery は埋め込みビュー (既存 useBQDatasets 等を再利用) のためパスなし。
+// cloudlogging も埋め込みビューだが、専用の getGcpLogEntries/useGcpLogEntries が直接
+// '/api/gcp/logging/entries' を叩くため、この対応関係は他所から参照されない (将来の
+// 一貫性のためだけに記載する)。
 export const GCP_SERVICE_TO_PATH: Record<string, string> = {
   cloudrun: 'cloudrun',
   gcs: 'gcs',
   gcpiam: 'iam',
   gcpserviceaccounts: 'serviceaccounts',
+  cloudlogging: 'logging',
 };
 
 // サービスキー → バックエンド URL パスセグメント

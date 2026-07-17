@@ -133,3 +133,36 @@ export interface ServiceAccountRow {
   uniqueId: string;
   disabled: boolean;
 }
+
+// ============================================================
+// Cloud Logging
+// ============================================================
+export interface LogEntryRaw {
+  timestamp: string;
+  severity: string;
+  log_name: string;
+  resource_type: string;
+  resource_labels?: Record<string, string>;
+  labels?: Record<string, string>;
+  payload: string;
+  insert_id: string;
+  trace?: string;
+}
+
+export interface LogEntryRow {
+  id: string;
+  timestamp: string;
+  severity: string;
+  logName: string;
+  resourceType: string;
+  resourceLabels: Record<string, string>;
+  labels: Record<string, string>;
+  payload: string;
+  insertId: string;
+  trace: string;
+}
+
+export interface LogEntryPageRaw {
+  entries: LogEntryRaw[];
+  next_page_token?: string;
+}

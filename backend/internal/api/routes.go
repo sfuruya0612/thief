@@ -84,6 +84,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/gcp/gcs/{bucket}/objects/upload", s.handleGCPGCSObjectUpload)
 	s.mux.HandleFunc("GET /api/gcp/iam", s.handleGCPIAM)
 	s.mux.HandleFunc("GET /api/gcp/serviceaccounts", s.handleGCPServiceAccounts)
+	s.mux.HandleFunc("GET /api/gcp/logging/entries", s.handleGCPLoggingEntries)
+	s.mux.HandleFunc("GET /api/gcp/logging/tail", s.handleGCPLoggingTail)
 
 	// Datadog
 	s.mux.HandleFunc("GET /api/datadog/cost/historical", s.handleDatadogHistorical)

@@ -77,9 +77,9 @@ interface SvcItemProps {
 
 function SvcItem({ svc, project, active, onService }: SvcItemProps) {
   const meta = GCP_SERVICES.find((s) => s.key === svc);
-  // bigquery は GCP_SERVICE_TO_PATH にパスを持たず useGcpResources 経由で fetch されないため、
-  // 件数バッジは他所からのキャッシュ観測が期待できない。ハイフンのみ表示にする。
-  const isObservable = svc !== 'bigquery';
+  // bigquery / cloudlogging は専用ビュー・専用フックで fetch され useGcpResources を
+  // 経由しないため、件数バッジは他所からのキャッシュ観測が期待できない。ハイフンのみ表示にする。
+  const isObservable = svc !== 'bigquery' && svc !== 'cloudlogging';
   const { data } = useQuery<unknown[]>({
     queryKey: ['gcp', svc, project],
     enabled: false,

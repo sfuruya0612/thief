@@ -5,6 +5,8 @@ import {
   groupIAMBindingsByMember,
   gcsBucketFromRaw,
   gcsObjectFromRaw,
+  logEntryFromRaw,
+  logSeverityLevel,
 } from './normalizeGcp';
 import type { IAMBindingRow } from '../types/gcp';
 
@@ -162,5 +164,85 @@ describe('gcsObjectFromRaw', () => {
       updated: '2024-02-01T00:00:00Z',
       storageClass: 'STANDARD',
     });
+  });
+});
+
+describe('logEntryFromRaw', () => {
+  it('snake_case を camelCase に変換し、insert_id + index で id を組み立てる', () => {
+    const row = logEntryFromRaw(
+      {
+        timestamp: '2026-07-18T00:00:00Z',
+        severity: 'Error',
+        log_name: 'projects/p-1/logs/run.googleapis.com%2Fstderr',
+        resource_type: 'cloud_run_revision',
+        resource_labels: { service_name: 'api' },
+        labels: { foo: 'bar' },
+        payload: 'boom',
+        insert_id: 'abc123',
+        trace: 'projects/p-1/traces/xyz',
+      },
+      0,
+    );
+    expect(row).toEqual({
+      id: 'abc123#0',
+      timestamp: '2026-07-18T00:00:00Z',
+      severity: 'Error',
+      logName: 'projects/p-1/logs/run.googleapis.com%2Fstderr',
+      resourceType: 'cloud_run_revision',
+      resourceLabels: { service_name: 'api' },
+      labels: { foo: 'bar' },
+      payload: 'boom',
+      insertId: 'abc123',
+      trace: 'projects/p-1/traces/xyz',
+    });
+  });
+
+  it('insert_id が空なら timestamp + index で id を組み立てる', () => {
+    const row = logEntryFromRaw(
+      {
+        timestamp: '2026-07-18T00:00:00Z',
+        severity: 'Info',
+        log_name: 'projects/p-1/logs/l',
+        resource_type: 'global',
+        payload: 'hello',
+        insert_id: '',
+      },
+      2,
+    );
+    expect(row.id).toBe('2026-07-18T00:00:00Z#2');
+  });
+
+  it('resource_labels/labels/trace 省略時は空オブジェクト/空文字にフォールバックする', () => {
+    const row = logEntryFromRaw(
+      {
+        timestamp: '2026-07-18T00:00:00Z',
+        severity: 'Info',
+        log_name: 'projects/p-1/logs/l',
+        resource_type: 'global',
+        payload: 'hello',
+        insert_id: 'i-1',
+      },
+      0,
+    );
+    expect(row.resourceLabels).toEqual({});
+    expect(row.labels).toEqual({});
+    expect(row.trace).toBe('');
+  });
+});
+
+describe('logSeverityLevel', () => {
+  it.each([
+    ['Error', 'err'],
+    ['Critical', 'err'],
+    ['Alert', 'err'],
+    ['Emergency', 'err'],
+    ['Warning', 'warn'],
+    ['Notice', 'warn'],
+    ['Default', 'info'],
+    ['Debug', 'info'],
+    ['Info', 'info'],
+    ['', 'info'],
+  ] as const)('%s は %s に丸められる', (severity, want) => {
+    expect(logSeverityLevel(severity)).toBe(want);
   });
 });

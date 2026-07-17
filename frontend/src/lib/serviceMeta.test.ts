@@ -49,6 +49,7 @@ describe('GCP_SERVICE_GROUPS / GCP_SERVICES', () => {
       { key: 'analytics', services: ['bigquery'] },
       { key: 'storage', services: ['gcs'] },
       { key: 'security', services: ['gcpiam', 'gcpserviceaccounts'] },
+      { key: 'observability', services: ['cloudlogging'] },
     ]);
   });
 });

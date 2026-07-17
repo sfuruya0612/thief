@@ -44,6 +44,7 @@ import { DataTable } from '../components/DataTable';
 import { Drawer } from '../components/Drawer/Drawer';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { BigQueryView } from './nonaws/BigQueryView';
+import { CloudLoggingView } from './nonaws/CloudLoggingView';
 
 interface GcpRowsPanelProps<TRow extends BaseRow> {
   service: string;
@@ -273,6 +274,7 @@ export function GcpView({
         />
       )}
       {activeService === 'bigquery' && <BigQueryView projectId={activeProject} />}
+      {activeService === 'cloudlogging' && <CloudLoggingView projectId={activeProject} />}
     </div>
   );
 }

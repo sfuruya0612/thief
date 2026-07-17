@@ -2,11 +2,17 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+
+	"github.com/coder/websocket"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/gcp"
@@ -254,4 +260,127 @@ func (s *Server) handleGCPGCSObjectUpload(w http.ResponseWriter, r *http.Request
 	// アップロード成功後、対象バケット配下のオブジェクト一覧キャッシュを無効化する。
 	s.resourceCache.InvalidatePrefix(cacheKey("gcp-gcs-objects", projectID, bucket, ""))
 	writeJSON(w, map[string]string{"status": "ok", "key": objectKey})
+}
+
+// handleGCPLoggingEntries は指定プロジェクトのログエントリを期間・フィルター指定で 1 ページ返す。
+// 実行のたびに結果が変わりうる読み取りのため、BigQuery のクエリ実行系 (handlers_bigquery.go:54)
+// と同じ方針でキャッシュ (serveCached) を通さない。
+func (s *Server) handleGCPLoggingEntries(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := s.gcpProjectIDFromQuery(w, r)
+	if !ok {
+		return
+	}
+
+	q := r.URL.Query()
+	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+
+	page, err := gcp.ListLogEntries(r.Context(), projectID, q.Get("filter"), q.Get("start"), q.Get("end"), q.Get("page_token"), pageSize)
+	if err != nil {
+		writeInternalError(w, err.Error())
+		return
+	}
+	writeJSON(w, page)
+}
+
+// gcpLoggingTailReadLimit はブラウザ側 WebSocket からの 1 メッセージあたりの読み取り上限バイト数。
+// ブラウザから backend へは切断検知のためのメッセージしか届かない想定のため小さくてよい。
+const gcpLoggingTailReadLimit = 1 << 12 // 4KiB
+
+// gcpLoggingTailControlMessage は Live Tail 終了時にブラウザへ送る制御メッセージ
+// (session/bridge.go の exit 通知に倣った形)。
+type gcpLoggingTailControlMessage struct {
+	Type   string `json:"type"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// handleGCPLoggingTail は Cloud Logging の Live Tail を WebSocket 経由でブラウザへ中継する。
+// フレーム規約: ログエントリは TEXT フレームの JSON (gcp.LogEntryInfo) で 1 件ずつ push する。
+// 終了時は {"type":"end","reason":"..."} を送ってからクローズする。
+func (s *Server) handleGCPLoggingTail(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := s.gcpProjectIDFromQuery(w, r)
+	if !ok {
+		return
+	}
+	filter := r.URL.Query().Get("filter")
+
+	// OriginPatterns は cfg.WebOrigins に従う。DNS rebinding 対策のためここにのみ渡し、
+	// InsecureSkipVerify は使わない (handlers_session.go:84 と同じ規約)。
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: s.cfg.WebOrigins,
+	})
+	if err != nil {
+		slog.Warn("failed to accept gcp logging tail websocket", "err", err)
+		return
+	}
+	conn.SetReadLimit(gcpLoggingTailReadLimit)
+
+	// errgroup + 明示的な cancel で、tail ストリームの終了とブラウザ切断のどちらが先に
+	// 起きても確実にもう片方を止める (session/bridge.go の Bridge.Run と同じ構図を
+	// 片方向 push 用に簡略化したもの)。
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		defer cancel()
+		return gcp.TailLogEntries(ctx, projectID, filter, func(entry gcp.LogEntryInfo) error {
+			payload, err := json.Marshal(entry)
+			if err != nil {
+				return fmt.Errorf("marshal tail log entry: %w", err)
+			}
+			return conn.Write(ctx, websocket.MessageText, payload)
+		})
+	})
+	g.Go(func() error {
+		defer cancel()
+		return discardGCPLoggingBrowserMessages(ctx, conn)
+	})
+
+	err = g.Wait()
+
+	reason := "stream ended"
+	switch {
+	case err == nil:
+		// discardGCPLoggingBrowserMessages がブラウザの正常切断で nil を返したケース。
+	case errors.Is(err, context.Canceled):
+		// もう片方の goroutine 終了に伴う cancel。ブラウザへは汎用メッセージのみ通知する。
+	default:
+		reason = err.Error()
+		slog.Warn("gcp logging tail ended with error", "project_id", projectID, "err", err)
+	}
+	notifyGCPLoggingTailEnd(conn, reason)
+	if err := conn.Close(websocket.StatusNormalClosure, ""); err != nil {
+		slog.Warn("failed to close gcp logging tail websocket", "err", err)
+	}
+}
+
+// discardGCPLoggingBrowserMessages はブラウザ→backend 方向を切断検知のためだけに読み捨てる。
+// ブラウザの正常切断 (タブ/Drawer を閉じる等) は nil を返し、それ以外はエラーを返す。
+func discardGCPLoggingBrowserMessages(ctx context.Context, conn *websocket.Conn) error {
+	for {
+		if _, _, err := conn.Read(ctx); err != nil {
+			switch websocket.CloseStatus(err) {
+			case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+				return nil
+			}
+			return fmt.Errorf("read from browser: %w", err)
+		}
+	}
+}
+
+// notifyGCPLoggingTailEnd はセッション終了をブラウザへ通知する。呼び出し時点で r.Context() は
+// すでにキャンセルされている可能性があるため、専用の短命 context を使う
+// (session/bridge.go の cleanup と同じ規約)。送信エラーはログに残すのみで処理は継続する。
+func notifyGCPLoggingTailEnd(conn *websocket.Conn, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), sessionTerminateTimeout)
+	defer cancel()
+
+	payload, err := json.Marshal(gcpLoggingTailControlMessage{Type: "end", Reason: reason})
+	if err != nil {
+		slog.Warn("failed to marshal gcp logging tail end message", "err", err)
+		return
+	}
+	if err := conn.Write(ctx, websocket.MessageText, payload); err != nil {
+		slog.Warn("failed to notify browser of gcp logging tail end", "err", err)
+	}
 }

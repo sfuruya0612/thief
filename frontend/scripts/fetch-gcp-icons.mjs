@@ -21,6 +21,11 @@ const ICON_FILENAMES = {
   cloudrun: 'CloudRun-512-color-rgb.svg',
   bigquery: 'BigQuery-512-color.svg',
   gcs: 'Cloud_Storage-512-color.svg',
+  // 実ファイル名は Google Cloud 公式アイコンパッケージ (Unique Icons) の命名規則からの
+  // 推測であり、このセッションでは zip が入手できず実際の展開・検証を行えていない。
+  // mise run frontend:fetch-gcp-icons 実行時にファイル名不一致で失敗した場合は、
+  // パッケージ内の実際のファイル名に合わせて修正すること。
+  cloudlogging: 'Cloud_Logging-512-color.svg',
 };
 
 function extractZip(zipPath, destDir) {

@@ -76,6 +76,8 @@ import {
   getELBRules,
   getELBTargetGroups,
   getELBTargetHealth,
+  type GcpLogEntriesQuery,
+  getGcpLogEntries,
   getGcpProjects,
   getGcpResources,
   getGcsObjectPreview,
@@ -770,5 +772,37 @@ export function useGcsObjectPreview(projectId: string, bucket: string, key: stri
     queryKey: ['gcp', 'gcs-object-preview', projectId, bucket, key],
     queryFn: async () => objectPreviewFromRaw(await getGcsObjectPreview(projectId, bucket, key!)),
     enabled: !!projectId && !!bucket && !!key,
+  });
+}
+
+// ============================================================
+// Cloud Logging (期間指定 + フィルターでのログエントリ取得。ページング対応)
+// ============================================================
+
+// 1 ページあたりの取得件数 (バックエンド既定と揃える必要はないが、多すぎるとログ 1 画面が
+// 重くなるため BigQuery/Athena の結果ページングより小さめにする)。
+const GCP_LOG_ENTRY_PAGE_SIZE = 200;
+
+// runToken は「実行」ボタンを押すたびに呼び出し側でインクリメントする値。同じ filter/期間で
+// 再実行しても新しい queryKey になるため、useBQQueryResults 等のジョブ ID ベースの結果取得と
+// 同様に、確定した 1 回の実行結果を不変 (staleTime: Infinity) として扱える。
+export function useGcpLogEntries(
+  projectId: string,
+  runToken: number,
+  query: Pick<GcpLogEntriesQuery, 'filter' | 'start' | 'end'>,
+  enabled: boolean,
+) {
+  return useInfiniteQuery({
+    queryKey: ['gcp', 'logging-entries', projectId, runToken],
+    queryFn: ({ pageParam }) =>
+      getGcpLogEntries(projectId, {
+        ...query,
+        pageToken: pageParam,
+        pageSize: GCP_LOG_ENTRY_PAGE_SIZE,
+      }),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_page_token || undefined,
+    enabled: enabled && !!projectId && runToken > 0,
+    staleTime: Infinity,
   });
 }
