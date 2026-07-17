@@ -124,6 +124,15 @@ describe('AddSessionPicker', () => {
     document.removeEventListener('keydown', outerKeyDown);
   });
 
+  it('loadError の間はエラー表示と再試行ボタンを出し空状態は出さない', () => {
+    const onRetry = vi.fn();
+    renderPicker({ items: [], loadError: true, onRetry });
+    expect(screen.getByText('一覧の取得に失敗しました')).toBeInTheDocument();
+    expect(screen.queryByText('一致するプロファイルがありません')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('再試行'));
+    expect(onRetry).toHaveBeenCalled();
+  });
+
   it('items 差し替えでハイライトがリセットされる', () => {
     const handlers = { onSelect: vi.fn(), onClose: vi.fn() };
     const props = {

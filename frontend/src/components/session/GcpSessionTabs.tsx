@@ -14,7 +14,7 @@ export interface GcpSessionTabsProps {
 }
 
 export function GcpSessionTabs({ sessions }: GcpSessionTabsProps) {
-  const { projects, openProjects, activeProject } = sessions;
+  const { projects, openProjects, activeProject, isError } = sessions;
   const refreshProjects = useRefreshGcpProjects();
 
   const items = useMemo<SessionTabItem[]>(
@@ -57,6 +57,8 @@ export function GcpSessionTabs({ sessions }: GcpSessionTabsProps) {
           }
           footerHint="別アカウントのプロジェクトは gcloud auth login で認証後に表示"
           emptyText="一致するプロジェクトがありません"
+          loadError={isError}
+          onRetry={() => refreshProjects.mutate()}
           narrow
           onSelect={(id) => {
             sessions.openProject(id);

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import type { AwsSessions } from '../../hooks/useProfiles';
 import { awsPickerItems } from '../../lib/sessionMeta';
+import { Icons } from '../icons/Icons';
 import { AddSessionPicker } from './AddSessionPicker';
 import { SessionTabs, type SessionTabItem } from './SessionTabs';
 
@@ -11,7 +12,7 @@ export interface AwsSessionTabsProps {
 }
 
 export function AwsSessionTabs({ sessions }: AwsSessionTabsProps) {
-  const { profiles, openProfiles, activeProfile } = sessions;
+  const { profiles, openProfiles, activeProfile, isError, refetchProfiles } = sessions;
 
   // AWS のドットは環境色を使わない (モック 4b: 環境による特別扱いなし)。
   const items = useMemo<SessionTabItem[]>(
@@ -43,8 +44,20 @@ export function AwsSessionTabs({ sessions }: AwsSessionTabsProps) {
           items={pickerItems}
           placeholder="プロファイルを検索…"
           headerNote={`~/.aws/config · ${profiles.length}件`}
+          headerAction={
+            <button
+              className="btn sm ghost"
+              style={{ padding: '1px 4px' }}
+              title="プロファイル一覧を再取得"
+              onClick={() => refetchProfiles()}
+            >
+              <Icons.refresh size={11} />
+            </button>
+          }
           footerHint="↑↓ で選択 · ⏎ で開く · 期限切れは開いた後に再認証を案内"
           emptyText="一致するプロファイルがありません"
+          loadError={isError}
+          onRetry={refetchProfiles}
           onSelect={(id) => {
             sessions.openProfile(id);
             // オーバーフロー中でも追加したタブが表示域に入るよう右端と入替える

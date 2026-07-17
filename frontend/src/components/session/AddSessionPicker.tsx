@@ -18,6 +18,11 @@ export interface AddSessionPickerProps {
   headerAction?: ReactNode;
   // ピッカー幅 (AWS 440px / GCP 400px。モック実測値)
   narrow?: boolean;
+  // 一覧取得の失敗状態。true の間は「0件」ではなく取得エラーである旨と
+  // 再試行導線を表示する (issue 0021: backend 起動前にページを開くと
+  // 一覧が空のまま復旧しないバグの対策)。
+  loadError?: boolean;
+  onRetry?: () => void;
   onSelect: (id: string) => void;
   onClose: () => void;
 }
@@ -30,6 +35,8 @@ export function AddSessionPicker({
   emptyText,
   headerAction,
   narrow,
+  loadError,
+  onRetry,
   onSelect,
   onClose,
 }: AddSessionPickerProps) {
@@ -103,7 +110,19 @@ export function AddSessionPicker({
         </span>
       </div>
       <ul className="session-picker-list" role="listbox">
-        {filtered.length === 0 && <li className="session-picker-empty">{emptyText}</li>}
+        {loadError && (
+          <li className="session-picker-empty session-picker-error">
+            一覧の取得に失敗しました
+            {onRetry && (
+              <button className="btn sm ghost" onClick={onRetry}>
+                再試行
+              </button>
+            )}
+          </li>
+        )}
+        {!loadError && filtered.length === 0 && (
+          <li className="session-picker-empty">{emptyText}</li>
+        )}
         {filtered.map((item, i) => (
           <li
             key={item.id}
