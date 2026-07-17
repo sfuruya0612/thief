@@ -1,14 +1,8 @@
-// 非 AWS サービス (BigQuery / Datadog / TiDB) 用の列定義
+// 非 AWS サービス (Datadog / TiDB) 用の列定義
 // columns.tsx と同じ ColumnDef パターンを再利用する。$/mo 相当の列は対象サービスに存在しない。
-import type {
-  BQDatasetRow,
-  BQFieldRow,
-  BQTableRow,
-  TiDBClusterRow,
-  TiDBProjectRow,
-} from '../../types/nonaws';
+// BigQuery はクエリエディタ化に伴い一覧テーブルを持たないため、列定義はここに無い。
+import type { TiDBClusterRow, TiDBProjectRow } from '../../types/nonaws';
 import type { ColumnDef } from './columns';
-import { formatBytes } from './columns';
 import { StatusBadge } from '../primitives';
 
 const monoStyle = { fontFamily: 'var(--font-mono)' } as const;
@@ -18,112 +12,6 @@ const dashStyle = { color: 'var(--text-4)' } as const;
 function Dash() {
   return <span style={dashStyle}>—</span>;
 }
-
-// ============================================================
-// BigQuery
-// ============================================================
-export const bqDatasetColumns: ColumnDef<BQDatasetRow>[] = [
-  {
-    key: 'name',
-    header: 'Dataset',
-    width: '24%',
-    cell: (r) => <span className="primary truncate">{r.name}</span>,
-  },
-  {
-    key: 'location',
-    header: 'Location',
-    width: '14%',
-    cell: (r) => <span style={mutedMono}>{r.location}</span>,
-  },
-  {
-    key: 'creationTime',
-    header: 'Created',
-    width: '18%',
-    cell: (r) => (r.creationTime ? <span style={mutedMono}>{r.creationTime}</span> : <Dash />),
-  },
-  {
-    key: 'lastModifiedTime',
-    header: 'Last modified',
-    width: '18%',
-    cell: (r) =>
-      r.lastModifiedTime ? <span style={mutedMono}>{r.lastModifiedTime}</span> : <Dash />,
-  },
-  {
-    key: 'description',
-    header: 'Description',
-    width: '26%',
-    cell: (r) => (r.description ? <span className="truncate">{r.description}</span> : <Dash />),
-  },
-];
-
-export const bqTableColumns: ColumnDef<BQTableRow>[] = [
-  {
-    key: 'name',
-    header: 'Table',
-    width: '26%',
-    cell: (r) => <span className="primary truncate">{r.name}</span>,
-  },
-  {
-    key: 'type',
-    header: 'Type',
-    width: '12%',
-    cell: (r) => <span style={mutedMono}>{r.type}</span>,
-  },
-  {
-    key: 'numRows',
-    header: 'Rows',
-    width: '16%',
-    align: 'right',
-    cell: (r) => <span style={monoStyle}>{r.numRows.toLocaleString()}</span>,
-  },
-  {
-    key: 'numBytes',
-    header: 'Size',
-    width: '14%',
-    align: 'right',
-    cell: (r) => <span style={mutedMono}>{formatBytes(r.numBytes)}</span>,
-  },
-  {
-    key: 'creationTime',
-    header: 'Created',
-    width: '16%',
-    cell: (r) => (r.creationTime ? <span style={mutedMono}>{r.creationTime}</span> : <Dash />),
-  },
-  {
-    key: 'lastModifiedTime',
-    header: 'Last modified',
-    width: '16%',
-    cell: (r) =>
-      r.lastModifiedTime ? <span style={mutedMono}>{r.lastModifiedTime}</span> : <Dash />,
-  },
-];
-
-export const bqFieldColumns: ColumnDef<BQFieldRow>[] = [
-  {
-    key: 'name',
-    header: 'Field',
-    width: '28%',
-    cell: (r) => <span className="primary truncate">{r.name}</span>,
-  },
-  {
-    key: 'type',
-    header: 'Type',
-    width: '18%',
-    cell: (r) => <span style={mutedMono}>{r.type}</span>,
-  },
-  {
-    key: 'mode',
-    header: 'Mode',
-    width: '18%',
-    cell: (r) => <span style={mutedMono}>{r.mode}</span>,
-  },
-  {
-    key: 'description',
-    header: 'Description',
-    width: '36%',
-    cell: (r) => (r.description ? <span className="truncate">{r.description}</span> : <Dash />),
-  },
-];
 
 // ============================================================
 // TiDB

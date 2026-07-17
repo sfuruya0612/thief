@@ -6,6 +6,8 @@
   - @sfuruya0612
 - [UPDATE] backend の設定解決でレガシー CLI 互換の環境変数 `THIEF_PROFILE` / `THIEF_REGION` を解決するようにする
   - @sfuruya0612
+- [UPDATE] AWS / Google Cloud の公式アイコンアセット未展開時に、壊れた画像アイコンではなく無地のプレースホルダを表示するようにする
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
@@ -58,6 +60,11 @@
   - @sfuruya0612
 - [ADD] backend CLI に `ecs services` / `ecs tasks` / `rds cluster` / `cfn describe` / `cfn changeset` / `ecr images` / `bq table info` / `datadog estimated` を追加する
   - @sfuruya0612
+- [ADD] AWS サービス一覧に Athena のクエリエディタを追加する (カタログ / データベース / ワークグループ選択、S3 出力先の指定、スキーマツリー、読み取り専用 SQL の非同期実行・キャンセル、実行履歴、結果の追加読み込み)
+  - @sfuruya0612
+- [ADD] BigQuery / Athena クエリエディタ共通の編集機能を追加する (複数タブ・保存クエリの localStorage 永続化、スニペットのサービス別ローカルファイル保存 (`THIEF_SNIPPETS_DIR` 配下の `athena/` / `bigquery/`、既定 `/tmp/thief`)、CodeMirror による SQL ハイライトとスキーマ補完、SQL フォーマット、結果テーブルの列フィルター・ソート・ページング・CSV コピー、フッターの CLI コマンドヒント)
+  - @sfuruya0612
+- [ADD] BigQuery のドライランで処理バイト量とオンデマンド概算費用を実行前に確認できるようにする
   - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
@@ -86,6 +93,12 @@
 - [CHANGE] backend が返す各 AWS サービスの state を小文字・ハイフン表記に統一する
   - @sfuruya0612
 - [CHANGE] backend CLI のコマンド体系・フラグ・出力列をレガシー CLI (ルート cmd/) のインターフェースに一致させる (`ec2` → `ec2 ls`、`ssm ls` → `ssm param ls`、`datadog cost historical` → `datadog historical`、`tidb cost --month` → `tidb cost --billed-month`、`bq table ls <dataset>` → `bq table ls --dataset` 等)
+  - @sfuruya0612
+- [CHANGE] BigQuery ビューを dataset / table 一覧からクエリエディタ構成 (スキーマツリー + タブ付きエディタ + 結果パネル) に刷新する
+  - @sfuruya0612
+- [CHANGE] POST /api/bigquery/query を同期実行から非同期ジョブ開始 (job_id 返却) に変更し、ジョブ状態取得 / 結果ページング / キャンセル / 実行履歴の API を追加する
+  - @sfuruya0612
+- [CHANGE] ダークモードの配色をクエリエディタのデザインパレット (背景 #15171c / パネル #1e2127) に全体統一する
   - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
   - @sfuruya0612

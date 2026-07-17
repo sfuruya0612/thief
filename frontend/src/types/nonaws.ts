@@ -55,11 +55,6 @@ export interface BQFieldRow {
   description: string;
 }
 
-export interface BQQueryResult {
-  columns: string[];
-  rows: string[][];
-}
-
 // ============================================================
 // Datadog
 // ============================================================

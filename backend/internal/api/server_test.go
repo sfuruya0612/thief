@@ -9,13 +9,19 @@ import (
 	"time"
 
 	"github.com/sfuruya0612/thief/backend/internal/cache"
+	"github.com/sfuruya0612/thief/backend/internal/config"
+	"github.com/sfuruya0612/thief/backend/internal/snippet"
 )
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	c := cache.New[any](time.Minute)
 	t.Cleanup(c.Close)
-	return &Server{resourceCache: c}
+	return &Server{
+		cfg:           config.Defaults(),
+		snippets:      snippet.NewStore(t.TempDir()),
+		resourceCache: c,
+	}
 }
 
 func TestServeCachedMissThenHit(t *testing.T) {

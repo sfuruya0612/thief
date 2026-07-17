@@ -1,4 +1,6 @@
 // AWS 公式 Architecture Icons (public/assets/aws-icons/*.svg) を表示するアイコンコンポーネント
+import { AssetIcon } from './AssetIcon';
+
 export interface AwsIconProps {
   size?: number;
 }
@@ -9,6 +11,7 @@ type AwsIconComponent = (p?: AwsIconProps) => JSX.Element;
 const AWS_ICON_FILES: Record<string, string> = {
   ec2: 'ec2.svg',
   ecr: 'ecr.svg',
+  athena: 'athena.svg',
   lambda: 'lambda.svg',
   ecs: 'ecs.svg',
   rds: 'rds.svg',
@@ -29,15 +32,7 @@ const AWS_ICON_FILES: Record<string, string> = {
 };
 
 function AwsIcon(svc: string, { size = 16 }: AwsIconProps = {}) {
-  return (
-    <img
-      src={`/assets/aws-icons/${AWS_ICON_FILES[svc]}`}
-      width={size}
-      height={size}
-      alt={svc}
-      style={{ display: 'block', borderRadius: 3.5 }}
-    />
-  );
+  return <AssetIcon src={`/assets/aws-icons/${AWS_ICON_FILES[svc]}`} alt={svc} size={size} />;
 }
 
 export const AwsIcons: Record<string, AwsIconComponent> = Object.fromEntries(

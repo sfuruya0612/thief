@@ -48,11 +48,27 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost", s.handleCost)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost/forecast", s.handleCostForecast)
 
+	// Athena (クエリエディタ)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/catalogs", s.handleAthenaCatalogs)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/databases", s.handleAthenaDatabases)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/workgroups", s.handleAthenaWorkgroups)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/tables", s.handleAthenaTables)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/athena/query", s.handleAthenaQueryStart)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/query/history", s.handleAthenaQueryHistory)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/query/{id}", s.handleAthenaQueryGet)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/query/{id}/results", s.handleAthenaQueryResults)
+	s.mux.HandleFunc("DELETE /api/aws/profiles/{profile}/athena/query/{id}", s.handleAthenaQueryStop)
+
 	// BigQuery
 	s.mux.HandleFunc("GET /api/bigquery/datasets", s.handleBQDatasets)
 	s.mux.HandleFunc("GET /api/bigquery/datasets/{dataset}/tables", s.handleBQTables)
 	s.mux.HandleFunc("GET /api/bigquery/datasets/{dataset}/tables/{table}/schema", s.handleBQSchema)
-	s.mux.HandleFunc("POST /api/bigquery/query", s.handleBQQuery)
+	s.mux.HandleFunc("POST /api/bigquery/query", s.handleBQQueryStart)
+	s.mux.HandleFunc("POST /api/bigquery/query/dryrun", s.handleBQQueryDryRun)
+	s.mux.HandleFunc("GET /api/bigquery/query/history", s.handleBQQueryHistory)
+	s.mux.HandleFunc("GET /api/bigquery/query/jobs/{job}", s.handleBQQueryJob)
+	s.mux.HandleFunc("GET /api/bigquery/query/jobs/{job}/results", s.handleBQQueryJobResults)
+	s.mux.HandleFunc("DELETE /api/bigquery/query/jobs/{job}", s.handleBQQueryJobCancel)
 
 	// GCP
 	s.mux.HandleFunc("GET /api/gcp/projects", s.handleGCPProjects)
@@ -72,4 +88,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/tidb/projects", s.handleTiDBProjects)
 	s.mux.HandleFunc("GET /api/tidb/projects/{project_id}/clusters", s.handleTiDBClusters)
 	s.mux.HandleFunc("GET /api/tidb/cost", s.handleTiDBCost)
+
+	// クエリスニペット (サービス別ディレクトリへのローカルファイル保存)
+	s.mux.HandleFunc("GET /api/snippets/{service}", s.handleSnippetsList)
+	s.mux.HandleFunc("POST /api/snippets/{service}", s.handleSnippetSave)
+	s.mux.HandleFunc("DELETE /api/snippets/{service}/{name}", s.handleSnippetDelete)
 }

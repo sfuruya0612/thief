@@ -2,6 +2,9 @@
 // 全ビュー共通フッターとして App.tsx ルートに配置するため、サービスごとの模擬 CLI コマンド文言のみを表示する
 // (件数は ServicePanel 内部の filtered state に依存し App まで持ち上げるとコストが大きいため、
 //  課題 4-2 の方針「最小変更」に従い件数表示は廃止する)
+// クエリエディタ (BigQuery / Athena) は直近の操作に対応する等価コマンドで上書きする
+import { useCliHint } from '../hooks/useCliHint';
+
 export interface StatusBarProps {
   service: string;
 }
@@ -25,17 +28,19 @@ const COMMANDS: Record<string, string> = {
   iam: 'aws iam list-users',
   ssm: 'aws ssm describe-parameters',
   secrets: 'aws secretsmanager list-secrets',
+  athena: 'aws athena list-work-groups',
   bigquery: 'bq ls',
   datadog: 'datadog-ci cost estimated',
   tidb: 'ticloud cluster list',
 };
 
 export function StatusBar({ service }: StatusBarProps) {
+  const override = useCliHint(service);
   return (
     <div className="statusbar">
       <span className="cmd">$</span>
       <span>
-        <span className="muted">{COMMANDS[service] ?? 'aws iam list-users'}</span>
+        <span className="muted">{override ?? COMMANDS[service] ?? 'aws iam list-users'}</span>
       </span>
       <span className="spacer" />
     </div>

@@ -20,6 +20,7 @@ const OUTPUT_DIR = join(SCRIPT_DIR, '..', 'public', 'assets', 'aws-icons');
 // natgw は Architecture Icons (32px) に該当アイコンが存在しないため、
 // Resource Icons (48px) の NAT Gateway アイコンを使用する。
 const ICON_FILENAMES = {
+  athena: 'Arch_Amazon-Athena_32.svg',
   ec2: 'Arch_Amazon-EC2_32.svg',
   s3: 'Arch_Amazon-Simple-Storage-Service_32.svg',
   rds: 'Arch_Amazon-RDS_32.svg',

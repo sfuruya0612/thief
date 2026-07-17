@@ -4,6 +4,7 @@ import type { ServiceMeta } from '../types/common';
 export const SERVICES: ServiceMeta[] = [
   { key: 'ec2', name: 'EC2', sub: 'Instances', color: 'var(--svc-ec2)', group: 'compute' },
   { key: 'ecr', name: 'ECR', sub: 'Repositories', color: 'var(--svc-ecr)', group: 'compute' },
+  { key: 'athena', name: 'Athena', sub: 'Query editor', color: 'var(--svc-athena)', group: 'data' },
   { key: 'rds', name: 'RDS', sub: 'Databases', color: 'var(--svc-rds)', group: 'data' },
   { key: 'dynamo', name: 'DynamoDB', sub: 'Tables', color: 'var(--svc-dynamo)', group: 'data' },
   { key: 'cache', name: 'ElastiCache', sub: 'Clusters', color: 'var(--svc-cache)', group: 'data' },
@@ -71,7 +72,7 @@ export const GCP_SERVICES: ServiceMeta[] = [
   {
     key: 'bigquery',
     name: 'BigQuery',
-    sub: 'Datasets',
+    sub: 'Query editor',
     color: 'var(--svc-bigquery)',
     group: 'data',
   },

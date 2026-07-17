@@ -8,31 +8,56 @@
   --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, 'JetBrains Mono', monospace;
 
-  /* Dark theme (Linear dark) */
-  --bg-0: #1b1b1f; /* app background */
-  --bg-1: #202024; /* panels */
-  --bg-2: #26262b; /* raised */
-  --bg-3: #2d2d33; /* hover */
-  --bg-4: #35353c; /* active */
-  --line-1: #2a2a30; /* hairline */
-  --line-2: #35353c; /* stronger border */
-  --line-3: #45454e;
+  /* Dark theme (クエリエディタ デザイン 3 のパレットに全体統一) */
+  --bg-0: #15171c; /* app background */
+  --bg-1: #1e2127; /* panels */
+  --bg-2: #262b33; /* raised */
+  --bg-3: #2c313a; /* hover */
+  --bg-4: #353b45; /* active */
+  --line-1: #262a31; /* hairline */
+  --line-2: #2c313a; /* stronger border */
+  --line-3: #3a404b;
 
-  --text-1: #eeeef0;
-  --text-2: #a8a8b0;
-  --text-3: #7e7e88;
-  --text-4: #55555e;
+  --text-1: #e6e9ee;
+  --text-2: #b6bcc6;
+  --text-3: #868d99;
+  --text-4: #596070;
 
   --accent: #5e6ad2; /* Linear indigo default */
   --accent-hi: #7b86e2;
   --accent-dim: rgba(94, 106, 210, 0.14);
   --accent-text: #fff;
 
-  --ok: #4cb782;
-  --warn: #f2c94c;
+  --ok: #58c184;
+  --warn: #e5a54b;
   --err: #eb5757;
-  --info: #4ea7fc;
-  --muted: #7e7e88;
+  --info: #6ea3f7;
+  --muted: #868d99;
+
+  /* SQL エディタのシンタックスハイライト (デザイン 3: 明度を上げた同系色) */
+  --sql-kw: #6ea3f7;
+  --sql-fn: #c08bfa;
+  --sql-str: #58c184;
+  --sql-num: #e5a54b;
+  --sql-text: #d7dbe2;
+  --sql-comment: #596070;
+  --sql-linenum: #4a505b;
+
+  /* クエリエディタ固有トークン */
+  --qe-run: #16a34a; /* Run ボタンとアクティブタブ下線 (両テーマ共通) */
+  --qe-run-hover: #149042;
+  --qe-tree-sel-bg: #1c2b4a;
+  --qe-tree-sel-text: #9db8f7;
+  --qe-partition: #e5a54b;
+  --qe-selection: rgba(110, 163, 247, 0.22);
+  --qe-pill-run-bg: rgba(229, 165, 75, 0.15);
+  --qe-pill-run-text: #e5a54b;
+  --qe-pill-ok-bg: rgba(88, 193, 132, 0.15);
+  --qe-pill-ok-text: #58c184;
+  --qe-pill-err-bg: rgba(235, 87, 87, 0.16);
+  --qe-pill-err-text: #f28b8b;
+  --qe-pill-muted-bg: rgba(134, 141, 153, 0.15);
+  --qe-pill-muted-text: #9aa1ac;
 
   --svc-ec2: #f2994a;
   --svc-rds: #4ea7fc;
@@ -53,6 +78,7 @@
   --svc-ssm: #de5d9c;
   --svc-secrets: #de5d9c;
   --svc-costexplorer: #f2c94c;
+  --svc-athena: #a97ce8;
   --svc-cloudrun: #4285f4;
   --svc-bigquery: #4285f4;
   --svc-gcs: #4285f4;
@@ -102,6 +128,29 @@
   --err: #e5484d;
   --info: #2f80ed;
   --muted: #8b8b95;
+
+  /* SQL エディタのシンタックスハイライト (デザイン 2: ライト) */
+  --sql-kw: #2563eb;
+  --sql-fn: #7c3aed;
+  --sql-str: #15803d;
+  --sql-num: #b45309;
+  --sql-text: #1f2937;
+  --sql-comment: #9ca3af;
+  --sql-linenum: #c2c7cf;
+
+  /* クエリエディタ固有トークン */
+  --qe-tree-sel-bg: #eef2ff;
+  --qe-tree-sel-text: #1e3a8a;
+  --qe-partition: #b45309;
+  --qe-selection: rgba(37, 99, 235, 0.15);
+  --qe-pill-run-bg: #fef3c7;
+  --qe-pill-run-text: #b45309;
+  --qe-pill-ok-bg: #dcfce7;
+  --qe-pill-ok-text: #15803d;
+  --qe-pill-err-bg: #fee2e2;
+  --qe-pill-err-text: #dc2626;
+  --qe-pill-muted-bg: #f3f4f6;
+  --qe-pill-muted-text: #6b7280;
 
   --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.05);
   --shadow-drawer: -24px 0 60px rgba(24, 24, 40, 0.1);
@@ -1110,13 +1159,13 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 }
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(76, 183, 130, 0.5);
+    box-shadow: 0 0 0 0 rgba(88, 193, 132, 0.5);
   }
   70% {
-    box-shadow: 0 0 0 6px rgba(76, 183, 130, 0);
+    box-shadow: 0 0 0 6px rgba(88, 193, 132, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(76, 183, 130, 0);
+    box-shadow: 0 0 0 0 rgba(88, 193, 132, 0);
   }
 }
 
@@ -1787,6 +1836,812 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ============================================================
+   クエリエディタ (BigQuery / Athena 共通)
+   デザイン 2 (ライト) / 3 (ダーク) の構成: 左スキーマツリー +
+   エディタカード (タブ / SQL / ツールバー) + 結果パネル
+   ============================================================ */
+.main.qe-main {
+  background: var(--bg-0);
+}
+
+.qe-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+
+.qe-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* ---------- スキーマツリー ---------- */
+.qe-schema {
+  width: 248px;
+  flex-shrink: 0;
+}
+.qe-schema-search {
+  padding: 10px;
+  border-bottom: 1px solid var(--line-1);
+}
+.qe-schema-search input {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  font-size: 12px;
+  outline: 0;
+}
+.qe-schema-search input:focus {
+  border-color: var(--accent);
+  background: var(--bg-0);
+}
+.qe-schema-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+.qe-schema-footer {
+  padding: 8px 10px;
+  border-top: 1px solid var(--line-1);
+  color: var(--text-4);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.qe-partition-hint {
+  color: var(--qe-partition);
+  font-weight: 600;
+}
+
+.qe-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--text-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qe-tree-row:hover {
+  background: var(--bg-2);
+}
+.qe-tree-row.lv0 {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.qe-tree-row.lv1 {
+  padding-left: 22px;
+}
+.qe-tree-row.lv2 {
+  padding-left: 38px;
+  color: var(--text-3);
+}
+.qe-tree-row.selected,
+.qe-tree-row.selected:hover {
+  background: var(--qe-tree-sel-bg);
+  color: var(--qe-tree-sel-text);
+}
+.qe-tree-row.partition .qe-tree-label,
+.qe-tree-row.partition .qe-tree-badge {
+  color: var(--qe-partition);
+}
+.qe-tree-arrow {
+  flex: none;
+  width: 10px;
+  color: var(--text-4);
+  font-size: 9px;
+}
+.qe-tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qe-tree-badge {
+  flex: none;
+  color: var(--text-4);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+}
+.qe-tree-empty {
+  padding: 10px;
+  color: var(--text-4);
+  font-size: 11.5px;
+}
+
+/* ---------- エディタカード ---------- */
+.qe-editor-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 12px;
+}
+.qe-editor-card {
+  flex-shrink: 0;
+  /* ツールバー下向きに開くスニペットメニューをカード外へ表示できるようクリップしない
+     (カード内の子要素は背景を持たないため角丸のはみ出しは発生しない) */
+  overflow: visible;
+}
+
+.qe-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+}
+.qe-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  height: 33px;
+  padding: 0 10px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qe-tab:hover {
+  color: var(--text-2);
+}
+.qe-tab.active {
+  border-bottom-color: var(--qe-run);
+  color: var(--text-1);
+  font-weight: 500;
+}
+.qe-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qe-tab-rename {
+  width: 120px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--bg-0);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text-1);
+  font-size: 12px;
+  outline: 0;
+}
+.qe-tab-close {
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.qe-tab-close:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+}
+.qe-tab-add {
+  width: 28px;
+  height: 33px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.qe-tab-add:hover {
+  color: var(--text-1);
+}
+.qe-tabs-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+  padding-right: 2px;
+}
+.qe-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.qe-hint .qe-status-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qe-copy {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.qe-copy:hover {
+  color: var(--text-1);
+}
+
+.qe-sql-editor {
+  border-bottom: 1px solid var(--line-1);
+}
+.qe-sql-editor .cm-editor {
+  max-height: 320px;
+}
+.qe-sql-editor .cm-scroller {
+  overflow: auto;
+}
+.qe-sql-editor .cm-content,
+.qe-sql-editor .cm-gutter {
+  min-height: 132px;
+}
+
+.qe-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  flex-wrap: wrap;
+}
+.qe-run {
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--qe-run);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.qe-run:hover:not(:disabled) {
+  background: var(--qe-run-hover);
+}
+.qe-run:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.qe-cancel {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--err);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--err);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.qe-cancel:hover:not(:disabled) {
+  background: var(--qe-pill-err-bg);
+}
+.qe-toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+.qe-muted {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.qe-status-text {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.qe-status-text.running,
+.qe-status-text.queued {
+  color: var(--warn);
+}
+.qe-status-text.succeeded {
+  color: var(--ok);
+}
+.qe-status-text.failed {
+  color: var(--err);
+}
+.qe-status-text.cancelled {
+  color: var(--text-3);
+}
+.qe-status-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.qe-status-mono.dim {
+  color: var(--text-4);
+}
+.qe-error {
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-1);
+  color: var(--err);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.qe-error-block {
+  margin: 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--qe-pill-err-bg);
+}
+
+/* ---------- 結果パネル ---------- */
+.qe-results {
+  flex: 1;
+  min-height: 0;
+}
+.qe-results-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+}
+.qe-results-tabs > button {
+  height: 32px;
+  padding: 0 10px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.qe-results-tabs > button:hover {
+  color: var(--text-2);
+}
+.qe-results-tabs > button.active {
+  border-bottom-color: var(--qe-run);
+  color: var(--text-1);
+  font-weight: 500;
+}
+.qe-results-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-left: auto;
+  padding-right: 2px;
+}
+.qe-results-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.qe-tab-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 24px;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+/* ---------- 結果テーブル ---------- */
+.qe-rt {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.qe-rt-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.qe-rt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.qe-rt-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-1);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.qe-rt-table thead tr.qe-rt-filter th {
+  top: 30px;
+  height: 28px;
+  padding: 0 6px;
+  cursor: default;
+}
+.qe-rt-filter input {
+  width: 100%;
+  min-width: 72px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--bg-2);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  outline: 0;
+}
+.qe-rt-filter input:focus {
+  border-color: var(--accent);
+  background: var(--bg-0);
+}
+.qe-rt-sort {
+  color: var(--text-4);
+  font-size: 8px;
+}
+.qe-rt-sort.active {
+  color: var(--text-1);
+}
+.qe-rt-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--line-1);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qe-rt-table tbody tr:hover td {
+  background: var(--bg-2);
+}
+.qe-rt-table th.num,
+.qe-rt-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.qe-rt-table .qe-rt-idx {
+  width: 44px;
+  color: var(--text-4);
+  text-align: right;
+}
+td.qe-rt-empty {
+  padding: 24px;
+  color: var(--text-4);
+  text-align: center;
+}
+.qe-rt-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line-1);
+  color: var(--text-3);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.qe-rt-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.qe-rt-pager button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: none;
+  color: var(--text-2);
+  line-height: 1;
+  cursor: pointer;
+}
+.qe-rt-pager button:hover:not(:disabled) {
+  background: var(--bg-2);
+}
+.qe-rt-pager button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.qe-rt-output {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 実行履歴 ---------- */
+.qe-history {
+  table-layout: fixed;
+}
+.qe-history .qe-history-sql {
+  max-width: 0;
+}
+.qe-history-actions {
+  white-space: nowrap;
+  color: var(--text-4);
+}
+.qe-history-actions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--info);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.qe-history-actions button:hover {
+  text-decoration: underline;
+}
+
+/* ---------- 状態ピル ---------- */
+.qe-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.qe-pill.running,
+.qe-pill.queued {
+  background: var(--qe-pill-run-bg);
+  color: var(--qe-pill-run-text);
+}
+.qe-pill.succeeded {
+  background: var(--qe-pill-ok-bg);
+  color: var(--qe-pill-ok-text);
+}
+.qe-pill.failed {
+  background: var(--qe-pill-err-bg);
+  color: var(--qe-pill-err-text);
+}
+.qe-pill.cancelled {
+  background: var(--qe-pill-muted-bg);
+  color: var(--qe-pill-muted-text);
+}
+
+/* ---------- 保存クエリ / スニペット一覧 ---------- */
+.qe-named-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 6px;
+  padding: 10px 12px;
+  overflow: auto;
+}
+.qe-named-header {
+  display: flex;
+  flex-shrink: 0;
+}
+.qe-named-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+}
+.qe-named-item:hover {
+  border-color: var(--line-3);
+  background: var(--bg-2);
+}
+.qe-named-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  cursor: pointer;
+}
+.qe-named-body b {
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 600;
+}
+.qe-named-sql {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qe-named-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.qe-named-actions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--info);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.qe-named-actions button:hover {
+  text-decoration: underline;
+}
+.qe-named-date {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* ---------- スニペットドロップダウン ---------- */
+.qe-snippet-dd {
+  position: relative;
+  display: inline-flex;
+}
+.qe-snippet-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.qe-snippet-menu-head {
+  padding: 8px 12px 6px;
+  color: var(--text-4);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.qe-snippet-menu-list {
+  max-height: 240px;
+  padding: 0 4px 4px;
+  overflow: auto;
+}
+.qe-snippet-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.qe-snippet-item:hover {
+  background: var(--bg-2);
+}
+.qe-snippet-item-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.qe-snippet-item-body b {
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 600;
+}
+.qe-snippet-item-sql {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qe-snippet-item-delete {
+  flex: none;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-4);
+  font-size: 12px;
+  cursor: pointer;
+}
+.qe-snippet-item-delete:hover {
+  background: var(--bg-3);
+  color: var(--err);
+}
+.qe-snippet-empty {
+  padding: 10px 12px;
+  color: var(--text-4);
+  font-size: 11.5px;
+}
+.qe-snippet-menu-save {
+  padding: 8px 12px;
+  border: 0;
+  border-top: 1px solid var(--line-1);
+  background: var(--bg-1);
+  color: var(--info);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.qe-snippet-menu-save:hover {
+  background: var(--bg-2);
+}
+
+/* ---------- Athena コンテキストセレクタ ---------- */
+.qe-selectors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.qe-selector-label {
+  margin-left: 6px;
+  color: var(--text-4);
+  font-size: 11px;
+}
+.qe-selector-label:first-child {
+  margin-left: 0;
+}
+.qe-selectors select {
+  max-width: 180px;
+}
+.qe-output-input {
+  width: 230px;
+  height: 24px;
+  padding: 0 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: 0;
+}
+.qe-output-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-0);
+}
+.qe-output-input::placeholder {
+  color: var(--text-4);
+  font-family: var(--font-sans);
 }
 
 /* ============================================================

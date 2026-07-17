@@ -14,6 +14,8 @@ services:
     volumes:
       # ホストの AWS 認証情報 (config/credentials/SSO cache) を共有する。
       - ~/.aws:/root/.aws:ro
+      # クエリスニペット (.sql) をホストと共有し、コンテナ再作成後も保持する。
+      - /tmp/thief:/tmp/thief
 
   frontend:
     build:
