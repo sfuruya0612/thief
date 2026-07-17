@@ -147,3 +147,16 @@ run = "docker compose up --build"
 [tasks."docker:down"]
 description = "docker compose を停止"
 run = "docker compose down"
+
+# === example (floci によるローカル動作確認環境) ===
+[tasks."example:up"]
+description = "floci 込みのローカル動作確認環境を起動"
+run = "docker compose -f compose.yaml -f example/compose.yaml up --build"
+
+[tasks."example:down"]
+description = "example 環境を停止"
+run = "docker compose -f compose.yaml -f example/compose.yaml down"
+
+[tasks."example:seed"]
+description = "floci にサンプルリソース (S3/DynamoDB/SQS/SSM/Secrets Manager/CloudFormation) を投入"
+run = "./example/seed.sh"

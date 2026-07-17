@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -148,8 +150,35 @@ func ListS3BucketInfos(ctx context.Context, profile string) ([]S3BucketInfo, err
 }
 
 // newS3Client は S3 API クライアントを生成する。
+//
+// path-style アクセス (floci 等の S3 互換エミュレータ向け opt-in) は THIEF_S3_PATH_STYLE
+// 環境変数を internal/aws パッケージ内で直接参照して解決する。internal/config.Config
+// 経由で bool を渡す設計も検討したが、S3 クライアント生成は newS3Client の 1 箇所に
+// 集約されている一方、config.Config はこの関数の呼び出し元 (handler 層) までしか
+// 到達しておらず、bool を橋渡しするには NewClient や呼び出し元シグネチャすべてに
+// 変更が波及する。影響範囲を S3 のみに閉じるため、この関数内で環境変数を直接読む
+// 局所的な opt-in とした (AGENTS.md: 抽象化は実需が出てから入れる)。
 func newS3Client(ctx context.Context, profile, region string) (*s3.Client, error) {
+	pathStyle := s3PathStyleEnabled()
 	return NewClient(ctx, profile, region, func(cfg aws.Config) *s3.Client {
-		return s3.NewFromConfig(cfg)
+		return s3.NewFromConfig(cfg, s3PathStyleOption(pathStyle))
 	})
+}
+
+// s3PathStyleEnabled は THIEF_S3_PATH_STYLE 環境変数を bool として解釈する。
+// 未設定または不正な値の場合は false (virtual-hosted style) を返す。
+func s3PathStyleEnabled() bool {
+	v, err := strconv.ParseBool(os.Getenv("THIEF_S3_PATH_STYLE"))
+	if err != nil {
+		return false
+	}
+	return v
+}
+
+// s3PathStyleOption は s3.Options.UsePathStyle を pathStyle に設定する s3.NewFromConfig 用の
+// オプション関数を返す。
+func s3PathStyleOption(pathStyle bool) func(*s3.Options) {
+	return func(o *s3.Options) {
+		o.UsePathStyle = pathStyle
+	}
 }
