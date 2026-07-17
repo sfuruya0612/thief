@@ -28,14 +28,13 @@ import { SqlEditor, type SqlEditorHandle } from '../components/query/SqlEditor';
 import { useEditorTabs } from '../components/query/useEditorTabs';
 import { useNamedQueries } from '../components/query/useNamedQueries';
 import { useServerSnippets } from '../components/query/useServerSnippets';
-import { setCliHint } from '../hooks/useCliHint';
 import { athenaResultsFromPages } from '../lib/normalizeQuery';
 import {
   type AthenaContext,
   loadAthenaContext,
   saveAthenaContext,
 } from '../lib/queryEditorStorage';
-import { cliHintSql, formatDurationClock, s3Dir, shortId, toCsv } from '../lib/queryFormat';
+import { formatDurationClock, s3Dir, shortId, toCsv } from '../lib/queryFormat';
 import { ApiError } from '../types/common';
 import type { AthenaTableRow, NamedQuery, QueryHistoryRow } from '../types/query';
 
@@ -125,24 +124,10 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
 
   const history = useAthenaQueryHistory(profile, region, workgroup || undefined, true);
 
-  // 完了時は等価な CLI コマンド (結果取得) をステータスバーへ反映する
-  useEffect(() => {
-    if (status?.state === 'succeeded') {
-      setCliHint('athena', `aws athena get-query-results --query-execution-id ${status.id}`);
-    }
-  }, [status?.state, status?.id]);
-
   const runSql = useCallback(
     (tabId: string, sql: string) => {
       const text = sql.trim();
       if (!text) return;
-      const resultConfig = configuredOutput
-        ? ` --result-configuration OutputLocation=${configuredOutput}`
-        : '';
-      setCliHint(
-        'athena',
-        `aws athena start-query-execution --work-group ${workgroup || DEFAULT_WORKGROUP}${resultConfig} --query-string '${cliHintSql(text)}'`,
-      );
       start.mutate(
         {
           sql: text,

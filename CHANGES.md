@@ -106,6 +106,8 @@
   - @sfuruya0612
 - [CHANGE] サイドバーのプロファイル / プロジェクト選択ドロップダウンを廃止し、セッションタブとアクティブセッションカードに置き換える
   - @sfuruya0612
+- [CHANGE] フッターの CLI コマンドサンプル表示を全て削除する
+  - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
   - @sfuruya0612
 - [FIX] ECS Service / Task / Container の state が SDK 生値の大文字表記のままで StatusBadge が未知 state 扱いになる不具合を修正する
