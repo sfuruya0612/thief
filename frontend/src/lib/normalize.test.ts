@@ -123,6 +123,8 @@ describe('ecsTaskFromRaw', () => {
           health_status: 'healthy',
           exit_code: undefined,
           reason: '',
+          runtime_id: 'runtime-app',
+          exec_enabled: true,
         },
       ],
     });
@@ -147,6 +149,8 @@ describe('ecsTaskFromRaw', () => {
           healthStatus: 'healthy',
           exitCode: undefined,
           reason: '',
+          runtimeId: 'runtime-app',
+          execEnabled: true,
         },
       ],
     });

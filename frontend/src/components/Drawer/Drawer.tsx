@@ -19,7 +19,7 @@ import { DrawerELBTargets } from './DrawerELBTargets';
 import { DrawerGCSObjects } from './DrawerGCSObjects';
 import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerTags } from './DrawerTags';
-import { DrawerTerminal } from './DrawerTerminal';
+import { DrawerTerminal, type ECSExecTarget } from './DrawerTerminal';
 import type { OverviewEntry } from './overviewRows';
 
 const DRAWER_TABS: Record<string, string[]> = {
@@ -110,10 +110,16 @@ export function Drawer({
 }: DrawerProps) {
   const [tab, setTab] = useState('Overview');
   const [size, setSize] = useState<DrawerSize>(loadDrawerSize);
+  // Tasks タブの Containers テーブルで「Exec」を押した対象。Terminal タブへ渡ってドロップダウン
+  // 選択を経由せず直接接続する (タブ間で状態を持ち回す唯一の受け渡し役)。
+  const [pendingExecTarget, setPendingExecTarget] = useState<ECSExecTarget | null>(null);
   const open = !!resource;
 
   useEffect(() => {
-    if (resource) setTab('Overview');
+    if (resource) {
+      setTab('Overview');
+      setPendingExecTarget(null);
+    }
   }, [resource?.id]);
 
   // レイアウト崩れ等で閉じるボタンに届かない場合の復旧手段として ESC でも閉じられるようにする
@@ -277,6 +283,7 @@ export function Drawer({
                   profile={profile}
                   region={region}
                   resource={resource}
+                  execTarget={pendingExecTarget}
                 />
               )}
               {tab === 'Images' && (
@@ -286,7 +293,15 @@ export function Drawer({
                 <DrawerECSServices profile={profile} region={region} cluster={resource.name} />
               )}
               {tab === 'Tasks' && service === 'ecs' && (
-                <DrawerECSTasks profile={profile} region={region} cluster={resource.name} />
+                <DrawerECSTasks
+                  profile={profile}
+                  region={region}
+                  cluster={resource.name}
+                  onExec={(target) => {
+                    setPendingExecTarget(target);
+                    setTab('Terminal');
+                  }}
+                />
               )}
               {tab === 'Objects' && service === 's3' && (
                 <DrawerS3Objects profile={profile} region={region} bucket={resource.name} />

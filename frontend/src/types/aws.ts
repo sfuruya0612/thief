@@ -253,6 +253,8 @@ export interface ECSTaskContainerDetailRaw {
   health_status: string;
   exit_code?: number;
   reason: string;
+  runtime_id: string;
+  exec_enabled: boolean;
 }
 
 export interface ECSTaskContainerDetailRow {
@@ -262,6 +264,8 @@ export interface ECSTaskContainerDetailRow {
   healthStatus: string;
   exitCode?: number;
   reason: string;
+  runtimeId: string;
+  execEnabled: boolean;
 }
 
 export interface ECSTaskRaw {

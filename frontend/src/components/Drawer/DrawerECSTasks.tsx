@@ -14,13 +14,30 @@ export interface DrawerECSTasksProps {
   profile: string;
   region: string;
   cluster: string;
+  onExec?: (target: { taskArn: string; container: string }) => void;
 }
 
 // DataTable が要求する id/state を arn/lastStatus から射影した行型
 type ECSTaskTableRow = ECSTaskRow & { id: string; state: string };
 
+// exec 不可コンテナの理由: タスク全体で ECS Exec が無効か、コンテナがまだ Exec 可能な状態まで
+// 起動していない (RuntimeID 未割り当て) かのいずれか
+function execDisabledReason(task: ECSTaskTableRow, runtimeId: string): string {
+  if (!task.enableExecuteCommand) return 'このタスクは ECS Exec が有効になっていません';
+  if (!runtimeId) return 'コンテナがまだ Exec 可能な状態で起動していません';
+  return '';
+}
+
 // タスク選択時に Tasks タブ内へ表示する詳細ペイン
-function ECSTaskDetail({ task, onClose }: { task: ECSTaskTableRow; onClose: () => void }) {
+function ECSTaskDetail({
+  task,
+  onClose,
+  onExec,
+}: {
+  task: ECSTaskTableRow;
+  onClose: () => void;
+  onExec?: (target: { taskArn: string; container: string }) => void;
+}) {
   return (
     <div
       className="section"
@@ -60,11 +77,12 @@ function ECSTaskDetail({ task, onClose }: { task: ECSTaskTableRow; onClose: () =
       <h3>Containers ({task.containers.length})</h3>
       <table className="dt">
         <colgroup>
-          <col style={{ width: '22%' }} />
-          <col style={{ width: '30%' }} />
-          <col style={{ width: '14%' }} />
-          <col style={{ width: '14%' }} />
-          <col style={{ width: '8%' }} />
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '26%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '13%' }} />
           <col style={{ width: '12%' }} />
         </colgroup>
         <thead>
@@ -75,24 +93,38 @@ function ECSTaskDetail({ task, onClose }: { task: ECSTaskTableRow; onClose: () =
             <th>Health</th>
             <th>Exit code</th>
             <th>Reason</th>
+            <th>Exec</th>
           </tr>
         </thead>
         <tbody>
-          {task.containers.map((c) => (
-            <tr key={c.name}>
-              <td className="primary">{c.name}</td>
-              <td className="truncate">{c.image || '-'}</td>
-              <td>
-                <StatusBadge state={c.lastStatus} />
-              </td>
-              <td>{c.healthStatus || '-'}</td>
-              <td>{c.exitCode ?? '-'}</td>
-              <td className="truncate">{c.reason || '-'}</td>
-            </tr>
-          ))}
+          {task.containers.map((c) => {
+            const disabledReason = execDisabledReason(task, c.runtimeId);
+            return (
+              <tr key={c.name}>
+                <td className="primary">{c.name}</td>
+                <td className="truncate">{c.image || '-'}</td>
+                <td>
+                  <StatusBadge state={c.lastStatus} />
+                </td>
+                <td>{c.healthStatus || '-'}</td>
+                <td>{c.exitCode ?? '-'}</td>
+                <td className="truncate">{c.reason || '-'}</td>
+                <td>
+                  <button
+                    className="btn sm"
+                    disabled={!c.execEnabled}
+                    title={disabledReason || 'ターミナルで Exec を開始する'}
+                    onClick={() => onExec?.({ taskArn: task.arn, container: c.name })}
+                  >
+                    Exec
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
           {task.containers.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ textAlign: 'center', padding: 20, color: 'var(--text-3)' }}>
+              <td colSpan={7} style={{ textAlign: 'center', padding: 20, color: 'var(--text-3)' }}>
                 No containers
               </td>
             </tr>
@@ -103,7 +135,7 @@ function ECSTaskDetail({ task, onClose }: { task: ECSTaskTableRow; onClose: () =
   );
 }
 
-export function DrawerECSTasks({ profile, region, cluster }: DrawerECSTasksProps) {
+export function DrawerECSTasks({ profile, region, cluster, onExec }: DrawerECSTasksProps) {
   const { data, isLoading } = useECSTasks(profile, region, cluster);
   const [filters, setFilters] = useState<Filters>({});
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
@@ -139,7 +171,11 @@ export function DrawerECSTasks({ profile, region, cluster }: DrawerECSTasksProps
             selectedId={selectedArn}
           />
           {selectedTask && (
-            <ECSTaskDetail task={selectedTask} onClose={() => setSelectedArn(null)} />
+            <ECSTaskDetail
+              task={selectedTask}
+              onClose={() => setSelectedArn(null)}
+              onExec={onExec}
+            />
           )}
         </>
       )}

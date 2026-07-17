@@ -273,6 +273,8 @@ export function ecsTaskFromRaw(raw: ECSTaskRaw): ECSTaskRow {
       healthStatus: c.health_status,
       exitCode: c.exit_code,
       reason: c.reason,
+      runtimeId: c.runtime_id,
+      execEnabled: c.exec_enabled,
     })),
   };
 }
