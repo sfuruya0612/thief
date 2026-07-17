@@ -10,7 +10,6 @@ import { useTweaks } from './hooks/useTweaks';
 import { loadPersisted, savePersisted } from './lib/storage';
 import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
-import { StatusBar } from './components/StatusBar';
 import { AwsSessionTabs } from './components/session/AwsSessionTabs';
 import { GcpSessionTabs } from './components/session/GcpSessionTabs';
 import { SessionEmptyState } from './components/session/SessionEmptyState';
@@ -80,9 +79,6 @@ export function App() {
   const [activeService, setActiveService] = useState('ec2');
   const [activeGcpService, setActiveGcpService] = useState('cloudrun');
   const queryClient = useQueryClient();
-
-  // フッター (StatusBar) に表示するサービス名: AWS/GCP ビューは選択中サービス、それ以外はビュー名そのもの
-  const footerService = view === 'aws' ? activeService : view === 'gcp' ? activeGcpService : view;
 
   useEffect(() => {
     if (error) {
@@ -156,7 +152,6 @@ export function App() {
         ))}
       {view === 'datadog' && <DatadogView />}
       {view === 'tidb' && <TiDBView />}
-      <StatusBar service={footerService} />
       {tweaksOpen && <TweaksPanel open onClose={() => setTweaksOpen(false)} />}
     </div>
   );

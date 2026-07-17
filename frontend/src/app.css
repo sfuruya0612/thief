@@ -1396,61 +1396,6 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 }
 
 /* ============================================================
-   Footer status bar
-   ============================================================ */
-.statusbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 28px;
-  flex-shrink: 0;
-  padding: 0 var(--sp-4);
-  background: var(--bg-0);
-  border-top: 1px solid var(--line-1);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-3);
-  flex-shrink: 0;
-}
-.statusbar .cmd {
-  color: var(--text-2);
-}
-.statusbar .sep {
-  color: var(--text-4);
-}
-.statusbar .spacer {
-  flex: 1;
-}
-.statusbar .live {
-  color: var(--ok);
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.statusbar .live .pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ok);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .statusbar .live .pulse {
-    animation: pulse 2s infinite;
-  }
-}
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(88, 193, 132, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(88, 193, 132, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(88, 193, 132, 0);
-  }
-}
-
-/* ============================================================
    Drawer (detail) — Linear peek panel
    ============================================================ */
 .drawer-backdrop {

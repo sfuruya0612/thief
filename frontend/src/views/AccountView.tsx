@@ -95,7 +95,6 @@ interface ServicePanelProps<TRaw, TRow extends BaseRow> {
 }
 
 // 汎用サービスパネル: useResources 呼び出し + Stats/Facet/Table/Drawer 描画
-// フッター (StatusBar) は全ビュー共通化のため App.tsx ルートに移管した (課題 4-2)
 function ServicePanel<TRaw, TRow extends BaseRow>({
   service,
   profile,

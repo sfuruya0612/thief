@@ -28,10 +28,8 @@ import { SqlEditor, type SqlEditorHandle } from '../../components/query/SqlEdito
 import { useEditorTabs } from '../../components/query/useEditorTabs';
 import { useNamedQueries } from '../../components/query/useNamedQueries';
 import { useServerSnippets } from '../../components/query/useServerSnippets';
-import { setCliHint } from '../../hooks/useCliHint';
 import { bqResultsFromPages } from '../../lib/normalizeQuery';
 import {
-  cliHintSql,
   estimateBQCostUSD,
   formatApproxUSD,
   formatDurationSeconds,
@@ -90,7 +88,6 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
     (tabId: string, sql: string) => {
       const text = sql.trim();
       if (!text) return;
-      setCliHint('bigquery', `bq query --nouse_legacy_sql '${cliHintSql(text)}'`);
       start.mutate(text, {
         onSuccess: (job) => {
           setJobs((prev) => ({ ...prev, [tabId]: job }));
@@ -108,7 +105,6 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
   const runDryRun = useCallback(() => {
     const text = activeTab.sql.trim();
     if (!text) return;
-    setCliHint('bigquery', `bq query --dry_run '${cliHintSql(text)}'`);
     dryRun.mutate(text, {
       onSuccess: (bytes) => setDryRuns((prev) => ({ ...prev, [activeTab.id]: bytes })),
     });

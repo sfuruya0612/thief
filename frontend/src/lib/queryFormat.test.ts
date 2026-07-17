@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cliHintSql,
   estimateBQCostUSD,
   formatApproxUSD,
   formatDurationClock,
@@ -10,16 +9,6 @@ import {
   shortId,
   toCsv,
 } from './queryFormat';
-
-describe('cliHintSql', () => {
-  it('改行と連続空白を 1 スペースへ潰す', () => {
-    expect(cliHintSql('SELECT *\n  FROM t')).toBe('SELECT * FROM t');
-  });
-  it('長い SQL は切り詰めて省略記号を付ける', () => {
-    const long = 'SELECT ' + 'x, '.repeat(40);
-    expect(cliHintSql(long, 20)).toBe(long.slice(0, 20) + '…');
-  });
-});
 
 describe('s3Dir', () => {
   it('オブジェクトパスからディレクトリを取り出す', () => {

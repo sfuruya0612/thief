@@ -57,13 +57,6 @@ export function shortId(id: string, head = 8, tail = 2): string {
   return `${id.slice(0, head)}…${id.slice(-tail)}`;
 }
 
-// ステータスバーの CLI ヒント表示用に SQL を 1 行へ潰して切り詰める
-export function cliHintSql(sql: string, max = 60): string {
-  const collapsed = sql.replace(/\s+/g, ' ').trim();
-  if (collapsed.length <= max) return collapsed;
-  return `${collapsed.slice(0, max)}…`;
-}
-
 // S3 オブジェクトパスからディレクトリ部分 (末尾スラッシュ付き) を取り出す
 export function s3Dir(path: string): string {
   const idx = path.lastIndexOf('/');
