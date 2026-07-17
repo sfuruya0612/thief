@@ -6,25 +6,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { AwsIcons } from './icons/AwsIcons';
 import { Icons } from './icons/Icons';
-import { SERVICES } from '../lib/serviceMeta';
+import { AWS_SERVICE_GROUPS, SERVICES } from '../lib/serviceMeta';
 import { useRegions } from '../api/queries';
 import { startSidebarResize } from '../lib/sidebarResize';
 import type { Profile } from '../types/common';
 import { AwsActiveSessionCard } from './session/AwsActiveSessionCard';
 
-interface SidebarSection {
-  label: string;
-  services: string[];
-}
-
-const SECTIONS: SidebarSection[] = [
-  { label: 'Compute', services: ['ec2', 'ecr', 'lambda', 'ecs', 'cfn'] },
-  { label: 'Data', services: ['athena', 'rds', 'dynamo', 'cache', 's3'] },
-  { label: 'Network', services: ['elb', 'cloudfront', 'apigw', 'natgw'] },
-  { label: 'Messaging', services: ['sqs', 'kinesis'] },
-  { label: 'Security', services: ['waf', 'iam', 'ssm', 'secrets'] },
-  { label: 'Cost', services: ['costexplorer'] },
-];
+// カテゴリ定義 (AWS_SERVICE_GROUPS) の表示順に、各サービスの group から所属サービスを導出する。
+// 該当サービスが 1 つもないカテゴリは表示しない。
+const SECTIONS = AWS_SERVICE_GROUPS.map((g) => ({
+  label: g.label,
+  services: SERVICES.filter((s) => s.group === g.key).map((s) => s.key),
+})).filter((section) => section.services.length > 0);
 
 export interface SidebarProps {
   profile: string;

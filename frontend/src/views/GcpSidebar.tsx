@@ -6,23 +6,19 @@
 // 件数バッジは選択中サービスのみ即時取得され、他はキャッシュを読むだけの観測用クエリで表示する
 // (Sidebar.tsx と同じ方針)。
 import { useQuery } from '@tanstack/react-query';
-import { GCP_SERVICES } from '../lib/serviceMeta';
+import { GCP_SERVICE_GROUPS, GCP_SERVICES } from '../lib/serviceMeta';
 import { startSidebarResize } from '../lib/sidebarResize';
 import type { GcpProject } from '../types/gcp';
 import { Icons } from '../components/icons/Icons';
 import { GcpIcons } from '../components/icons/GcpIcons';
 import { GcpActiveSessionCard } from '../components/session/GcpActiveSessionCard';
 
-interface SidebarSection {
-  label: string;
-  services: string[];
-}
-
-const SECTIONS: SidebarSection[] = [
-  { label: 'Compute', services: ['cloudrun'] },
-  { label: 'Data', services: ['bigquery', 'gcs'] },
-  { label: 'Security', services: ['gcpiam', 'gcpserviceaccounts'] },
-];
+// カテゴリ定義 (GCP_SERVICE_GROUPS) の表示順に、各サービスの group から所属サービスを導出する。
+// 該当サービスが 1 つもないカテゴリは表示しない。
+const SECTIONS = GCP_SERVICE_GROUPS.map((g) => ({
+  label: g.label,
+  services: GCP_SERVICES.filter((s) => s.group === g.key).map((s) => s.key),
+})).filter((section) => section.services.length > 0);
 
 export interface GcpSidebarProps {
   project: string;

@@ -15,14 +15,19 @@ export class ApiError extends Error {
   }
 }
 
-export type ServiceGroup = 'compute' | 'data' | 'network' | 'messaging' | 'security' | 'cost';
-
 export interface ServiceMeta {
   key: string;
   name: string;
   sub: string;
   color: string;
-  group: ServiceGroup;
+  // クラウドプロバイダの公式プロダクトカテゴリの key。対応するラベルは
+  // serviceMeta.ts の AWS_SERVICE_GROUPS / GCP_SERVICE_GROUPS で定義する。
+  group: string;
+}
+
+export interface ServiceGroupMeta {
+  key: string;
+  label: string;
 }
 
 // トップレベルビュー切替 (AWS / GCP / 非 AWS 統合先)
