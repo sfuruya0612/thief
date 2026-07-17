@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 )
@@ -27,13 +28,22 @@ func (s *Server) handleListProfiles(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, "list profiles: "+err.Error())
 		return
 	}
-	var infos []ProfileInfo
+	infos := make([]ProfileInfo, 0, len(profiles))
 	for _, p := range profiles {
-		infos = append(infos, ProfileInfo{
+		info := ProfileInfo{
 			Name:        p.Name,
 			AccountID:   p.AccountID,
 			SSORoleName: p.SSORoleName,
-		})
+			Region:      p.Region,
+			AuthType:    string(p.AuthType),
+			SSOStatus:   string(p.SSOStatus),
+		}
+		// ゼロ値をそのまま Format すると "0001-01-01T00:00:00Z" が出力され
+		// omitempty が効かないため、非ゼロのときだけ変換する。
+		if !p.SSOExpiresAt.IsZero() {
+			info.SSOExpiresAt = p.SSOExpiresAt.UTC().Format(time.RFC3339)
+		}
+		infos = append(infos, info)
 	}
 	writeJSON(w, infos)
 }

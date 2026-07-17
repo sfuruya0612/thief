@@ -10,7 +10,7 @@ import { SERVICES } from '../lib/serviceMeta';
 import { useRegions } from '../api/queries';
 import { startSidebarResize } from '../lib/sidebarResize';
 import type { Profile } from '../types/common';
-import { ProfileSelect } from './ProfileSelect';
+import { AwsActiveSessionCard } from './session/AwsActiveSessionCard';
 
 interface SidebarSection {
   label: string;
@@ -30,7 +30,6 @@ export interface SidebarProps {
   profile: string;
   region: string;
   profiles: Profile[];
-  onProfileChange: (name: string) => void;
   onRegionChange: (region: string) => void;
   activeService: string;
   onService: (svc: string) => void;
@@ -41,7 +40,6 @@ export function Sidebar({
   profile,
   region,
   profiles,
-  onProfileChange,
   onRegionChange,
   activeService,
   onService,
@@ -56,8 +54,8 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="profile-card">
         <div className="profile-card-field">
-          <span className="label">AWS_PROFILE</span>
-          <ProfileSelect profile={profile} profiles={profiles} onProfileChange={onProfileChange} />
+          <span className="label">アクティブセッション</span>
+          <AwsActiveSessionCard profile={profile} profiles={profiles} />
         </div>
         <div className="profile-card-field">
           <span className="label">AWS_REGION</span>

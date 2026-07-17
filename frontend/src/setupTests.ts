@@ -30,3 +30,19 @@ if (globalThis.localStorage === undefined) {
     configurable: true,
   });
 }
+
+// jsdom は ResizeObserver を持たない。SessionTabs (タブバー) はコンストラクタ
+// 参照で落ちないよう no-op 実装を与える (発火しないため、表示本数のテストは
+// visibleCountOverride prop で注入する)。
+if (globalThis.ResizeObserver === undefined) {
+  class NoopResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    value: NoopResizeObserver,
+    writable: true,
+    configurable: true,
+  });
+}

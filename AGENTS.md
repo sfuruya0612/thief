@@ -276,10 +276,11 @@ frontend/
     ├── main.tsx / App.tsx / app.css     # エントリポイントとレイアウト CSS
     ├── types/{aws,nonaws,common}.ts     # Raw (backend JSON 形状) と Row (UI 形状) の 2 層
     ├── api/{client,endpoints,queries}.ts
-    ├── lib/{normalize,normalizeNonAws,serviceMeta,format,storage,spark}.ts
-    ├── hooks/{useTweaks,useProfiles}.ts
+    ├── lib/{normalize,normalizeNonAws,serviceMeta,format,storage,sessionTabsState,sessionMeta,sessionTabsLayout}.ts
+    ├── hooks/{useTweaks,useProfiles,useGcpProjects,useSessionTabs}.ts
     ├── components/
-    │   ├── {TopBar,ProfileTabs,Sidebar,StatsRow,FacetBar,StatusBar,DataTable,TweaksPanel,SSOExpiredBanner}.tsx
+    │   ├── {TopBar,Sidebar,StatsRow,FacetBar,StatusBar,DataTable,TweaksPanel,SSOExpiredBanner}.tsx
+    │   ├── session/{SessionTabs,AddSessionPicker,AwsSessionTabs,GcpSessionTabs,AwsActiveSessionCard,GcpActiveSessionCard,SessionEmptyState}.tsx
     │   ├── Drawer/{Drawer,DrawerTags,DrawerLogs,DrawerEmpty,overviewRows}.tsx
     │   ├── icons/{Icons,AwsIcons,Spark,AreaChart}.tsx
     │   ├── primitives/{StatusBadge,TagList,CellBar,Money,Kbd}.tsx

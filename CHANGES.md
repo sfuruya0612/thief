@@ -8,6 +8,8 @@
   - @sfuruya0612
 - [UPDATE] AWS / Google Cloud の公式アイコンアセット未展開時に、壊れた画像アイコンではなく無地のプレースホルダを表示するようにする
   - @sfuruya0612
+- [UPDATE] AWS プロファイル一覧 API が認証方式と SSO セッションの有効期限を返し、~/.aws/credentials のみに定義されたプロファイルも一覧に含めるようにする
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
@@ -66,6 +68,8 @@
   - @sfuruya0612
 - [ADD] BigQuery のドライランで処理バイト量とオンデマンド概算費用を実行前に確認できるようにする
   - @sfuruya0612
+- [ADD] AWS / Google Cloud のアカウントをセッションタブで複数開いて切り替えられるようにする
+  - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
 - [CHANGE] Monthly Cost の統計に表示していた実データと無関係な spark ミニチャートを削除する
@@ -99,6 +103,8 @@
 - [CHANGE] POST /api/bigquery/query を同期実行から非同期ジョブ開始 (job_id 返却) に変更し、ジョブ状態取得 / 結果ページング / キャンセル / 実行履歴の API を追加する
   - @sfuruya0612
 - [CHANGE] ダークモードの配色をクエリエディタのデザインパレット (背景 #15171c / パネル #1e2127) に全体統一する
+  - @sfuruya0612
+- [CHANGE] サイドバーのプロファイル / プロジェクト選択ドロップダウンを廃止し、セッションタブとアクティブセッションカードに置き換える
   - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
   - @sfuruya0612

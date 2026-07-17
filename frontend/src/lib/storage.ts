@@ -1,8 +1,13 @@
 import type { AppView, Tweaks } from '../types/common';
+import type { SessionTabsState } from './sessionTabsState';
+import { normalizeSessionState, openSession } from './sessionTabsState';
 
 export const STORAGE_KEY = 'cloudlens:v1';
 
 export interface PersistedState {
+  // 旧形式の単一選択フィールド。awsSessions / gcpSessions 導入後も
+  // アクティブタブを常にミラーして書き続ける (旧バージョンへのロール
+  // バック互換 + 旧バージョンで行われた選択変更の合流に使う)。
   activeProfile?: string;
   perProfileState?: Record<string, unknown>;
   tweaks?: Tweaks;
@@ -10,6 +15,9 @@ export interface PersistedState {
   view?: AppView;
   sidebarWidth?: number;
   gcpProject?: string;
+  // セッションタブ (開いている複数セッション + アクティブ)
+  awsSessions?: SessionTabsState;
+  gcpSessions?: SessionTabsState;
 }
 
 export function loadState<T>(key: string, fallback: T): T {
@@ -30,6 +38,29 @@ export function saveState<T>(key: string, value: T): void {
   }
 }
 
+// 単一選択フィールド (activeProfile / gcpProject) とセッションタブの整合を取る。
+// 冪等な純関数 (2 回適用しても結果が変わらない) として実装し、StrictMode の
+// 二重実行や壊れた手編集データでも throw しない。
+function migrateSessions(
+  sessions: SessionTabsState | undefined,
+  legacyActive: unknown,
+): SessionTabsState | undefined {
+  const legacy = typeof legacyActive === 'string' ? legacyActive : '';
+  if (sessions === undefined) {
+    // 旧形式のみ → 単一タブとして引き継ぐ。旧形式も無ければ未定義のまま
+    // (初回起動: 一覧ロード後の自動オープンに任せる)。
+    if (legacy === '') return undefined;
+    return normalizeSessionState({ open: [legacy], active: legacy });
+  }
+  let next = normalizeSessionState(sessions);
+  // 旧バージョンに戻って選択変更した後に新バージョンへ来た場合、旧フィールド
+  // だけが書き換わり active と食い違う。旧側の選択をタブ集合へ合流させる。
+  if (legacy !== '' && legacy !== next.active) {
+    next = openSession(next, legacy);
+  }
+  return next;
+}
+
 export function loadPersisted(): PersistedState {
   const state = loadState<PersistedState>(STORAGE_KEY, {});
   // 旧 AppView 値 'bigquery' → 'gcp' への後方互換マイグレーション
@@ -38,6 +69,10 @@ export function loadPersisted(): PersistedState {
   if ((state.view as string | undefined) === 'bigquery') {
     state.view = 'gcp';
   }
+  const awsSessions = migrateSessions(state.awsSessions, state.activeProfile);
+  if (awsSessions !== undefined) state.awsSessions = awsSessions;
+  const gcpSessions = migrateSessions(state.gcpSessions, state.gcpProject);
+  if (gcpSessions !== undefined) state.gcpSessions = gcpSessions;
   return state;
 }
 

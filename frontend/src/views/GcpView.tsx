@@ -197,7 +197,6 @@ function GcpIAMPanel({ projectId, drawerPos, selectedId, onSelectId }: GcpIAMPan
 export interface GcpViewProps {
   activeProject: string;
   projects: GcpProject[];
-  onProjectChange: (id: string) => void;
   activeService: string;
   onServiceChange: (service: string) => void;
   drawerPos: DrawerPos;
@@ -207,7 +206,6 @@ export interface GcpViewProps {
 export function GcpView({
   activeProject,
   projects,
-  onProjectChange,
   activeService,
   onServiceChange,
   drawerPos,
@@ -225,7 +223,6 @@ export function GcpView({
       <GcpSidebar
         project={activeProject}
         projects={projects}
-        onProjectChange={onProjectChange}
         onWidthChange={onSidebarWidthChange}
         activeService={activeService}
         onService={onServiceChange}
