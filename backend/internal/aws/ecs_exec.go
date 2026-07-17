@@ -49,6 +49,11 @@ type ECSTaskContainerDetail struct {
 	HealthStatus string `json:"health_status"`
 	ExitCode     *int32 `json:"exit_code,omitempty"`
 	Reason       string `json:"reason"`
+	RuntimeID    string `json:"runtime_id"`
+	// ExecEnabled は Task.EnableExecuteCommand とコンテナの RuntimeID 有無から判定する
+	// (ListECSContainers の ExecEnabled と同じ判定)。RuntimeID が空の場合、
+	// タスクがまだ Exec 可能な状態まで起動していない。
+	ExecEnabled bool `json:"exec_enabled"`
 }
 
 // ECSContainerResource represents a single container within an ECS task.
@@ -158,6 +163,7 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 	containers := make([]ECSTaskContainerDetail, 0, len(t.Containers))
 	for _, c := range t.Containers {
 		names = append(names, ptrStr(c.Name))
+		runtimeID := ptrStr(c.RuntimeId)
 		containers = append(containers, ECSTaskContainerDetail{
 			Name:         ptrStr(c.Name),
 			Image:        ptrStr(c.Image),
@@ -165,6 +171,8 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 			HealthStatus: DisplayState(string(c.HealthStatus)),
 			ExitCode:     c.ExitCode,
 			Reason:       ptrStr(c.Reason),
+			RuntimeID:    runtimeID,
+			ExecEnabled:  t.EnableExecuteCommand && runtimeID != "",
 		})
 	}
 	startedAt := ""

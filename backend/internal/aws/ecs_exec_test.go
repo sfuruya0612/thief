@@ -93,6 +93,7 @@ func TestECSTaskFromSDK(t *testing.T) {
 						Image:        aws.String("app:latest"),
 						LastStatus:   aws.String("RUNNING"),
 						HealthStatus: ecstypes.HealthStatusHealthy,
+						RuntimeId:    aws.String("runtime-app"),
 					},
 					{Name: aws.String("sidecar")},
 				},
@@ -109,7 +110,14 @@ func TestECSTaskFromSDK(t *testing.T) {
 				Memory:               "512",
 				StartedAt:            startedAt.Format(time.RFC3339),
 				Containers: []ECSTaskContainerDetail{
-					{Name: "app", Image: "app:latest", LastStatus: "running", HealthStatus: "healthy"},
+					{
+						Name:         "app",
+						Image:        "app:latest",
+						LastStatus:   "running",
+						HealthStatus: "healthy",
+						RuntimeID:    "runtime-app",
+						ExecEnabled:  true,
+					},
 					{Name: "sidecar"},
 				},
 			},
@@ -123,7 +131,7 @@ func TestECSTaskFromSDK(t *testing.T) {
 				StoppedAt:     &stoppedAt,
 				StoppedReason: aws.String("Essential container in task exited"),
 				Containers: []ecstypes.Container{
-					{Name: aws.String("app"), LastStatus: aws.String("STOPPED"), ExitCode: &exitCode, Reason: aws.String("nonzero exit")},
+					{Name: aws.String("app"), LastStatus: aws.String("STOPPED"), ExitCode: &exitCode, Reason: aws.String("nonzero exit"), RuntimeId: aws.String("runtime-app")},
 				},
 			},
 			want: ECSTaskResource{
@@ -134,7 +142,8 @@ func TestECSTaskFromSDK(t *testing.T) {
 				StoppedAt:      stoppedAt.Format(time.RFC3339),
 				StoppedReason:  "Essential container in task exited",
 				Containers: []ECSTaskContainerDetail{
-					{Name: "app", LastStatus: "stopped", ExitCode: &exitCode, Reason: "nonzero exit"},
+					// EnableExecuteCommand が false のため、RuntimeID があっても ExecEnabled は false
+					{Name: "app", LastStatus: "stopped", ExitCode: &exitCode, Reason: "nonzero exit", RuntimeID: "runtime-app", ExecEnabled: false},
 				},
 			},
 		},

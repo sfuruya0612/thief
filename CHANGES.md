@@ -70,6 +70,8 @@
   - @sfuruya0612
 - [ADD] AWS / Google Cloud のアカウントをセッションタブで複数開いて切り替えられるようにする
   - @sfuruya0612
+- [ADD] ECS クラスタの Drawer の Tasks タブから、コンテナを指定して ECS Exec ターミナルを直接開始できるようにする
+  - @sfuruya0612
 - [CHANGE] ECS クラスタの Drawer のタブ順序を Overview / Services / Tasks / Terminal / Tags にする
   - @sfuruya0612
 - [CHANGE] Monthly Cost の統計に表示していた実データと無関係な spark ミニチャートを削除する

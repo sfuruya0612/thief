@@ -10,24 +10,64 @@ import { useECSContainers, useECSTasks } from '../../api/queries';
 import { arnSuffix } from '../../lib/format';
 import { Terminal } from '../Terminal/Terminal';
 
+// Tasks タブの Containers テーブルで事前に選択された exec 対象
+export interface ECSExecTarget {
+  taskArn: string;
+  container: string;
+}
+
 export interface DrawerTerminalProps {
   service: string;
   profile: string;
   region: string;
   resource: BaseRow;
+  execTarget?: ECSExecTarget | null;
 }
 
-export function DrawerTerminal({ service, profile, region, resource }: DrawerTerminalProps) {
+export function DrawerTerminal({
+  service,
+  profile,
+  region,
+  resource,
+  execTarget,
+}: DrawerTerminalProps) {
   if (service === 'ec2') {
     return <Terminal wsUrl={ec2SessionUrl(profile, resource.id, region)} />;
   }
   if (service === 'ecs') {
-    return <ECSExecTerminal profile={profile} region={region} cluster={resource.name} />;
+    return (
+      <ECSExecTerminal
+        profile={profile}
+        region={region}
+        cluster={resource.name}
+        target={execTarget}
+      />
+    );
   }
   return null;
 }
 
 function ECSExecTerminal({
+  profile,
+  region,
+  cluster,
+  target,
+}: {
+  profile: string;
+  region: string;
+  cluster: string;
+  target?: ECSExecTarget | null;
+}) {
+  // Tasks タブから対象が事前確定している場合は、ドロップダウン選択を経由せず直接接続する
+  if (target) {
+    const task = arnSuffix(target.taskArn);
+    return <Terminal wsUrl={ecsExecUrl(profile, cluster, task, target.container, region)} />;
+  }
+
+  return <ECSExecTerminalDropdown profile={profile} region={region} cluster={cluster} />;
+}
+
+function ECSExecTerminalDropdown({
   profile,
   region,
   cluster,
@@ -88,7 +128,8 @@ function ECSExecTerminal({
             <option value="">タスクを選択</option>
             {tasks.map((t) => (
               <option key={t.arn} value={t.arn}>
-                {arnSuffix(t.arn)}
+                {t.group || '-'} / {arnSuffix(t.arn)}
+                {t.startedAt ? ` (${t.startedAt})` : ''}
               </option>
             ))}
           </select>
