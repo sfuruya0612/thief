@@ -1,40 +1,53 @@
-// GCP のアクティブプロジェクト選択状態を管理するフック。
+// GCP プロジェクトのセッションタブ状態を管理するフック。
 // 一覧取得 (useGcpProjects in api/queries.ts) と役割を分けるため、こちらは
 // useActiveGcpProject という名前にしてある。
-import { useCallback, useEffect, useState } from 'react';
+// 旧実装にあった「永続値が一覧に無ければ先頭へ自動フォールバック」は削除した。
+// プロジェクト一覧の refresh で消えたプロジェクトのタブが勝手に別プロジェクト
+// へ飛ぶのを防ぐため、一覧に無い開きタブもそのまま残す (手動で × で閉じる)。
+import { useEffect, useRef } from 'react';
 import { useGcpProjects as useGcpProjectsQuery } from '../api/queries';
-import { loadPersisted, savePersisted } from '../lib/storage';
+import type { GcpProject } from '../types/gcp';
+import { useSessionTabs } from './useSessionTabs';
 
-export function useActiveGcpProject() {
+export interface GcpSessions {
+  projects: GcpProject[];
+  isLoading: boolean;
+  error: Error | null;
+  openProjects: string[];
+  activeProject: string;
+  activateProject: (id: string) => void;
+  openProject: (id: string) => void;
+  closeProject: (id: string) => void;
+  moveProject: (from: number, to: number) => void;
+  swapProjectToVisible: (id: string, visibleCount: number) => void;
+}
+
+export function useActiveGcpProject(): GcpSessions {
   const query = useGcpProjectsQuery();
-  const [activeProject, setActiveProjectState] = useState<string>(() => {
-    return loadPersisted().gcpProject ?? '';
-  });
+  const tabs = useSessionTabs('gcpSessions');
 
-  // プロジェクト一覧取得後、未選択 または 永続化された値が一覧に無い場合は先頭を採用する
+  // 初回だけの自動オープン (useProfiles と同じワンショット規約)。
+  const autoOpened = useRef(false);
+  const { open, openSession } = tabs;
   useEffect(() => {
+    if (autoOpened.current) return;
     if (!query.data || query.data.length === 0) return;
-    const exists = activeProject && query.data.some((p) => p.id === activeProject);
-    if (!exists) {
-      setActiveProjectState(query.data[0].id);
+    autoOpened.current = true;
+    if (open.length === 0) {
+      openSession(query.data[0].id);
     }
-  }, [activeProject, query.data]);
-
-  useEffect(() => {
-    if (!activeProject) return;
-    const prev = loadPersisted();
-    savePersisted({ ...prev, gcpProject: activeProject });
-  }, [activeProject]);
-
-  const setActiveProject = useCallback((id: string) => {
-    setActiveProjectState(id);
-  }, []);
+  }, [query.data, open.length, openSession]);
 
   return {
     projects: query.data ?? [],
     isLoading: query.isLoading,
     error: query.error,
-    activeProject,
-    setActiveProject,
+    openProjects: tabs.open,
+    activeProject: tabs.active,
+    activateProject: tabs.activate,
+    openProject: tabs.openSession,
+    closeProject: tabs.closeSession,
+    moveProject: tabs.move,
+    swapProjectToVisible: tabs.swapToVisible,
   };
 }

@@ -11,6 +11,9 @@ import { loadPersisted, savePersisted } from './lib/storage';
 import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
 import { StatusBar } from './components/StatusBar';
+import { AwsSessionTabs } from './components/session/AwsSessionTabs';
+import { GcpSessionTabs } from './components/session/GcpSessionTabs';
+import { SessionEmptyState } from './components/session/SessionEmptyState';
 import { AccountView } from './views/AccountView';
 import { GcpView } from './views/GcpView';
 import { DatadogView } from './views/nonaws/DatadogView';
@@ -66,12 +69,10 @@ function usePersistedSidebarWidth() {
 
 export function App() {
   const { tweaks, update } = useTweaks();
-  const { profiles, activeProfile, setActiveProfile, error } = useProfiles();
-  const {
-    projects: gcpProjects,
-    activeProject: gcpProject,
-    setActiveProject: setGcpProject,
-  } = useActiveGcpProject();
+  const aws = useProfiles();
+  const { profiles, activeProfile, error } = aws;
+  const gcp = useActiveGcpProject();
+  const { projects: gcpProjects, activeProject: gcpProject } = gcp;
   const { region, setRegion } = usePersistedRegion();
   const { view, setView } = usePersistedView();
   const { setWidth: setSidebarWidth } = usePersistedSidebarWidth();
@@ -112,30 +113,47 @@ export function App() {
         view={view}
         onViewChange={setView}
       />
-      {view === 'aws' && activeProfile && (
-        <AccountView
-          profile={activeProfile}
-          region={region}
-          profiles={profiles}
-          onProfileChange={setActiveProfile}
-          onRegionChange={setRegion}
-          activeService={activeService}
-          onServiceChange={setActiveService}
-          drawerPos={tweaks.drawerPos}
-          onSidebarWidthChange={setSidebarWidth}
-        />
-      )}
-      {view === 'gcp' && (
-        <GcpView
-          activeProject={gcpProject}
-          projects={gcpProjects}
-          onProjectChange={setGcpProject}
-          activeService={activeGcpService}
-          onServiceChange={setActiveGcpService}
-          drawerPos={tweaks.drawerPos}
-          onSidebarWidthChange={setSidebarWidth}
-        />
-      )}
+      {view === 'aws' && <AwsSessionTabs sessions={aws} />}
+      {view === 'gcp' && <GcpSessionTabs sessions={gcp} />}
+      {view === 'aws' &&
+        (activeProfile ? (
+          // key= でプロファイル切替時に丸ごと再マウントする。ServicePanel の
+          // フィルタ / 選択 / Drawer が前アカウントの状態のまま残るのを防ぐ
+          // (エディタ内容は localStorage、リソースは queryKey キャッシュから復元される)。
+          <AccountView
+            key={activeProfile}
+            profile={activeProfile}
+            region={region}
+            profiles={profiles}
+            onRegionChange={setRegion}
+            activeService={activeService}
+            onServiceChange={setActiveService}
+            drawerPos={tweaks.drawerPos}
+            onSidebarWidthChange={setSidebarWidth}
+          />
+        ) : (
+          <SessionEmptyState
+            title="プロファイルを開いてください"
+            hint="上のタブバーの「＋ プロファイルを追加」から接続するプロファイルを選択します"
+          />
+        ))}
+      {view === 'gcp' &&
+        (gcpProject ? (
+          <GcpView
+            key={gcpProject}
+            activeProject={gcpProject}
+            projects={gcpProjects}
+            activeService={activeGcpService}
+            onServiceChange={setActiveGcpService}
+            drawerPos={tweaks.drawerPos}
+            onSidebarWidthChange={setSidebarWidth}
+          />
+        ) : (
+          <SessionEmptyState
+            title="プロジェクトを開いてください"
+            hint="上のタブバーの「＋ プロジェクトを追加」から接続するプロジェクトを選択します"
+          />
+        ))}
       {view === 'datadog' && <DatadogView />}
       {view === 'tidb' && <TiDBView />}
       <StatusBar service={footerService} />

@@ -30,6 +30,30 @@ describe('profileFromRaw', () => {
       ssoRoleName: undefined,
     });
   });
+
+  it('auth_type / sso_status / region / sso_expires_at を変換する', () => {
+    const row = profileFromRaw({
+      name: 'sso-prof',
+      region: 'ap-northeast-1',
+      auth_type: 'sso',
+      sso_status: 'valid',
+      sso_expires_at: '2026-07-17T20:00:00Z',
+    });
+    expect(row.region).toBe('ap-northeast-1');
+    expect(row.authType).toBe('sso');
+    expect(row.ssoStatus).toBe('valid');
+    expect(row.ssoExpiresAt).toBe('2026-07-17T20:00:00Z');
+  });
+
+  it('未知の enum 文字列は undefined に落とす', () => {
+    const row = profileFromRaw({
+      name: 'future-prof',
+      auth_type: 'quantum_auth',
+      sso_status: 'maybe',
+    });
+    expect(row.authType).toBeUndefined();
+    expect(row.ssoStatus).toBeUndefined();
+  });
 });
 
 describe('callerIdentityFromRaw', () => {

@@ -2,6 +2,7 @@
 // サービスごとに useResources<TRaw,TRow> の型引数が異なるため、汎用 ServicePanel を用意し
 // activeService に応じて 15 分岐で呼び分ける (各分岐は normalizer/columns/overviewRows を渡すだけ)
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   apigwFromRaw,
   cacheFromRaw,
@@ -106,8 +107,17 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   const { data, isLoading, error } = useResources<TRaw, TRow>(service, profile, region, normalizer);
   const { data: cost } = useCost(profile, region);
   const [filters, setFilters] = useState<Filters>({});
+  const queryClient = useQueryClient();
 
   const ssoExpired = error instanceof ApiError && error.code === 'SSO_TOKEN_EXPIRED';
+
+  // SSO 期限切れを検知したらプロファイル一覧も再取得し、セッションタブの
+  // ピッカーやアクティブセッションカードのバッジを「期限切れ」へ追随させる
+  // (一覧の staleTime 5 分を待たない)。
+  useEffect(() => {
+    if (!ssoExpired) return;
+    void queryClient.invalidateQueries({ queryKey: ['aws', 'profiles'] });
+  }, [ssoExpired, queryClient]);
   const allResources = data ?? [];
   const selected = allResources.find((r) => r.id === selectedId) ?? null;
 
@@ -167,7 +177,6 @@ export interface AccountViewProps {
   profile: string;
   region: string;
   profiles: Profile[];
-  onProfileChange: (name: string) => void;
   onRegionChange: (region: string) => void;
   activeService: string;
   onServiceChange: (service: string) => void;
@@ -179,7 +188,6 @@ export function AccountView({
   profile,
   region,
   profiles,
-  onProfileChange,
   onRegionChange,
   activeService,
   onServiceChange,
@@ -199,7 +207,6 @@ export function AccountView({
         profile={profile}
         region={region}
         profiles={profiles}
-        onProfileChange={onProfileChange}
         onRegionChange={onRegionChange}
         onWidthChange={onSidebarWidthChange}
         activeService={activeService}

@@ -24,6 +24,16 @@ type ProfileInfo struct {
 	// (sso_account_id / sso_role_name) and are empty for non-SSO profiles.
 	AccountID   string `json:"account_id,omitempty"`
 	SSORoleName string `json:"sso_role_name,omitempty"`
+	// Region はプロファイルの region キー (未設定なら欠落)。
+	Region string `json:"region,omitempty"`
+	// AuthType は "sso" | "access_key" | "assume_role" | "credential_process" |
+	// "unknown" のいずれか。全プロファイルで必ず返す。
+	AuthType string `json:"auth_type"`
+	// SSOStatus は "valid" | "expired" | "not_logged_in"。SSO 以外のプロファイル
+	// および判定不能時は欠落する。
+	SSOStatus string `json:"sso_status,omitempty"`
+	// SSOExpiresAt はトークンキャッシュの expiresAt (RFC3339, UTC)。不明時は欠落。
+	SSOExpiresAt string `json:"sso_expires_at,omitempty"`
 }
 
 // CallerIdentityInfo is returned by GET /api/aws/profiles/{profile}/identity.

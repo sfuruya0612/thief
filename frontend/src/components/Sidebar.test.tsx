@@ -40,7 +40,6 @@ describe('Sidebar region selector', () => {
         profile="test"
         region="ap-northeast-1"
         profiles={[{ name: 'test' }]}
-        onProfileChange={() => {}}
         onRegionChange={() => {}}
         activeService="ec2"
         onService={() => {}}
@@ -63,7 +62,6 @@ describe('Sidebar region selector', () => {
         profile="test"
         region="ap-northeast-1"
         profiles={[{ name: 'test' }]}
-        onProfileChange={() => {}}
         onRegionChange={() => {}}
         activeService="ec2"
         onService={() => {}}

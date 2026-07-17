@@ -1,6 +1,13 @@
 // Raw (バックエンド JSON) → Row (UI 用) 変換関数
 import { formatUptime } from './format';
-import type { CallerIdentity, CallerIdentityRaw, Profile, ProfileRaw } from '../types/common';
+import type {
+  CallerIdentity,
+  CallerIdentityRaw,
+  Profile,
+  ProfileAuthType,
+  ProfileRaw,
+  ProfileSSOStatus,
+} from '../types/common';
 import type {
   APIGWRaw,
   APIGWRow,
@@ -76,11 +83,33 @@ function uptimeOrUndef(iso: string): string | undefined {
   return u || undefined;
 }
 
+const PROFILE_AUTH_TYPES: readonly ProfileAuthType[] = [
+  'sso',
+  'access_key',
+  'assume_role',
+  'credential_process',
+  'unknown',
+];
+const PROFILE_SSO_STATUSES: readonly ProfileSSOStatus[] = ['valid', 'expired', 'not_logged_in'];
+
+// backend の enum 文字列を union 型へ縮小する。未知の値 (将来の backend 拡張等)
+// は undefined に落とし、UI 側はバッジ等を出さない挙動に degrade する。
+function narrowEnum<T extends string>(
+  value: string | undefined,
+  allowed: readonly T[],
+): T | undefined {
+  return allowed.includes(value as T) ? (value as T) : undefined;
+}
+
 export function profileFromRaw(raw: ProfileRaw): Profile {
   return {
     name: raw.name,
     accountId: raw.account_id,
     ssoRoleName: raw.sso_role_name,
+    region: raw.region,
+    authType: narrowEnum(raw.auth_type, PROFILE_AUTH_TYPES),
+    ssoStatus: narrowEnum(raw.sso_status, PROFILE_SSO_STATUSES),
+    ssoExpiresAt: raw.sso_expires_at,
   };
 }
 

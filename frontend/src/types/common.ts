@@ -45,17 +45,30 @@ export interface Tweaks {
 
 // GET /api/aws/profiles のバックエンド JSON 形状。
 // AccountID / SSORoleName は ~/.aws/config の静的パース結果で、
-// SSO プロファイル以外では欠落する。
+// SSO プロファイル以外では欠落する。auth_type 以降は認証方式と
+// SSO トークンキャッシュ由来のローカル状態 (best-effort 表示用)。
 export interface ProfileRaw {
   name: string;
   account_id?: string;
   sso_role_name?: string;
+  region?: string;
+  auth_type?: string;
+  sso_status?: string;
+  sso_expires_at?: string;
 }
+
+export type ProfileAuthType =
+  'sso' | 'access_key' | 'assume_role' | 'credential_process' | 'unknown';
+export type ProfileSSOStatus = 'valid' | 'expired' | 'not_logged_in';
 
 export interface Profile {
   name: string;
   accountId?: string;
   ssoRoleName?: string;
+  region?: string;
+  authType?: ProfileAuthType;
+  ssoStatus?: ProfileSSOStatus;
+  ssoExpiresAt?: string;
 }
 
 // GET /api/aws/profiles/{profile}/identity のバックエンド JSON 形状。
