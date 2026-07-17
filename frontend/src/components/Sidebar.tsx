@@ -18,7 +18,7 @@ interface SidebarSection {
 }
 
 const SECTIONS: SidebarSection[] = [
-  { label: 'Compute', services: ['ec2', 'ecr', 'lambda', 'ecs'] },
+  { label: 'Compute', services: ['ec2', 'ecr', 'lambda', 'ecs', 'cfn'] },
   { label: 'Data', services: ['athena', 'rds', 'dynamo', 'cache', 's3'] },
   { label: 'Network', services: ['elb', 'cloudfront', 'apigw', 'natgw'] },
   { label: 'Messaging', services: ['sqs', 'kinesis'] },
