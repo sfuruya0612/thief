@@ -29,6 +29,7 @@ const AWS_ICON_FILES: Record<string, string> = {
   ssm: 'ssm.svg',
   secrets: 'secrets.svg',
   costexplorer: 'costexplorer.svg',
+  cfn: 'cfn.svg',
 };
 
 function AwsIcon(svc: string, { size = 16 }: AwsIconProps = {}) {

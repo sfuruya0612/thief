@@ -23,6 +23,9 @@ import {
 } from '../lib/normalizeNonAws';
 import {
   callerIdentityFromRaw,
+  cfnStackDetailFromRaw,
+  cfnStackEventFromRaw,
+  cfnStackResourceFromRaw,
   dynamoTableSchemaFromRaw,
   ecrImageFromRaw,
   ecsContainerFromRaw,
@@ -55,6 +58,9 @@ import {
   getBQQueryResults,
   getBQSchema,
   getBQTables,
+  getCFNStackDetail,
+  getCFNStackEvents,
+  getCFNStackResources,
   getCost,
   getCostForecast,
   getDatadogEstimated,
@@ -260,6 +266,39 @@ export function useECRImages(profile: string, region: string, repo: string) {
     queryFn: async () => (await getECRImages(profile, region, repo)).map(ecrImageFromRaw),
     staleTime: 60_000,
     enabled: !!profile && !!repo,
+  });
+}
+
+// ============================================================
+// CloudFormation (Drawer の Overview / Events / Resources タブ)
+// ============================================================
+export function useCFNStackDetail(profile: string, region: string, stack: string) {
+  return useQuery({
+    queryKey: ['aws', 'cfn-detail', profile, region, stack],
+    queryFn: async () => cfnStackDetailFromRaw(await getCFNStackDetail(profile, region, stack)),
+    staleTime: 60_000,
+    enabled: !!profile && !!stack,
+  });
+}
+
+export function useCFNStackEvents(profile: string, region: string, stack: string) {
+  return useQuery({
+    queryKey: ['aws', 'cfn-events', profile, region, stack],
+    queryFn: async () =>
+      (await getCFNStackEvents(profile, region, stack)).map(cfnStackEventFromRaw),
+    // デプロイ進行中の確認が主用途で backend も 30 秒 TTL のため短めにする
+    staleTime: 30_000,
+    enabled: !!profile && !!stack,
+  });
+}
+
+export function useCFNStackResources(profile: string, region: string, stack: string) {
+  return useQuery({
+    queryKey: ['aws', 'cfn-resources', profile, region, stack],
+    queryFn: async () =>
+      (await getCFNStackResources(profile, region, stack)).map(cfnStackResourceFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!stack,
   });
 }
 

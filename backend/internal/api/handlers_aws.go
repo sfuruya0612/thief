@@ -201,6 +201,33 @@ func (s *Server) handleCFN(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleCFNStackDetail(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	stack := r.PathValue("stack")
+	s.serveCached(w, r, cacheKey("cfn-detail", profile, region, stack), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.DescribeCFNStackDetail(r.Context(), profile, region, stack)
+	})
+}
+
+// cfnEventsCacheTTL はデプロイ進行中の確認が主用途のため既定の cacheTTL (1 時間) より短くする。
+const cfnEventsCacheTTL = 30 * time.Second
+
+func (s *Server) handleCFNStackEvents(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	stack := r.PathValue("stack")
+	s.serveCached(w, r, cacheKey("cfn-events", profile, region, stack), cfnEventsCacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListCFNStackEvents(r.Context(), profile, region, stack)
+	})
+}
+
+func (s *Server) handleCFNStackResources(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	stack := r.PathValue("stack")
+	s.serveCached(w, r, cacheKey("cfn-resources", profile, region, stack), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListCFNStackResources(r.Context(), profile, region, stack)
+	})
+}
+
 func (s *Server) handleKinesis(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	s.serveCached(w, r, cacheKey("kinesis", profile, region), cacheTTL, writeAWSError, func() (any, error) {

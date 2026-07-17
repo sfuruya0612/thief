@@ -94,6 +94,208 @@ func cfnFromSummary(s cfntypes.StackSummary) CFNStackResource {
 	}
 }
 
+// maxCFNStackEvents は Events API で返す件数の上限。DescribeStackEvents は
+// 直近 90 日分を無限に遡れるが、UI の用途は直近デプロイ結果の確認であり
+// 全履歴は不要なため打ち切る。
+const maxCFNStackEvents = 100
+
+// CFNStackDetail は Web API 用のスタック詳細 (Overview / Tags タブ) を保持する。
+type CFNStackDetail struct {
+	StackName   string            `json:"stack_name"`
+	Status      string            `json:"status"`
+	DriftStatus string            `json:"drift_status"`
+	CreatedTime string            `json:"created_time"`
+	UpdatedTime string            `json:"updated_time"`
+	Description string            `json:"description"`
+	Parameters  []CFNParameter    `json:"parameters"`
+	Outputs     []CFNOutput       `json:"outputs"`
+	Tags        map[string]string `json:"tags"`
+}
+
+// CFNParameter is the JSON API counterpart of CfnParameter.
+type CFNParameter struct {
+	Key           string `json:"key"`
+	Value         string `json:"value"`
+	ResolvedValue string `json:"resolved_value"`
+}
+
+// CFNOutput is the JSON API counterpart of CfnOutput.
+type CFNOutput struct {
+	Key         string `json:"key"`
+	Value       string `json:"value"`
+	ExportName  string `json:"export_name"`
+	Description string `json:"description"`
+}
+
+// CFNStackEvent はスタックイベント (Events タブ) の表示用フィールドを保持する。
+type CFNStackEvent struct {
+	Timestamp            string `json:"timestamp"`
+	LogicalResourceID    string `json:"logical_resource_id"`
+	ResourceType         string `json:"resource_type"`
+	ResourceStatus       string `json:"resource_status"`
+	ResourceStatusReason string `json:"resource_status_reason"`
+}
+
+// CFNStackResourceSummary はスタックが管理するリソース (Resources タブ) の表示用フィールドを保持する。
+type CFNStackResourceSummary struct {
+	LogicalResourceID  string `json:"logical_resource_id"`
+	PhysicalResourceID string `json:"physical_resource_id"`
+	ResourceType       string `json:"resource_type"`
+	ResourceStatus     string `json:"resource_status"`
+	LastUpdatedTime    string `json:"last_updated_time"`
+}
+
+// describeCfnStackRaw calls DescribeStacks and returns the first matching stack.
+// DescribeCfnStack (CLI 用) と DescribeCFNStackDetail (API 用) の共有ロジック。
+func describeCfnStackRaw(ctx context.Context, profile, region, stackName string) (cfntypes.Stack, error) {
+	client, err := newCfnClient(ctx, profile, region)
+	if err != nil {
+		return cfntypes.Stack{}, err
+	}
+
+	o, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{
+		StackName: aws.String(stackName),
+	})
+	if err != nil {
+		return cfntypes.Stack{}, fmt.Errorf("describe stack %s: %w", stackName, err)
+	}
+	if len(o.Stacks) == 0 {
+		return cfntypes.Stack{}, fmt.Errorf("stack %q not found", stackName)
+	}
+	return o.Stacks[0], nil
+}
+
+// DescribeCFNStackDetail は Web API 用のスタック詳細 (Overview / Tags タブ) を返す。
+func DescribeCFNStackDetail(ctx context.Context, profile, region, stackName string) (*CFNStackDetail, error) {
+	s, err := describeCfnStackRaw(ctx, profile, region, stackName)
+	if err != nil {
+		return nil, err
+	}
+
+	detail := &CFNStackDetail{
+		StackName:   ptrStr(s.StackName),
+		Status:      string(s.StackStatus),
+		DriftStatus: "NOT_CHECKED",
+		Description: ptrStr(s.Description),
+		Tags:        make(map[string]string, len(s.Tags)),
+	}
+	if s.DriftInformation != nil {
+		detail.DriftStatus = string(s.DriftInformation.StackDriftStatus)
+	}
+	if s.CreationTime != nil {
+		detail.CreatedTime = s.CreationTime.Format(time.RFC3339)
+	}
+	if s.LastUpdatedTime != nil {
+		detail.UpdatedTime = s.LastUpdatedTime.Format(time.RFC3339)
+	}
+
+	for _, p := range s.Parameters {
+		detail.Parameters = append(detail.Parameters, CFNParameter{
+			Key:           ptrStr(p.ParameterKey),
+			Value:         ptrStr(p.ParameterValue),
+			ResolvedValue: ptrStr(p.ResolvedValue),
+		})
+	}
+	for _, out := range s.Outputs {
+		detail.Outputs = append(detail.Outputs, CFNOutput{
+			Key:         ptrStr(out.OutputKey),
+			Value:       ptrStr(out.OutputValue),
+			ExportName:  ptrStr(out.ExportName),
+			Description: ptrStr(out.Description),
+		})
+	}
+	for _, tag := range s.Tags {
+		detail.Tags[ptrStr(tag.Key)] = ptrStr(tag.Value)
+	}
+
+	return detail, nil
+}
+
+// ListCFNStackEvents はスタックイベントを新しい順に最新 maxCFNStackEvents 件まで返す。
+func ListCFNStackEvents(ctx context.Context, profile, region, stackName string) ([]CFNStackEvent, error) {
+	client, err := newCfnClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+
+	var events []CFNStackEvent
+	paginator := cloudformation.NewDescribeStackEventsPaginator(client, &cloudformation.DescribeStackEventsInput{
+		StackName: aws.String(stackName),
+	})
+	for paginator.HasMorePages() && len(events) < maxCFNStackEvents {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe stack events %s: %w", stackName, err)
+		}
+		events = appendCFNStackEventsPage(events, page.StackEvents, maxCFNStackEvents)
+	}
+	return events, nil
+}
+
+// appendCFNStackEventsPage は 1 ページ分の StackEvent を変換して events に追加し、
+// limit 件に達したら以降を打ち切る。
+func appendCFNStackEventsPage(events []CFNStackEvent, page []cfntypes.StackEvent, limit int) []CFNStackEvent {
+	for _, e := range page {
+		if len(events) >= limit {
+			break
+		}
+		events = append(events, cfnEventFromSDK(e))
+	}
+	return events
+}
+
+func cfnEventFromSDK(e cfntypes.StackEvent) CFNStackEvent {
+	timestamp := ""
+	if e.Timestamp != nil {
+		timestamp = e.Timestamp.Format(time.RFC3339)
+	}
+	return CFNStackEvent{
+		Timestamp:            timestamp,
+		LogicalResourceID:    ptrStr(e.LogicalResourceId),
+		ResourceType:         ptrStr(e.ResourceType),
+		ResourceStatus:       string(e.ResourceStatus),
+		ResourceStatusReason: ptrStr(e.ResourceStatusReason),
+	}
+}
+
+// ListCFNStackResources はスタックが管理するリソースを全件取得する。
+// 1 スタックのリソース数は CloudFormation の上限 500 個で抑えられているため全件で問題ない。
+func ListCFNStackResources(ctx context.Context, profile, region, stackName string) ([]CFNStackResourceSummary, error) {
+	client, err := newCfnClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+
+	var resources []CFNStackResourceSummary
+	paginator := cloudformation.NewListStackResourcesPaginator(client, &cloudformation.ListStackResourcesInput{
+		StackName: aws.String(stackName),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list stack resources %s: %w", stackName, err)
+		}
+		for _, r := range page.StackResourceSummaries {
+			resources = append(resources, cfnResourceFromSDK(r))
+		}
+	}
+	return resources, nil
+}
+
+func cfnResourceFromSDK(r cfntypes.StackResourceSummary) CFNStackResourceSummary {
+	lastUpdated := ""
+	if r.LastUpdatedTimestamp != nil {
+		lastUpdated = r.LastUpdatedTimestamp.Format(time.RFC3339)
+	}
+	return CFNStackResourceSummary{
+		LogicalResourceID:  ptrStr(r.LogicalResourceId),
+		PhysicalResourceID: ptrStr(r.PhysicalResourceId),
+		ResourceType:       ptrStr(r.ResourceType),
+		ResourceStatus:     string(r.ResourceStatus),
+		LastUpdatedTime:    lastUpdated,
+	}
+}
+
 // CfnStackSummary はレガシー CLI 互換の CloudFormation スタック一覧表示用フィールドを保持する。
 type CfnStackSummary struct {
 	StackName   string

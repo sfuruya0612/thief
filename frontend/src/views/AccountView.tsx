@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   apigwFromRaw,
   cacheFromRaw,
+  cfnFromRaw,
   cloudfrontFromRaw,
   dynamoFromRaw,
   ec2FromRaw,
@@ -26,6 +27,7 @@ import {
 import {
   apigwColumns,
   cacheColumns,
+  cfnColumns,
   cloudfrontColumns,
   dynamoColumns,
   ec2Columns,
@@ -47,6 +49,7 @@ import {
 import {
   apigwOverviewRows,
   cacheOverviewRows,
+  cfnOverviewRows,
   cloudfrontOverviewRows,
   dynamoOverviewRows,
   ec2OverviewRows,
@@ -234,6 +237,19 @@ export function AccountView({
           normalizer={ecrFromRaw}
           columns={ecrColumns}
           overviewRows={ecrOverviewRows}
+          drawerPos={drawerPos}
+          selectedId={selectedId}
+          onSelectId={setSelectedId}
+        />
+      )}
+      {activeService === 'cfn' && (
+        <ServicePanel
+          service="cfn"
+          profile={profile}
+          region={region}
+          normalizer={cfnFromRaw}
+          columns={cfnColumns}
+          overviewRows={cfnOverviewRows}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}

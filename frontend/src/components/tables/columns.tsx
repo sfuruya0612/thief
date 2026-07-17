@@ -6,6 +6,9 @@ import type { ReactNode } from 'react';
 import type {
   APIGWRow,
   CacheRow,
+  CFNStackEventRow,
+  CFNStackResourceRow,
+  CFNStackRow,
   CloudFrontRow,
   DynamoRow,
   EC2Row,
@@ -1266,5 +1269,121 @@ export const iamColumns: ColumnDef<IAMRow>[] = [
     width: '15%',
     align: 'right',
     cell: (r) => <span style={mutedMono}>{r.groups.length}</span>,
+  },
+];
+
+// ============================================================
+// CloudFormation
+// ============================================================
+export const cfnColumns: ColumnDef<CFNStackRow>[] = [
+  {
+    key: 'name',
+    header: 'Stack',
+    width: '26%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  { key: 'state', header: 'State', width: '16%', cell: (r) => <StatusBadge state={r.state} /> },
+  {
+    key: 'driftStatus',
+    header: 'Drift',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.driftStatus}</span>,
+  },
+  {
+    key: 'createdAt',
+    header: 'Created',
+    width: '22%',
+    cell: (r) => (r.createdAt ? <span style={dimMono}>{r.createdAt}</span> : <Dash />),
+  },
+  {
+    key: 'updatedAt',
+    header: 'Updated',
+    width: '22%',
+    cell: (r) => (r.updatedAt ? <span style={dimMono}>{r.updatedAt}</span> : <Dash />),
+  },
+];
+
+// CFN イベントの失敗系ステータス (CREATE_FAILED / ROLLBACK 系) は色分けする
+const CFN_EVENT_FAILURE_RE = /FAILED|ROLLBACK/;
+
+export function isCfnEventFailure(status: string): boolean {
+  return CFN_EVENT_FAILURE_RE.test(status);
+}
+
+export const cfnEventColumns: ColumnDef<CFNStackEventRow>[] = [
+  {
+    key: 'timestamp',
+    header: 'Time',
+    width: '18%',
+    cell: (r) => (r.timestamp ? <span style={dimMono}>{r.timestamp}</span> : <Dash />),
+  },
+  {
+    key: 'logicalResourceId',
+    header: 'Logical ID',
+    width: '20%',
+    cell: (r) => <span className="truncate">{r.logicalResourceId}</span>,
+  },
+  {
+    key: 'resourceType',
+    header: 'Type',
+    width: '20%',
+    cell: (r) => <span style={mutedMono}>{r.resourceType}</span>,
+  },
+  {
+    key: 'resourceStatus',
+    header: 'Status',
+    width: '14%',
+    cell: (r) => (
+      <span style={{ color: isCfnEventFailure(r.resourceStatus) ? 'var(--err)' : undefined }}>
+        {r.resourceStatus}
+      </span>
+    ),
+  },
+  {
+    key: 'resourceStatusReason',
+    header: 'Reason',
+    width: '28%',
+    cell: (r) => (
+      <span className="truncate" title={r.resourceStatusReason}>
+        {r.resourceStatusReason || <Dash />}
+      </span>
+    ),
+  },
+];
+
+export const cfnResourceColumns: ColumnDef<CFNStackResourceRow>[] = [
+  {
+    key: 'logicalResourceId',
+    header: 'Logical ID',
+    width: '22%',
+    cell: (r) => <span className="primary truncate">{r.logicalResourceId}</span>,
+  },
+  {
+    key: 'physicalResourceId',
+    header: 'Physical ID',
+    width: '26%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.physicalResourceId || <Dash />}
+      </span>
+    ),
+  },
+  {
+    key: 'resourceType',
+    header: 'Type',
+    width: '22%',
+    cell: (r) => <span style={mutedMono}>{r.resourceType}</span>,
+  },
+  {
+    key: 'resourceStatus',
+    header: 'Status',
+    width: '14%',
+    cell: (r) => <StatusBadge state={r.resourceStatus} />,
+  },
+  {
+    key: 'lastUpdatedTime',
+    header: 'Updated',
+    width: '16%',
+    cell: (r) => (r.lastUpdatedTime ? <span style={dimMono}>{r.lastUpdatedTime}</span> : <Dash />),
   },
 ];

@@ -40,6 +40,7 @@ const ICON_FILENAMES = {
   apigw: 'Arch_Amazon-API-Gateway_32.svg',
   natgw: 'Res_Amazon-VPC_NAT-Gateway_48.svg',
   costexplorer: 'Arch_AWS-Cost-Explorer_32.svg',
+  cfn: 'Arch_AWS-CloudFormation_32.svg',
 };
 
 function extractZip(zipPath, destDir) {
