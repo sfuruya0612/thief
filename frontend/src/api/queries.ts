@@ -91,11 +91,17 @@ import {
   uploadS3Object,
 } from './endpoints';
 
+// backend 未起動時の一時的な取得失敗から自動復旧するためのポーリング間隔。
+// 成功後は refetchInterval が false を返すため通常時は無停止ポーリングにならない。
+const PROFILE_LIST_ERROR_RETRY_INTERVAL = 15_000;
+
 export function useProfiles() {
   return useQuery({
     queryKey: ['aws', 'profiles'],
     queryFn: async () => (await getProfiles()).map(profileFromRaw),
     staleTime: 5 * 60 * 1000,
+    refetchInterval: (query) =>
+      query.state.status === 'error' ? PROFILE_LIST_ERROR_RETRY_INTERVAL : false,
   });
 }
 
@@ -641,6 +647,8 @@ export function useGcpProjects() {
     queryKey: ['gcp', 'projects'],
     queryFn: async () => (await getGcpProjects()).map(gcpProjectFromRaw),
     staleTime: 5 * 60 * 1000,
+    refetchInterval: (query) =>
+      query.state.status === 'error' ? PROFILE_LIST_ERROR_RETRY_INTERVAL : false,
   });
 }
 

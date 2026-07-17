@@ -12,6 +12,7 @@ import { useSessionTabs } from './useSessionTabs';
 export interface GcpSessions {
   projects: GcpProject[];
   isLoading: boolean;
+  isError: boolean;
   error: Error | null;
   openProjects: string[];
   activeProject: string;
@@ -41,6 +42,7 @@ export function useActiveGcpProject(): GcpSessions {
   return {
     projects: query.data ?? [],
     isLoading: query.isLoading,
+    isError: query.isError,
     error: query.error,
     openProjects: tabs.open,
     activeProject: tabs.active,

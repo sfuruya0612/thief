@@ -9,7 +9,9 @@ import { useSessionTabs } from './useSessionTabs';
 export interface AwsSessions {
   profiles: Profile[];
   isLoading: boolean;
+  isError: boolean;
   error: Error | null;
+  refetchProfiles: () => void;
   openProfiles: string[];
   activeProfile: string;
   activateProfile: (name: string) => void;
@@ -43,7 +45,9 @@ export function useProfiles(): AwsSessions {
   return {
     profiles: query.data ?? [],
     isLoading: query.isLoading,
+    isError: query.isError,
     error: query.error,
+    refetchProfiles: () => void query.refetch(),
     openProfiles: tabs.open,
     activeProfile: tabs.active,
     activateProfile: tabs.activate,
