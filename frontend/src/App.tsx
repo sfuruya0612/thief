@@ -4,10 +4,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AppView } from './types/common';
+import { useHealthCheck } from './api/queries';
 import { useProfiles } from './hooks/useProfiles';
 import { useActiveGcpProject } from './hooks/useGcpProjects';
 import { useTweaks } from './hooks/useTweaks';
 import { loadPersisted, savePersisted } from './lib/storage';
+import { ConnectionWaiting } from './components/ConnectionWaiting';
 import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
 import { AwsSessionTabs } from './components/session/AwsSessionTabs';
@@ -67,6 +69,7 @@ function usePersistedSidebarWidth() {
 }
 
 export function App() {
+  const health = useHealthCheck();
   const { tweaks, update } = useTweaks();
   const aws = useProfiles();
   const { profiles, activeProfile, error } = aws;
@@ -98,6 +101,10 @@ export function App() {
   const handleToggleTheme = useCallback(() => {
     update({ theme: tweaks.theme === 'dark' ? 'light' : 'dark' });
   }, [tweaks.theme, update]);
+
+  if (!health.isSuccess) {
+    return <ConnectionWaiting />;
+  }
 
   return (
     <div className="app">

@@ -1,6 +1,9 @@
 package api
 
 func (s *Server) registerRoutes() {
+	// 接続確認
+	s.mux.HandleFunc("GET /api/health", s.handleHealth)
+
 	// AWS profiles
 	s.mux.HandleFunc("GET /api/aws/profiles", s.handleListProfiles)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/identity", s.handleProfileIdentity)
