@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -45,6 +46,12 @@ func ListCloudRun(ctx context.Context, projectID string) ([]RunResourceInfo, err
 
 	var resources []RunResourceInfo
 
+	// 各フェーズの所要時間を計測してログに残す (issue 0041: 50 秒遅延の原因調査)。
+	// 逐次処理 (ロケーションごとの ListJobs) と個々の API 応答のどちらが支配的かを
+	// 実環境のログから切り分けられるようにする。
+	overallStart := time.Now()
+
+	svcStart := time.Now()
 	svcIt := svcClient.ListServices(ctx, &runpb.ListServicesRequest{Parent: parent})
 	for {
 		s, err := svcIt.Next()
@@ -58,17 +65,26 @@ func ListCloudRun(ctx context.Context, projectID string) ([]RunResourceInfo, err
 		r.ProjectID = projectID
 		resources = append(resources, r)
 	}
+	slog.Info("cloud run list services done",
+		"project_id", projectID, "duration_ms", time.Since(svcStart).Milliseconds(), "count", len(resources))
 
 	// Jobs API は Services と異なり Parent に "-" ワイルドカードを受け付けないため、
 	// ロケーションを列挙してからロケーションごとに ListJobs を呼び出す。
+	locStart := time.Now()
 	locations, err := listRunLocations(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("cloud run list locations done",
+		"project_id", projectID, "duration_ms", time.Since(locStart).Milliseconds(), "count", len(locations))
 
+	jobsStart := time.Now()
+	jobCount := 0
 	for _, location := range locations {
+		locJobStart := time.Now()
 		jobParent := "projects/" + projectID + "/locations/" + location
 		jobIt := jobClient.ListJobs(ctx, &runpb.ListJobsRequest{Parent: jobParent})
+		locJobCount := 0
 		for {
 			j, err := jobIt.Next()
 			if err == iterator.Done {
@@ -80,8 +96,19 @@ func ListCloudRun(ctx context.Context, projectID string) ([]RunResourceInfo, err
 			r := runResourceFromJob(j)
 			r.ProjectID = projectID
 			resources = append(resources, r)
+			locJobCount++
 		}
+		jobCount += locJobCount
+		slog.Info("cloud run list jobs in location done",
+			"project_id", projectID, "location", location,
+			"duration_ms", time.Since(locJobStart).Milliseconds(), "count", locJobCount)
 	}
+	slog.Info("cloud run list jobs done (all locations, sequential)",
+		"project_id", projectID, "duration_ms", time.Since(jobsStart).Milliseconds(),
+		"locations", len(locations), "count", jobCount)
+
+	slog.Info("cloud run list all done",
+		"project_id", projectID, "duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 
 	return resources, nil
 }
