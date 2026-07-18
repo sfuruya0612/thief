@@ -1,6 +1,13 @@
 // スキーマツリーの表示部品 (検索ボックス + ツリー行 + フッターヒント)。
 // データの取得と組み立ては各ビュー (BigQueryView / AthenaView) の責務。
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import {
+  RESOURCE_PANEL_CSS_VAR,
+  RESOURCE_PANEL_MAX_WIDTH,
+  RESOURCE_PANEL_MIN_WIDTH,
+  useResourcePanelWidth,
+} from '../../hooks/useResourcePanelWidth';
+import { startPanelResize } from '../../lib/panelResize';
 
 export interface SchemaTreePanelProps {
   search: string;
@@ -10,8 +17,11 @@ export interface SchemaTreePanelProps {
 }
 
 export function SchemaTreePanel({ search, onSearch, footer, children }: SchemaTreePanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const { setWidth } = useResourcePanelWidth();
+
   return (
-    <div className="qe-panel qe-schema">
+    <div className="qe-panel qe-schema" ref={panelRef}>
       <div className="qe-schema-search">
         <input
           placeholder="テーブルを検索…"
@@ -21,6 +31,17 @@ export function SchemaTreePanel({ search, onSearch, footer, children }: SchemaTr
       </div>
       <div className="qe-schema-tree">{children}</div>
       <div className="qe-schema-footer">{footer}</div>
+      <div
+        className="panel-resizer"
+        onPointerDown={startPanelResize({
+          min: RESOURCE_PANEL_MIN_WIDTH,
+          max: RESOURCE_PANEL_MAX_WIDTH,
+          cssVar: RESOURCE_PANEL_CSS_VAR,
+          getLeftEdge: () => panelRef.current?.getBoundingClientRect().left ?? 0,
+          onWidthChange: setWidth,
+        })}
+        title="Drag to resize"
+      />
     </div>
   );
 }

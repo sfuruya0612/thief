@@ -14,6 +14,8 @@ export interface PersistedState {
   region?: string;
   view?: AppView;
   sidebarWidth?: number;
+  // Athena / CloudWatch Logs / BigQuery / Cloud Logging の左パネル (.qe-schema / .lv-tree) 幅
+  resourcePanelWidth?: number;
   gcpProject?: string;
   // セッションタブ (開いている複数セッション + アクティブ)
   awsSessions?: SessionTabsState;
