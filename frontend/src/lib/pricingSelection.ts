@@ -40,7 +40,8 @@ export type PricingAction =
   | { type: 'toggleCollapsed'; service: string }
   | { type: 'toggleRate'; region: string; service: string; rateId: string }
   | { type: 'setQty'; region: string; service: string; rateId: string; qty: number }
-  | { type: 'pruneStaleRates'; region: string; service: string; validRateIds: string[] };
+  | { type: 'pruneStaleRates'; region: string; service: string; validRateIds: string[] }
+  | { type: 'clearSelection'; region: string };
 
 type RateEntry = { checked: boolean; qty: number };
 
@@ -121,6 +122,14 @@ export function pricingReducer(
         },
       };
     }
+    case 'clearSelection':
+      return {
+        ...state,
+        selection: {
+          ...state.selection,
+          [action.region]: {},
+        },
+      };
     default:
       return state;
   }

@@ -5,6 +5,11 @@
 import { useMemo, useState } from 'react';
 import { estimate } from '../../lib/pricingEstimate';
 import {
+  attributeValueOptions,
+  matchesAttributeSelection,
+  PRICING_ATTRIBUTE_FILTERS,
+} from '../../lib/pricingAttributeFilters';
+import {
   PRICING_SERVICE_ICON_KEY,
   PRICING_SERVICE_LABELS,
   type PricingService,
@@ -15,6 +20,7 @@ import { AwsIcons } from '../icons/AwsIcons';
 import { Icons } from '../icons/Icons';
 import { ErrorBanner } from '../ErrorBanner';
 import { Loading } from '../Loading';
+import { AttributeFilterBar } from './AttributeFilterBar';
 import { RateGroupSection } from './RateGroupSection';
 
 export interface ServiceCardProps {
@@ -70,8 +76,34 @@ export function ServiceCard({
   refreshing,
 }: ServiceCardProps) {
   const [instanceFilter, setInstanceFilter] = useState('');
+  const [attrSelection, setAttrSelection] = useState<Record<string, Set<string>>>({});
 
-  const groups = useMemo(() => (table ? groupRates(table.rates) : []), [table]);
+  const attributeSpecs = PRICING_ATTRIBUTE_FILTERS[service];
+  const attributeOptions = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const spec of attributeSpecs) {
+      out[spec.key] = attributeValueOptions(table?.rates ?? [], spec.key);
+    }
+    return out;
+  }, [attributeSpecs, table]);
+
+  const toggleAttrValue = (key: string, value: string) => {
+    setAttrSelection((prev) => {
+      const next = new Set(prev[key] ?? []);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return { ...prev, [key]: next };
+    });
+  };
+
+  // グルーピング (On-Demand/RI/SP の区分) は属性フィルタ適用後の行に対して行う。
+  // spInstanceTypes (下記) は「この構成に SP が存在するか」の全体判定用のため、
+  // 属性フィルタの影響を受けない元の table.rates から計算する。
+  const attrFilteredRates = useMemo(
+    () => (table ? table.rates.filter((r) => matchesAttributeSelection(r, attrSelection)) : []),
+    [table, attrSelection],
+  );
+  const groups = useMemo(() => groupRates(attrFilteredRates), [attrFilteredRates]);
 
   const spInstanceTypes = useMemo(() => {
     const set = new Set<string>();
@@ -183,17 +215,27 @@ export function ServiceCard({
                       />
                     </span>
                   </div>
-                  {groups.map(([group, rates]) => (
-                    <RateGroupSection
-                      key={group}
-                      group={group}
-                      rates={rates}
-                      selection={selection}
-                      onToggleRate={onToggleRate}
-                      instanceFilter={instanceFilter}
-                      spInstanceTypes={spInstanceTypes}
-                    />
-                  ))}
+                  <AttributeFilterBar
+                    specs={attributeSpecs}
+                    options={attributeOptions}
+                    selected={attrSelection}
+                    onToggle={toggleAttrValue}
+                  />
+                  {groups.length === 0 ? (
+                    <div className="pr-card-empty">この条件に一致する単価がありません。</div>
+                  ) : (
+                    groups.map(([group, rates]) => (
+                      <RateGroupSection
+                        key={group}
+                        group={group}
+                        rates={rates}
+                        selection={selection}
+                        onToggleRate={onToggleRate}
+                        instanceFilter={instanceFilter}
+                        spInstanceTypes={spInstanceTypes}
+                      />
+                    ))
+                  )}
                 </>
               )}
             </>

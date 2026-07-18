@@ -92,7 +92,11 @@
   - @sfuruya0612
 - [ADD] Cloud Logging / CloudWatch Logs のログ一覧で SUMMARY 列を省略記号ではなく横スクロールで全文確認できるようにし、Cloud Logging では表示するフィールドをユーザが選択して SUMMARY 列の先頭に優先表示できるようにする
   - @sfuruya0612
-- [ADD] AWS サービス一覧に Pricing を追加し、EC2 / RDS / ElastiCache / ECS (Fargate) の指定リージョンの単価を On-Demand / Reserved Instances / Savings Plans 別に一覧できるようにする。単価表の項目を選び数量を入力すると、月額継続 / 前払い一括 / 実効月額の 3 系統で見積もりを算出する。単価データは初回取得後 `/tmp/thief/price/{service}/{region}.json` にキャッシュし、更新ボタンでのみ再取得する
+- [ADD] AWS サービス一覧に Pricing を追加し、EC2 / RDS / ElastiCache / ECS (Fargate) の指定リージョンの単価を On-Demand / Reserved Instances / Savings Plans 別に一覧できるようにする。単価表の項目を選び数量を入力すると、月額継続 / 前払い一括 / 実効月額の 3 系統で見積もりを算出し、見積もり画面の一括削除ボタンで追加した項目をまとめて解除できる。単価データは初回取得後 `/tmp/thief/price/{service}/{region}.json` にキャッシュし、更新ボタンでのみ再取得する
+  - @sfuruya0612
+- [ADD] Pricing 画面の EC2 / RDS / ElastiCache の単価表に、Instance Type のテキスト検索とは別に OS (EC2) / Engine・Deployment・Storage Type (RDS) / Engine (ElastiCache) のチップ選択による絞り込みを追加する。RDS の Storage Type (Standard / IO-Optimized) は Aurora MySQL / Aurora PostgreSQL のストレージオプションの違いを表す (Aurora 以外の RDS エンジンには存在しない区分のため、Aurora を選択している場合のみチップが表示される)。RDS の単価表の各行ラベルにも Storage Type を表示し、同一インスタンスタイプ・エンジン・デプロイでも Standard/IO-Optimized の行を見分けられるようにする
+  - @sfuruya0612
+- [ADD] Pricing 画面の On-Demand / Reserved Instance / Savings Plans 各グループをそれぞれ折りたためるようにする。インスタンスタイプ数の多い EC2 / RDS / ElastiCache でも、不要なグループを畳んで目的の単価にたどり着きやすくする
   - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612

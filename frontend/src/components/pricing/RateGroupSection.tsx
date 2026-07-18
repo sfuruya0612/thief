@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { formatPricingUnit, formatUnitPrice } from '../../lib/format';
 import type { PriceRateRow } from '../../types/aws';
+import { Icons } from '../icons/Icons';
 
 export interface RateGroupSectionProps {
   group: string;
@@ -87,6 +88,7 @@ export function RateGroupSection({
   const [lease, setLease] = useState(() => leaseOptions[0] ?? '');
   const [offeringClass, setOfferingClass] = useState(() => offeringClassOptions[0] ?? '');
   const [payment, setPayment] = useState(() => paymentOptions[0] ?? '');
+  const [collapsed, setCollapsed] = useState(false);
 
   const hasConditions = model !== 'on_demand';
 
@@ -116,8 +118,17 @@ export function RateGroupSection({
   return (
     <div className="pr-group">
       <div className="pr-group-head">
+        <button
+          type="button"
+          className="pr-group-collapse"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          title={collapsed ? '展開' : '折りたたむ'}
+        >
+          <Icons.chevron size={12} style={{ transform: collapsed ? 'none' : 'rotate(90deg)' }} />
+        </button>
         <span className="pr-group-title">{group}</span>
-        {hasConditions && (
+        {hasConditions && !collapsed && (
           <div className="pr-group-conditions">
             {leaseOptions.length > 1 && (
               <select className="btn sm" value={lease} onChange={(e) => setLease(e.target.value)}>
@@ -158,56 +169,57 @@ export function RateGroupSection({
         )}
       </div>
 
-      {filteredRates.length === 0 ? (
-        <div className="pr-group-empty">この条件に一致する単価がありません</div>
-      ) : (
-        <table className="pr-rate-table">
-          <tbody>
-            {filteredRates.map((rate) => {
-              const checked = selection[rate.rateId]?.checked ?? false;
-              const instanceType = rate.attributes.instance_type;
-              const noSp =
-                model !== 'savings_plan' &&
-                !!instanceType &&
-                !!spInstanceTypes &&
-                !spInstanceTypes.has(instanceType);
-              return (
-                <tr key={rate.rateId} className={checked ? 'checked' : ''}>
-                  <td className="pr-rate-check">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => onToggleRate(rate.rateId)}
-                      aria-label={rate.label}
-                    />
-                  </td>
-                  <td className="pr-rate-label">{rate.label}</td>
-                  <td className="pr-rate-price">
-                    {formatUnitPrice(rate.priceUSD)}
-                    {formatPricingUnit(rate.unit)}
-                    {rate.upfrontUSD > 0 && (
-                      <span className="pr-rate-upfront">
-                        {' '}
-                        + {formatUnitPrice(rate.upfrontUSD)} 前払い
-                      </span>
-                    )}
-                  </td>
-                  <td className="pr-rate-note">
-                    {noSp && (
-                      <span
-                        className="pr-note-badge"
-                        title="この構成には Savings Plans がありません"
-                      >
-                        SP対象外
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+      {!collapsed &&
+        (filteredRates.length === 0 ? (
+          <div className="pr-group-empty">この条件に一致する単価がありません</div>
+        ) : (
+          <table className="pr-rate-table">
+            <tbody>
+              {filteredRates.map((rate) => {
+                const checked = selection[rate.rateId]?.checked ?? false;
+                const instanceType = rate.attributes.instance_type;
+                const noSp =
+                  model !== 'savings_plan' &&
+                  !!instanceType &&
+                  !!spInstanceTypes &&
+                  !spInstanceTypes.has(instanceType);
+                return (
+                  <tr key={rate.rateId} className={checked ? 'checked' : ''}>
+                    <td className="pr-rate-check">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => onToggleRate(rate.rateId)}
+                        aria-label={rate.label}
+                      />
+                    </td>
+                    <td className="pr-rate-label">{rate.label}</td>
+                    <td className="pr-rate-price">
+                      {formatUnitPrice(rate.priceUSD)}
+                      {formatPricingUnit(rate.unit)}
+                      {rate.upfrontUSD > 0 && (
+                        <span className="pr-rate-upfront">
+                          {' '}
+                          + {formatUnitPrice(rate.upfrontUSD)} 前払い
+                        </span>
+                      )}
+                    </td>
+                    <td className="pr-rate-note">
+                      {noSp && (
+                        <span
+                          className="pr-note-badge"
+                          title="この構成には Savings Plans がありません"
+                        >
+                          SP対象外
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ))}
     </div>
   );
 }

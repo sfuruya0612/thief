@@ -180,3 +180,41 @@ describe('pricingReducer / pruneStaleRates', () => {
     expect(next).toBe(state);
   });
 });
+
+describe('pricingReducer / clearSelection', () => {
+  it('対象リージョンの全サービスの選択を空にする', () => {
+    const state: PricingPersistedState = {
+      activeServices: [...PRICING_SERVICES],
+      collapsed: {},
+      selection: {
+        'ap-northeast-1': {
+          ec2: { 'sku.1': { checked: true, qty: 2 } },
+          rds: { 'sku.2': { checked: true, qty: 1 } },
+        },
+      },
+    };
+    const next = pricingReducer(state, { type: 'clearSelection', region: 'ap-northeast-1' });
+    expect(next.selection['ap-northeast-1']).toEqual({});
+  });
+
+  it('他リージョンの選択には影響しない', () => {
+    const state: PricingPersistedState = {
+      activeServices: [...PRICING_SERVICES],
+      collapsed: {},
+      selection: {
+        'ap-northeast-1': { ec2: { 'sku.1': { checked: true, qty: 2 } } },
+        'us-east-1': { ec2: { 'sku.1': { checked: true, qty: 3 } } },
+      },
+    };
+    const next = pricingReducer(state, { type: 'clearSelection', region: 'ap-northeast-1' });
+    expect(next.selection['us-east-1']).toEqual({
+      ec2: { 'sku.1': { checked: true, qty: 3 } },
+    });
+  });
+
+  it('対象リージョンの選択が元々無くても空オブジェクトになる', () => {
+    const state = initialPricingState();
+    const next = pricingReducer(state, { type: 'clearSelection', region: 'ap-northeast-1' });
+    expect(next.selection['ap-northeast-1']).toEqual({});
+  });
+});

@@ -162,4 +162,37 @@ describe('PricingPanel', () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it('一括削除ボタンでチェック済みの見積もりがすべて解除される', async () => {
+    vi.spyOn(endpoints, 'getPricing').mockImplementation(async (_profile, _region, service) => {
+      if (service === 'ec2') return table('ec2', { rates: [rate()] });
+      return table(service);
+    });
+    renderPanel();
+
+    const ec2Card = await waitFor(() => {
+      const card = cardFor('EC2');
+      expect(within(card).getByText('m5.large / Linux / Shared')).toBeInTheDocument();
+      return card;
+    });
+
+    fireEvent.click(within(ec2Card).getByRole('checkbox'));
+    await waitFor(() => {
+      expect(within(ec2Card).getByText('1/1 選択中')).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText('m5.large / Linux / Shared', { selector: '.pr-estimator-line-label' }),
+    ).toBeInTheDocument();
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: '一括削除' }));
+    confirmSpy.mockRestore();
+
+    await waitFor(() => {
+      expect(within(ec2Card).getByText('0/1 選択中')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText('m5.large / Linux / Shared', { selector: '.pr-estimator-line-label' }),
+    ).not.toBeInTheDocument();
+  });
 });
