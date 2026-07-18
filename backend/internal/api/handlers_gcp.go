@@ -44,7 +44,7 @@ func (s *Server) handleGCPProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	refresh := s.refresh(r)
-	s.serveCached(w, r, cacheKey("gcp-projects"), regionsCacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-projects"), regionsCacheTTL, writeGCPError, func() (any, error) {
 		if !refresh {
 			if projects, _, ok, err := gcp.LoadProjectsFromDisk(dir); err != nil {
 				return nil, err
@@ -62,7 +62,7 @@ func (s *Server) handleGCPCloudRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.serveCached(w, r, cacheKey("gcp-cloudrun", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-cloudrun", projectID), cacheTTL, writeGCPError, func() (any, error) {
 		return gcp.ListCloudRun(r.Context(), projectID)
 	})
 }
@@ -73,7 +73,7 @@ func (s *Server) handleGCPGCS(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.serveCached(w, r, cacheKey("gcp-gcs", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-gcs", projectID), cacheTTL, writeGCPError, func() (any, error) {
 		return gcp.ListBuckets(r.Context(), projectID)
 	})
 }
@@ -86,7 +86,7 @@ func (s *Server) handleGCPGCSObjects(w http.ResponseWriter, r *http.Request) {
 	}
 	bucket := r.PathValue("bucket")
 	prefix := r.URL.Query().Get("prefix")
-	s.serveCached(w, r, cacheKey("gcp-gcs-objects", projectID, bucket, prefix), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-gcs-objects", projectID, bucket, prefix), cacheTTL, writeGCPError, func() (any, error) {
 		return gcp.ListObjects(r.Context(), projectID, bucket, prefix)
 	})
 }
@@ -111,7 +111,7 @@ func (s *Server) handleGCPGCSObjectDownload(w http.ResponseWriter, r *http.Reque
 
 	obj, err := gcp.GetObject(r.Context(), projectID, bucket, objectKey)
 	if err != nil {
-		writeInternalError(w, err.Error())
+		writeGCPError(w, err)
 		return
 	}
 	defer obj.Close()
@@ -157,7 +157,7 @@ func (s *Server) handleGCPGCSObjectPreview(w http.ResponseWriter, r *http.Reques
 
 	obj, err := gcp.GetObject(r.Context(), projectID, bucket, objectKey)
 	if err != nil {
-		writeInternalError(w, err.Error())
+		writeGCPError(w, err)
 		return
 	}
 	defer obj.Close()
@@ -181,7 +181,7 @@ func (s *Server) handleGCPIAM(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.serveCached(w, r, cacheKey("gcp-iam", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-iam", projectID), cacheTTL, writeGCPError, func() (any, error) {
 		return gcp.ListIAMBindings(r.Context(), projectID)
 	})
 }
@@ -192,7 +192,7 @@ func (s *Server) handleGCPServiceAccounts(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	s.serveCached(w, r, cacheKey("gcp-serviceaccounts", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("gcp-serviceaccounts", projectID), cacheTTL, writeGCPError, func() (any, error) {
 		return gcp.ListServiceAccounts(r.Context(), projectID)
 	})
 }
@@ -243,7 +243,7 @@ func (s *Server) handleGCPGCSObjectUpload(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if err := gcp.PutObject(r.Context(), projectID, bucket, objectKey, bytes.NewReader(body), contentType); err != nil {
-			writeInternalError(w, err.Error())
+			writeGCPError(w, err)
 			return
 		}
 		uploaded = true
@@ -274,7 +274,7 @@ func (s *Server) handleGCPLoggingEntries(w http.ResponseWriter, r *http.Request)
 
 	page, err := gcp.ListLogEntries(r.Context(), projectID, q.Get("filter"), q.Get("start"), q.Get("end"), q.Get("page_token"), pageSize)
 	if err != nil {
-		writeInternalError(w, err.Error())
+		writeGCPError(w, err)
 		return
 	}
 	writeJSON(w, page)

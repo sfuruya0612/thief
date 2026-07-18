@@ -158,6 +158,8 @@
   - @sfuruya0612
 - [FIX] AWS SSO 再ログイン後もセッション期限表示がリロードするまで期限切れのまま更新されない不具合を修正する (SSO ログイン API をブラウザ認可完了まで応答をブロックする同期方式に変更し、完了後に profiles の再取得が発火するようにする)
   - @sfuruya0612
+- [FIX] Google Cloud の IAM / Service Account 等で API 未有効化 (SERVICE_DISABLED) や権限不足などの Google API 4xx エラーを一律 500 INTERNAL_ERROR に丸めていた不具合を修正する (API 未有効化は 403 GCP_API_DISABLED として有効化 URL を含むメッセージを返し、その他 4xx は当該ステータスで返すよう GCP 系ハンドラのエラーマッピングを共通化する)
+  - @sfuruya0612
 
 ### misc
 
