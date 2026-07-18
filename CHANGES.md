@@ -146,6 +146,8 @@
   - @sfuruya0612
 - [FIX] Cloud Logging の公式アイコンのファイル名が推測値のままで実パッケージと一致せず展開に失敗する不具合を修正する (Unique Icons に専用アイコンが存在しないため Category Icons の Observability アイコンで代替し、`fetch-gcp-icons` を複数 zip 指定対応にする)
   - @sfuruya0612
+- [FIX] AWS SSO 再ログイン後もセッション期限表示がリロードするまで期限切れのまま更新されない不具合を修正する (SSO ログイン API をブラウザ認可完了まで応答をブロックする同期方式に変更し、完了後に profiles の再取得が発火するようにする)
+  - @sfuruya0612
 
 ### misc
 

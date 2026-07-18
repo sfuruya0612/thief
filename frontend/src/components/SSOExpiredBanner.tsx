@@ -14,15 +14,13 @@ export function SSOExpiredBanner({ profile }: SSOExpiredBannerProps) {
       <Icons.bell size={16} />
       <div className="sso-banner-text">
         <strong>{profile}</strong> の SSO セッションが期限切れです。再ログインしてください。
-        {login.isSuccess && (
+        {login.isPending && (
           <span className="sso-banner-hint">
             {' '}
-            ブラウザでログインを完了させたのち、再取得してください。
+            ブラウザで認可を完了してください。完了すると自動的に反映されます。
           </span>
         )}
-        {login.isError && (
-          <span className="sso-banner-error"> 再ログインの起動に失敗しました。</span>
-        )}
+        {login.isError && <span className="sso-banner-error"> 再ログインに失敗しました。</span>}
       </div>
       <button className="btn sm primary" onClick={() => login.mutate()} disabled={login.isPending}>
         {login.isPending ? 'ログイン中…' : 'SSO 再ログイン'}

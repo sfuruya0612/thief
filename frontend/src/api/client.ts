@@ -65,7 +65,7 @@ async function doFetch(url: URL, init: RequestInit): Promise<Response> {
   return res;
 }
 
-// POST 系共通のレスポンス解釈。202 Accepted (SSO login 起動等) / 204 No Content は
+// POST 系共通のレスポンス解釈。202 Accepted / 204 No Content (SSO login 完了等) は
 // ボディを持たないため undefined を返す。GET には適用しない (apiGet の挙動を変えない)
 async function parsePostResponse<T>(res: Response): Promise<T> {
   if (res.status === 202 || res.status === 204) {
