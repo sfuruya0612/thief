@@ -15,6 +15,7 @@ import {
   useAthenaWorkgroups,
 } from '../api/queries';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { Loading } from '../components/Loading';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { formatBytes } from '../components/tables/columns';
 import { EditorTabsBar } from '../components/query/EditorTabsBar';
@@ -304,9 +305,11 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
       <div className="qe-layout">
         <AthenaSchemaTree
           databases={(databases.data ?? []).map((d) => d.name)}
+          databasesLoading={databases.isLoading}
           selectedDatabase={database}
           onSelectDatabase={(db) => setCtx((c) => ({ ...c, database: db }))}
           tables={tables.data ?? []}
+          tablesLoading={tables.isLoading}
           onInsert={insertText}
         />
 
@@ -482,17 +485,21 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
 // ============================================================
 interface AthenaSchemaTreeProps {
   databases: string[];
+  databasesLoading?: boolean;
   selectedDatabase: string;
   onSelectDatabase: (db: string) => void;
   tables: AthenaTableRow[];
+  tablesLoading?: boolean;
   onInsert: (text: string) => void;
 }
 
 function AthenaSchemaTree({
   databases,
+  databasesLoading,
   selectedDatabase,
   onSelectDatabase,
   tables,
+  tablesLoading,
   onInsert,
 }: AthenaSchemaTreeProps) {
   const [search, setSearch] = useState('');
@@ -511,67 +518,75 @@ function AthenaSchemaTree({
         </>
       }
     >
-      {databases.map((db) => {
-        const selected = db === selectedDatabase;
-        return (
-          <div key={db}>
-            <SchemaTreeRow
-              level={0}
-              label={db}
-              expandable
-              expanded={selected}
-              onClick={() => onSelectDatabase(db)}
-            />
-            {selected &&
-              visibleTables.map((t) => {
-                const expanded = expandedTable === t.name;
-                return (
-                  <div key={t.name}>
-                    <SchemaTreeRow
-                      level={1}
-                      label={t.name}
-                      badge={t.type === 'EXTERNAL_TABLE' ? 'EXTERNAL' : t.type}
-                      expandable
-                      expanded={expanded}
-                      selected={expanded}
-                      onClick={(alt) => {
-                        onInsert(alt ? `SELECT *\nFROM ${t.name}\nLIMIT 100` : t.name);
-                        setExpandedTable(expanded ? null : t.name);
-                      }}
-                    />
-                    {expanded && (
-                      <>
-                        {t.columns.map((c) => (
-                          <SchemaTreeRow
-                            key={c.name}
-                            level={2}
-                            label={c.name}
-                            badge={c.type}
-                            onClick={() => onInsert(c.name)}
-                          />
-                        ))}
-                        {t.partitionKeys.map((c) => (
-                          <SchemaTreeRow
-                            key={`p-${c.name}`}
-                            level={2}
-                            label={c.name}
-                            badge="partition"
-                            partition
-                            onClick={() => onInsert(c.name)}
-                          />
-                        ))}
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            {selected && visibleTables.length === 0 && (
-              <div className="qe-tree-empty">テーブルがありません</div>
-            )}
-          </div>
-        );
-      })}
-      {databases.length === 0 && <div className="qe-tab-empty">データベースがありません</div>}
+      {databasesLoading ? (
+        <Loading />
+      ) : (
+        <>
+          {databases.map((db) => {
+            const selected = db === selectedDatabase;
+            return (
+              <div key={db}>
+                <SchemaTreeRow
+                  level={0}
+                  label={db}
+                  expandable
+                  expanded={selected}
+                  onClick={() => onSelectDatabase(db)}
+                />
+                {selected && tablesLoading && <Loading />}
+                {selected &&
+                  !tablesLoading &&
+                  visibleTables.map((t) => {
+                    const expanded = expandedTable === t.name;
+                    return (
+                      <div key={t.name}>
+                        <SchemaTreeRow
+                          level={1}
+                          label={t.name}
+                          badge={t.type === 'EXTERNAL_TABLE' ? 'EXTERNAL' : t.type}
+                          expandable
+                          expanded={expanded}
+                          selected={expanded}
+                          onClick={(alt) => {
+                            onInsert(alt ? `SELECT *\nFROM ${t.name}\nLIMIT 100` : t.name);
+                            setExpandedTable(expanded ? null : t.name);
+                          }}
+                        />
+                        {expanded && (
+                          <>
+                            {t.columns.map((c) => (
+                              <SchemaTreeRow
+                                key={c.name}
+                                level={2}
+                                label={c.name}
+                                badge={c.type}
+                                onClick={() => onInsert(c.name)}
+                              />
+                            ))}
+                            {t.partitionKeys.map((c) => (
+                              <SchemaTreeRow
+                                key={`p-${c.name}`}
+                                level={2}
+                                label={c.name}
+                                badge="partition"
+                                partition
+                                onClick={() => onInsert(c.name)}
+                              />
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                {selected && !tablesLoading && visibleTables.length === 0 && (
+                  <div className="qe-tree-empty">テーブルがありません</div>
+                )}
+              </div>
+            );
+          })}
+          {databases.length === 0 && <div className="qe-tab-empty">データベースがありません</div>}
+        </>
+      )}
     </SchemaTreePanel>
   );
 }
