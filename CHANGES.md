@@ -144,6 +144,8 @@
   - @sfuruya0612
 - [FIX] gcp サブコマンドで --group-by (-g) フラグが無視されていた不具合を修正する (テーブル出力を printRowsOrGroupBy に共通化)
   - @sfuruya0612
+- [FIX] Cloud Logging の公式アイコンのファイル名が推測値のままで実パッケージと一致せず展開に失敗する不具合を修正する (Unique Icons に専用アイコンが存在しないため Category Icons の Observability アイコンで代替し、`fetch-gcp-icons` を複数 zip 指定対応にする)
+  - @sfuruya0612
 
 ### misc
 
