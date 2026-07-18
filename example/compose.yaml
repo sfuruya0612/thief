@@ -3,13 +3,3 @@ services:
     image: floci/floci:latest
     ports:
       - "4566:4566"
-
-  backend:
-    environment:
-      - THIEF_S3_PATH_STYLE=true
-    volumes:
-      # ホストの実 ~/.aws を、floci プロファイルのみを含むダミー設定に差し替える。
-      # ホストの実アカウントからは意図的に隔離される (example/README.md 参照)。
-      - ./example/aws:/root/.aws:ro
-    depends_on:
-      - floci
