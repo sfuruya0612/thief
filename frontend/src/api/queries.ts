@@ -86,6 +86,7 @@ import {
   getGcpResources,
   getGcsObjectPreview,
   getGcsObjects,
+  getHealth,
   getProfileIdentity,
   getProfiles,
   getRegions,
@@ -117,6 +118,23 @@ export function useProfiles() {
     staleTime: 5 * 60 * 1000,
     refetchInterval: (query) =>
       query.state.status === 'error' ? PROFILE_LIST_ERROR_RETRY_INTERVAL : false,
+  });
+}
+
+// backend 起動待ちの検知用ポーリング間隔。
+const HEALTH_CHECK_RETRY_INTERVAL = 2_000;
+
+// backend の起動待ちを検知する。成功後は staleTime: Infinity かつ refetchInterval が
+// false を返すため再取得されず、起動時の初回疎通のみを対象にする
+// (セッション途中の一時的な network_error では待機表示に戻らない)。
+export function useHealthCheck() {
+  return useQuery({
+    queryKey: ['health'],
+    queryFn: getHealth,
+    retry: false,
+    staleTime: Infinity,
+    refetchInterval: (query) =>
+      query.state.status === 'error' ? HEALTH_CHECK_RETRY_INTERVAL : false,
   });
 }
 

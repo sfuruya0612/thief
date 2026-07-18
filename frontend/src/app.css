@@ -2927,6 +2927,41 @@ td.qe-rt-empty {
   }
 }
 
+/* backend 起動待ちオーバーレイ */
+.connection-waiting {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--bg-1);
+}
+.connection-waiting-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--bg-3);
+  border-top-color: var(--accent);
+  animation: connection-waiting-spin 0.8s linear infinite;
+}
+@keyframes connection-waiting-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.connection-waiting-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.connection-waiting-hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
 /* ============================================================
    ログビューア (CloudWatch Logs / Cloud Logging)
    デザイン Turn 8/9。テーマ変数 (--bg-*/

@@ -58,6 +58,11 @@ export function getProfiles(): Promise<ProfileRaw[]> {
   return apiGetList<ProfileRaw>('/api/aws/profiles');
 }
 
+// backend 起動待ちの疎通確認用。認証やクラウド呼び出しを伴わない。
+export function getHealth(): Promise<{ status: string }> {
+  return apiGet('/api/health');
+}
+
 // 選択されたプロファイル 1 件だけ STS GetCallerIdentity で Account ID を確定する。
 // 一覧取得 (getProfiles) は ~/.aws/config の静的パースのみで SSO ログイン不要だが、
 // role_arn / credential_process 系プロファイルでは Account ID が config に無いため、
