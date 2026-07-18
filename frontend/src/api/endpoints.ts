@@ -19,7 +19,12 @@ import type {
   RegionRaw,
   S3ObjectRaw,
 } from '../types/aws';
-import type { CallerIdentityRaw, ObjectPreviewRaw, ProfileRaw } from '../types/common';
+import type {
+  CallerIdentityRaw,
+  ObjectListEnvelopeRaw,
+  ObjectPreviewRaw,
+  ProfileRaw,
+} from '../types/common';
 import type {
   BQDatasetRaw,
   BQFieldRaw,
@@ -137,13 +142,14 @@ export function getRegions(profile: string): Promise<RegionRaw[]> {
 // ============================================================
 // S3 Objects (Drawer の Objects タブ)
 // ============================================================
-export function getS3Objects(
+// バックエンドは {objects, truncated} エンベロープを返す (1000 件で打ち切られた場合の通知用)。
+export async function getS3Objects(
   profile: string,
   region: string,
   bucket: string,
   prefix?: string,
-): Promise<S3ObjectRaw[]> {
-  return apiGetList<S3ObjectRaw>(
+): Promise<ObjectListEnvelopeRaw<S3ObjectRaw>> {
+  return apiGet<ObjectListEnvelopeRaw<S3ObjectRaw>>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects`,
     { region, prefix },
   );
@@ -633,15 +639,19 @@ export function getGcsBuckets(projectId: string): Promise<GcsBucketRaw[]> {
 }
 
 // GCS バケット内のオブジェクト一覧 (Drawer の Objects タブ相当)
-export function getGcsObjects(
+// バックエンドは {objects, truncated} エンベロープを返す (1000 件で打ち切られた場合の通知用)。
+export async function getGcsObjects(
   projectId: string,
   bucket: string,
   prefix?: string,
-): Promise<GcsObjectRaw[]> {
-  return apiGetList<GcsObjectRaw>(`/api/gcp/gcs/${encodeURIComponent(bucket)}/objects`, {
-    project_id: projectId,
-    prefix,
-  });
+): Promise<ObjectListEnvelopeRaw<GcsObjectRaw>> {
+  return apiGet<ObjectListEnvelopeRaw<GcsObjectRaw>>(
+    `/api/gcp/gcs/${encodeURIComponent(bucket)}/objects`,
+    {
+      project_id: projectId,
+      prefix,
+    },
+  );
 }
 
 export function uploadGcsObject(

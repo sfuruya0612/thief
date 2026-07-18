@@ -112,3 +112,10 @@ export interface ObjectPreviewRow {
   contentType: string;
   size: number;
 }
+
+// S3 / GCS オブジェクト一覧 API の共通レスポンス形状 (件数上限による打ち切りを持つもの)。
+// backend の S3ObjectsResponse / GCSObjectsResponse に対応する。
+export interface ObjectListEnvelopeRaw<T> {
+  objects: T[] | null;
+  truncated: boolean;
+}

@@ -231,10 +231,15 @@ export function useRegions(profile: string) {
 // ============================================================
 // S3 Objects (Drawer の Objects タブ)
 // ============================================================
+// バックエンドは最大 1000 件で打ち切る ({objects, truncated} エンベロープ)。
+// prefix ごとに独立した queryKey で、検索確定 (prefix 変更) のたびに再取得される。
 export function useS3Objects(profile: string, region: string, bucket: string, prefix?: string) {
   return useQuery({
     queryKey: ['aws', 's3-objects', profile, region, bucket, prefix],
-    queryFn: async () => (await getS3Objects(profile, region, bucket, prefix)).map(s3ObjectFromRaw),
+    queryFn: async () => {
+      const { objects, truncated } = await getS3Objects(profile, region, bucket, prefix);
+      return { objects: (objects ?? []).map(s3ObjectFromRaw), truncated };
+    },
     staleTime: 60_000,
     enabled: !!profile && !!bucket,
   });
@@ -766,13 +771,15 @@ export function useGcpResources<TRaw, TRow extends BaseRow>(
   });
 }
 
+// バックエンドは最大 1000 件で打ち切る ({objects, truncated} エンベロープ)。
+// prefix ごとに独立した queryKey で、検索確定 (prefix 変更) のたびに再取得される。
 export function useGcsObjects(projectId: string, bucket: string, prefix?: string) {
   return useQuery({
     queryKey: ['gcp', 'gcs-objects', projectId, bucket, prefix],
-    queryFn: async () =>
-      (await getGcsObjects(projectId, bucket, prefix)).map((raw, idx) =>
-        gcsObjectFromRaw(raw, idx),
-      ),
+    queryFn: async () => {
+      const { objects, truncated } = await getGcsObjects(projectId, bucket, prefix);
+      return { objects: (objects ?? []).map((raw, idx) => gcsObjectFromRaw(raw, idx)), truncated };
+    },
     staleTime: 60_000,
     enabled: !!projectId && !!bucket,
   });

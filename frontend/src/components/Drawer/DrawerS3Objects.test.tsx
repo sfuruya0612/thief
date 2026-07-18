@@ -26,15 +26,18 @@ describe('DrawerS3Objects', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: async () => [
-        {
-          key: 'path/to/file.txt',
-          size: 2048,
-          last_modified: '2026-07-08T00:00:00Z',
-          storage_class: 'STANDARD',
-          etag: 'abc',
-        },
-      ],
+      json: async () => ({
+        objects: [
+          {
+            key: 'path/to/file.txt',
+            size: 2048,
+            last_modified: '2026-07-08T00:00:00Z',
+            storage_class: 'STANDARD',
+            etag: 'abc',
+          },
+        ],
+        truncated: false,
+      }),
     } as Response);
 
     const { container } = renderWithQC(
@@ -54,6 +57,29 @@ describe('DrawerS3Objects', () => {
     expect(dl!.getAttribute('href')).toContain('key=path%2Fto%2Ffile.txt');
   });
 
+  it('取得件数が上限に達した場合は打ち切りの通知を表示する', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        objects: [
+          { key: 'a.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+        ],
+        truncated: true,
+      }),
+    } as Response);
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a.txt');
+    });
+    expect(container.textContent).toContain('上限');
+  });
+
   it('ファイル選択とアップロードボタン押下で multipart POST を送る', async () => {
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     // 1 回目 = 一覧 GET、2 回目 = アップロード POST、3 回目 = 一覧再取得 GET
@@ -62,7 +88,7 @@ describe('DrawerS3Objects', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => [],
+        json: async () => ({ objects: [], truncated: false }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
@@ -74,7 +100,7 @@ describe('DrawerS3Objects', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => [],
+        json: async () => ({ objects: [], truncated: false }),
       } as Response);
 
     const { container } = renderWithQC(
@@ -109,17 +135,38 @@ describe('DrawerS3Objects', () => {
     expect(init.body).toBeInstanceOf(FormData);
   });
 
-  it('prefix 入力では API を再実行せず、取得済みの一覧をフロントエンドでフィルタする', async () => {
+  it('prefix 入力だけでは再取得されず、検索ボタン押下でサーバへ prefix 付きの再取得を要求する', async () => {
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => [
-        { key: 'logs/a.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '1' },
-        { key: 'other/b.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '2' },
-      ],
-    } as Response);
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          objects: [
+            { key: 'logs/a.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+            {
+              key: 'other/b.txt',
+              size: 1,
+              last_modified: '',
+              storage_class: 'STANDARD',
+              etag: '2',
+            },
+          ],
+          truncated: false,
+        }),
+      } as Response)
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          objects: [
+            { key: 'logs/a.txt', size: 1, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+          ],
+          truncated: false,
+        }),
+      } as Response);
 
     const { container } = renderWithQC(
       <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
@@ -134,15 +181,27 @@ describe('DrawerS3Objects', () => {
     const prefixInput = container.querySelector(
       'input[placeholder="prefix (folder/subfolder)…"]',
     ) as HTMLInputElement;
-    // 入力途中 (末尾スラッシュなし) でも前方一致でフィルタされることを確認する
-    fireEvent.change(prefixInput, { target: { value: '/log' } });
+    fireEvent.change(prefixInput, { target: { value: '/logs' } });
 
-    // prefix でフロントエンド側フィルタされ、一覧 GET は再実行されない
+    // 入力だけでは一覧 GET は再実行されない
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const searchBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '検索',
+    ) as HTMLButtonElement;
+    fireEvent.click(searchBtn);
+
+    // 検索ボタン押下でサーバへ prefix 付きの再取得が走る
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    const searchCall = fetchMock.mock.calls[1];
+    expect(searchCall[0]).toContain('prefix=logs');
+
     await waitFor(() => {
       expect(container.textContent).not.toContain('other/b.txt');
     });
     expect(container.textContent).toContain('logs/a.txt');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('prefix を入力してアップロードすると key に prefix が付与される', async () => {
@@ -152,7 +211,7 @@ describe('DrawerS3Objects', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => [],
+        json: async () => ({ objects: [], truncated: false }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
@@ -164,7 +223,7 @@ describe('DrawerS3Objects', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => [],
+        json: async () => ({ objects: [], truncated: false }),
       } as Response);
 
     const { container } = renderWithQC(
@@ -205,17 +264,20 @@ describe('DrawerS3Objects', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: async () => [
-        { key: 'ok.log', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
-        { key: 'image.png', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '2' },
-        {
-          key: 'huge.txt',
-          size: 5 * 1024 * 1024,
-          last_modified: '',
-          storage_class: 'STANDARD',
-          etag: '3',
-        },
-      ],
+      json: async () => ({
+        objects: [
+          { key: 'ok.log', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+          { key: 'image.png', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '2' },
+          {
+            key: 'huge.txt',
+            size: 5 * 1024 * 1024,
+            last_modified: '',
+            storage_class: 'STANDARD',
+            etag: '3',
+          },
+        ],
+        truncated: false,
+      }),
     } as Response);
 
     const { container } = renderWithQC(
@@ -254,9 +316,18 @@ describe('DrawerS3Objects', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => [
-          { key: 'notes.txt', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
-        ],
+        json: async () => ({
+          objects: [
+            {
+              key: 'notes.txt',
+              size: 100,
+              last_modified: '',
+              storage_class: 'STANDARD',
+              etag: '1',
+            },
+          ],
+          truncated: false,
+        }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
@@ -294,9 +365,18 @@ describe('DrawerS3Objects', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => [
-          { key: 'notes.txt', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
-        ],
+        json: async () => ({
+          objects: [
+            {
+              key: 'notes.txt',
+              size: 100,
+              last_modified: '',
+              storage_class: 'STANDARD',
+              etag: '1',
+            },
+          ],
+          truncated: false,
+        }),
       } as Response)
       .mockResolvedValueOnce({
         ok: true,

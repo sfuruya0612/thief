@@ -57,27 +57,34 @@ func ListBuckets(ctx context.Context, projectID string) ([]BucketInfo, error) {
 	return buckets, nil
 }
 
+// maxGCSListObjects は ListObjects が返すオブジェクト件数の上限。S3 の
+// maxS3ListObjects と同じ考え方で、蓄積件数がこれに達した時点で列挙を打ち切る。
+const maxGCSListObjects = 1000
+
 // ListObjects は指定バケット内のオブジェクトを prefix 絞り込みで列挙する。
-func ListObjects(ctx context.Context, projectID, bucket, prefix string) ([]ObjectInfo, error) {
+// 蓄積件数が maxGCSListObjects に達した時点で打ち切り、truncated に true を返す。
+func ListObjects(ctx context.Context, projectID, bucket, prefix string) (objects []ObjectInfo, truncated bool, err error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create storage client: %w", err)
+		return nil, false, fmt.Errorf("create storage client: %w", err)
 	}
 	defer client.Close()
 
-	var objects []ObjectInfo
 	it := client.Bucket(bucket).UserProject(projectID).Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
+		if len(objects) >= maxGCSListObjects {
+			return objects, true, nil
+		}
 		attrs, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("iterate objects in %s: %w", bucket, err)
+			return nil, false, fmt.Errorf("iterate objects in %s: %w", bucket, err)
 		}
 		objects = append(objects, objectFromAttrs(attrs))
 	}
-	return objects, nil
+	return objects, false, nil
 }
 
 // ObjectReader は GCS オブジェクトのダウンロード用リーダーとメタデータを保持する。

@@ -356,7 +356,7 @@ func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
 	if err != nil {
 		return err
 	}
-	objects, err := gcp.ListObjects(context.Background(), projectID, bucket, prefix)
+	objects, truncated, err := gcp.ListObjects(context.Background(), projectID, bucket, prefix)
 	if err != nil {
 		return err
 	}
@@ -372,5 +372,11 @@ func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
 		{Header: "StorageClass"},
 		{Header: "Updated"},
 	}
-	return printRowsOrGroupBy(cfg, cols, rows)
+	if err := printRowsOrGroupBy(cfg, cols, rows); err != nil {
+		return err
+	}
+	if truncated {
+		fmt.Fprintln(cmd.ErrOrStderr(), "warning: object list truncated, narrow down with --prefix")
+	}
+	return nil
 }

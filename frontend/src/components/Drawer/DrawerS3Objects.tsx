@@ -17,14 +17,13 @@ export interface DrawerS3ObjectsProps {
 // DataTable が要求する id/state を key から射影した行型 (S3 オブジェクトに state はないため空文字)
 type S3ObjectTableRow = S3ObjectRow & { id: string; state: string };
 
-const keyOf = (r: S3ObjectRow): string => r.key;
 const toTableRow = (r: S3ObjectRow): S3ObjectTableRow => ({ ...r, id: r.key, state: '' });
 const baseColumns = s3ObjectColumns as ColumnDef<S3ObjectTableRow>[];
 const previewKeyOf = (r: S3ObjectTableRow): string => r.key;
 const sizeOf = (r: S3ObjectTableRow): number => r.size;
 
 export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProps) {
-  const { data, isLoading, error } = useS3Objects(profile, region, bucket);
+  const useObjects = (prefix: string) => useS3Objects(profile, region, bucket, prefix);
   const useUpload = (uploadPrefix: string | undefined) =>
     useS3Upload(profile, region, bucket, uploadPrefix);
   const usePreview = (key: string | undefined) => useS3ObjectPreview(profile, region, bucket, key);
@@ -35,10 +34,7 @@ export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProp
 
   return (
     <DrawerObjectBrowser
-      data={data}
-      isLoading={isLoading}
-      error={error}
-      keyOf={keyOf}
+      useObjects={useObjects}
       toTableRow={toTableRow}
       baseColumns={baseColumns}
       downloadHref={downloadHref}
