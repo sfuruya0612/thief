@@ -25,12 +25,19 @@ func (r S3ObjectResource) ResourceName() string  { return r.Key }
 func (r S3ObjectResource) ResourceState() string { return "" }
 func (r S3ObjectResource) ServiceName() string   { return "s3-objects" }
 
+// maxS3ListObjects は ListS3Objects が返すオブジェクト件数の上限。オブジェクトが膨大な
+// バケットで取得に時間がかかりレスポンスが肥大化するのを避けるため、蓄積件数がこれに
+// 達した時点でページネーションを打ち切る。ページサイズ (ListObjectsV2 の既定 1000 件/ページ)
+// に依存せず、オブジェクト単位でカウントする。
+const maxS3ListObjects = 1000
+
 // ListS3Objects は指定バケット (と prefix) のオブジェクト一覧を返す。
 // バケットのリージョンを GetBucketLocation で解決してから ListObjectsV2 を呼ぶ。
-func ListS3Objects(ctx context.Context, profile, region, bucket, prefix string) ([]S3ObjectResource, error) {
+// 蓄積件数が maxS3ListObjects に達した時点で打ち切り、truncated に true を返す。
+func ListS3Objects(ctx context.Context, profile, region, bucket, prefix string) (resources []S3ObjectResource, truncated bool, err error) {
 	client, err := newS3ClientForBucket(ctx, profile, region, bucket)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	input := &s3.ListObjectsV2Input{Bucket: aws.String(bucket)}
@@ -38,18 +45,36 @@ func ListS3Objects(ctx context.Context, profile, region, bucket, prefix string) 
 		input.Prefix = aws.String(prefix)
 	}
 
-	var resources []S3ObjectResource
 	paginator := s3.NewListObjectsV2Paginator(client, input)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list s3 objects in %s: %w", bucket, err)
+			return nil, false, fmt.Errorf("list s3 objects in %s: %w", bucket, err)
 		}
-		for _, obj := range page.Contents {
-			resources = append(resources, s3ObjectFromSDK(obj))
+		var pageTruncated bool
+		resources, pageTruncated = appendS3ObjectsUpToLimit(resources, page.Contents, maxS3ListObjects)
+		if pageTruncated {
+			return resources, true, nil
 		}
 	}
-	return resources, nil
+	return resources, false, nil
+}
+
+// appendS3ObjectsUpToLimit は objs を resources に変換しながら追加し、蓄積件数が max に
+// 達した時点で追加を止める。ページの途中でも打ち切るため、ListObjectsV2 の既定ページサイズに
+// 依存せずオブジェクト単位で上限を判定できる。
+func appendS3ObjectsUpToLimit(
+	resources []S3ObjectResource,
+	objs []s3types.Object,
+	max int,
+) (updated []S3ObjectResource, truncated bool) {
+	for _, obj := range objs {
+		if len(resources) >= max {
+			return resources, true
+		}
+		resources = append(resources, s3ObjectFromSDK(obj))
+	}
+	return resources, false
 }
 
 // GetS3Object は指定オブジェクトを取得する。Body はストリーミングで返す。

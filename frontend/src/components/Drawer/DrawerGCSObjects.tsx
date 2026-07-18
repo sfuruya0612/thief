@@ -17,14 +17,13 @@ export interface DrawerGCSObjectsProps {
 // DataTable が要求する id/state を GcsObjectRow から射影した行型 (GCS オブジェクトに state はないため空文字)
 type GcsObjectTableRow = GcsObjectRow & { state: string };
 
-const keyOf = (r: GcsObjectRow): string => r.name;
 const toTableRow = (r: GcsObjectRow): GcsObjectTableRow => ({ ...r, state: '' });
 const baseColumns = gcsObjectColumns as ColumnDef<GcsObjectTableRow>[];
 const previewKeyOf = (r: GcsObjectTableRow): string => r.name;
 const sizeOf = (r: GcsObjectTableRow): number => r.size;
 
 export function DrawerGCSObjects({ projectId, bucket }: DrawerGCSObjectsProps) {
-  const { data, isLoading, error } = useGcsObjects(projectId, bucket);
+  const useObjects = (prefix: string) => useGcsObjects(projectId, bucket, prefix);
   const useUpload = (uploadPrefix: string | undefined) =>
     useGcsUpload(projectId, bucket, uploadPrefix);
   const usePreview = (key: string | undefined) => useGcsObjectPreview(projectId, bucket, key);
@@ -35,10 +34,7 @@ export function DrawerGCSObjects({ projectId, bucket }: DrawerGCSObjectsProps) {
 
   return (
     <DrawerObjectBrowser
-      data={data}
-      isLoading={isLoading}
-      error={error}
-      keyOf={keyOf}
+      useObjects={useObjects}
       toTableRow={toTableRow}
       baseColumns={baseColumns}
       downloadHref={downloadHref}

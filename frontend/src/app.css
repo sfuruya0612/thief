@@ -2042,11 +2042,20 @@ table.dt.cost-cross-table thead th:nth-child(2) {
    ============================================================ */
 .s3-prefix-input {
   display: flex;
+  gap: 8px;
   margin-bottom: 8px;
   width: 100%;
 }
 .s3-prefix-input input {
   width: 100%;
+}
+.s3-truncated-notice {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  color: var(--warn);
+  font-size: 12px;
 }
 .s3-upload {
   display: flex;

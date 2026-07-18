@@ -78,6 +78,13 @@ func (s *Server) handleGCPGCS(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GCSObjectsResponse は handleGCPGCSObjects のレスポンスエンベロープ。
+// Truncated は maxGCSListObjects で打ち切られたことを示す。
+type GCSObjectsResponse struct {
+	Objects   []gcp.ObjectInfo `json:"objects"`
+	Truncated bool             `json:"truncated"`
+}
+
 // handleGCPGCSObjects は指定バケット配下のオブジェクトを prefix 絞り込みで返す。
 func (s *Server) handleGCPGCSObjects(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := s.gcpProjectIDFromQuery(w, r)
@@ -87,7 +94,11 @@ func (s *Server) handleGCPGCSObjects(w http.ResponseWriter, r *http.Request) {
 	bucket := r.PathValue("bucket")
 	prefix := r.URL.Query().Get("prefix")
 	s.serveCached(w, r, cacheKey("gcp-gcs-objects", projectID, bucket, prefix), cacheTTL, writeGCPError, func() (any, error) {
-		return gcp.ListObjects(r.Context(), projectID, bucket, prefix)
+		objects, truncated, err := gcp.ListObjects(r.Context(), projectID, bucket, prefix)
+		if err != nil {
+			return nil, err
+		}
+		return GCSObjectsResponse{Objects: objects, Truncated: truncated}, nil
 	})
 }
 

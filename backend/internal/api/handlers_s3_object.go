@@ -12,6 +12,13 @@ import (
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 )
 
+// S3ObjectsResponse は handleS3Objects のレスポンスエンベロープ。
+// Truncated は maxS3ListObjects で打ち切られたことを示す。
+type S3ObjectsResponse struct {
+	Objects   []awsinternal.S3ObjectResource `json:"objects"`
+	Truncated bool                           `json:"truncated"`
+}
+
 // handleS3Objects は指定バケット (と prefix) のオブジェクト一覧を返す。
 // キャッシュキーには prefix も含める (prefix ごとに独立キャッシュ)。
 func (s *Server) handleS3Objects(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +31,11 @@ func (s *Server) handleS3Objects(w http.ResponseWriter, r *http.Request) {
 	prefix := r.URL.Query().Get("prefix")
 
 	s.serveCached(w, r, cacheKey("s3-objects", profile, region, bucket, prefix), cacheTTL, writeAWSError, func() (any, error) {
-		return awsinternal.ListS3Objects(r.Context(), profile, region, bucket, prefix)
+		objects, truncated, err := awsinternal.ListS3Objects(r.Context(), profile, region, bucket, prefix)
+		if err != nil {
+			return nil, err
+		}
+		return S3ObjectsResponse{Objects: objects, Truncated: truncated}, nil
 	})
 }
 

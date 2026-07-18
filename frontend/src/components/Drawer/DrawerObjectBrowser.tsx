@@ -1,6 +1,8 @@
 // オブジェクトストレージ (S3 / GCS) の Drawer タブ共通実装。オブジェクト一覧 + prefix
-// フィルタ + アップロード + ダウンロードリンクをまとめて描画する。ストレージ差分
+// 検索 + アップロード + ダウンロードリンクをまとめて描画する。ストレージ差分
 // (取得結果・アップロードフック・キー項目・列定義・ダウンロード URL) は props で注入する。
+// 一覧取得は backend 側で最大 1000 件に打ち切られるため、prefix 絞り込みは
+// フロントエンドでのフィルタではなく検索ボタン押下でサーバへ再取得を要求する。
 import { useMemo, useRef, useState } from 'react';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { ColumnDef } from '../tables/columns';
@@ -10,10 +12,11 @@ import { Loading } from '../Loading';
 import { ApiError } from '../../types/common';
 import { isPreviewEligible, previewDisabledReason } from '../../lib/objectPreview';
 
-// stripLeadingSlashes は一覧の前方一致フィルタに使う prefix の先頭スラッシュのみを
-// 取り除く。末尾は加工しない (入力途中の "log" でも "logs/..." に前方一致させるため)。
-function stripLeadingSlashes(prefix: string): string {
-  return prefix.replace(/^\/+/, '');
+// normalizeSearchPrefix は検索確定時に送る prefix を正規化する。先頭スラッシュのみを
+// 取り除く (末尾は加工しない。"logs" でも "logs-2024/..." に前方一致させないためではなく、
+// バックエンドの前方一致仕様どおり素通しする)。
+function normalizeSearchPrefix(prefix: string): string {
+  return prefix.trim().replace(/^\/+/, '');
 }
 
 // normalizeUploadPrefix はアップロード先フォルダを確定するための prefix を正規化する。
@@ -40,12 +43,18 @@ export interface ObjectPreviewQuery {
   error: unknown;
 }
 
-export interface DrawerObjectBrowserProps<TObject, TRow extends { id: string }> {
-  data: TObject[] | undefined;
+// ObjectListQuery は useS3Objects / useGcsObjects の戻り値のうち、DrawerObjectBrowser が
+// 参照するフィールドだけを表す。truncated は backend の 1000 件上限による打ち切りを示す。
+export interface ObjectListQuery<TObject> {
+  data: { objects: TObject[]; truncated: boolean } | undefined;
   isLoading: boolean;
   error: unknown;
-  // keyOf は prefix 前方一致フィルタに使うオブジェクトキーを取り出す。
-  keyOf: (obj: TObject) => string;
+}
+
+export interface DrawerObjectBrowserProps<TObject, TRow extends { id: string }> {
+  // useObjects は検索確定済みの prefix (未検索時は空文字) を受け取るカスタムフック。
+  // prefix が変わるとコンポーネント側の queryKey が変わり、サーバへ再取得される。
+  useObjects: (prefix: string) => ObjectListQuery<TObject>;
   // toTableRow は DataTable が要求する id/state を持つ行へ射影する。
   toTableRow: (obj: TObject) => TRow;
   baseColumns: ColumnDef<TRow>[];
@@ -62,10 +71,7 @@ export interface DrawerObjectBrowserProps<TObject, TRow extends { id: string }> 
 }
 
 export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
-  data,
-  isLoading,
-  error,
-  keyOf,
+  useObjects,
   toTableRow,
   baseColumns,
   downloadHref,
@@ -75,7 +81,8 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   usePreview,
 }: DrawerObjectBrowserProps<TObject, TRow>) {
   const [prefixInput, setPrefixInput] = useState('');
-  const filterPrefix = stripLeadingSlashes(prefixInput);
+  const [committedPrefix, setCommittedPrefix] = useState('');
+  const { data, isLoading, error } = useObjects(committedPrefix);
   const uploadPrefix = normalizeUploadPrefix(prefixInput);
   const upload = useUpload(uploadPrefix || undefined);
   // プレビュー編集の保存専用インスタンス。フィルタ入力由来の uploadPrefix を
@@ -88,12 +95,9 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   const previewKey = previewRow ? previewKeyOf(previewRow) : undefined;
   const preview = usePreview(previewKey);
 
-  // 一覧は常に全件取得済みのものを受け取り、prefix フィルタはフロントエンド側で行う
-  // (入力の都度 API を再実行しないようにするため)。
-  const rows = useMemo<TRow[]>(
-    () => (data ?? []).filter((o) => keyOf(o).startsWith(filterPrefix)).map(toTableRow),
-    [data, filterPrefix, keyOf, toTableRow],
-  );
+  const runSearch = () => setCommittedPrefix(normalizeSearchPrefix(prefixInput));
+
+  const rows = useMemo<TRow[]>(() => (data?.objects ?? []).map(toTableRow), [data, toTableRow]);
 
   // 共通列に Preview / Download の Actions 列を末尾に追加する
   const columns = useMemo<ColumnDef<TRow>[]>(
@@ -176,8 +180,21 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
           placeholder="prefix (folder/subfolder)…"
           value={prefixInput}
           onChange={(e) => setPrefixInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') runSearch();
+          }}
         />
+        <button className="btn sm" onClick={runSearch}>
+          検索
+        </button>
       </span>
+
+      {data?.truncated && (
+        <div className="s3-truncated-notice">
+          取得件数が上限 (1000 件) に達したため一部のみ表示しています。prefix
+          で絞り込んで再検索してください。
+        </div>
+      )}
 
       <div className="s3-upload">
         <label
