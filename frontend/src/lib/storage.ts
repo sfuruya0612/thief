@@ -17,6 +17,8 @@ export interface PersistedState {
   // Athena / CloudWatch Logs / BigQuery / Cloud Logging の左パネル (.qe-schema / .lv-tree) 幅
   resourcePanelWidth?: number;
   gcpProject?: string;
+  // Cloud Logging の SUMMARY 列に先頭表示するフィールドキー (選択順 = 表示順)
+  gcpLogSummaryFields?: string[];
   // セッションタブ (開いている複数セッション + アクティブ)
   awsSessions?: SessionTabsState;
   gcpSessions?: SessionTabsState;

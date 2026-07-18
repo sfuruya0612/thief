@@ -11,13 +11,16 @@ import { LogFieldRow, LogList, SeverityBadge } from '../../components/logviewer/
 import { LogToolbarActions } from '../../components/logviewer/LogToolbarActions';
 import { LogTree } from '../../components/logviewer/LogTree';
 import { LogViewerShell } from '../../components/logviewer/LogViewerShell';
+import { SummaryFieldPicker } from '../../components/logviewer/SummaryFieldPicker';
 import { useCopy } from '../../components/logviewer/useCopy';
 import { useLiveTail } from '../../components/logviewer/useLiveTail';
 import { formatLogClock, jsonFieldsOf, rowsToCsv, rowsToJson } from '../../lib/logFormat';
 import type { LogTreeNode } from '../../lib/logGroupTree';
 import { buildHistogram, rangeFromItems } from '../../lib/logHistogram';
+import { availableSummaryFieldKeys, buildSummaryText } from '../../lib/logSummaryFields';
 import { type PresetOption, presetToRange } from '../../lib/logTimeRange';
 import { logEntryFromRaw, logSeverityLevel } from '../../lib/normalizeGcp';
+import { loadPersisted, savePersisted } from '../../lib/storage';
 import type { LogEntryRaw, LogEntryRow } from '../../types/gcp';
 
 export interface CloudLoggingViewProps {
@@ -123,10 +126,26 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
   const [runToken, setRunToken] = useState(0);
   const [live, setLive] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [summaryFields, setSummaryFields] = useState<string[]>(
+    () => loadPersisted().gcpLogSummaryFields ?? [],
+  );
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const jsonCopy = useCopy();
   const csvCopy = useCopy();
+
+  const toggleSummaryField = useCallback((key: string) => {
+    setSummaryFields((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      savePersisted({ ...loadPersisted(), gcpLogSummaryFields: next });
+      return next;
+    });
+  }, []);
+
+  const clearSummaryFields = useCallback(() => {
+    setSummaryFields([]);
+    savePersisted({ ...loadPersisted(), gcpLogSummaryFields: [] });
+  }, []);
 
   const toggleType = useCallback((value: string) => {
     setSelected((prev) => {
@@ -203,6 +222,8 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
   }, [staticQuery.data]);
 
   const rows = live ? liveTail.lines : staticRows;
+
+  const availableFields = useMemo(() => availableSummaryFieldKeys(rows), [rows]);
 
   const histItems = useMemo(
     () =>
@@ -432,8 +453,16 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
             />
           )}
           messageHeader="SUMMARY"
-          getMessage={(r) => r.payload}
+          getMessage={(r) => buildSummaryText(r, summaryFields)}
           renderDetail={renderDetail}
+          headerExtra={
+            <SummaryFieldPicker
+              available={availableFields}
+              selected={summaryFields}
+              onToggle={toggleSummaryField}
+              onClear={clearSummaryFields}
+            />
+          }
           copyLabel={jsonCopy.copied ? 'コピー済み' : 'JSONコピー'}
           onCopy={exportJson}
           footer={footer}

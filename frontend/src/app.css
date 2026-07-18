@@ -3334,6 +3334,108 @@ td.qe-rt-empty {
   margin-left: auto;
   flex: none;
 }
+/* ---------- SUMMARY フィールド選択ポップオーバー ---------- */
+.lv-field-picker {
+  position: relative;
+  display: inline-flex;
+  margin-right: 8px;
+}
+.lv-field-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.lv-field-picker-head {
+  padding: 8px 12px 6px;
+  color: var(--text-4);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lv-field-picker-selected {
+  display: flex;
+  flex-direction: column;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line-1);
+}
+.lv-field-picker-candidates {
+  display: flex;
+  flex-direction: column;
+  max-height: 200px;
+  padding: 4px;
+  overflow: auto;
+}
+.lv-field-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+.lv-field-picker-item:hover {
+  background: var(--bg-2);
+}
+.lv-field-picker-item.selected {
+  cursor: default;
+}
+.lv-field-picker-order {
+  flex: none;
+  color: var(--text-4);
+  font-size: 10px;
+}
+.lv-field-picker-key {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.lv-field-picker-remove {
+  flex: none;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-4);
+  font-size: 12px;
+  cursor: pointer;
+}
+.lv-field-picker-remove:hover {
+  background: var(--bg-3);
+  color: var(--err);
+}
+.lv-field-picker-empty {
+  padding: 10px 12px;
+  color: var(--text-4);
+  font-size: 11.5px;
+}
+.lv-field-picker-clear {
+  padding: 7px 12px;
+  border: 0;
+  border-top: 1px solid var(--line-1);
+  background: var(--bg-1);
+  color: var(--info);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.lv-field-picker-clear:hover {
+  background: var(--bg-2);
+}
 .lv-list-body {
   flex: 1;
   overflow: auto;
@@ -3370,9 +3472,10 @@ td.qe-rt-empty {
 .lv-row-msg {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-x: auto;
+  overflow-y: hidden;
   white-space: nowrap;
+  scrollbar-width: thin;
 }
 .lv-row-msg.tint-err {
   color: #dc2626;
