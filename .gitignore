@@ -31,6 +31,11 @@ go.work.sum
 # Mac OS X Finder directory files
 .DS_Store
 
+# example の floci 用ダミー HOME。backend を HOME=example/home で起動すると Go 等の
+# ツールがビルドキャッシュ/テレメトリを書き込むため、追跡対象の .aws 以外を無視する。
+/example/home/*
+!/example/home/.aws
+
 # issue 管理ディレクトリ (git 管理対象外)
 issues/
 
