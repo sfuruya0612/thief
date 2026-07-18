@@ -19,7 +19,7 @@ import (
 // 無制限にすると Cloud Run Admin API の QPS クオータに抵触しうるため上限を設ける
 // (issue 0043: 逐次実行が支配的だったための並列化。実測ではロケーション 43 件の
 // 逐次実行が全体 44.9 秒中 43.4 秒を占めていた)。
-const listJobsConcurrency = 15
+const listJobsConcurrency = 30
 
 // RunResourceInfo は Cloud Run のサービス / ジョブを 1 レコードに正規化した表現。
 type RunResourceInfo struct {

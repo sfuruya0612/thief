@@ -14,6 +14,10 @@
   - @sfuruya0612
 - [UPDATE] Cloud Logging の UI を、左のリソースタイプ別ツリー、severity 積み上げヒストグラム、行クリックで JSON を展開できるログ一覧を備えたログビューアに刷新する (CloudWatch Logs と共通のコンポーネントを使う)
   - @sfuruya0612
+- [UPDATE] BigQuery のデータセット・テーブル一覧取得で、各データセット・テーブルのメタデータ取得を逐次実行から並列実行 (並列数 30) に変更する
+  - @sfuruya0612
+- [UPDATE] Cloud Run の ListJobs 並列実行数を 15 から 30 に引き上げる
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする

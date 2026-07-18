@@ -9,8 +9,13 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 )
+
+// metadataConcurrency はデータセット・テーブルごとの Metadata 取得を同時実行する上限数。
+// 無制限にすると BigQuery API のクォータに抵触しうるため上限を設ける。
+const metadataConcurrency = 30
 
 // Client wraps the BigQuery SDK client.
 type Client struct {
@@ -58,8 +63,10 @@ type FieldInfo struct {
 }
 
 // ListDatasets returns metadata for all datasets in the project.
+// データセット ID の列挙は逐次だが、各データセットの Metadata 取得は
+// 互いに独立しているため goroutine に分けて並列実行する。
 func (c *Client) ListDatasets(ctx context.Context) ([]DatasetInfo, error) {
-	var datasets []DatasetInfo
+	var datasetIDs []string
 	it := c.bq.Datasets(ctx)
 	for {
 		ds, err := it.Next()
@@ -69,24 +76,39 @@ func (c *Client) ListDatasets(ctx context.Context) ([]DatasetInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("iterate datasets: %w", err)
 		}
-		meta, err := c.bq.Dataset(ds.DatasetID).Metadata(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("get dataset metadata for %s: %w", ds.DatasetID, err)
-		}
-		datasets = append(datasets, DatasetInfo{
-			DatasetID:        ds.DatasetID,
-			Location:         meta.Location,
-			CreationTime:     meta.CreationTime.Format(time.RFC3339),
-			LastModifiedTime: meta.LastModifiedTime.Format(time.RFC3339),
-			Description:      meta.Description,
+		datasetIDs = append(datasetIDs, ds.DatasetID)
+	}
+
+	datasets := make([]DatasetInfo, len(datasetIDs))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(metadataConcurrency)
+	for i, datasetID := range datasetIDs {
+		g.Go(func() error {
+			meta, err := c.bq.Dataset(datasetID).Metadata(gctx)
+			if err != nil {
+				return fmt.Errorf("get dataset metadata for %s: %w", datasetID, err)
+			}
+			datasets[i] = DatasetInfo{
+				DatasetID:        datasetID,
+				Location:         meta.Location,
+				CreationTime:     meta.CreationTime.Format(time.RFC3339),
+				LastModifiedTime: meta.LastModifiedTime.Format(time.RFC3339),
+				Description:      meta.Description,
+			}
+			return nil
 		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return datasets, nil
 }
 
 // ListTables returns metadata for all tables in the given dataset.
+// テーブル ID の列挙は逐次だが、各テーブルの Metadata 取得は
+// 互いに独立しているため goroutine に分けて並列実行する。
 func (c *Client) ListTables(ctx context.Context, datasetID string) ([]TableInfo, error) {
-	var tables []TableInfo
+	var tableIDs []string
 	it := c.bq.Dataset(datasetID).Tables(ctx)
 	for {
 		t, err := it.Next()
@@ -96,18 +118,31 @@ func (c *Client) ListTables(ctx context.Context, datasetID string) ([]TableInfo,
 		if err != nil {
 			return nil, fmt.Errorf("iterate tables in %s: %w", datasetID, err)
 		}
-		meta, err := c.bq.Dataset(datasetID).Table(t.TableID).Metadata(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("get table metadata for %s.%s: %w", datasetID, t.TableID, err)
-		}
-		tables = append(tables, TableInfo{
-			TableID:          t.TableID,
-			Type:             string(meta.Type),
-			CreationTime:     meta.CreationTime.Format(time.RFC3339),
-			LastModifiedTime: meta.LastModifiedTime.Format(time.RFC3339),
-			NumRows:          meta.NumRows,
-			NumBytes:         meta.NumBytes,
+		tableIDs = append(tableIDs, t.TableID)
+	}
+
+	tables := make([]TableInfo, len(tableIDs))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(metadataConcurrency)
+	for i, tableID := range tableIDs {
+		g.Go(func() error {
+			meta, err := c.bq.Dataset(datasetID).Table(tableID).Metadata(gctx)
+			if err != nil {
+				return fmt.Errorf("get table metadata for %s.%s: %w", datasetID, tableID, err)
+			}
+			tables[i] = TableInfo{
+				TableID:          tableID,
+				Type:             string(meta.Type),
+				CreationTime:     meta.CreationTime.Format(time.RFC3339),
+				LastModifiedTime: meta.LastModifiedTime.Format(time.RFC3339),
+				NumRows:          meta.NumRows,
+				NumBytes:         meta.NumBytes,
+			}
+			return nil
 		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return tables, nil
 }
