@@ -67,7 +67,8 @@ func (s *Server) handleS3ObjectDownload(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleS3ObjectPreview は S3 オブジェクトの中身をプレビュー用 JSON エンベロープで返す。
-// csv/txt/json のみ、5 MB 未満のオブジェクトのみを対象とする。
+// 既知のバイナリ拡張子を除く 5 MB 未満のオブジェクトを対象とし、中身がテキストでなければ
+// buildPreviewResponse が弾く。
 func (s *Server) handleS3ObjectPreview(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	bucket := r.PathValue("bucket")

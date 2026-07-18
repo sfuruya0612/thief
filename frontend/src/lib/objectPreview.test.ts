@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fileExtension, isPreviewEligible, previewDisabledReason } from './objectPreview';
+import {
+  fileExtension,
+  isBinaryExtension,
+  isPreviewEligible,
+  previewDisabledReason,
+} from './objectPreview';
 
 describe('fileExtension', () => {
   it('末尾の拡張子を小文字で取り出す', () => {
@@ -24,27 +29,43 @@ describe('fileExtension', () => {
   });
 });
 
+describe('isBinaryExtension', () => {
+  it('既知のバイナリ拡張子は true', () => {
+    expect(isBinaryExtension('image.png')).toBe(true);
+    expect(isBinaryExtension('doc.PDF')).toBe(true);
+    expect(isBinaryExtension('archive.zip')).toBe(true);
+  });
+
+  it('テキスト系拡張子・拡張子なしは false', () => {
+    expect(isBinaryExtension('app.log')).toBe(false);
+    expect(isBinaryExtension('config.yaml')).toBe(false);
+    expect(isBinaryExtension('README')).toBe(false);
+    expect(isBinaryExtension('data.csv')).toBe(false);
+  });
+});
+
 describe('isPreviewEligible', () => {
-  it('csv / txt / json かつ 5 MB 未満なら true', () => {
+  it('バイナリ拡張子でなく 5 MB 未満なら true', () => {
     expect(isPreviewEligible('data.csv', 100)).toBe(true);
-    expect(isPreviewEligible('data.txt', 5 * 1024 * 1024 - 1)).toBe(true);
+    expect(isPreviewEligible('app.log', 5 * 1024 * 1024 - 1)).toBe(true);
+    expect(isPreviewEligible('Dockerfile', 100)).toBe(true);
   });
 
   it('5 MB ちょうどは false', () => {
     expect(isPreviewEligible('data.json', 5 * 1024 * 1024)).toBe(false);
   });
 
-  it('対象外拡張子は false', () => {
+  it('バイナリ拡張子は false', () => {
     expect(isPreviewEligible('image.png', 100)).toBe(false);
   });
 });
 
 describe('previewDisabledReason', () => {
-  it('対象外拡張子の理由を返す', () => {
-    expect(previewDisabledReason('image.png', 100)).toBe('csv / txt / json のみプレビューできます');
+  it('バイナリ拡張子の理由を返す', () => {
+    expect(previewDisabledReason('image.png', 100)).toBe('バイナリファイルはプレビューできません');
   });
 
-  it('サイズ超過の理由を返す (拡張子は対象内)', () => {
+  it('サイズ超過の理由を返す (バイナリ拡張子ではない)', () => {
     expect(previewDisabledReason('data.csv', 5 * 1024 * 1024)).toBe(
       '5 MB 以上のオブジェクトはプレビューできません',
     );
@@ -52,5 +73,6 @@ describe('previewDisabledReason', () => {
 
   it('プレビュー可能なら空文字', () => {
     expect(previewDisabledReason('data.csv', 100)).toBe('');
+    expect(previewDisabledReason('app.log', 100)).toBe('');
   });
 });

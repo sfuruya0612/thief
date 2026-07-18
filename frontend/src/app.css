@@ -884,6 +884,14 @@ textarea {
   background: var(--bg-2);
   border-color: var(--line-3);
 }
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn:disabled:hover {
+  background: var(--bg-1);
+  border-color: var(--line-2);
+}
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -1171,6 +1179,14 @@ table.dt tbody tr:hover {
 }
 table.dt tbody tr.selected {
   background: var(--accent-dim);
+}
+/* プレビュー不可のオブジェクト行はメタデータ列を淡色化してグレーアウトを示す。
+   Actions 列 (最終列: Preview / Download) はダウンロードが可能なため淡色化しない。 */
+table.dt tbody tr.preview-ineligible td {
+  opacity: 0.45;
+}
+table.dt tbody tr.preview-ineligible td:last-child {
+  opacity: 1;
 }
 table.dt tbody td {
   padding: 0 10px;

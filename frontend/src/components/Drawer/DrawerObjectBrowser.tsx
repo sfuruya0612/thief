@@ -214,7 +214,15 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
           {error instanceof ApiError ? error.message : String(error)}
         </div>
       ) : (
-        <DataTable rows={rows} columns={columns} onSelect={() => {}} selectedId={null} />
+        <DataTable
+          rows={rows}
+          columns={columns}
+          onSelect={() => {}}
+          selectedId={null}
+          rowClassName={(r) =>
+            isPreviewEligible(previewKeyOf(r), sizeOf(r)) ? undefined : 'preview-ineligible'
+          }
+        />
       )}
     </div>
   );

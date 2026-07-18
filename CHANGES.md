@@ -10,6 +10,8 @@
   - @sfuruya0612
 - [UPDATE] AWS プロファイル一覧 API が認証方式と SSO セッションの有効期限を返し、~/.aws/credentials のみに定義されたプロファイルも一覧に含めるようにする
   - @sfuruya0612
+- [UPDATE] S3 / GCS オブジェクトのプレビュー対象を csv / txt / json 限定から「既知のバイナリ拡張子を除くテキスト全般」に拡張する (中身の UTF-8 + NUL バイト検査を最終判定とする)。プレビュー不可のオブジェクトは一覧行をグレーアウトし、Preview ボタンを無効化する
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
