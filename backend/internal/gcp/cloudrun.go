@@ -9,10 +9,17 @@ import (
 
 	run "cloud.google.com/go/run/apiv2"
 	"cloud.google.com/go/run/apiv2/runpb"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	locationpb "google.golang.org/genproto/googleapis/cloud/location"
 )
+
+// listJobsConcurrency はロケーションごとの ListJobs を同時実行する上限数。
+// 無制限にすると Cloud Run Admin API の QPS クオータに抵触しうるため上限を設ける
+// (issue 0043: 逐次実行が支配的だったための並列化。実測ではロケーション 43 件の
+// 逐次実行が全体 44.9 秒中 43.4 秒を占めていた)。
+const listJobsConcurrency = 15
 
 // RunResourceInfo は Cloud Run のサービス / ジョブを 1 レコードに正規化した表現。
 type RunResourceInfo struct {
@@ -78,34 +85,51 @@ func ListCloudRun(ctx context.Context, projectID string) ([]RunResourceInfo, err
 	slog.Info("cloud run list locations done",
 		"project_id", projectID, "duration_ms", time.Since(locStart).Milliseconds(), "count", len(locations))
 
+	// ロケーションごとの ListJobs は互いに独立しているため、専用 goroutine に分けて
+	// 並列実行する。各 goroutine は自分の index にのみ書き込むため、結果スライスへの
+	// 書き込みはロック不要で競合しない (データオーナーシップを goroutine ごとに分離)。
 	jobsStart := time.Now()
-	jobCount := 0
-	for _, location := range locations {
-		locJobStart := time.Now()
-		jobParent := "projects/" + projectID + "/locations/" + location
-		jobIt := jobClient.ListJobs(ctx, &runpb.ListJobsRequest{Parent: jobParent})
-		locJobCount := 0
-		for {
-			j, err := jobIt.Next()
-			if err == iterator.Done {
-				break
+	jobsByLocation := make([][]RunResourceInfo, len(locations))
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(listJobsConcurrency)
+	for i, location := range locations {
+		g.Go(func() error {
+			locJobStart := time.Now()
+			jobParent := "projects/" + projectID + "/locations/" + location
+			jobIt := jobClient.ListJobs(gctx, &runpb.ListJobsRequest{Parent: jobParent})
+			var locResources []RunResourceInfo
+			for {
+				j, err := jobIt.Next()
+				if err == iterator.Done {
+					break
+				}
+				if err != nil {
+					return fmt.Errorf("iterate cloud run jobs in %s: %w", location, err)
+				}
+				r := runResourceFromJob(j)
+				r.ProjectID = projectID
+				locResources = append(locResources, r)
 			}
-			if err != nil {
-				return nil, fmt.Errorf("iterate cloud run jobs in %s: %w", location, err)
-			}
-			r := runResourceFromJob(j)
-			r.ProjectID = projectID
-			resources = append(resources, r)
-			locJobCount++
-		}
-		jobCount += locJobCount
-		slog.Info("cloud run list jobs in location done",
-			"project_id", projectID, "location", location,
-			"duration_ms", time.Since(locJobStart).Milliseconds(), "count", locJobCount)
+			jobsByLocation[i] = locResources
+			slog.Info("cloud run list jobs in location done",
+				"project_id", projectID, "location", location,
+				"duration_ms", time.Since(locJobStart).Milliseconds(), "count", len(locResources))
+			return nil
+		})
 	}
-	slog.Info("cloud run list jobs done (all locations, sequential)",
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	jobCount := 0
+	for _, locResources := range jobsByLocation {
+		resources = append(resources, locResources...)
+		jobCount += len(locResources)
+	}
+	slog.Info("cloud run list jobs done (all locations, parallel)",
 		"project_id", projectID, "duration_ms", time.Since(jobsStart).Milliseconds(),
-		"locations", len(locations), "count", jobCount)
+		"locations", len(locations), "concurrency", listJobsConcurrency, "count", jobCount)
 
 	slog.Info("cloud run list all done",
 		"project_id", projectID, "duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
