@@ -12,6 +12,8 @@
   - @sfuruya0612
 - [UPDATE] S3 / GCS オブジェクトのプレビュー対象を csv / txt / json 限定から「既知のバイナリ拡張子を除くテキスト全般」に拡張する (中身の UTF-8 + NUL バイト検査を最終判定とする)。プレビュー不可のオブジェクトは一覧行をグレーアウトし、Preview ボタンを無効化する
   - @sfuruya0612
+- [UPDATE] Cloud Logging の UI を、左のリソースタイプ別ツリー、severity 積み上げヒストグラム、行クリックで JSON を展開できるログ一覧を備えたログビューアに刷新する (CloudWatch Logs と共通のコンポーネントを使う)
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
