@@ -3761,6 +3761,44 @@ td.qe-rt-empty {
   margin-bottom: 2px;
 }
 
+/* ---------- AttributeFilterBar ---------- */
+.pr-attr-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+.pr-attr-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pr-attr-label {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-right: 2px;
+}
+.pr-attr-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--bg-1);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.pr-attr-chip:hover {
+  background: var(--bg-2);
+}
+.pr-attr-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--text-1);
+}
+
 /* ---------- RateGroupSection ---------- */
 .pr-group {
   border: 1px solid var(--line-1);
@@ -3780,6 +3818,16 @@ td.qe-rt-empty {
   padding: 6px 10px;
   background: var(--bg-2);
   border-bottom: 1px solid var(--line-1);
+}
+.pr-group-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px;
 }
 .pr-group-title {
   font-size: 11.5px;
@@ -3862,10 +3910,17 @@ td.qe-rt-empty {
   background: var(--bg-2);
 }
 .pr-estimator-head h2 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-1);
+}
+.pr-estimator-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .pr-estimator-totals {
   display: flex;

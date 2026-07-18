@@ -340,7 +340,6 @@ func instanceOnDemandRatesFromDocument(service string, spec pricingServiceSpec, 
 		// instanceType で複数の紛らわしい重複行を生むため v1 スコープ外とする。
 		return nil
 	}
-
 	label := instanceLabel(service, attrs)
 	curated := curatedInstanceAttributes(service, attrs)
 
@@ -431,7 +430,11 @@ func instanceLabel(service string, attrs map[string]string) string {
 	case "ec2":
 		return joinNonEmpty(" / ", attrs["instanceType"], attrs["operatingSystem"], attrs["tenancy"])
 	case "rds":
-		return joinNonEmpty(" / ", attrs["instanceType"], attrs["databaseEngine"], attrs["deploymentOption"])
+		storageLabel := "Standard"
+		if rdsStorageType(attrs["storage"]) == "io_optimized" {
+			storageLabel = "IO-Optimized"
+		}
+		return joinNonEmpty(" / ", attrs["instanceType"], attrs["databaseEngine"], attrs["deploymentOption"], storageLabel)
 	case "elasticache":
 		return joinNonEmpty(" / ", attrs["instanceType"], attrs["cacheEngine"])
 	default:
@@ -451,11 +454,25 @@ func curatedInstanceAttributes(service string, attrs map[string]string) map[stri
 		setIfNonEmpty(out, "engine", attrs["databaseEngine"])
 		setIfNonEmpty(out, "deployment_option", attrs["deploymentOption"])
 		setIfNonEmpty(out, "license_model", attrs["licenseModel"])
+		out["storage_type"] = rdsStorageType(attrs["storage"])
 	case "elasticache":
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
 		setIfNonEmpty(out, "engine", attrs["cacheEngine"])
 	}
 	return out
+}
+
+// rdsStorageType normalizes the Price List "storage" attribute into a
+// standard/io_optimized axis for filtering. IO-Optimized storage is an
+// Aurora-only option (confirmed against live data: the "storage" attribute
+// is the exact string "Aurora IO Optimization Mode" for IO-Optimized rows;
+// every other RDS row, including Aurora's own default storage mode and all
+// non-Aurora engines, reports "EBS Only" or an instance-store description).
+func rdsStorageType(storage string) string {
+	if storage == "Aurora IO Optimization Mode" {
+		return "io_optimized"
+	}
+	return "standard"
 }
 
 // fargateUnitFromUsageType derives the normalized unit from a Fargate
@@ -587,18 +604,15 @@ func savingsPlanRateFrom(service string, r sptypes.SavingsPlanOfferingRate) (Pri
 // instanceSavingsPlanRate handles ec2/rds/elasticache. It excludes the same
 // long-tail dimensions the On-Demand/RI path excludes (dedicated
 // tenancy/hosts, unused capacity accounting rows, bundled SQL Server
-// licensing) plus two SP-specific exclusions confirmed against live data:
-// Aurora rows (this issue's RDS scope is non-Aurora RDS only, and Aurora SP
-// rows carry an unreliable instanceType property besides) and ElastiCache
-// Serverless processing-unit rows (not a node rate).
+// licensing) plus one SP-specific exclusion confirmed against live data:
+// ElastiCache Serverless processing-unit rows (not a node rate). Aurora rows
+// are included; spInstanceType (below) already works around their
+// unreliable instanceType property.
 func instanceSavingsPlanRate(service string, r sptypes.SavingsPlanOfferingRate, usageType string, props map[string]string) (PriceRate, bool) {
 	if containsAny(usageType, "Dedicated", "Unused", "Host") {
 		return PriceRate{}, false
 	}
 	productDescription := props["productDescription"]
-	if strings.Contains(productDescription, "Aurora") {
-		return PriceRate{}, false
-	}
 	if strings.Contains(productDescription, "SQL Server") {
 		return PriceRate{}, false
 	}

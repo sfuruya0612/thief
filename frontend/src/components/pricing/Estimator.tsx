@@ -16,15 +16,40 @@ export interface EstimatorProps {
   rates: PriceTablesByService;
   onSetQty: (service: string, rateId: string, qty: number) => void;
   onToggleRate: (service: string, rateId: string) => void;
+  onClearAll: () => void;
 }
 
-export function Estimator({ selection, rates, onSetQty, onToggleRate }: EstimatorProps) {
+export function Estimator({
+  selection,
+  rates,
+  onSetQty,
+  onToggleRate,
+  onClearAll,
+}: EstimatorProps) {
   const result = useMemo(() => estimate(selection, rates), [selection, rates]);
+  const hasEntries = result.byService.length > 0;
+
+  const handleClearAll = () => {
+    if (window.confirm('見積もりに追加した項目をすべて削除します。よろしいですか？')) {
+      onClearAll();
+    }
+  };
 
   return (
     <aside className="pr-estimator">
       <div className="pr-estimator-head">
-        <h2>見積もり</h2>
+        <div className="pr-estimator-title-row">
+          <h2>見積もり</h2>
+          <button
+            type="button"
+            className="btn sm ghost"
+            onClick={handleClearAll}
+            disabled={!hasEntries}
+            title="見積もりに追加した項目をすべて削除する"
+          >
+            一括削除
+          </button>
+        </div>
         <div className="pr-estimator-totals">
           <div className="pr-estimator-total">
             <span className="label">月額継続</span>
@@ -39,10 +64,7 @@ export function Estimator({ selection, rates, onSetQty, onToggleRate }: Estimato
             <Money value={result.totalEffectiveMonthly} />
           </div>
         </div>
-        <p className="pr-estimator-note">
-          730 時間/月 (365×24/12 の近似) で計算しています。実月の時間数とは異なります。 Savings
-          Plans の前払いは API 仕様上 $0 として扱われます (購入時のコミット額は含みません)。
-        </p>
+        <p className="pr-estimator-note">730 時間/月 (365×24/12 の近似) で計算しています。</p>
       </div>
 
       <div className="pr-estimator-body">

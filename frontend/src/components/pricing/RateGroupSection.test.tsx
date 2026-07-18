@@ -178,4 +178,56 @@ describe('RateGroupSection', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     expect(onToggleRate).toHaveBeenCalledWith('sku.1');
   });
+
+  it('折りたたみボタンで表と条件セレクタを非表示にでき、再クリックで元に戻る', () => {
+    const rates = [
+      rate({
+        rateId: 'std-1yr-noupfront',
+        model: 'reserved',
+        group: 'Reserved Instance',
+        label: 'm5.large standard 1yr No Upfront',
+        term: { lease: '1yr', offeringClass: 'standard', payment: 'No Upfront' },
+      }),
+      rate({
+        rateId: 'std-3yr-noupfront',
+        model: 'reserved',
+        group: 'Reserved Instance',
+        label: 'm5.large standard 3yr No Upfront',
+        term: { lease: '3yr', offeringClass: 'standard', payment: 'No Upfront' },
+      }),
+    ];
+    renderGroup({ group: 'Reserved Instance', rates });
+
+    expect(screen.getByText('m5.large standard 1yr No Upfront')).toBeInTheDocument();
+    expect(document.querySelector('.pr-group-conditions')).not.toBeNull();
+
+    fireEvent.click(screen.getByTitle('折りたたむ'));
+
+    expect(screen.queryByText('m5.large standard 1yr No Upfront')).not.toBeInTheDocument();
+    expect(document.querySelector('.pr-group-conditions')).toBeNull();
+    expect(document.querySelector('.pr-rate-table')).toBeNull();
+
+    fireEvent.click(screen.getByTitle('展開'));
+
+    expect(screen.getByText('m5.large standard 1yr No Upfront')).toBeInTheDocument();
+    expect(document.querySelector('.pr-group-conditions')).not.toBeNull();
+  });
+
+  it('絞り込みで非該当メッセージが出ている状態でも、折りたたむとメッセージごと隠れる', () => {
+    renderGroup({ rates: [rate()], instanceFilter: 'no-such-instance' });
+    expect(screen.getByText('この条件に一致する単価がありません')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle('折りたたむ'));
+
+    expect(screen.queryByText('この条件に一致する単価がありません')).not.toBeInTheDocument();
+  });
+
+  it('折りたたみボタンは aria-expanded で開閉状態を表す', () => {
+    renderGroup();
+    const btn = screen.getByTitle('折りたたむ');
+    expect(btn).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(btn);
+    expect(screen.getByTitle('展開')).toHaveAttribute('aria-expanded', 'false');
+  });
 });

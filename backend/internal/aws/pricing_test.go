@@ -41,7 +41,8 @@ const ec2PriceDoc = `{
 const rdsPriceDoc = `{
   "product": {"sku": "SKU2", "productFamily": "Database Instance", "attributes": {
     "instanceType": "db.t3.micro", "databaseEngine": "MySQL", "deploymentOption": "Single-AZ",
-    "licenseModel": "No license required", "regionCode": "ap-northeast-1", "usagetype": "APN1-InstanceUsage:db.t3.micro"
+    "storage": "EBS Only", "licenseModel": "No license required",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-InstanceUsage:db.t3.micro"
   }},
   "terms": {
     "OnDemand": {"SKU2.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
@@ -52,6 +53,32 @@ const rdsPriceDoc = `{
         "termAttributes": {"LeaseContractLength": "1yr", "OfferingClass": "standard", "PurchaseOption": "No Upfront"},
         "priceDimensions": {"SKU2.RI1.RC1": {"rateCode": "SKU2.RI1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "0.0202000000"}}}}
     }
+  }
+}`
+
+const rdsAuroraPriceDoc = `{
+  "product": {"sku": "SKU10", "productFamily": "Database Instance", "attributes": {
+    "instanceType": "db.r6g.large", "databaseEngine": "Aurora MySQL", "deploymentOption": "Single-AZ",
+    "storage": "EBS Only", "licenseModel": "No license required",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-InstanceUsage:db.r6g.large"
+  }},
+  "terms": {
+    "OnDemand": {"SKU10.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU10.OTC1.RC1": {"rateCode": "SKU10.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "0.2200000000"}}
+    }}}
+  }
+}`
+
+const rdsAuroraIOOptimizedPriceDoc = `{
+  "product": {"sku": "SKU11", "productFamily": "Database Instance", "attributes": {
+    "instanceType": "db.r6g.large", "databaseEngine": "Aurora MySQL", "deploymentOption": "Single-AZ",
+    "storage": "Aurora IO Optimization Mode", "licenseModel": "No license required",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-InstanceUsageIOOptimized:db.r6g.large"
+  }},
+  "terms": {
+    "OnDemand": {"SKU11.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU11.OTC1.RC1": {"rateCode": "SKU11.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "0.2860000000"}}
+    }}}
   }
 }`
 
@@ -188,16 +215,49 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			want: []PriceRate{
 				{
 					RateID: "SKU2.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
-					Label:      "db.t3.micro / MySQL / Single-AZ",
-					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required"},
+					Label:      "db.t3.micro / MySQL / Single-AZ / Standard",
+					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Unit:       "Hrs", PriceUSD: 0.026, Currency: "USD",
 				},
 				{
 					RateID: "SKU2.RI1", Model: "reserved", Group: "Reserved Instance",
-					Label:      "db.t3.micro / MySQL / Single-AZ",
-					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required"},
+					Label:      "db.t3.micro / MySQL / Single-AZ / Standard",
+					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Term:       PriceTerm{Lease: strPtr("1yr"), OfferingClass: strPtr("standard"), Payment: strPtr("No Upfront")},
 					Unit:       "Hrs", PriceUSD: 0.0202, Currency: "USD",
+				},
+			},
+		},
+		{
+			// Aurora は RDS スコープに含める (実際に Aurora MySQL/PostgreSQL を運用して
+			// いるユーザーからのフィードバックにより、非 Aurora 限定のスコープ案は不採用)。
+			// storage 属性が "EBS Only" (Aurora の既定ストレージ) の行は
+			// storage_type: "standard" になる。
+			name:    "rds aurora standard storage",
+			service: "rds",
+			raw:     rdsAuroraPriceDoc,
+			want: []PriceRate{
+				{
+					RateID: "SKU10.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
+					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / Standard",
+					Attributes: map[string]string{"instance_type": "db.r6g.large", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
+					Unit:       "Hrs", PriceUSD: 0.22, Currency: "USD",
+				},
+			},
+		},
+		{
+			// IO-Optimized ストレージは Aurora 専用機能で、storage 属性が正確に
+			// "Aurora IO Optimization Mode" の行だけが storage_type: "io_optimized"
+			// になる (実データ確認済み、非 Aurora RDS にはこの storage 値は存在しない)。
+			name:    "rds aurora io-optimized storage",
+			service: "rds",
+			raw:     rdsAuroraIOOptimizedPriceDoc,
+			want: []PriceRate{
+				{
+					RateID: "SKU11.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
+					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / IO-Optimized",
+					Attributes: map[string]string{"instance_type": "db.r6g.large", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "io_optimized"},
+					Unit:       "Hrs", PriceUSD: 0.286, Currency: "USD",
 				},
 			},
 		},
@@ -525,12 +585,16 @@ func TestInstanceSavingsPlanRate(t *testing.T) {
 			wantOK: false,
 		},
 		{
-			name:    "aurora excluded (out of RDS scope)",
+			// Aurora は RDS スコープに含まれる。Savings Plans の Aurora 行は
+			// instanceType プロパティが壊れている (instance family のみの大文字表記)
+			// ことがあるが、それは spInstanceType の usageType フォールバックで
+			// 別途対処済み (下の "broken instanceType property" サブテスト参照)。
+			name:    "aurora kept (in RDS scope)",
 			service: "rds",
 			rate: newSPRate("APN1-InstanceUsageIOOptimized:db.r7g.4xl", "2.77", baseOffering, map[string]string{
 				"instanceType": "R7G", "productDescription": "Aurora MySQL",
 			}),
-			wantOK: false,
+			wantOK: true,
 		},
 		{
 			name:    "elasticache serverless processing units excluded",

@@ -182,6 +182,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
           onToggleRate={(service, rateId) =>
             dispatch({ type: 'toggleRate', region, service, rateId })
           }
+          onClearAll={() => dispatch({ type: 'clearSelection', region })}
         />
       </div>
     </div>
