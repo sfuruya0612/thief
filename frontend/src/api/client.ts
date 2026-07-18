@@ -2,7 +2,7 @@ import { ApiError } from '../types/common';
 
 // VITE_API_BASE が未設定ならローカル開発時の backend デフォルトを使う。
 const rawApiBase = import.meta.env.VITE_API_BASE;
-const BASE_URL = rawApiBase === undefined ? 'http://127.0.0.1:8080' : rawApiBase;
+const BASE_URL = rawApiBase === undefined ? 'http://127.0.0.1:8089' : rawApiBase;
 
 // 非 2xx レスポンスから標準エラー DTO を読み取り ApiError を構築する
 async function throwApiError(res: Response): Promise<never> {

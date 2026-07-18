@@ -38,7 +38,7 @@
 | `mise run backend:fmt` | `gofmt -w .` + `goimports -w .` |
 | `mise run backend:tidy` | `go mod tidy -v` |
 | `mise run backend:mocks` | mockery でモック生成 |
-| `mise run backend:run` | ローカルで API サーバを起動 (127.0.0.1:8080) |
+| `mise run backend:run` | ローカルで API サーバを起動 (127.0.0.1:8089) |
 
 ### frontend タスク
 
@@ -49,8 +49,8 @@
 | `mise run frontend:test` | `npm run test` (vitest) |
 | `mise run frontend:lint` | `npm run lint` (eslint + `tsc --noEmit`) |
 | `mise run frontend:fmt` | `npm run fmt` (prettier) |
-| `mise run frontend:run` | `npm run dev` (vite dev server, http://localhost:8082) |
-| `mise run frontend:serve` | `npm run build` + `npm run preview` (ポート 8082 で dist を配信) |
+| `mise run frontend:run` | `npm run dev` (vite dev server, http://localhost:8088) |
+| `mise run frontend:serve` | `npm run build` + `npm run preview` (ポート 8088 で dist を配信) |
 
 ### Agent への指示
 
@@ -279,7 +279,7 @@ frontend/
 
 ### API クライアントとエラーハンドリング
 
-- `api/client.ts` の `apiGet<T>`/`apiPost<T>` を経由してすべての HTTP 呼び出しを行う。`baseURL` は `import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8080'`。
+- `api/client.ts` の `apiGet<T>`/`apiPost<T>` を経由してすべての HTTP 呼び出しを行う。`baseURL` は `import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8089'`。
 - 非 2xx レスポンスは `{"error", "code", "message", "details"}` 形状を parse し `ApiError`(`types/common.ts`)を throw する。ネットワーク到達不能等は `ApiError(0, 'network_error', ...)` に正規化する。
 - SSO トークン期限切れは HTTP 401 + `code === 'SSO_TOKEN_EXPIRED'` で表現される。バックエンドの全 AWS リソースハンドラがこの経路を通るため、フロントは専用ステータス取得を持たず、各 `useResources` 呼び出しの `error` を `error instanceof ApiError && error.code === 'SSO_TOKEN_EXPIRED'` で判定し、`SSOExpiredBanner` を表示する。
 

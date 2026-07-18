@@ -86,7 +86,7 @@ dir = "backend"
 run = "mockery"
 
 [tasks."backend:run"]
-description = "API サーバー起動 (127.0.0.1:8080)"
+description = "API サーバー起動 (127.0.0.1:8089)"
 dir = "backend"
 depends = ["backend:install"]
 run = "thief server"
@@ -130,12 +130,12 @@ dir = "frontend"
 run = "npm run fmt"
 
 [tasks."frontend:run"]
-description = "Vite dev server 起動 (ブラウザで http://localhost:8082 を開く)"
+description = "Vite dev server 起動 (ブラウザで http://localhost:8088 を開く)"
 dir = "frontend"
 run = "npm run dev"
 
 [tasks."frontend:serve"]
-description = "frontend ビルドして dist を静的サーブ (vite preview, ポート 8082)"
+description = "frontend ビルドして dist を静的サーブ (vite preview, ポート 8088)"
 dir = "frontend"
 run = "npm run build && npm run preview"
 
