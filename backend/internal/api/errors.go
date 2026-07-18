@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"google.golang.org/api/googleapi"
 )
 
 func writeError(w http.ResponseWriter, code int, errCode, msg string) {
@@ -48,4 +50,49 @@ func writeAWSError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeInternalError(w, err.Error())
+}
+
+// writeGCPError は GCP 系エラーを HTTP ステータスへマップする。
+// API 未有効化 (SERVICE_DISABLED / accessNotConfigured) は 403 GCP_API_DISABLED として
+// 有効化を促すメッセージを返し、その他の Google API クライアントエラー (4xx) は当該
+// ステータスで GCP_ERROR を返す。いずれにも当たらなければ 500 INTERNAL_ERROR とする。
+// serveCached のエラー writer として writeInternalFromError の代わりに使う。
+func writeGCPError(w http.ResponseWriter, err error) {
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) {
+		if gcpAPIDisabled(gerr) {
+			msg := gerr.Message
+			if msg == "" {
+				msg = err.Error()
+			}
+			writeError(w, http.StatusForbidden, "GCP_API_DISABLED", msg)
+			return
+		}
+		if gerr.Code >= 400 && gerr.Code < 500 {
+			writeError(w, gerr.Code, "GCP_ERROR", err.Error())
+			return
+		}
+	}
+	writeInternalError(w, err.Error())
+}
+
+// gcpAPIDisabled は googleapi.Error が「API 未有効化」を示すかを判定する。
+// 旧形式の Errors[].Reason ("accessNotConfigured") と新形式の ErrorInfo detail
+// ("reason": "SERVICE_DISABLED") の双方を検査する。
+func gcpAPIDisabled(gerr *googleapi.Error) bool {
+	for _, item := range gerr.Errors {
+		if item.Reason == "accessNotConfigured" {
+			return true
+		}
+	}
+	for _, d := range gerr.Details {
+		m, ok := d.(map[string]any)
+		if !ok {
+			continue
+		}
+		if reason, _ := m["reason"].(string); reason == "SERVICE_DISABLED" {
+			return true
+		}
+	}
+	return false
 }
