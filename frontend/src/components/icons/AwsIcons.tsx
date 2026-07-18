@@ -30,6 +30,7 @@ const AWS_ICON_FILES: Record<string, string> = {
   secrets: 'secrets.svg',
   costexplorer: 'costexplorer.svg',
   cfn: 'cfn.svg',
+  cloudwatchlogs: 'cloudwatchlogs.svg',
 };
 
 function AwsIcon(svc: string, { size = 16 }: AwsIconProps = {}) {

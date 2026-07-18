@@ -26,6 +26,7 @@ import {
   cfnStackDetailFromRaw,
   cfnStackEventFromRaw,
   cfnStackResourceFromRaw,
+  cwLogGroupFromRaw,
   dynamoTableSchemaFromRaw,
   ecrImageFromRaw,
   ecsContainerFromRaw,
@@ -64,6 +65,9 @@ import {
   getCFNStackResources,
   getCost,
   getCostForecast,
+  type CWLogEventsQuery,
+  getCWLogEvents,
+  getCWLogGroups,
   getDatadogEstimated,
   getDatadogHistorical,
   getDynamoItems,
@@ -803,6 +807,47 @@ export function useGcpLogEntries(
     initialPageParam: '',
     getNextPageParam: (last) => last.next_page_token || undefined,
     enabled: enabled && !!projectId && runToken > 0,
+    staleTime: Infinity,
+  });
+}
+
+// ============================================================
+// CloudWatch Logs (ログビューア)
+// ============================================================
+
+// ロググループ一覧。変化が緩やかなためやや長めの staleTime にする。
+export function useCWLogGroups(profile: string, region: string) {
+  return useQuery({
+    queryKey: ['aws', 'cwlogs-groups', profile, region],
+    queryFn: async () => (await getCWLogGroups(profile, region)).map(cwLogGroupFromRaw),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!profile,
+  });
+}
+
+// 1 ページあたりの取得件数 (ロググループ 1 つあたりの上限。複数選択時はこの倍数まで返る)。
+const CW_LOG_EVENT_PAGE_SIZE = 200;
+
+// useGcpLogEntries と同じく runToken を queryKey に混ぜて「確定した 1 回の実行結果」を
+// 不変 (staleTime: Infinity) として扱う。groups が空、または runToken が 0 のときは無効。
+export function useCWLogEvents(
+  profile: string,
+  region: string,
+  runToken: number,
+  query: Omit<CWLogEventsQuery, 'pageToken' | 'limit'>,
+  enabled: boolean,
+) {
+  return useInfiniteQuery({
+    queryKey: ['aws', 'cwlogs-events', profile, region, runToken],
+    queryFn: ({ pageParam }) =>
+      getCWLogEvents(profile, region, {
+        ...query,
+        pageToken: pageParam,
+        limit: CW_LOG_EVENT_PAGE_SIZE,
+      }),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_page_token || undefined,
+    enabled: enabled && !!profile && query.groups.length > 0 && runToken > 0,
     staleTime: Infinity,
   });
 }

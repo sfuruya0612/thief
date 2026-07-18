@@ -41,6 +41,8 @@ const ICON_FILENAMES = {
   natgw: 'Res_Amazon-VPC_NAT-Gateway_48.svg',
   costexplorer: 'Arch_AWS-Cost-Explorer_32.svg',
   cfn: 'Arch_AWS-CloudFormation_32.svg',
+  // CloudWatch Logs 専用の Architecture Icon は無いため CloudWatch (Arch) を代用する。
+  cloudwatchlogs: 'Arch_Amazon-CloudWatch_32.svg',
 };
 
 function extractZip(zipPath, destDir) {

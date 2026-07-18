@@ -885,3 +885,46 @@ export interface CFNStackResourceRow {
   resourceStatus: string;
   lastUpdatedTime: string;
 }
+
+// ============================================================
+// CloudWatch Logs (ログビューア)
+// ============================================================
+export interface CWLogGroupRaw {
+  name: string;
+  arn: string;
+  stored_bytes: number;
+  retention_days: number;
+  creation_time: string;
+}
+
+export interface CWLogGroupRow {
+  name: string;
+  arn: string;
+  storedBytes: number;
+  retentionDays: number;
+  creationTime: string;
+}
+
+export interface CWLogEventRaw {
+  timestamp: string;
+  ingestion_time: string;
+  message: string;
+  log_group: string;
+  log_stream: string;
+  event_id: string;
+}
+
+export interface CWLogEventRow {
+  id: string;
+  timestamp: string;
+  ingestionTime: string;
+  message: string;
+  logGroup: string;
+  logStream: string;
+  eventId: string;
+}
+
+export interface CWLogEventPageRaw {
+  events: CWLogEventRaw[];
+  next_page_token?: string;
+}

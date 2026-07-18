@@ -100,6 +100,13 @@ export const SERVICES: ServiceMeta[] = [
     group: 'management',
   },
   {
+    key: 'cloudwatchlogs',
+    name: 'CloudWatch Logs',
+    sub: 'Log viewer',
+    color: 'var(--svc-cloudwatchlogs)',
+    group: 'management',
+  },
+  {
     key: 'costexplorer',
     name: 'Cost Explorer',
     sub: 'Cost & Usage',
