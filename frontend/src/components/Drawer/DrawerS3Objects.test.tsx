@@ -286,4 +286,77 @@ describe('DrawerS3Objects', () => {
     expect(previewCall[0]).toContain('/objects/preview');
     expect(previewCall[0]).toContain('key=notes.txt');
   });
+
+  it('プレビューを編集して保存すると同じキーへ upload し確認ダイアログを挟む', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => [
+          { key: 'notes.txt', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+        ],
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ content: 'hello preview', content_type: 'text/plain', size: 13 }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        json: async () => ({}),
+      } as Response);
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('notes.txt');
+    });
+
+    const previewBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Preview',
+    ) as HTMLButtonElement;
+    fireEvent.click(previewBtn);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('hello preview');
+    });
+
+    const editBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '編集',
+    ) as HTMLButtonElement;
+    fireEvent.click(editBtn);
+
+    const textarea = container.querySelector(
+      'textarea.object-edit-textarea',
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'edited content' } });
+
+    const saveBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === '保存',
+    ) as HTMLButtonElement;
+    fireEvent.click(saveBtn);
+
+    expect(confirmSpy).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+    const saveCall = fetchMock.mock.calls[2];
+    expect(saveCall[0]).toContain('/objects/upload');
+    expect(saveCall[0]).toContain('key=notes.txt');
+    const init = saveCall[1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeInstanceOf(FormData);
+
+    confirmSpy.mockRestore();
+  });
 });
