@@ -22,6 +22,16 @@ export interface PersistedState {
   // セッションタブ (開いている複数セッション + アクティブ)
   awsSessions?: SessionTabsState;
   gcpSessions?: SessionTabsState;
+  pricing?: PricingPersistedState;
+}
+
+// Pricing 画面の選択状態。selection は region -> service -> rate_id -> チェック状態と数量。
+// リージョンを最上位のキーにするのは、リージョン切替で rate_id が変わり得るため
+// (lib/pricingEstimate.ts の estimate() は現在のリージョンの選択だけを渡される想定)。
+export interface PricingPersistedState {
+  activeServices: string[];
+  collapsed: Record<string, boolean>;
+  selection: Record<string, Record<string, Record<string, { checked: boolean; qty: number }>>>;
 }
 
 export function loadState<T>(key: string, fallback: T): T {

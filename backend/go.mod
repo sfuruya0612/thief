@@ -27,8 +27,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.5
 	github.com/aws/aws-sdk-go-v2/service/kinesis v1.43.6
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.90.0
+	github.com/aws/aws-sdk-go-v2/service/pricing v1.43.1
 	github.com/aws/aws-sdk-go-v2/service/rds v1.116.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0
+	github.com/aws/aws-sdk-go-v2/service/savingsplans v1.34.1
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.44.2
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.1
@@ -36,6 +38,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/aws-sdk-go-v2/service/wafv2 v1.74.1
+	github.com/aws/smithy-go v1.27.3
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/coder/websocket v1.8.15
 	github.com/google/go-cmp v0.7.0
@@ -75,7 +78,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.30 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.31 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.4.0 // indirect
-	github.com/aws/smithy-go v1.27.3 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect

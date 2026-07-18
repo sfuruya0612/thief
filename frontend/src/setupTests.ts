@@ -1,4 +1,15 @@
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+
+// vite.config.ts の test.globals は false のため、@testing-library/react が
+// afterEach グローバルの存在を検知して行う自動クリーンアップ登録が発火しない
+// (afterEach はグローバルスコープに存在せず import が必要)。登録されないと
+// render() したコンポーネントが document.body に蓄積し、同一ファイル内の
+// 後続テストに前のテストの DOM が混入する。
+afterEach(() => {
+  cleanup();
+});
 
 // Node 22+ は experimental な localStorage グローバルを持ち、--localstorage-file 未指定時は
 // undefined のまま jsdom の localStorage をシャドウしてしまう。テストで localStorage を使った

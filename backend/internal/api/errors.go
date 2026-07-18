@@ -52,6 +52,31 @@ func writeAWSError(w http.ResponseWriter, err error) {
 	writeInternalError(w, err.Error())
 }
 
+// writePricingError maps pricing/savings plans errors to HTTP responses.
+// Unlike writeAWSError, it distinguishes an IAM permission error (403) from
+// SSO token expiry (401): pricing:GetProducts and
+// savingsplans:DescribeSavingsPlansOfferingRates are commonly missing from a
+// role's policy even when the SSO session itself is valid, and
+// IsSSOTokenExpired's substring match ("not authorized") would otherwise
+// misclassify an AccessDenied error as an expired session, sending the user
+// to re-login when re-login cannot fix a missing IAM permission. Order
+// matters: IsAccessDenied (a precise smithy error-code check) must run
+// before IsSSOTokenExpired (a loose substring check) so the precise
+// classification wins.
+func writePricingError(w http.ResponseWriter, err error) {
+	switch {
+	case awsinternal.IsAccessDenied(err):
+		writeError(w, http.StatusForbidden, "PRICING_ACCESS_DENIED",
+			"missing IAM permission: pricing:GetProducts and savingsplans:DescribeSavingsPlansOfferingRates are required")
+	case awsinternal.IsThrottled(err):
+		writeError(w, http.StatusTooManyRequests, "PRICING_THROTTLED", err.Error())
+	case awsinternal.IsSSOTokenExpired(err):
+		writeUnauthorized(w, err.Error())
+	default:
+		writeInternalError(w, err.Error())
+	}
+}
+
 // writeGCPError は GCP 系エラーを HTTP ステータスへマップする。
 // API 未有効化 (SERVICE_DISABLED / accessNotConfigured) は 403 GCP_API_DISABLED として
 // 有効化を促すメッセージを返し、その他の Google API クライアントエラー (4xx) は当該

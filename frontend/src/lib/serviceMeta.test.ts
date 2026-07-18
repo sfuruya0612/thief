@@ -30,7 +30,7 @@ describe('AWS_SERVICE_GROUPS / SERVICES', () => {
       { key: 'integration', services: ['sqs'] },
       { key: 'security', services: ['iam', 'waf', 'secrets'] },
       { key: 'management', services: ['ssm', 'cfn', 'cloudwatchlogs'] },
-      { key: 'cost', services: ['costexplorer'] },
+      { key: 'cost', services: ['costexplorer', 'pricing'] },
     ]);
   });
 });

@@ -35,6 +35,11 @@ type Config struct {
 	// SnippetsDir はクエリスニペット (.sql ファイル) の保存ディレクトリ。API サーバ専用。
 	SnippetsDir string `yaml:"snippets-dir"`
 
+	// PriceCacheDir は AWS Pricing (単価表) のローカルファイルキャッシュの保存先
+	// ディレクトリ。API サーバ専用。TTL は設けず、ファイルが存在すれば常に使う
+	// (internal/pricecache 参照)。
+	PriceCacheDir string `yaml:"price-cache-dir"`
+
 	// S3PathStyle は S3 クライアントを path-style アクセス (http://host:port/bucket/key) で
 	// 構成するかどうかを示す。floci 等の S3 互換エミュレータ向けの opt-in で、既定は false
 	// (virtual-hosted style)。実際の S3 クライアント生成は internal/aws パッケージが
@@ -78,13 +83,14 @@ func (r redacted) value() string        { return string(r) }
 
 // fileConfig mirrors top-level fields for YAML unmarshalling.
 type fileConfig struct {
-	Profile     string `yaml:"profile"`
-	Region      string `yaml:"region"`
-	Output      string `yaml:"output"`
-	NoHeader    bool   `yaml:"no-header"`
-	ListenAddr  string `yaml:"listen-addr"`
-	SnippetsDir string `yaml:"snippets-dir"`
-	BigQuery    struct {
+	Profile       string `yaml:"profile"`
+	Region        string `yaml:"region"`
+	Output        string `yaml:"output"`
+	NoHeader      bool   `yaml:"no-header"`
+	ListenAddr    string `yaml:"listen-addr"`
+	SnippetsDir   string `yaml:"snippets-dir"`
+	PriceCacheDir string `yaml:"price-cache-dir"`
+	BigQuery      struct {
 		ProjectID string `yaml:"project-id"`
 	} `yaml:"bigquery"`
 	Datadog struct {
@@ -106,11 +112,12 @@ var defaultWebOrigins = []string{"localhost:8088", "127.0.0.1:8088"}
 // Defaults returns a Config with built-in default values.
 func Defaults() *Config {
 	return &Config{
-		Region:      "ap-northeast-1",
-		Output:      "tab",
-		ListenAddr:  "127.0.0.1:8089",
-		WebOrigins:  defaultWebOrigins,
-		SnippetsDir: "/tmp/thief",
+		Region:        "ap-northeast-1",
+		Output:        "tab",
+		ListenAddr:    "127.0.0.1:8089",
+		WebOrigins:    defaultWebOrigins,
+		SnippetsDir:   "/tmp/thief",
+		PriceCacheDir: "/tmp/thief/price",
 		Datadog: DatadogConfig{
 			Site: "datadoghq.com",
 			View: "summary",
@@ -149,6 +156,9 @@ func applyFile(cfg *Config, fc fileConfig) {
 	}
 	if fc.SnippetsDir != "" {
 		cfg.SnippetsDir = fc.SnippetsDir
+	}
+	if fc.PriceCacheDir != "" {
+		cfg.PriceCacheDir = fc.PriceCacheDir
 	}
 	if fc.BigQuery.ProjectID != "" {
 		cfg.BigQuery.ProjectID = fc.BigQuery.ProjectID
@@ -190,6 +200,9 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("THIEF_SNIPPETS_DIR"); v != "" {
 		cfg.SnippetsDir = v
+	}
+	if v := os.Getenv("THIEF_PRICE_CACHE_DIR"); v != "" {
+		cfg.PriceCacheDir = v
 	}
 	if v := os.Getenv("THIEF_S3_PATH_STYLE"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {

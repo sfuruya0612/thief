@@ -85,6 +85,7 @@
   --svc-ssm: #de5d9c;
   --svc-secrets: #de5d9c;
   --svc-costexplorer: #f2c94c;
+  --svc-pricing: #2dd4bf;
   --svc-cfn: #ff9900;
   --svc-cloudwatchlogs: #e7157b;
   --svc-athena: #a97ce8;
@@ -3603,4 +3604,370 @@ td.qe-rt-empty {
 .lv-sev-badge.lv-sev-info {
   color: var(--text-3);
   background: var(--bg-3);
+}
+
+/* ============================================================
+   Pricing (単価確認・見積もり)
+   ============================================================ */
+.pr-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.pr-freshness {
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pr-service-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line-1);
+  flex: none;
+}
+.pr-service-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--bg-1);
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.pr-service-toggle:hover {
+  background: var(--bg-2);
+}
+.pr-service-toggle.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--text-1);
+}
+
+.pr-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+.pr-stack {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pr-stack-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* ---------- ServiceCard ---------- */
+.pr-card {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--bg-1);
+  overflow: hidden;
+  flex: none;
+}
+.pr-card-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line-1);
+}
+.pr-card-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px;
+}
+.pr-card-title {
+  font-weight: 600;
+  color: var(--text-1);
+  font-size: 13px;
+}
+.pr-card-count {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.pr-card-subtotal {
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pr-card-spacer {
+  flex: 1;
+}
+.pr-card-fetched {
+  color: var(--warn);
+  font-size: 11px;
+}
+.pr-card-refreshing {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.pr-card-body {
+  padding: 10px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pr-card-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pr-card-inline-error {
+  color: var(--err);
+  font-size: 11.5px;
+}
+.pr-card-partial-note {
+  color: var(--warn);
+  font-size: 11.5px;
+  background: rgba(229, 165, 75, 0.12);
+  border: 1px solid rgba(229, 165, 75, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+.pr-card-empty {
+  color: var(--text-3);
+  font-size: 12px;
+  padding: 16px 0;
+  text-align: center;
+}
+.pr-card-filter {
+  margin-bottom: 2px;
+}
+
+/* ---------- RateGroupSection ---------- */
+.pr-group {
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-sm);
+}
+.pr-group + .pr-group {
+  margin-top: 8px;
+}
+.pr-group-disabled {
+  opacity: 0.6;
+}
+.pr-group-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line-1);
+}
+.pr-group-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+.pr-group-conditions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.pr-group-empty {
+  padding: 10px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.pr-rate-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.pr-rate-table tr {
+  border-bottom: 1px solid var(--line-1);
+}
+.pr-rate-table tr:last-child {
+  border-bottom: 0;
+}
+.pr-rate-table tr.checked {
+  background: var(--accent-dim);
+}
+.pr-rate-table td {
+  padding: 5px 10px;
+  vertical-align: middle;
+}
+.pr-rate-check {
+  width: 24px;
+}
+.pr-rate-label {
+  color: var(--text-1);
+}
+.pr-rate-price {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.pr-rate-upfront {
+  color: var(--text-3);
+}
+.pr-rate-note {
+  text-align: right;
+  white-space: nowrap;
+}
+.pr-note-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(134, 141, 153, 0.15);
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+/* ---------- Estimator ---------- */
+.pr-estimator {
+  width: 320px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--bg-1);
+  overflow: hidden;
+}
+.pr-estimator-head {
+  flex: none;
+  padding: 12px;
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-2);
+}
+.pr-estimator-head h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.pr-estimator-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pr-estimator-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.pr-estimator-total .label {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.pr-estimator-note {
+  margin: 8px 0 0;
+  color: var(--text-4);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.pr-estimator-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+}
+.pr-estimator-empty {
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+  padding: 24px 8px;
+}
+.pr-estimator-group + .pr-estimator-group {
+  margin-top: 14px;
+}
+.pr-estimator-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line-1);
+  margin-bottom: 6px;
+}
+.pr-estimator-line {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.pr-estimator-line:last-child {
+  border-bottom: 0;
+}
+.pr-estimator-line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.pr-estimator-line-label {
+  font-size: 11.5px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-estimator-line-remove {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--text-4);
+  cursor: pointer;
+  padding: 2px;
+}
+.pr-estimator-line-remove:hover {
+  color: var(--err);
+}
+.pr-estimator-line-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.pr-estimator-line-qty input {
+  width: 64px;
+  padding: 2px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  color: var(--text-1);
+  font-size: 11.5px;
+}
+.pr-estimator-line-amounts {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
 }

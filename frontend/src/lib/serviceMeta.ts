@@ -113,6 +113,13 @@ export const SERVICES: ServiceMeta[] = [
     color: 'var(--svc-costexplorer)',
     group: 'cost',
   },
+  {
+    key: 'pricing',
+    name: 'Pricing',
+    sub: 'Rates & estimate',
+    color: 'var(--svc-pricing)',
+    group: 'cost',
+  },
 ];
 
 // GCP サービス一覧

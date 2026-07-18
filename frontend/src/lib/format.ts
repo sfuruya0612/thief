@@ -24,6 +24,41 @@ export function formatMoney(v: number | undefined): string {
   return `$${v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })}`;
 }
 
+// Pricing の単価表示。formatMoney と異なり 0 を em dash に隠さない (All Upfront RI の
+// 時間単価 $0/hr のように、0 そのものが意味のある値になるため)。RI/SP の単価は 4 桁の
+// 小数まで意味を持つ (例: $0.0864) ため、formatMoney の 0/2 桁ルールではなく常に
+// 最大 4 桁まで表示する。
+export function formatUnitPrice(v: number): string {
+  return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+
+// Pricing の unit ("Hrs" / "vCPU-Hours" / "GB-Hours") を単価の接尾辞として表示する。
+// 未知の unit はそのまま "/<unit>" にする (バックエンドの許可リスト変更に追従できるように、
+// 未知値を空文字やエラーにしない)。
+export function formatPricingUnit(unit: string): string {
+  switch (unit) {
+    case 'Hrs':
+      return '/時間';
+    case 'vCPU-Hours':
+      return '/vCPU時間';
+    case 'GB-Hours':
+      return '/GB時間';
+    default:
+      return unit ? `/${unit}` : '';
+  }
+}
+
+// キャッシュ鮮度表示用の "MM/DD HH:mm" (ローカル時刻)。不正な日時は空文字を返す。
+export function formatFetchedAt(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${mm}/${dd} ${hh}:${mi}`;
+}
+
 // ARN の末尾セグメントを取り出す (例: arn:aws:ecs:region:account:task/cluster/task-id -> task-id)。
 // ECS タスク ARN は "/" を含むため URL パスセグメントにそのまま使えず、この短縮 ID を使う
 // (ECS API は DescribeTasks/ExecuteCommand の task 引数にこの短縮 ID を受け付ける)。
