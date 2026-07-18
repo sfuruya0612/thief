@@ -18,6 +18,8 @@ export interface LogListProps<T> {
   renderDetail: (row: T) => ReactNode;
   // true のときメッセージ本文を severity で色付けする (CloudWatch。GCP は SEVERITY バッジ側で表現)。
   tintMessageByLevel?: boolean;
+  // ヘッダー右側、コピー ボタンの直前に差し込む任意の操作 (Cloud Logging のフィールド選択等)。
+  headerExtra?: ReactNode;
   copyLabel: string;
   onCopy: () => void;
   footer?: ReactNode;
@@ -38,6 +40,7 @@ export function LogList<T>({
   getMessage,
   renderDetail,
   tintMessageByLevel,
+  headerExtra,
   copyLabel,
   onCopy,
   footer,
@@ -66,6 +69,7 @@ export function LogList<T>({
           {secondHeader}
         </span>
         <span className="lv-col-msg">{messageHeader}</span>
+        {headerExtra}
         <button className="btn sm lv-copy-btn" onClick={onCopy} disabled={rows.length === 0}>
           {copyLabel}
         </button>
