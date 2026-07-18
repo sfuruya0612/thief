@@ -10,6 +10,9 @@ export interface DataTableProps<T extends { id: string; state?: string }> {
   onSelect: (row: T) => void;
   selectedId: string | null;
   isLoading?: boolean;
+  // rowClassName は行ごとに追加する CSS クラスを返す (未指定なら追加しない)。
+  // オブジェクトブラウザのプレビュー不可行のグレーアウト等に使う。
+  rowClassName?: (row: T) => string | undefined;
 }
 
 // ソート可能な値のみを対象にする (それ以外はソート不能として扱う)
@@ -40,6 +43,7 @@ export function DataTable<T extends { id: string; state?: string }>({
   onSelect,
   selectedId,
   isLoading,
+  rowClassName,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -168,7 +172,9 @@ export function DataTable<T extends { id: string; state?: string }>({
           {sorted.map((r) => (
             <tr
               key={r.id}
-              className={selectedId === r.id ? 'selected' : ''}
+              className={[selectedId === r.id ? 'selected' : '', rowClassName?.(r) ?? '']
+                .filter(Boolean)
+                .join(' ')}
               onClick={() => onSelect(r)}
             >
               <td onClick={(e) => e.stopPropagation()}>

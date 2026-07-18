@@ -136,7 +136,8 @@ func (s *Server) handleGCPGCSObjectDownload(w http.ResponseWriter, r *http.Reque
 }
 
 // handleGCPGCSObjectPreview は GCS オブジェクトの中身をプレビュー用 JSON エンベロープで返す。
-// csv/txt/json のみ、5 MB 未満のオブジェクトのみを対象とする。
+// 既知のバイナリ拡張子を除く 5 MB 未満のオブジェクトを対象とし、中身がテキストでなければ
+// buildPreviewResponse が弾く。
 func (s *Server) handleGCPGCSObjectPreview(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := s.gcpProjectIDFromQuery(w, r)
 	if !ok {

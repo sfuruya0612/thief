@@ -16,12 +16,17 @@ func TestPreviewExtensionAllowed(t *testing.T) {
 		{name: "csv lowercase", key: "path/to/file.csv", want: true},
 		{name: "txt lowercase", key: "notes.txt", want: true},
 		{name: "json lowercase", key: "data.json", want: true},
-		{name: "json uppercase", key: "DATA.JSON", want: true},
-		{name: "csv mixed case", key: "Report.Csv", want: true},
-		{name: "multi extension rejected", key: "archive.json.gz", want: false},
-		{name: "unsupported extension", key: "image.png", want: false},
-		{name: "no extension", key: "README", want: false},
-		{name: "trailing dot", key: "weird.", want: false},
+		{name: "log is text", key: "app.log", want: true},
+		{name: "yaml is text", key: "config.yaml", want: true},
+		{name: "markdown is text", key: "README.md", want: true},
+		{name: "source code is text", key: "main.go", want: true},
+		{name: "no extension is allowed", key: "Dockerfile", want: true},
+		{name: "binary extension png rejected", key: "image.png", want: false},
+		{name: "binary extension png uppercase rejected", key: "IMAGE.PNG", want: false},
+		{name: "binary extension pdf rejected", key: "doc.pdf", want: false},
+		{name: "archive gz rejected via last extension", key: "archive.json.gz", want: false},
+		{name: "text remains allowed via last extension", key: "archive.gz.json", want: true},
+		{name: "trailing dot is allowed", key: "weird.", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -135,6 +140,13 @@ func TestBuildPreviewResponse(t *testing.T) {
 		{
 			name:    "invalid utf-8 binary content",
 			body:    []byte{0xff, 0xfe, 0x00, 0x01},
+			wantErr: errPreviewNotText,
+		},
+		{
+			// NUL バイトは妥当な UTF-8 だが、テキストにはまず含まれない (UTF-16 やバイナリの
+			// 徴候)。utf8.Valid だけでは通ってしまうため NUL 検査で弾くことを検証する。
+			name:    "valid utf-8 but contains NUL byte",
+			body:    []byte{'h', 'e', 'l', 'l', 'o', 0x00, 'w'},
 			wantErr: errPreviewNotText,
 		},
 		{

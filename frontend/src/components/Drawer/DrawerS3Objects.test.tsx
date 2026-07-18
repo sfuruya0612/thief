@@ -200,13 +200,13 @@ describe('DrawerS3Objects', () => {
     expect(uploadCall[0]).toContain('key=logs%2Fhello.txt');
   });
 
-  it('対象外拡張子や 5 MB 以上のオブジェクトは Preview ボタンを無効化する', async () => {
+  it('バイナリ拡張子や 5 MB 以上のオブジェクトは Preview ボタンを無効化し行をグレーアウトする', async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       status: 200,
       statusText: 'OK',
       json: async () => [
-        { key: 'ok.csv', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
+        { key: 'ok.log', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '1' },
         { key: 'image.png', size: 100, last_modified: '', storage_class: 'STANDARD', etag: '2' },
         {
           key: 'huge.txt',
@@ -223,7 +223,7 @@ describe('DrawerS3Objects', () => {
     );
 
     await waitFor(() => {
-      expect(container.textContent).toContain('ok.csv');
+      expect(container.textContent).toContain('ok.log');
     });
 
     const previewButtons = Array.from(container.querySelectorAll('button')).filter(
@@ -231,11 +231,20 @@ describe('DrawerS3Objects', () => {
     );
     expect(previewButtons).toHaveLength(3);
     const [okBtn, pngBtn, hugeBtn] = previewButtons;
+    // テキスト拡張子 (.log) はプレビュー可能
     expect(okBtn.disabled).toBe(false);
     expect(pngBtn.disabled).toBe(true);
-    expect(pngBtn.title).toBe('csv / txt / json のみプレビューできます');
+    expect(pngBtn.title).toBe('バイナリファイルはプレビューできません');
     expect(hugeBtn.disabled).toBe(true);
     expect(hugeBtn.title).toBe('5 MB 以上のオブジェクトはプレビューできません');
+
+    // プレビュー不可の行だけ preview-ineligible クラスでグレーアウトされる
+    const dataRows = Array.from(container.querySelectorAll('table.dt tbody tr'));
+    const rowFor = (text: string) =>
+      dataRows.find((tr) => tr.textContent?.includes(text)) as HTMLTableRowElement;
+    expect(rowFor('ok.log').classList.contains('preview-ineligible')).toBe(false);
+    expect(rowFor('image.png').classList.contains('preview-ineligible')).toBe(true);
+    expect(rowFor('huge.txt').classList.contains('preview-ineligible')).toBe(true);
   });
 
   it('Preview ボタンをクリックするとプレビュー API を呼び中身を表示する', async () => {
