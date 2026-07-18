@@ -1,5 +1,7 @@
 // S3 / GCS オブジェクトブラウザ (DrawerObjectBrowser) から開くプレビュー本体。
 // txt/json はテキスト表示 (json は整形)、csv はテーブル表示する。
+// 編集モードでは表示形式に関わらず生テキストを直接編集し、保存前に上書き確認を挟む。
+import { useState } from 'react';
 import { Loading } from '../Loading';
 import { ResultTable } from '../query/ResultTable';
 import { ApiError } from '../../types/common';
@@ -12,6 +14,8 @@ export interface DrawerObjectPreviewProps {
   isLoading: boolean;
   error: unknown;
   onClose: () => void;
+  // 保存経路 (アップロード API 呼び出し) を呼び出し側から注入する。失敗時は reject する。
+  onSave: (content: string) => Promise<void>;
 }
 
 function PreviewBody({ fileName, content }: { fileName: string; content: string }) {
@@ -50,16 +54,84 @@ export function DrawerObjectPreview({
   isLoading,
   error,
   onClose,
+  onSave,
 }: DrawerObjectPreviewProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<unknown>(null);
+
+  const startEdit = () => {
+    setDraft(content ?? '');
+    setSaveError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setSaveError(null);
+  };
+
+  const handleSave = async () => {
+    if (!window.confirm(`${fileName} を上書きします。よろしいですか？`)) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(draft);
+      setEditing(false);
+    } catch (e) {
+      setSaveError(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="section">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>Preview: {fileName}</h3>
-        <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={onClose}>
+        {!editing && content !== undefined && (
+          <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>
+            編集
+          </button>
+        )}
+        {editing && (
+          <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+            <button className="btn sm" onClick={cancelEdit} disabled={isSaving}>
+              キャンセル
+            </button>
+            <button
+              className="btn sm primary"
+              onClick={() => void handleSave()}
+              disabled={isSaving}
+            >
+              {isSaving ? '保存中…' : '保存'}
+            </button>
+          </span>
+        )}
+        <button
+          className="btn sm"
+          style={editing ? undefined : { marginLeft: 8 }}
+          onClick={onClose}
+          disabled={isSaving}
+        >
           Close
         </button>
       </div>
-      {isLoading ? (
+      {saveError !== null && (
+        <div style={{ padding: '8px 0', color: 'var(--err)' }}>
+          {saveError instanceof ApiError ? saveError.message : String(saveError)}
+        </div>
+      )}
+      {editing ? (
+        <textarea
+          className="object-edit-textarea"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          disabled={isSaving}
+          spellCheck={false}
+        />
+      ) : isLoading ? (
         <Loading />
       ) : error ? (
         <div style={{ padding: 20, color: 'var(--err)' }}>

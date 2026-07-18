@@ -35,7 +35,7 @@ export type ObjectUploadMutation = UseMutationResult<
 // DrawerObjectBrowser が参照するフィールドだけを表す (react-query の UseQueryResult は
 // duck typing で満たされる)。
 export interface ObjectPreviewQuery {
-  data: { content: string } | undefined;
+  data: { content: string; contentType: string } | undefined;
   isLoading: boolean;
   error: unknown;
 }
@@ -78,6 +78,9 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   const filterPrefix = stripLeadingSlashes(prefixInput);
   const uploadPrefix = normalizeUploadPrefix(prefixInput);
   const upload = useUpload(uploadPrefix || undefined);
+  // プレビュー編集の保存専用インスタンス。フィルタ入力由来の uploadPrefix を
+  // 付けると保存先キーが変わってしまうため、prefix なしで呼び出す。
+  const editUpload = useUpload(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -145,13 +148,21 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   };
 
   if (previewRow) {
+    const previewKeyForSave = previewKeyOf(previewRow);
     return (
       <DrawerObjectPreview
-        fileName={previewKeyOf(previewRow)}
+        fileName={previewKeyForSave}
         content={preview.data?.content}
         isLoading={preview.isLoading}
         error={preview.error}
         onClose={() => setPreviewRow(null)}
+        onSave={async (newContent) => {
+          const contentType = preview.data?.contentType || 'text/plain';
+          const file = new File([newContent], previewKeyForSave.split('/').pop() || 'file', {
+            type: contentType,
+          });
+          await editUpload.mutateAsync({ key: previewKeyForSave, file });
+        }}
       />
     );
   }

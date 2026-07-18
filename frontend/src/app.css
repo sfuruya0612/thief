@@ -1681,6 +1681,20 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   overflow-y: auto;
   line-height: 1.6;
 }
+/* S3 / GCS オブジェクトプレビューの編集用テキストエリア */
+.object-edit-textarea {
+  width: 100%;
+  min-height: 320px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-1);
+  line-height: 1.6;
+  resize: vertical;
+}
 .logbox .ts {
   color: var(--text-4);
   margin-right: 8px;

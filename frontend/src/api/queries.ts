@@ -249,6 +249,9 @@ export function useS3Upload(profile: string, region: string, bucket: string, pre
       void queryClient.invalidateQueries({
         queryKey: ['aws', 's3-objects', profile, region, bucket],
       });
+      void queryClient.invalidateQueries({
+        queryKey: ['aws', 's3-object-preview', profile, region, bucket],
+      });
     },
   });
 }
@@ -783,6 +786,9 @@ export function useGcsUpload(projectId: string, bucket: string, prefix?: string)
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['gcp', 'gcs-objects', projectId, bucket],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['gcp', 'gcs-object-preview', projectId, bucket],
       });
     },
   });
