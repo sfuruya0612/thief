@@ -54,6 +54,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/waf", s.handleWAF)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost", s.handleCost)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost/forecast", s.handleCostForecast)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/pricing", s.handlePricing)
 
 	// CloudWatch Logs (ログビューア)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/logs/groups", s.handleCWLogGroups)

@@ -928,3 +928,66 @@ export interface CWLogEventPageRaw {
   events: CWLogEventRaw[];
   next_page_token?: string;
 }
+
+// ============================================================
+// Pricing (AWS Price List / Savings Plans の正規化レート表)
+// ============================================================
+
+// backend/internal/aws/pricing.go の PriceRate.Model と同じ 3 値のみを取る。
+export type PriceModel = 'on_demand' | 'reserved' | 'savings_plan';
+
+export interface PriceTermRaw {
+  lease: string | null;
+  offering_class: string | null;
+  payment: string | null;
+}
+
+export interface PriceTermRow {
+  lease: string | null;
+  offeringClass: string | null;
+  payment: string | null;
+}
+
+export interface PriceRateRaw {
+  rate_id: string;
+  model: PriceModel;
+  group: string;
+  label: string;
+  attributes: Record<string, string>;
+  term: PriceTermRaw;
+  unit: string;
+  price_usd: number;
+  upfront_usd: number;
+  currency: string;
+}
+
+export interface PriceRateRow {
+  rateId: string;
+  model: PriceModel;
+  group: string;
+  label: string;
+  attributes: Record<string, string>;
+  term: PriceTermRow;
+  unit: string;
+  priceUSD: number;
+  upfrontUSD: number;
+  currency: string;
+}
+
+export interface PriceTableRaw {
+  service: string;
+  region: string;
+  fetched_at: string;
+  partial: boolean;
+  missing_models: string[];
+  rates: PriceRateRaw[];
+}
+
+export interface PriceTableRow {
+  service: string;
+  region: string;
+  fetchedAt: string;
+  partial: boolean;
+  missingModels: string[];
+  rates: PriceRateRow[];
+}

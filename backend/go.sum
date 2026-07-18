@@ -102,10 +102,14 @@ github.com/aws/aws-sdk-go-v2/service/kinesis v1.43.6 h1:Gw375uiaTvryG3z4QN9m5Kua
 github.com/aws/aws-sdk-go-v2/service/kinesis v1.43.6/go.mod h1:CHCpwz0om22znPqK8Gn3jmu1QZxnxDzMZ6UbQ1duH3A=
 github.com/aws/aws-sdk-go-v2/service/lambda v1.90.0 h1:5Ik7cnQRuS078cSh1Sj66QdLPlXtuRRmuwDAWbsuL4c=
 github.com/aws/aws-sdk-go-v2/service/lambda v1.90.0/go.mod h1:7qoh/MlWG5QCnZwq9bvdXomEAkmumayXcjEjIemIV7U=
+github.com/aws/aws-sdk-go-v2/service/pricing v1.43.1 h1:jj0ESTD6wR5FNj663h7khDJhVd4C/TkwQJVV3fo98EA=
+github.com/aws/aws-sdk-go-v2/service/pricing v1.43.1/go.mod h1:fX2p8/1nehWSKdUTLWSp/gPCxOUSCaBk2r2wjDoyxf4=
 github.com/aws/aws-sdk-go-v2/service/rds v1.116.1 h1:a5PMhM3lOcu2DKgvYGjhCDToKQnz9VEUo9iSc5+DsyA=
 github.com/aws/aws-sdk-go-v2/service/rds v1.116.1/go.mod h1:bMaMwbVQ96bx42kDw/Ko+YiDyT/UCotPO+1RDp6lq7E=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0 h1:XptwLL+UHXgafYMIHTy59IRovLbhz3znkxY2uS/pbXU=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0/go.mod h1:zdmCoFO/dSI7GlrwsPqFJI+WlFnSU4Tc8TJnlXrM1Do=
+github.com/aws/aws-sdk-go-v2/service/savingsplans v1.34.1 h1:hy0MjTo2iPU8ksM07QNPPP2gGRz+OjbVFuUCy9yBRN8=
+github.com/aws/aws-sdk-go-v2/service/savingsplans v1.34.1/go.mod h1:yCPYuZaXpuk8XpMoZsDq9pRUKCVhd6+7YyDYT+GGqRg=
 github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0 h1:5RbF+fv7+6MU1ImSFQHGHT0RDOkABOM9I9Y71/cRNcM=
 github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0/go.mod h1:oUyL28WfxY0RqPhFpkrWZx26Cu4JlyrWMMcWq8qqhi0=
 github.com/aws/aws-sdk-go-v2/service/signin v1.4.0 h1:sLzmJGCMv+C8KqiJgEqDLB6vxaJGmobRh4rr//ZpA3w=

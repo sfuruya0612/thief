@@ -17,8 +17,10 @@ func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	c := cache.New[any](time.Minute)
 	t.Cleanup(c.Close)
+	cfg := config.Defaults()
+	cfg.PriceCacheDir = t.TempDir()
 	return &Server{
-		cfg:           config.Defaults(),
+		cfg:           cfg,
 		snippets:      snippet.NewStore(t.TempDir()),
 		resourceCache: c,
 	}

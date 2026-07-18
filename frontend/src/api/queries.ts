@@ -3,6 +3,7 @@ import type { CostRow } from '../types/aws';
 import type { BaseRow } from '../types/common';
 import type { QueryStatusRow } from '../types/query';
 import { gcpProjectFromRaw, gcsObjectFromRaw } from '../lib/normalizeGcp';
+import { priceTableFromRaw } from '../lib/normalizePricing';
 import {
   athenaExecutionFromRaw,
   athenaHistoryFromRaw,
@@ -87,6 +88,7 @@ import {
   getGcsObjectPreview,
   getGcsObjects,
   getHealth,
+  getPricing,
   getProfileIdentity,
   getProfiles,
   getRegions,
@@ -209,6 +211,34 @@ export function useCostForecast(profile: string, region: string) {
     },
     staleTime: 60_000,
     enabled: !!profile,
+  });
+}
+
+// ============================================================
+// Pricing (AWS Price List / Savings Plans の正規化レート表)
+// 単価はアカウント非依存のため queryKey に profile を含めない (プロファイル間で共有する)。
+// バックエンドのファイルキャッシュ (TTL なし) を正とし、staleTime: Infinity で自動再取得は
+// しない。更新は useRefreshPricing (mutation) からのみ行う。
+// ============================================================
+export function usePricing(profile: string, region: string, service: string, enabled = true) {
+  return useQuery({
+    queryKey: ['aws', 'pricing', service, region],
+    queryFn: async () => priceTableFromRaw(await getPricing(profile, region, service)),
+    staleTime: Infinity,
+    enabled: enabled && !!profile && !!region,
+  });
+}
+
+// 明示的な更新 (ツールバーの更新ボタン)。invalidateQueries はバックエンドのファイル
+// キャッシュにヒットして強制再取得にならないため、refresh=true を渡した結果を
+// setQueryData で直接差し替える (useRefreshGcpProjects と同じ方針)。
+export function useRefreshPricing(profile: string, region: string, service: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => priceTableFromRaw(await getPricing(profile, region, service, true)),
+    onSuccess: (table) => {
+      queryClient.setQueryData(['aws', 'pricing', service, region], table);
+    },
   });
 }
 

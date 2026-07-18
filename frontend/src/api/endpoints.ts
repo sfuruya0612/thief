@@ -16,6 +16,7 @@ import type {
   ELBTargetGroupRaw,
   ELBTargetHealthRaw,
   ForecastRaw,
+  PriceTableRaw,
   RegionRaw,
   S3ObjectRaw,
 } from '../types/aws';
@@ -124,6 +125,25 @@ export function getCost(
 export function getCostForecast(profile: string, region: string): Promise<ForecastRaw[]> {
   return apiGetList<ForecastRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/cost/forecast`, {
     region,
+  });
+}
+
+// ============================================================
+// Pricing (AWS Price List / Savings Plans の正規化レート表)
+// ============================================================
+// バックエンドはサービス×リージョン単位でローカルファイルにキャッシュする (TTL なし、
+// プロファイルはパスに含めない。認証にのみ使う)。refresh=true を渡すと強制再取得する
+// (ツールバーの更新ボタンから使う)。
+export function getPricing(
+  profile: string,
+  region: string,
+  service: string,
+  refresh?: boolean,
+): Promise<PriceTableRaw> {
+  return apiGet<PriceTableRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/pricing`, {
+    region,
+    service,
+    refresh: refresh ? true : undefined,
   });
 }
 

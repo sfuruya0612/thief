@@ -82,6 +82,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { AthenaView } from './AthenaView';
 import { CloudWatchLogsView } from './CloudWatchLogsView';
 import { CostExplorerPanel } from './CostExplorerPanel';
+import { PricingPanel } from './PricingPanel';
 
 interface ServicePanelProps<TRaw, TRow extends BaseRow> {
   service: string;
@@ -468,6 +469,9 @@ export function AccountView({
         <CloudWatchLogsView profile={profile} region={region} />
       )}
       {activeService === 'costexplorer' && <CostExplorerPanel profile={profile} region={region} />}
+      {activeService === 'pricing' && (
+        <PricingPanel profile={profile} region={region} onRegionChange={onRegionChange} />
+      )}
     </div>
   );
 }

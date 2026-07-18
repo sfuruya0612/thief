@@ -341,6 +341,18 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  pricing: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <path d="M8 7h8" />
+          <path d="M8 11h2M12 11h2M16 11h2M8 15h2M12 15h2M16 15h2" />
+        </>
+      }
+    />
+  ),
   clock: (p = {}) => (
     <Icon
       {...p}
