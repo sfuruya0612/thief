@@ -139,23 +139,14 @@ description = "frontend ビルドして dist を静的サーブ (vite preview, �
 dir = "frontend"
 run = "npm run build && npm run preview"
 
-# === docker ===
-[tasks."docker:up"]
-description = "docker compose で frontend (8088) / backend (8089) を起動"
-run = "docker compose up --build"
-
-[tasks."docker:down"]
-description = "docker compose を停止"
-run = "docker compose down"
-
 # === example (floci によるローカル動作確認環境) ===
 [tasks."example:up"]
-description = "floci 込みのローカル動作確認環境を起動"
-run = "docker compose -f compose.yaml -f example/compose.yaml up --build"
+description = "floci (AWS エミュレータ) を起動する (backend/frontend は別途 mise run backend:run / frontend:run で起動すること)"
+run = "docker compose -f example/compose.yaml up"
 
 [tasks."example:down"]
-description = "example 環境を停止"
-run = "docker compose -f compose.yaml -f example/compose.yaml down"
+description = "floci を停止する"
+run = "docker compose -f example/compose.yaml down"
 
 [tasks."example:seed"]
 description = "floci にサンプルリソース (S3/DynamoDB/SQS/SSM/Secrets Manager/CloudFormation) を投入"

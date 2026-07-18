@@ -10,11 +10,23 @@
 mise run example:up
 ```
 
-ルートの `compose.yaml` に `example/compose.yaml` を override として重ねる。
+`floci/floci:latest` (ポート 4566) が単体で起動する。
+thief 本体はネイティブ起動のため、別ターミナルで次のように起動する。
 
-- `floci` サービス (`floci/floci:latest`、ポート 4566) が追加で起動する
-- `backend` サービスの `~/.aws` マウントが `./example/aws` (floci 専用プロファイルのみを含むダミー設定) に差し替わる
-- `backend` サービスに `THIEF_S3_PATH_STYLE=true` が設定される (floci は S3 を path-style でのみ提供するため)
+```sh
+export HOME="$(pwd)/example/home"
+export THIEF_S3_PATH_STYLE=true
+mise run backend:run
+```
+
+- `HOME` を `./example/home` (floci 専用プロファイルのみを含む `.aws/config` / `.aws/credentials` を配置したダミー home) に差し替え、ホストの実 `~/.aws` (実アカウントのプロファイル・SSO キャッシュ) から隔離する。
+- `THIEF_S3_PATH_STYLE=true` は floci が S3 を path-style でのみ提供するために必要。
+
+frontend は別ターミナルで、`HOME` を差し替えずに通常どおり起動する (frontend は `~/.aws` を参照しない)。
+
+```sh
+mise run frontend:run
+```
 
 停止は次のとおり。
 
@@ -37,15 +49,16 @@ mise run example:seed
 - Secrets Manager: シークレット 1 件
 - CloudFormation: 最小スタック `thief-example-stack` (S3 バケット 1 個を作成するテンプレート)
 
-`mise run example:up` でコンテナが起動した後に実行すること。`seed.sh` はホストから実行する前提のため、エンドポイントはコンテナ名 (`floci`) ではなく `localhost:4566` を使う。
+`mise run example:up` で floci が起動した後に実行すること。
 
 ## 確認手順
 
 1. `mise run example:up`
 2. `mise run example:seed`
-3. ブラウザで http://localhost:8088 を開く
-4. プロファイル選択で `floci` を選ぶ
-5. S3 (バケット一覧、オブジェクトブラウザ)、DynamoDB (テーブル一覧、schema / items タブ)、SQS、SSM Parameter Store、Secrets Manager、CloudFormation (スタック一覧、Events / Resources の Drawer) の一覧表示を確認する
+3. 上記の `HOME` / `THIEF_S3_PATH_STYLE` を設定した状態で `mise run backend:run` と `mise run frontend:run` を起動する
+4. ブラウザで http://localhost:8082 を開く
+5. プロファイル選択で `floci` を選ぶ
+6. S3 (バケット一覧、オブジェクトブラウザ)、DynamoDB (テーブル一覧、schema / items タブ)、SQS、SSM Parameter Store、Secrets Manager、CloudFormation (スタック一覧、Events / Resources の Drawer) の一覧表示を確認する
 
 ## 動作確認できない機能
 
@@ -57,5 +70,5 @@ mise run example:seed
 
 ## 注意
 
-- `backend` サービスの `~/.aws` マウントが `./example/aws` に差し替わるため、`example` 環境ではホストの実 `~/.aws` (実アカウントのプロファイル・SSO キャッシュ) が一切見えなくなる。これは実アカウントからローカル確認環境を隔離する意図どおりの挙動。
-- `example` 環境を終えて通常の `mise run docker:up` に戻る場合、`mise run example:down` で停止してから `docker:up` を実行すること (同じコンテナ名・ネットワークを使い回すため)。
+- backend の `HOME` を `./example/home` に差し替えるため、`example` 環境で起動した backend からはホストの実 `~/.aws` (実アカウントのプロファイル・SSO キャッシュ) が一切見えなくなる。これは実アカウントからローカル確認環境を隔離する意図どおりの挙動。
+- `HOME` の差し替えはそのシェルセッション内でのみ有効。通常の thief 起動に戻るときは、`HOME` を差し替えていない別のターミナルで `mise run backend:run` を実行すること。
