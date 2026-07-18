@@ -1,7 +1,9 @@
 // ログビューアのログ一覧。1 行 1 イベントで、行クリックで詳細 (JSON フィールド) を展開する。
 // CloudWatch Logs (GROUP 列) と Cloud Logging (SEVERITY バッジ列) で列構成が異なるため、
 // 列見出し・2 列目の描画・詳細の描画を呼び出し側から差し込む汎用コンポーネントにする。
-import { type ReactNode, useState } from 'react';
+// 実 <table> (auto table layout) + thead sticky で描画し、SUMMARY 列が長い場合はパネル全体
+// (ヘッダー含む) が 1 本のスクロールバーで横スクロールする (行ごとの個別スクロールにはしない)。
+import { Fragment, type ReactNode, useState } from 'react';
 import { formatLogClock } from '../../lib/logFormat';
 import type { SeverityLevel } from '../../lib/logSeverity';
 
@@ -61,45 +63,66 @@ export function LogList<T>({
 
   return (
     <div className="lv-list">
-      <div className="lv-list-head">
-        <span className="lv-col-ts" style={{ width: 150 }}>
-          TIMESTAMP
-        </span>
-        <span className="lv-col-second" style={{ width: secondWidth }}>
-          {secondHeader}
-        </span>
-        <span className="lv-col-msg">{messageHeader}</span>
+      <div className="lv-list-toolbar">
         {headerExtra}
         <button className="btn sm lv-copy-btn" onClick={onCopy} disabled={rows.length === 0}>
           {copyLabel}
         </button>
       </div>
-      <div className="lv-list-body" ref={bodyRef} onScroll={onScroll}>
-        {rows.length === 0 ? (
-          <div className="lv-list-empty">{emptyMessage}</div>
-        ) : (
-          rows.map((row) => {
-            const key = getKey(row);
-            const level = getLevel(row);
-            const isOpen = expanded.has(key);
-            return (
-              <div key={key} className={`lv-row lv-row-${level} ${isOpen ? 'open' : ''}`}>
-                <div className="lv-row-line" onClick={() => toggle(key)}>
-                  <span className="lv-row-ts" style={{ width: 150 }}>
-                    {formatLogClock(getTimestamp(row))}
-                  </span>
-                  <span className="lv-row-second" style={{ width: secondWidth }}>
-                    {renderSecond(row)}
-                  </span>
-                  <span className={`lv-row-msg ${tintMessageByLevel ? `tint-${level}` : ''}`}>
-                    {getMessage(row)}
-                  </span>
-                </div>
-                {isOpen && <div className="lv-row-detail">{renderDetail(row)}</div>}
-              </div>
-            );
-          })
-        )}
+      <div className="lv-table-wrap" ref={bodyRef} onScroll={onScroll}>
+        <table className="lv-table">
+          <thead>
+            <tr>
+              <th className="lv-col-ts" style={{ width: 150 }}>
+                TIMESTAMP
+              </th>
+              <th className="lv-col-second" style={{ width: secondWidth }}>
+                {secondHeader}
+              </th>
+              <th className="lv-col-msg">{messageHeader}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td className="lv-list-empty" colSpan={3}>
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const key = getKey(row);
+                const level = getLevel(row);
+                const isOpen = expanded.has(key);
+                return (
+                  <Fragment key={key}>
+                    <tr
+                      className={`lv-row lv-row-${level} ${isOpen ? 'open' : ''}`}
+                      onClick={() => toggle(key)}
+                    >
+                      <td className="lv-row-ts" style={{ width: 150 }}>
+                        {formatLogClock(getTimestamp(row))}
+                      </td>
+                      <td className="lv-row-second" style={{ width: secondWidth }}>
+                        {renderSecond(row)}
+                      </td>
+                      <td className={`lv-row-msg ${tintMessageByLevel ? `tint-${level}` : ''}`}>
+                        {getMessage(row)}
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="lv-row-detail-row">
+                        <td colSpan={3}>
+                          <div className="lv-row-detail">{renderDetail(row)}</div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
       {footer && <div className="lv-list-foot">{footer}</div>}
     </div>

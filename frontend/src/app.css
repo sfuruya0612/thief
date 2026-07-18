@@ -3318,27 +3318,22 @@ td.qe-rt-empty {
   width: 100%;
   min-height: 0;
 }
-.lv-list-head {
+.lv-list-toolbar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   border-bottom: 1px solid var(--line-1);
   padding: 6px 12px;
-  font-size: 10.5px;
-  color: var(--text-3);
   flex: none;
 }
-.lv-col-msg {
-  flex: 1;
-}
 .lv-copy-btn {
-  margin-left: auto;
   flex: none;
 }
 /* ---------- SUMMARY フィールド選択ポップオーバー ---------- */
 .lv-field-picker {
   position: relative;
   display: inline-flex;
-  margin-right: 8px;
 }
 .lv-field-picker-menu {
   position: absolute;
@@ -3436,46 +3431,61 @@ td.qe-rt-empty {
 .lv-field-picker-clear:hover {
   background: var(--bg-2);
 }
-.lv-list-body {
+.lv-table-wrap {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 11.5px;
   line-height: 1.7;
 }
-.lv-row {
+.lv-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+}
+.lv-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-1);
   border-bottom: 1px solid var(--line-1);
+  padding: 6px 12px;
+  font-size: 10.5px;
+  font-weight: 400;
+  text-align: left;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+[data-theme='dark'] .lv-table thead th {
+  background: var(--bg-0);
+}
+.lv-row {
+  cursor: pointer;
+}
+.lv-row:hover {
+  background: var(--bg-3);
 }
 .lv-row.open {
   background: var(--bg-2);
 }
-.lv-row-line {
-  display: flex;
+.lv-row td {
+  border-bottom: 1px solid var(--line-1);
   padding: 5px 12px;
   color: var(--text-2);
-  cursor: pointer;
-}
-.lv-row-line:hover {
-  background: var(--bg-3);
+  vertical-align: top;
 }
 .lv-row-ts {
-  flex: none;
   color: var(--text-3);
+  white-space: nowrap;
 }
 .lv-row-second {
-  flex: none;
   color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .lv-row-msg {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
   white-space: nowrap;
-  scrollbar-width: thin;
 }
 .lv-row-msg.tint-err {
   color: #dc2626;
@@ -3489,6 +3499,9 @@ td.qe-rt-empty {
   white-space: nowrap;
   display: inline-block;
   max-width: 100%;
+}
+.lv-row-detail-row td {
+  border-bottom: 1px solid var(--line-1);
 }
 .lv-row-detail {
   padding: 2px 12px 9px 162px;
