@@ -735,6 +735,22 @@ textarea {
   background: var(--accent);
   opacity: 0.5;
 }
+/* Athena / CloudWatch Logs / BigQuery / Cloud Logging の左パネル (.qe-schema / .lv-tree)
+   共通のリサイズハンドル。親が overflow: hidden のため sidebar-resizer と異なり
+   right: 0 (パネル内側) に置く。 */
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 1;
+}
+.panel-resizer:hover {
+  background: var(--accent);
+  opacity: 0.5;
+}
 .sidebar .section-label {
   font-size: 11px;
   font-weight: 500;
@@ -2136,8 +2152,9 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 
 /* ---------- スキーマツリー ---------- */
 .qe-schema {
-  width: 248px;
+  width: var(--resource-panel-w, 248px);
   flex-shrink: 0;
+  position: relative;
 }
 .qe-schema-search {
   padding: 10px;
@@ -3067,8 +3084,9 @@ td.qe-rt-empty {
   padding: 0 18px 16px;
 }
 .lv-tree {
-  width: 248px;
+  width: var(--resource-panel-w, 248px);
   flex: none;
+  position: relative;
   background: var(--bg-1);
   border: 1px solid var(--line-2);
   border-radius: 8px;

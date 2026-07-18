@@ -1,7 +1,14 @@
 // ログビューアの共通レイアウト。上部ツールバー (タイトル + 操作) と、左ツリー + 右 (フィルタ /
 // ヒストグラム + ログ一覧) の分割ボディを組む。各スロットの中身は呼び出し側 (CloudWatch Logs /
 // Cloud Logging) が差し込む。
-import { type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import {
+  RESOURCE_PANEL_CSS_VAR,
+  RESOURCE_PANEL_MAX_WIDTH,
+  RESOURCE_PANEL_MIN_WIDTH,
+  useResourcePanelWidth,
+} from '../../hooks/useResourcePanelWidth';
+import { startPanelResize } from '../../lib/panelResize';
 
 export interface LogViewerShellProps {
   title: string;
@@ -29,6 +36,9 @@ export function LogViewerShell({
   logList,
   banner,
 }: LogViewerShellProps) {
+  const treeRef = useRef<HTMLDivElement>(null);
+  const { setWidth } = useResourcePanelWidth();
+
   return (
     <div className="main lv-root">
       <div className="lv-topbar">
@@ -42,7 +52,20 @@ export function LogViewerShell({
       {banner}
 
       <div className="lv-body">
-        <div className="lv-tree">{tree}</div>
+        <div className="lv-tree" ref={treeRef}>
+          {tree}
+          <div
+            className="panel-resizer"
+            onPointerDown={startPanelResize({
+              min: RESOURCE_PANEL_MIN_WIDTH,
+              max: RESOURCE_PANEL_MAX_WIDTH,
+              cssVar: RESOURCE_PANEL_CSS_VAR,
+              getLeftEdge: () => treeRef.current?.getBoundingClientRect().left ?? 0,
+              onWidthChange: setWidth,
+            })}
+            title="Drag to resize"
+          />
+        </div>
         <div className="lv-right">
           <div className="lv-filter-card">
             <div className="lv-filter-bar">{filterBar}</div>
