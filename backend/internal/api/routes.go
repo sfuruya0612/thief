@@ -52,6 +52,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost", s.handleCost)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost/forecast", s.handleCostForecast)
 
+	// CloudWatch Logs (ログビューア)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/logs/groups", s.handleCWLogGroups)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/logs/events", s.handleCWLogEvents)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/logs/tail", s.handleCWLogTail)
+
 	// Athena (クエリエディタ)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/catalogs", s.handleAthenaCatalogs)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/athena/databases", s.handleAthenaDatabases)

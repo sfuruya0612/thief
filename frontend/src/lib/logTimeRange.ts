@@ -3,6 +3,18 @@
 
 export type LogTimeRangePreset = '15m' | '1h' | '6h' | '24h' | '7d';
 
+// PresetOption は期間セレクタの選択肢 (プリセット + カスタム)。ログビューアで共有する。
+export type PresetOption = LogTimeRangePreset | 'custom';
+
+export const PRESET_LABELS: Record<PresetOption, string> = {
+  '15m': '直近 15 分',
+  '1h': '直近 1 時間',
+  '6h': '直近 6 時間',
+  '24h': '直近 24 時間',
+  '7d': '直近 7 日',
+  custom: 'カスタム',
+};
+
 export interface LogTimeRange {
   start: string;
   end: string;

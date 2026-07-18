@@ -3,6 +3,8 @@ import type {
   CFNStackEventRaw,
   CFNStackResourceRaw,
   CostRaw,
+  CWLogEventPageRaw,
+  CWLogGroupRaw,
   DynamoItemRaw,
   DynamoTableSchemaRaw,
   ECRImageRaw,
@@ -711,4 +713,40 @@ export function postSnippet(service: string, name: string, sql: string): Promise
 
 export function deleteSnippet(service: string, name: string): Promise<void> {
   return apiDelete(`/api/snippets/${encodeURIComponent(service)}/${encodeURIComponent(name)}`);
+}
+
+// ============================================================
+// CloudWatch Logs (ログビューア)
+// ロググループ一覧 (キャッシュあり) と、選択ロググループ横断のイベント検索 (キャッシュなし)。
+// Live Tail は api/terminal.ts の cwLogsTailUrl 経由の WebSocket で別途行う。
+// ============================================================
+export function getCWLogGroups(profile: string, region: string): Promise<CWLogGroupRaw[]> {
+  return apiGetList<CWLogGroupRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/logs/groups`, {
+    region,
+  });
+}
+
+export interface CWLogEventsQuery {
+  groups: string[];
+  filter?: string;
+  start?: string;
+  end?: string;
+  pageToken?: string;
+  limit?: number;
+}
+
+export function getCWLogEvents(
+  profile: string,
+  region: string,
+  opts: CWLogEventsQuery,
+): Promise<CWLogEventPageRaw> {
+  return apiGet<CWLogEventPageRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/logs/events`, {
+    region,
+    group: opts.groups,
+    filter: opts.filter || undefined,
+    start: opts.start || undefined,
+    end: opts.end || undefined,
+    page_token: opts.pageToken || undefined,
+    limit: opts.limit !== undefined ? String(opts.limit) : undefined,
+  });
 }

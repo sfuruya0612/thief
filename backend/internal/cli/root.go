@@ -43,6 +43,7 @@ including AWS, BigQuery, Datadog, and TiDB.`,
 		newKinesisCmd(),
 		newCloudFrontCmd(),
 		newELBCmd(),
+		newLogsCmd(),
 		newGCPCmd(),
 		newServerCmd(),
 	)

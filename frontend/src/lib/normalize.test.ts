@@ -5,6 +5,8 @@ import {
   cfnStackDetailFromRaw,
   cfnStackEventFromRaw,
   cfnStackResourceFromRaw,
+  cwLogEventFromRaw,
+  cwLogGroupFromRaw,
   dynamoTableSchemaFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
@@ -370,5 +372,65 @@ describe('cfnStackResourceFromRaw', () => {
       resourceStatus: 'UPDATE_COMPLETE',
       lastUpdatedTime: '2026-07-02T00:00:00Z',
     });
+  });
+});
+
+describe('cwLogGroupFromRaw', () => {
+  it('snake_case を camelCase に変換する', () => {
+    expect(
+      cwLogGroupFromRaw({
+        name: '/aws/lambda/api',
+        arn: 'arn:aws:logs:...:log-group:/aws/lambda/api',
+        stored_bytes: 4096,
+        retention_days: 30,
+        creation_time: '2026-07-18T00:00:00Z',
+      }),
+    ).toEqual({
+      name: '/aws/lambda/api',
+      arn: 'arn:aws:logs:...:log-group:/aws/lambda/api',
+      storedBytes: 4096,
+      retentionDays: 30,
+      creationTime: '2026-07-18T00:00:00Z',
+    });
+  });
+});
+
+describe('cwLogEventFromRaw', () => {
+  it('snake_case を camelCase に変換し index 付きの id を作る', () => {
+    const row = cwLogEventFromRaw(
+      {
+        timestamp: '2026-07-18T03:04:05Z',
+        ingestion_time: '2026-07-18T03:04:06Z',
+        message: 'ERROR boom',
+        log_group: '/aws/lambda/api',
+        log_stream: 'stream-1',
+        event_id: 'evt-1',
+      },
+      3,
+    );
+    expect(row).toEqual({
+      id: 'evt-1#3',
+      timestamp: '2026-07-18T03:04:05Z',
+      ingestionTime: '2026-07-18T03:04:06Z',
+      message: 'ERROR boom',
+      logGroup: '/aws/lambda/api',
+      logStream: 'stream-1',
+      eventId: 'evt-1',
+    });
+  });
+
+  it('event_id が空なら timestamp を id のベースにする', () => {
+    const row = cwLogEventFromRaw(
+      {
+        timestamp: '2026-07-18T03:04:05Z',
+        ingestion_time: '',
+        message: 'hi',
+        log_group: '/g',
+        log_stream: 's',
+        event_id: '',
+      },
+      0,
+    );
+    expect(row.id).toBe('2026-07-18T03:04:05Z#0');
   });
 });

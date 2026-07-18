@@ -25,6 +25,10 @@ import type {
   CFNStackRow,
   CloudFrontRaw,
   CloudFrontRow,
+  CWLogEventRaw,
+  CWLogEventRow,
+  CWLogGroupRaw,
+  CWLogGroupRow,
   DynamoIndexSchemaRaw,
   DynamoIndexSchemaRow,
   DynamoRaw,
@@ -585,5 +589,32 @@ export function wafFromRaw(raw: WAFRaw, region: string): WAFRow {
     ruleCount: raw.rule_count,
     associatedCount: raw.associated_count,
     tags: raw.tags ?? {},
+  };
+}
+
+// ============================================================
+// CloudWatch Logs (ログビューア)
+// ============================================================
+export function cwLogGroupFromRaw(raw: CWLogGroupRaw): CWLogGroupRow {
+  return {
+    name: raw.name,
+    arn: raw.arn,
+    storedBytes: raw.stored_bytes,
+    retentionDays: raw.retention_days,
+    creationTime: raw.creation_time,
+  };
+}
+
+// event_id は同一検索内で一意だが、複数ページ・複数回取得を突き合わせると衝突しうるため、
+// 呼び出し側の連番 (index) も id に含めて一意性を担保する (Cloud Logging の logEntryFromRaw と同方針)。
+export function cwLogEventFromRaw(raw: CWLogEventRaw, index: number): CWLogEventRow {
+  return {
+    id: `${raw.event_id || raw.timestamp}#${index}`,
+    timestamp: raw.timestamp,
+    ingestionTime: raw.ingestion_time,
+    message: raw.message,
+    logGroup: raw.log_group,
+    logStream: raw.log_stream,
+    eventId: raw.event_id,
   };
 }

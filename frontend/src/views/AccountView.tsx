@@ -80,6 +80,7 @@ import { DataTable } from '../components/DataTable';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { AthenaView } from './AthenaView';
+import { CloudWatchLogsView } from './CloudWatchLogsView';
 import { CostExplorerPanel } from './CostExplorerPanel';
 
 interface ServicePanelProps<TRaw, TRow extends BaseRow> {
@@ -463,6 +464,9 @@ export function AccountView({
         />
       )}
       {activeService === 'athena' && <AthenaView profile={profile} region={region} />}
+      {activeService === 'cloudwatchlogs' && (
+        <CloudWatchLogsView profile={profile} region={region} />
+      )}
       {activeService === 'costexplorer' && <CostExplorerPanel profile={profile} region={region} />}
     </div>
   );

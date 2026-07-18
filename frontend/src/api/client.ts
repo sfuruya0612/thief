@@ -26,15 +26,20 @@ async function throwApiError(res: Response): Promise<never> {
   throw new ApiError(res.status, code, message, details);
 }
 
-type QueryParams = Record<string, string | boolean | undefined>;
+type QueryParams = Record<string, string | boolean | string[] | undefined>;
 
-// パスとクエリパラメータから URL を組み立てる (undefined のパラメータは付与しない)
+// パスとクエリパラメータから URL を組み立てる (undefined のパラメータは付与しない)。
+// 配列値は同名キーを繰り返す (例: group=a&group=b。CloudWatch Logs の複数ロググループ指定)。
 function buildUrl(path: string, params?: QueryParams): URL {
   const url = new URL(path, BASE_URL);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined) continue;
-      url.searchParams.set(k, typeof v === 'boolean' ? String(v) : v);
+      if (Array.isArray(v)) {
+        for (const item of v) url.searchParams.append(k, item);
+      } else {
+        url.searchParams.set(k, typeof v === 'boolean' ? String(v) : v);
+      }
     }
   }
   return url;

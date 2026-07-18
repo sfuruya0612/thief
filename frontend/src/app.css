@@ -86,6 +86,7 @@
   --svc-secrets: #de5d9c;
   --svc-costexplorer: #f2c94c;
   --svc-cfn: #ff9900;
+  --svc-cloudwatchlogs: #e7157b;
   --svc-athena: #a97ce8;
   --svc-cloudrun: #4285f4;
   --svc-bigquery: #4285f4;
@@ -2924,4 +2925,490 @@ td.qe-rt-empty {
   100% {
     background-position: -100% 0;
   }
+}
+
+/* ============================================================
+   ログビューア (CloudWatch Logs / Cloud Logging)
+   デザイン Turn 8/9。テーマ変数 (--bg-*/
+--line-*/--text-*) を使い light/dark 両対応。
+   severity 色 (err/warn/info) のみ両テーマ共通の固定色を使う。
+   ============================================================ */
+.lv-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.lv-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 10px;
+  flex: none;
+}
+.lv-topbar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.lv-topbar-title h1 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-1);
+}
+.lv-subtitle {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.lv-topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.lv-live-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: var(--bg-1);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 11.5px;
+}
+.lv-live-toggle .lv-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: #dc2626;
+}
+.lv-live-toggle.on {
+  border-color: #16a34a;
+  color: #15803d;
+  background: rgba(22, 163, 74, 0.12);
+  font-weight: 600;
+}
+.lv-live-toggle.on .lv-live-dot,
+.lv-live-dot.on {
+  background: #16a34a;
+}
+.lv-range-select {
+  min-width: 120px;
+}
+
+.lv-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 0 18px 16px;
+}
+.lv-tree {
+  width: 248px;
+  flex: none;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+}
+.lv-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 左ツリー */
+.lv-tree-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+.lv-tree-search {
+  padding: 8px;
+  flex: none;
+}
+.lv-tree-search input {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  background: var(--bg-0);
+  color: var(--text-1);
+}
+.lv-tree-nodes {
+  flex: 1;
+  overflow: auto;
+  padding: 2px 8px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.9;
+}
+.lv-tree-parent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 1px 2px;
+  user-select: none;
+}
+.lv-tree-caret {
+  width: 10px;
+  flex: none;
+}
+.lv-tree-parent-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lv-tree-leaf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px 1px 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-2);
+}
+.lv-tree-leaf.checked {
+  background: var(--accent-dim);
+  color: var(--accent-hi);
+  font-weight: 600;
+}
+.lv-tree-leaf input {
+  flex: none;
+}
+.lv-tree-leaf-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lv-tree-footer {
+  border-top: 1px solid var(--line-1);
+  padding: 8px 10px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  flex: none;
+}
+.lv-tree-empty {
+  padding: 16px 10px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+/* フィルタ + ヒストグラムカード */
+.lv-filter-card {
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  flex: none;
+}
+.lv-filter-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line-1);
+}
+.lv-filter-icon {
+  color: var(--text-3);
+  font-size: 12px;
+  padding-top: 3px;
+  flex: none;
+}
+.lv-filter-input,
+.lv-filter-textarea {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  background: var(--bg-0);
+  color: var(--text-1);
+}
+.lv-filter-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.lv-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.lv-run-btn {
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lv-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ヒストグラム */
+.lv-histogram-wrap {
+  padding: 10px 12px 8px;
+}
+.lv-hist-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.lv-histogram {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 64px;
+}
+.lv-hcol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+.lv-hcol-stack {
+  gap: 1px;
+}
+.lv-hbar {
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+}
+.lv-hbar-info {
+  background: #9aa4b2;
+}
+.lv-hbar-warn {
+  background: #e0972f;
+}
+.lv-hbar-err {
+  background: #dc2626;
+}
+.lv-hseg {
+  width: 100%;
+}
+.lv-hseg-err {
+  background: #dc2626;
+}
+.lv-hseg-warn {
+  background: #e0972f;
+}
+.lv-hseg-info {
+  background: #9aa4b2;
+}
+.lv-hist-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--text-4);
+  margin-top: 4px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+/* ログ一覧 */
+.lv-list-card {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+}
+.lv-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+.lv-list-head {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line-1);
+  padding: 6px 12px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  flex: none;
+}
+.lv-col-msg {
+  flex: 1;
+}
+.lv-copy-btn {
+  margin-left: auto;
+  flex: none;
+}
+.lv-list-body {
+  flex: 1;
+  overflow: auto;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+.lv-row {
+  border-bottom: 1px solid var(--line-1);
+}
+.lv-row.open {
+  background: var(--bg-2);
+}
+.lv-row-line {
+  display: flex;
+  padding: 5px 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.lv-row-line:hover {
+  background: var(--bg-3);
+}
+.lv-row-ts {
+  flex: none;
+  color: var(--text-3);
+}
+.lv-row-second {
+  flex: none;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lv-row-msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lv-row-msg.tint-err {
+  color: #dc2626;
+}
+.lv-row-msg.tint-warn {
+  color: #b45309;
+}
+.lv-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  max-width: 100%;
+}
+.lv-row-detail {
+  padding: 2px 12px 9px 162px;
+  font-size: 11px;
+}
+.lv-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-3);
+  line-height: 1.9;
+}
+.lv-field {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lv-field-label {
+  color: var(--text-3);
+  flex: none;
+}
+.lv-field-value {
+  color: var(--text-1);
+  word-break: break-all;
+}
+.lv-field-action {
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--text-2);
+  font-size: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+.lv-field-action:hover {
+  background: var(--bg-3);
+}
+.lv-list-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line-1);
+  padding: 7px 12px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  flex: none;
+}
+.lv-more-btn {
+  margin-left: auto;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 11px;
+}
+.lv-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lv-live-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lv-list-empty {
+  padding: 24px 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* severity バッジ / 凡例テキスト */
+.lv-sev-err {
+  color: #dc2626;
+}
+.lv-sev-warn {
+  color: #b45309;
+}
+.lv-sev-info {
+  color: var(--text-3);
+}
+.lv-sev-badge {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.lv-sev-badge.lv-sev-err {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.15);
+}
+.lv-sev-badge.lv-sev-warn {
+  color: #b45309;
+  background: rgba(224, 151, 47, 0.18);
+}
+.lv-sev-badge.lv-sev-info {
+  color: var(--text-3);
+  background: var(--bg-3);
 }

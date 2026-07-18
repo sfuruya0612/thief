@@ -80,6 +80,8 @@
   - @sfuruya0612
 - [ADD] floci (AWS エミュレータ) を使ったローカル動作確認環境を `example/` に追加し、backend に S3 path-style アクセスの opt-in (`THIEF_S3_PATH_STYLE`) を追加する
   - @sfuruya0612
+- [ADD] AWS サービス一覧に CloudWatch Logs を追加し、複数ロググループ横断のフィルタパターン検索、StartLiveTail による Live Tail、取得済みイベントのヒストグラム、行クリックでの JSON 展開をログビューアで提供する
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)
