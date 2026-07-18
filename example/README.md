@@ -56,7 +56,7 @@ mise run example:seed
 1. `mise run example:up`
 2. `mise run example:seed`
 3. 上記の `HOME` / `THIEF_S3_PATH_STYLE` を設定した状態で `mise run backend:run` と `mise run frontend:run` を起動する
-4. ブラウザで http://localhost:8082 を開く
+4. ブラウザで http://localhost:8088 を開く
 5. プロファイル選択で `floci` を選ぶ
 6. S3 (バケット一覧、オブジェクトブラウザ)、DynamoDB (テーブル一覧、schema / items タブ)、SQS、SSM Parameter Store、Secrets Manager、CloudFormation (スタック一覧、Events / Resources の Drawer) の一覧表示を確認する
 

@@ -86,7 +86,7 @@ func (s *Server) Close() {
 const readHeaderTimeout = 10 * time.Second
 
 // HTTPServer builds a ready-to-start http.Server. Listen アドレスは cfg.ListenAddr
-// (デフォルト 127.0.0.1:8080、環境変数 THIEF_LISTEN_ADDR で上書き可能) に従う。
+// (デフォルト 127.0.0.1:8089、環境変数 THIEF_LISTEN_ADDR で上書き可能) に従う。
 //
 // ReadTimeout/WriteTimeout はセッションブリッジ (EC2 Start Session / ECS Exec Command) の
 // WebSocket 接続がハンドラ内で長時間ブロックすることと衝突するため設定しない。アイドル接続の

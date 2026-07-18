@@ -34,11 +34,11 @@
 backend と frontend をそれぞれ別ターミナルで起動する。
 
 ```sh
-mise run backend:run   # API サーバー起動 (http://127.0.0.1:8080)
-mise run frontend:run  # Vite dev server 起動 (http://localhost:8082)
+mise run backend:run   # API サーバー起動 (http://127.0.0.1:8089)
+mise run frontend:run  # Vite dev server 起動 (http://localhost:8088)
 ```
 
-ブラウザで `http://localhost:8082` を開く。
+ブラウザで `http://localhost:8088` を開く。
 
 ## CLI として使う
 

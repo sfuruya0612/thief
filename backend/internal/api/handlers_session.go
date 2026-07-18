@@ -78,7 +78,7 @@ func (s *Server) runSessionBridge(w http.ResponseWriter, r *http.Request, result
 		return
 	}
 
-	// OriginPatterns は cfg.WebOrigins (デフォルト localhost:8082/127.0.0.1:8082、環境変数
+	// OriginPatterns は cfg.WebOrigins (デフォルト localhost:8088/127.0.0.1:8088、環境変数
 	// THIEF_WEB_ORIGINS で上書き可能) に従う。DNS rebinding 対策のためここにのみ渡し、
 	// InsecureSkipVerify は使わない。
 	browser, err := websocket.Accept(w, r, &websocket.AcceptOptions{

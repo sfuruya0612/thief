@@ -16,7 +16,7 @@ import (
 func newServerCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "server",
-		Short: "Start the API server (127.0.0.1:8080)",
+		Short: "Start the API server (127.0.0.1:8089)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()

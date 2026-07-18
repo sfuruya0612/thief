@@ -101,14 +101,14 @@ type fileConfig struct {
 
 // defaultWebOrigins は frontend dev server (mise run frontend:run) のポートに合わせた
 // WebSocket 許可オリジンのデフォルト値。
-var defaultWebOrigins = []string{"localhost:8082", "127.0.0.1:8082"}
+var defaultWebOrigins = []string{"localhost:8088", "127.0.0.1:8088"}
 
 // Defaults returns a Config with built-in default values.
 func Defaults() *Config {
 	return &Config{
 		Region:      "ap-northeast-1",
 		Output:      "tab",
-		ListenAddr:  "127.0.0.1:8080",
+		ListenAddr:  "127.0.0.1:8089",
 		WebOrigins:  defaultWebOrigins,
 		SnippetsDir: "/tmp/thief",
 		Datadog: DatadogConfig{
