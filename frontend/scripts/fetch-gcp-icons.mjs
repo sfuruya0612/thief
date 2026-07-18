@@ -2,9 +2,11 @@
 // Google Cloud 公式アイコンパッケージ (zip) から未改変の SVG を抽出し、
 // public/assets/gcp-icons/<service>.svg に配置するセットアップスクリプト。
 //
-// 使い方: node scripts/fetch-gcp-icons.mjs <path-to-gcp-icons.zip>
+// 使い方: node scripts/fetch-gcp-icons.mjs <path-to-icons.zip> [<path-to-another.zip> ...]
 //
-// Google Cloud の公式アイコンパッケージ (Unique Icons を含む zip) の構成に対応するため、
+// Google Cloud の公式アイコンは Unique Icons (製品単位) と Category Icons (カテゴリ単位) の
+// 複数パッケージに分かれて配布されている。Cloud Logging のように専用アイコンが存在しない
+// サービスは Category Icons 側の代替アイコンを使うため、複数の zip を指定できるようにする。
 // ファイル名一致で検索する (ディレクトリ階層には依存しない)。
 
 import { execFileSync } from 'node:child_process';
@@ -21,11 +23,9 @@ const ICON_FILENAMES = {
   cloudrun: 'CloudRun-512-color-rgb.svg',
   bigquery: 'BigQuery-512-color.svg',
   gcs: 'Cloud_Storage-512-color.svg',
-  // 実ファイル名は Google Cloud 公式アイコンパッケージ (Unique Icons) の命名規則からの
-  // 推測であり、このセッションでは zip が入手できず実際の展開・検証を行えていない。
-  // mise run frontend:fetch-gcp-icons 実行時にファイル名不一致で失敗した場合は、
-  // パッケージ内の実際のファイル名に合わせて修正すること。
-  cloudlogging: 'Cloud_Logging-512-color.svg',
+  // Cloud Logging は Unique Icons (製品単位) に専用アイコンが存在しないため、
+  // Category Icons の Observability カテゴリアイコンで代替する。
+  cloudlogging: 'Observability-512-color.svg',
 };
 
 function extractZip(zipPath, destDir) {
@@ -64,16 +64,22 @@ function buildFilenameIndex(dir) {
 }
 
 function main() {
-  const zipPath = process.argv[2];
-  if (!zipPath) {
-    console.error('使い方: node scripts/fetch-gcp-icons.mjs <path-to-gcp-icons.zip>');
+  const zipPaths = process.argv.slice(2);
+  if (zipPaths.length === 0) {
+    console.error(
+      '使い方: node scripts/fetch-gcp-icons.mjs <path-to-icons.zip> [<path-to-another.zip> ...]',
+    );
     process.exit(1);
   }
 
   const tmpDir = mkdtempSync(join(tmpdir(), 'gcp-icons-'));
   try {
-    extractZip(zipPath, tmpDir);
-    extractNestedZips(tmpDir);
+    zipPaths.forEach((zipPath, i) => {
+      const extractDir = join(tmpDir, String(i));
+      mkdirSync(extractDir, { recursive: true });
+      extractZip(zipPath, extractDir);
+      extractNestedZips(extractDir);
+    });
 
     const index = buildFilenameIndex(tmpDir);
     const missing = [];

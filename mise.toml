@@ -104,10 +104,10 @@ usage = "arg \"<zip>\" help=\"AWS 公式アイコンパッケージの zip フ�
 run = "node scripts/fetch-aws-icons.mjs \"$usage_zip\""
 
 [tasks."frontend:fetch-gcp-icons"]
-description = "Google Cloud 公式アイコン (zip) を public/assets/gcp-icons/ に展開する (引数: zip ファイルパス)"
+description = "Google Cloud 公式アイコン (zip) を public/assets/gcp-icons/ に展開する (引数: zip ファイルパス、複数指定可)"
 dir = "frontend"
-usage = "arg \"<zip>\" help=\"Google Cloud 公式アイコンパッケージの zip ファイルパス\""
-run = "node scripts/fetch-gcp-icons.mjs \"$usage_zip\""
+usage = "arg \"<zip>\" var=#true help=\"Google Cloud 公式アイコンパッケージの zip ファイルパス (複数指定可)\""
+run = "node scripts/fetch-gcp-icons.mjs $usage_zip"
 
 [tasks."frontend:build"]
 description = "frontend ビルド (Web)"
