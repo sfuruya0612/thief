@@ -16,6 +16,7 @@ import {
   useBQTables,
 } from '../../api/queries';
 import { ErrorBanner } from '../../components/ErrorBanner';
+import { Loading } from '../../components/Loading';
 import { formatBytes } from '../../components/tables/columns';
 import { EditorTabsBar } from '../../components/query/EditorTabsBar';
 import { NamedQueryList } from '../../components/query/NamedQueryList';
@@ -376,7 +377,7 @@ interface BQSchemaTreeProps {
 }
 
 function BQSchemaTree({ projectId, onInsert, onTables, onColumns }: BQSchemaTreeProps) {
-  const { data: datasets, error } = useBQDatasets(projectId);
+  const { data: datasets, isLoading, error } = useBQDatasets(projectId);
   const [search, setSearch] = useState('');
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
   const [expandedTable, setExpandedTable] = useState<string | null>(null);
@@ -399,24 +400,30 @@ function BQSchemaTree({ projectId, onInsert, onTables, onColumns }: BQSchemaTree
       onSearch={setSearch}
       footer={<>クリックで挿入 · ⌥クリックでSELECT *</>}
     >
-      {error ? <div className="qe-tab-empty">{(error as Error).message}</div> : null}
-      {visibleDatasets.map((d) => (
-        <BQDatasetNode
-          key={d.id}
-          projectId={projectId}
-          dataset={d}
-          expanded={expandedDatasets.has(d.id)}
-          onToggle={() => toggleDataset(d.id)}
-          search={q}
-          expandedTable={expandedTable}
-          onExpandTable={setExpandedTable}
-          onInsert={onInsert}
-          onTables={onTables}
-          onColumns={onColumns}
-        />
-      ))}
-      {(datasets ?? []).length === 0 && !error && (
-        <div className="qe-tab-empty">データセットがありません</div>
+      {isLoading ? (
+        <Loading />
+      ) : (
+        <>
+          {error ? <div className="qe-tab-empty">{(error as Error).message}</div> : null}
+          {visibleDatasets.map((d) => (
+            <BQDatasetNode
+              key={d.id}
+              projectId={projectId}
+              dataset={d}
+              expanded={expandedDatasets.has(d.id)}
+              onToggle={() => toggleDataset(d.id)}
+              search={q}
+              expandedTable={expandedTable}
+              onExpandTable={setExpandedTable}
+              onInsert={onInsert}
+              onTables={onTables}
+              onColumns={onColumns}
+            />
+          ))}
+          {(datasets ?? []).length === 0 && !error && (
+            <div className="qe-tab-empty">データセットがありません</div>
+          )}
+        </>
       )}
     </SchemaTreePanel>
   );
@@ -448,7 +455,7 @@ function BQDatasetNode({
   onColumns,
 }: BQDatasetNodeProps) {
   // 展開時のみテーブル一覧を取得する (enabled は dataset 引数の有無で制御される)
-  const { data: tables } = useBQTables(expanded ? dataset.id : '', projectId);
+  const { data: tables, isLoading } = useBQTables(expanded ? dataset.id : '', projectId);
 
   useEffect(() => {
     if (tables)
@@ -471,7 +478,9 @@ function BQDatasetNode({
         expanded={expanded}
         onClick={onToggle}
       />
+      {expanded && isLoading && <Loading />}
       {expanded &&
+        !isLoading &&
         visibleTables.map((t) => (
           <BQTableNode
             key={t.id}

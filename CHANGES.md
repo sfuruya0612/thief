@@ -18,6 +18,8 @@
   - @sfuruya0612
 - [UPDATE] Cloud Run の ListJobs 並列実行数を 15 から 30 に引き上げる
   - @sfuruya0612
+- [UPDATE] BigQuery / Athena のスキーマツリーで、データセット (データベース) 一覧・テーブル一覧の初回取得中に他ページと共通の pacman loader を表示するようにする
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
