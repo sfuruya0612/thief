@@ -176,6 +176,8 @@
   - @sfuruya0612
 - [FIX] Cloud Logging の entries.list など gRPC トランスポートの GCP クライアントで API 未有効化 (SERVICE_DISABLED) が 403 GCP_API_DISABLED ではなく 500 INTERNAL_ERROR になる不具合を修正する (writeGCPError に gRPC status の ErrorInfo detail 判定と gRPC code → HTTP ステータスのマッピングを追加し、REST 系 (`*googleapi.Error`) と同じ分類にする)
   - @sfuruya0612
+- [FIX] app.css のコメント内でテーマ変数名 (`--bg-*`) 直後の `*/` が CSS コメント終端として解釈され、ビルド時に css-syntax-error 警告が出る不具合を修正する (変数名の列挙を読点区切りにし `*/` の並びが生じないようにする)
+  - @sfuruya0612
 
 ### misc
 
