@@ -712,6 +712,94 @@ func TestEcsSavingsPlanRate(t *testing.T) {
 	}
 }
 
+// issue 0052: DescribeSavingsPlansOfferingRates は同一レートに対して、内部的な Operation
+// コードのみが異なる (Rate や Properties は完全一致する) 複数の SearchResults エントリを
+// 返すことがある (RDS の Oracle/Db2 で実データ確認済み)。Operation は PriceRate のどの
+// フィールドにも取り込まれないため、そこから生成される PriceRate は完全に同一の内容になる。
+func TestDedupeSavingsPlanRates(t *testing.T) {
+	rate := func(priceUSD float64) PriceRate {
+		return PriceRate{
+			RateID:     "offer-1#APN1-InstanceUsage:db.m7i.12xl#Db2",
+			Model:      "savings_plan",
+			Group:      "Database Savings Plans",
+			Label:      "db.m7i.12xl / Db2",
+			Attributes: map[string]string{"engine": "Db2", "instance_type": "db.m7i.12xl"},
+			Term:       PriceTerm{Lease: strPtr("1yr"), Payment: strPtr("No Upfront")},
+			Unit:       "Hrs",
+			PriceUSD:   priceUSD,
+			Currency:   "USD",
+		}
+	}
+
+	t.Run("完全に同一の行 (Operation 違いのみ) は 1 件にまとまる", func(t *testing.T) {
+		got := dedupeSavingsPlanRates([]PriceRate{rate(4.7424), rate(4.7424), rate(4.7424)})
+		if len(got) != 1 {
+			t.Fatalf("len(got) = %d, want 1", len(got))
+		}
+	})
+
+	t.Run("RateID が同じでも価格が異なれば別行として残す (誤統合しない)", func(t *testing.T) {
+		got := dedupeSavingsPlanRates([]PriceRate{rate(4.7424), rate(5.0)})
+		if len(got) != 2 {
+			t.Fatalf("len(got) = %d, want 2 (誤って統合された)", len(got))
+		}
+	})
+
+	t.Run("互いに異なる複数行はすべて残る", func(t *testing.T) {
+		r1 := rate(4.7424)
+		r2 := rate(4.7424)
+		r2.RateID = "offer-1#APN1-InstanceUsage:db.m7i.16xl#Db2"
+		r2.Label = "db.m7i.16xl / Db2"
+		got := dedupeSavingsPlanRates([]PriceRate{r1, r2})
+		if len(got) != 2 {
+			t.Fatalf("len(got) = %d, want 2", len(got))
+		}
+	})
+
+	t.Run("空スライスは空スライスのまま", func(t *testing.T) {
+		got := dedupeSavingsPlanRates([]PriceRate{})
+		if len(got) != 0 {
+			t.Fatalf("len(got) = %d, want 0", len(got))
+		}
+	})
+}
+
+// TestFetchSavingsPlansDedupesOperationVariants は issue 0052 の実データ形状 (同一
+// OfferingId/UsageType/Properties/Rate だが Operation のみ異なる 2 エントリ) を
+// DescribeSavingsPlansOfferingRates のフェイク応答として与え、fetchSavingsPlans が返す
+// PriceRate が 1 件に統合されることを検証する。
+func TestFetchSavingsPlansDedupesOperationVariants(t *testing.T) {
+	offeringID := "8870e805-fb04-4245-820e-231a54e5121b"
+	offering := &sptypes.ParentSavingsPlanOffering{
+		OfferingId:      &offeringID,
+		PaymentOption:   sptypes.SavingsPlanPaymentOptionNoUpfront,
+		PlanType:        sptypes.SavingsPlanTypeDatabase,
+		DurationSeconds: 31536000,
+	}
+	props := map[string]string{"instanceType": "M7i", "productDescription": "Db2", "region": "ap-northeast-1"}
+	// Operation は SavingsPlanOfferingRate のフィールドだが savingsPlanRateFrom はこれを
+	// 読まないため、フェイク側でも設定不要 (実データでの差異点そのものを再現する必要はなく、
+	// 「PriceRate に変換されると区別がつかなくなる 2 エントリ」であれば十分)。
+	rate1 := newSPRate("APN1-InstanceUsage:db.m7i.12xl", "4.7424000000", offering, props)
+	rate2 := newSPRate("APN1-InstanceUsage:db.m7i.12xl", "4.7424000000", offering, props)
+
+	client := &fakeSavingsPlansClient{
+		describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+			return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{
+				SearchResults: []sptypes.SavingsPlanOfferingRate{rate1, rate2},
+			}, nil
+		},
+	}
+
+	got, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", "rds", pricingServiceSpecs["rds"])
+	if err != nil {
+		t.Fatalf("fetchSavingsPlans() err = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("fetchSavingsPlans() returned %d rates, want 1 (Operation 違いの重複が残っている)", len(got))
+	}
+}
+
 // ---- fakes for orchestration tests ----
 
 type fakePricingClient struct {
@@ -852,10 +940,17 @@ func TestFetchSavingsPlansPagination(t *testing.T) {
 	client := &fakeSavingsPlansClient{
 		describe: func(in *savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
 			calls++
-			rate := newSPRate("APN1-BoxUsage:m5.large", "0.08", &sptypes.ParentSavingsPlanOffering{
+			// 2 ページ目は instanceType を変え、意図的に別レートにする。両ページが同一内容
+			// だと issue 0052 対応の dedupeSavingsPlanRates が (正しく) 1 件にまとめてしまい、
+			// 「ページネーションで両ページ分のデータが結果に含まれること」を検証できなくなる。
+			instanceType := "m5.large"
+			if in.NextToken != nil {
+				instanceType = "m5.xlarge"
+			}
+			rate := newSPRate("APN1-BoxUsage:"+instanceType, "0.08", &sptypes.ParentSavingsPlanOffering{
 				OfferingId: strPtr("o1"), PaymentOption: sptypes.SavingsPlanPaymentOptionNoUpfront,
 				PlanType: sptypes.SavingsPlanTypeCompute, DurationSeconds: 31536000,
-			}, map[string]string{"instanceType": "m5.large", "productDescription": "Linux"})
+			}, map[string]string{"instanceType": instanceType, "productDescription": "Linux"})
 			if in.NextToken == nil {
 				token := "page2"
 				return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{SearchResults: []sptypes.SavingsPlanOfferingRate{rate}, NextToken: &token}, nil

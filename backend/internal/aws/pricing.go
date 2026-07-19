@@ -578,7 +578,40 @@ func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region, serv
 		}
 		next = out.NextToken
 	}
-	return rates, nil
+	return dedupeSavingsPlanRates(rates), nil
+}
+
+// dedupeSavingsPlanRates は、ユーザーに見える情報 (RateID を含む全フィールド) が完全一致する
+// PriceRate を 1 件にまとめる。
+//
+// DescribeSavingsPlansOfferingRates は同一レートに対して複数の SearchResults エントリを返す
+// ことがあり (issue 0052: RDS の Oracle/Db2 で実データ確認済み)、それらは内部的な Operation
+// コード (例: "CreateDBInstance:0035" と "CreateDBInstance:0029") のみが異なり、Rate や
+// Properties (productDescription/instanceType/region) を含む他の全フィールドは完全一致する。
+// Operation はこのパッケージが PriceRate へ取り込むどのフィールドにも現れない (表示・計算の
+// どちらにも使われない) ため、Operation 違いはユーザーから見て意味のある区別ではない。
+// RateID に Operation を追加して一意にする方式は採らない: 見た目には全く同じ内容の行が
+// 依然として複数表示される問題 (React key の一意性は満たすが UX 上の重複は解消しない) が残る
+// ため、表示・計算に使う値がすべて一致する行そのものを 1 件に統合する。
+func dedupeSavingsPlanRates(rates []PriceRate) []PriceRate {
+	seen := make(map[string]bool, len(rates))
+	out := make([]PriceRate, 0, len(rates))
+	for _, r := range rates {
+		key, err := json.Marshal(r)
+		if err != nil {
+			// PriceRate は基本型・map[string]string・*string のみで構成され Marshal が
+			// 失敗することは実質的にない。万一失敗した場合はデデュープをスキップし、
+			// 行を残す安全側に倒す (取りこぼしより重複表示の方が実害が小さい)。
+			out = append(out, r)
+			continue
+		}
+		if seen[string(key)] {
+			continue
+		}
+		seen[string(key)] = true
+		out = append(out, r)
+	}
+	return out
 }
 
 func savingsPlanProperties(props []sptypes.SavingsPlanOfferingRateProperty) map[string]string {
