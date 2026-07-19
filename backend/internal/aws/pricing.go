@@ -641,7 +641,11 @@ func instanceSavingsPlanRate(service string, r sptypes.SavingsPlanOfferingRate, 
 	lease := leaseFromDuration(offering.DurationSeconds)
 	payment := string(offering.PaymentOption)
 	return PriceRate{
-		RateID:     ptrStr(offering.OfferingId) + "#" + usageType,
+		// offeringId + usageType だけでは一意にならない (issue 0049):
+		// Savings Plans は特定の OS/engine に縛られず柔軟に適用される契約のため、
+		// 同じ offeringId + usageType (instance_type) に対して productDescription
+		// (RDS の engine・EC2/ElastiCache の OS 相当) だけが異なる複数行を返す。
+		RateID:     ptrStr(offering.OfferingId) + "#" + usageType + "#" + productDescription,
 		Model:      "savings_plan",
 		Group:      spGroup(offering.PlanType),
 		Label:      label,
@@ -662,6 +666,11 @@ func instanceSavingsPlanRate(service string, r sptypes.SavingsPlanOfferingRate, 
 	}, true
 }
 
+// ecsSavingsPlanRate の RateID は offeringId + usageType のみで構成する (productDescription
+// を含めない)。ECS Fargate は instanceSavingsPlanRate (ec2/rds/elasticache) と異なり、
+// OS/architecture の別軸が productDescription ではなく usageType 文字列自体に "Windows"/"ARM"
+// として埋め込まれる (下の os/arch 判定参照) ため、offeringId + usageType の組で既に一意になる
+// (issue 0049 の調査で実データ上重複が確認されなかったことと整合する)。
 func ecsSavingsPlanRate(r sptypes.SavingsPlanOfferingRate, usageType string) (PriceRate, bool) {
 	unit, ok := fargateUnitFromUsageType(usageType)
 	if !ok {
