@@ -4000,6 +4000,11 @@ td.qe-rt-empty {
 .pr-estimator-line-remove:hover {
   color: var(--err);
 }
+.pr-estimator-line-term {
+  font-size: 10.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
 .pr-estimator-line-qty {
   display: flex;
   align-items: center;

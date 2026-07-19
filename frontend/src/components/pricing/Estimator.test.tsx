@@ -97,3 +97,58 @@ describe('Estimator / 注記', () => {
     expect(screen.queryByText(/Savings Plans の前払い/)).not.toBeInTheDocument();
   });
 });
+
+describe('Estimator / 期間・購入タイプの表示 (issue 0051)', () => {
+  it('Reserved Instance の行に期間・オファリングクラス・購入タイプを表示する', () => {
+    const riRate = rate({
+      rateId: 'sku.ri',
+      model: 'reserved',
+      label: 'm5.large / Linux / Shared',
+      term: { lease: '1yr', offeringClass: 'standard', payment: 'No Upfront' },
+    });
+    const selection: PriceSelectionByService = { ec2: { 'sku.ri': { checked: true, qty: 1 } } };
+    const rates: PriceTablesByService = { ec2: table({ rates: [riRate] }) };
+    renderEstimator({ selection, rates });
+    expect(screen.getByText('1yr / standard / No Upfront')).toBeInTheDocument();
+  });
+
+  it('Savings Plans の行に期間・購入タイプを表示する (オファリングクラスは持たない)', () => {
+    const spRate = rate({
+      rateId: 'sku.sp',
+      model: 'savings_plan',
+      label: 'm5.large / Compute Savings Plans',
+      term: { lease: '3yr', offeringClass: null, payment: 'All Upfront' },
+    });
+    const selection: PriceSelectionByService = { ec2: { 'sku.sp': { checked: true, qty: 1 } } };
+    const rates: PriceTablesByService = { ec2: table({ rates: [spRate] }) };
+    renderEstimator({ selection, rates });
+    expect(screen.getByText('3yr / All Upfront')).toBeInTheDocument();
+  });
+
+  it('同一インスタンスタイプで期間の異なる RI を複数チェックすると、明細で区別できる', () => {
+    const ri1yr = rate({
+      rateId: 'sku.ri.1yr',
+      model: 'reserved',
+      term: { lease: '1yr', offeringClass: 'standard', payment: 'No Upfront' },
+    });
+    const ri3yr = rate({
+      rateId: 'sku.ri.3yr',
+      model: 'reserved',
+      term: { lease: '3yr', offeringClass: 'standard', payment: 'No Upfront' },
+    });
+    const selection: PriceSelectionByService = {
+      ec2: { 'sku.ri.1yr': { checked: true, qty: 1 }, 'sku.ri.3yr': { checked: true, qty: 1 } },
+    };
+    const rates: PriceTablesByService = { ec2: table({ rates: [ri1yr, ri3yr] }) };
+    renderEstimator({ selection, rates });
+    expect(screen.getByText('1yr / standard / No Upfront')).toBeInTheDocument();
+    expect(screen.getByText('3yr / standard / No Upfront')).toBeInTheDocument();
+  });
+
+  it('On-Demand の行には期間・購入タイプを表示しない', () => {
+    const selection: PriceSelectionByService = { ec2: { 'sku.1': { checked: true, qty: 1 } } };
+    const rates: PriceTablesByService = { ec2: table() };
+    const { container } = renderEstimator({ selection, rates });
+    expect(container.querySelector('.pr-estimator-line-term')).toBeNull();
+  });
+});

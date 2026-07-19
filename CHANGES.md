@@ -98,6 +98,8 @@
   - @sfuruya0612
 - [ADD] Pricing 画面の On-Demand / Reserved Instance / Savings Plans 各グループをそれぞれ折りたためるようにする。インスタンスタイプ数の多い EC2 / RDS / ElastiCache でも、不要なグループを畳んで目的の単価にたどり着きやすくする
   - @sfuruya0612
+- [ADD] Pricing 画面の見積もり明細に、Reserved Instances / Savings Plans の行の期間 (1yr / 3yr) とオファリングクラス (RI のみ: standard / convertible)・購入タイプ (No Upfront 等) を表示する。同一インスタンスタイプで条件違いの行を複数チェックしても見積もり上で区別できるようにする (On-Demand の行には表示しない)
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)

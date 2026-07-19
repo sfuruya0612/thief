@@ -10,6 +10,19 @@ import {
 } from '../../lib/pricingEstimate';
 import { PRICING_SERVICE_LABELS, type PricingService } from '../../lib/pricingSelection';
 import { Icons } from '../icons/Icons';
+import type { PriceRateRow } from '../../types/aws';
+
+// RI/SP の行にのみ期間・オファリングクラス (EC2 RI のみ)・購入タイプを表示し、行を区別できる
+// ようにする (同一インスタンスタイプで条件違いの行を複数チェックした場合に必要)。
+// On-Demand はこれらの条件を持たない (term.* が null) ため表示しない。
+// 表現は単価表のセレクタ (RateGroupSection) の値をそのまま使い、見た目を揃える。
+function termLabel(rate: PriceRateRow): string | null {
+  if (rate.model === 'on_demand') return null;
+  const parts = [rate.term.lease, rate.term.offeringClass, rate.term.payment].filter(
+    (v): v is string => !!v,
+  );
+  return parts.length > 0 ? parts.join(' / ') : null;
+}
 
 export interface EstimatorProps {
   selection: PriceSelectionByService;
@@ -85,6 +98,7 @@ export function Estimator({
                   const rate = rateById.get(rateId);
                   if (!rate) return null;
                   const sub = subtotal(entry.qty, rate);
+                  const term = termLabel(rate);
                   return (
                     <div key={rateId} className="pr-estimator-line">
                       <div className="pr-estimator-line-head">
@@ -100,6 +114,7 @@ export function Estimator({
                           <Icons.x size={11} />
                         </button>
                       </div>
+                      {term && <div className="pr-estimator-line-term">{term}</div>}
                       <label className="pr-estimator-line-qty">
                         数量
                         <input
