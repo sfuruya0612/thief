@@ -654,6 +654,27 @@ func TestInstanceSavingsPlanRate(t *testing.T) {
 			t.Errorf("Attributes[instance_type] = %q, want %q", got.Attributes["instance_type"], "db.r7g.4xl")
 		}
 	})
+
+	// issue 0049: 同じ offeringId + usageType (= 同じ instance_type) でも、Savings Plans は
+	// 特定の engine/OS に縛られないため productDescription が異なる複数行を返す。RateID に
+	// productDescription を含めない実装だと、これらが同一の RateID を持ってしまい React の
+	// key 重複と選択状態 (rate_id をキーにした Record) の誤連動を引き起こす。
+	t.Run("same offering+usageType with different productDescription yields distinct RateID", func(t *testing.T) {
+		mysqlRate := newSPRate("APN1-InstanceUsage:db.m7g.12xl", "1.0", baseOffering, map[string]string{
+			"instanceType": "db.m7g.12xlarge", "productDescription": "MySQL",
+		})
+		mariaRate := newSPRate("APN1-InstanceUsage:db.m7g.12xl", "1.0", baseOffering, map[string]string{
+			"instanceType": "db.m7g.12xlarge", "productDescription": "MariaDB",
+		})
+		got1, ok1 := instanceSavingsPlanRate("rds", mysqlRate, ptrStr(mysqlRate.UsageType), savingsPlanProperties(mysqlRate.Properties))
+		got2, ok2 := instanceSavingsPlanRate("rds", mariaRate, ptrStr(mariaRate.UsageType), savingsPlanProperties(mariaRate.Properties))
+		if !ok1 || !ok2 {
+			t.Fatalf("instanceSavingsPlanRate() ok1 = %v, ok2 = %v, want both true", ok1, ok2)
+		}
+		if got1.RateID == got2.RateID {
+			t.Errorf("RateID collision: MySQL and MariaDB both got %q, want distinct RateIDs", got1.RateID)
+		}
+	})
 }
 
 func TestEcsSavingsPlanRate(t *testing.T) {

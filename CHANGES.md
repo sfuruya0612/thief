@@ -180,6 +180,8 @@
   - @sfuruya0612
 - [FIX] サイドバーの SvcItem が queryFn なしの useQuery を使っており、開発時にサービス数分の console.error (No queryFn was passed) が出続ける不具合を修正する (`queryFn: skipToken` を渡し、fetch を発生させない観測用オブザーバの動作を保ったまま警告を解消する)
   - @sfuruya0612
+- [FIX] EC2 / RDS / ElastiCache の Savings Plans で、同じ instance_type でも OS/engine (productDescription) が異なる複数の単価行が同一の rate_id を持ってしまい、React の key 重複警告と選択状態の誤連動 (チェックした行と異なる OS/engine の行が同時にチェック状態を共有する) を引き起こす不具合を修正する (rate_id の生成に productDescription を含めて一意性を確保する)
+  - @sfuruya0612
 
 ### misc
 
