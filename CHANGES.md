@@ -184,6 +184,8 @@
   - @sfuruya0612
 - [FIX] EC2 / RDS / ElastiCache の Savings Plans で、同じ instance_type でも OS/engine (productDescription) が異なる複数の単価行が同一の rate_id を持ってしまい、React の key 重複警告と選択状態の誤連動 (チェックした行と異なる OS/engine の行が同時にチェック状態を共有する) を引き起こす不具合を修正する (rate_id の生成に productDescription を含めて一意性を確保する)
   - @sfuruya0612
+- [FIX] RDS Savings Plans の Oracle/Db2 レートで、AWS API が内部的な Operation コードのみが異なる完全に同一内容の重複行を返すことがあり、rate_id が同じでも見た目に全く同じ行が複数表示されてしまう不具合を修正する (表示・計算に使う値が完全一致する行を 1 件にまとめる重複除去を Savings Plans 取得処理に追加する)
+  - @sfuruya0612
 
 ### misc
 
