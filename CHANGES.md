@@ -174,6 +174,8 @@
   - @sfuruya0612
 - [FIX] Google Cloud の IAM / Service Account 等で API 未有効化 (SERVICE_DISABLED) や権限不足などの Google API 4xx エラーを一律 500 INTERNAL_ERROR に丸めていた不具合を修正する (API 未有効化は 403 GCP_API_DISABLED として有効化 URL を含むメッセージを返し、その他 4xx は当該ステータスで返すよう GCP 系ハンドラのエラーマッピングを共通化する)
   - @sfuruya0612
+- [FIX] Cloud Logging の entries.list など gRPC トランスポートの GCP クライアントで API 未有効化 (SERVICE_DISABLED) が 403 GCP_API_DISABLED ではなく 500 INTERNAL_ERROR になる不具合を修正する (writeGCPError に gRPC status の ErrorInfo detail 判定と gRPC code → HTTP ステータスのマッピングを追加し、REST 系 (`*googleapi.Error`) と同じ分類にする)
+  - @sfuruya0612
 
 ### misc
 

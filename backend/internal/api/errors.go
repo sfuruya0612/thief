@@ -7,6 +7,9 @@ import (
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func writeError(w http.ResponseWriter, code int, errCode, msg string) {
@@ -81,7 +84,8 @@ func writePricingError(w http.ResponseWriter, err error) {
 // API 未有効化 (SERVICE_DISABLED / accessNotConfigured) は 403 GCP_API_DISABLED として
 // 有効化を促すメッセージを返し、その他の Google API クライアントエラー (4xx) は当該
 // ステータスで GCP_ERROR を返す。いずれにも当たらなければ 500 INTERNAL_ERROR とする。
-// serveCached のエラー writer として writeInternalFromError の代わりに使う。
+// REST 系クライアント (*googleapi.Error) と gRPC 系クライアント (google.golang.org/grpc/status)
+// の双方を検査する。serveCached のエラー writer として writeInternalFromError の代わりに使う。
 func writeGCPError(w http.ResponseWriter, err error) {
 	var gerr *googleapi.Error
 	if errors.As(err, &gerr) {
@@ -95,6 +99,25 @@ func writeGCPError(w http.ResponseWriter, err error) {
 		}
 		if gerr.Code >= 400 && gerr.Code < 500 {
 			writeError(w, gerr.Code, "GCP_ERROR", err.Error())
+			return
+		}
+	}
+	// logadmin / Cloud Run Admin など gRPC トランスポートのクライアントは
+	// *googleapi.Error ではなく gRPC status のエラーを返す。REST 系と同じく API 未有効化
+	// (SERVICE_DISABLED) を 403 GCP_API_DISABLED へ分類し、その他のクライアント起因コード
+	// (4xx 相当) は当該ステータスで GCP_ERROR を返す。status.FromError は ok=false のとき
+	// codes.Unknown のダミーステータスを返すため、ok が true の場合のみ検査する。
+	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
+		if gcpGRPCAPIDisabled(st) {
+			msg := st.Message()
+			if msg == "" {
+				msg = err.Error()
+			}
+			writeError(w, http.StatusForbidden, "GCP_API_DISABLED", msg)
+			return
+		}
+		if hs := grpcCodeToHTTP(st.Code()); hs >= 400 && hs < 500 {
+			writeError(w, hs, "GCP_ERROR", err.Error())
 			return
 		}
 	}
@@ -120,4 +143,41 @@ func gcpAPIDisabled(gerr *googleapi.Error) bool {
 		}
 	}
 	return false
+}
+
+// gcpGRPCAPIDisabled は gRPC status が「API 未有効化」を示すかを判定する。
+// gRPC トランスポートでは未有効化は google.rpc.ErrorInfo detail の
+// Reason == "SERVICE_DISABLED" として埋め込まれる (REST 系の gcpAPIDisabled と対になる)。
+func gcpGRPCAPIDisabled(st *status.Status) bool {
+	for _, d := range st.Details() {
+		if info, ok := d.(*errdetails.ErrorInfo); ok {
+			if info.GetReason() == "SERVICE_DISABLED" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// grpcCodeToHTTP は gRPC ステータスコードを対応する HTTP ステータスへ変換する。
+// クライアント起因のコード (4xx 相当) のみを明示的にマップし、サーバ起因・不明なコードは
+// 500 に倒す。writeGCPError では 4xx にマップされた場合のみ当該ステータスで GCP_ERROR を返し、
+// それ以外は INTERNAL_ERROR (500) とする (REST 系の gerr.Code >= 400 && < 500 と同じ方針)。
+func grpcCodeToHTTP(code codes.Code) int {
+	switch code {
+	case codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
+		return http.StatusBadRequest
+	case codes.Unauthenticated:
+		return http.StatusUnauthorized
+	case codes.PermissionDenied:
+		return http.StatusForbidden
+	case codes.NotFound:
+		return http.StatusNotFound
+	case codes.AlreadyExists, codes.Aborted:
+		return http.StatusConflict
+	case codes.ResourceExhausted:
+		return http.StatusTooManyRequests
+	default:
+		return http.StatusInternalServerError
+	}
 }
