@@ -178,6 +178,8 @@
   - @sfuruya0612
 - [FIX] app.css のコメント内でテーマ変数名 (`--bg-*`) 直後の `*/` が CSS コメント終端として解釈され、ビルド時に css-syntax-error 警告が出る不具合を修正する (変数名の列挙を読点区切りにし `*/` の並びが生じないようにする)
   - @sfuruya0612
+- [FIX] サイドバーの SvcItem が queryFn なしの useQuery を使っており、開発時にサービス数分の console.error (No queryFn was passed) が出続ける不具合を修正する (`queryFn: skipToken` を渡し、fetch を発生させない観測用オブザーバの動作を保ったまま警告を解消する)
+  - @sfuruya0612
 
 ### misc
 

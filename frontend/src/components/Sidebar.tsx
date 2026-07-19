@@ -1,9 +1,9 @@
 // sidebar.jsx の移植
 // 件数バッジは「選択中のサービスのみ即時取得、他はクリックするまで取得しない」方針を守るため、
-// enabled: false の読み取り専用オブザーバとして useQuery を使う。
+// queryFn: skipToken の読み取り専用オブザーバとして useQuery を使う。
 // 本体の useResources (ServicePanel 側) が同じ queryKey で fetch した際、
 // react-query のキャッシュ共有によりここにも値が反映される。
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { AwsIcons } from './icons/AwsIcons';
 import { Icons } from './icons/Icons';
 import { AWS_SERVICE_GROUPS, SERVICES } from '../lib/serviceMeta';
@@ -102,10 +102,12 @@ interface SvcItemProps {
 
 function SvcItem({ svc, profile, region, active, onService }: SvcItemProps) {
   const meta = SERVICES.find((s) => s.key === svc);
-  // fetch は発生させず、他所で埋まったキャッシュを読み取るだけの観測用クエリ
+  // fetch は発生させず、他所で埋まったキャッシュを読み取るだけの観測用クエリ。
+  // queryFn に skipToken を渡すことで「フェッチしない」動作は維持しつつ、
+  // queryFn 省略による dev 専用の console.error (No queryFn was passed) を回避する。
   const { data } = useQuery<unknown[]>({
     queryKey: ['aws', svc, profile, region],
-    enabled: false,
+    queryFn: skipToken,
   });
   const count = data ? data.length : '-';
   const IconEl = AwsIcons[svc] ?? Icons[svc];
