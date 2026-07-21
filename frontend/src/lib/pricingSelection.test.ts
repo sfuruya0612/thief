@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { PricingPersistedState } from './storage';
-import { initialPricingState, pricingReducer, PRICING_SERVICES } from './pricingSelection';
+import {
+  initialPricingState,
+  migratePricingState,
+  pricingReducer,
+  PRICING_SCHEMA_VERSION,
+  PRICING_SERVICES,
+} from './pricingSelection';
 
 describe('initialPricingState', () => {
   it('永続化データが無い場合は全サービスを選択した状態で初期化する', () => {
@@ -8,21 +14,64 @@ describe('initialPricingState', () => {
     expect(state.activeServices).toEqual([...PRICING_SERVICES]);
     expect(state.collapsed).toEqual({});
     expect(state.selection).toEqual({});
+    expect(state.pricingSchemaVersion).toBe(PRICING_SCHEMA_VERSION);
   });
 
-  it('永続化データがあればそれをそのまま使う', () => {
+  it('永続化データのスキーマ版が最新なら変更せずそのまま使う', () => {
     const persisted: PricingPersistedState = {
       activeServices: ['ec2'],
       collapsed: { rds: true },
       selection: { 'ap-northeast-1': { ec2: { 'sku.1': { checked: true, qty: 3 } } } },
+      pricingSchemaVersion: PRICING_SCHEMA_VERSION,
     };
     expect(initialPricingState(persisted)).toBe(persisted);
   });
 });
 
+describe('migratePricingState', () => {
+  it('スキーマ版が古い場合、その版までに追加された新サービスだけを activeServices に補完する', () => {
+    const persisted: PricingPersistedState = {
+      activeServices: ['ec2'],
+      collapsed: {},
+      selection: {},
+      pricingSchemaVersion: 0,
+    };
+    const next = migratePricingState(persisted);
+    expect(next.activeServices).toEqual(['ec2', 'compute-sp', 'ec2-instance-sp', 'database-sp']);
+    expect(next.pricingSchemaVersion).toBe(PRICING_SCHEMA_VERSION);
+  });
+
+  it('pricingSchemaVersion が未設定の永続化データは版 0 として扱う', () => {
+    const persisted: PricingPersistedState = {
+      activeServices: [],
+      collapsed: {},
+      selection: {},
+    };
+    const next = migratePricingState(persisted);
+    expect(next.activeServices).toEqual(['compute-sp', 'ec2-instance-sp', 'database-sp']);
+  });
+
+  it('ユーザーが手動で OFF にした既存サービスは補完で復活させない', () => {
+    const persisted: PricingPersistedState = {
+      activeServices: ['rds'],
+      collapsed: {},
+      selection: {},
+      pricingSchemaVersion: 0,
+    };
+    const next = migratePricingState(persisted);
+    expect(next.activeServices).toEqual(['rds', 'compute-sp', 'ec2-instance-sp', 'database-sp']);
+    expect(next.activeServices).not.toContain('ec2');
+  });
+});
+
 describe('pricingReducer / toggleService', () => {
   it('未選択のサービスをアクティブに追加する', () => {
-    const state = initialPricingState({ activeServices: [], collapsed: {}, selection: {} });
+    const state = initialPricingState({
+      activeServices: [],
+      collapsed: {},
+      selection: {},
+      pricingSchemaVersion: PRICING_SCHEMA_VERSION,
+    });
     const next = pricingReducer(state, { type: 'toggleService', service: 'ec2' });
     expect(next.activeServices).toEqual(['ec2']);
   });
@@ -32,6 +81,7 @@ describe('pricingReducer / toggleService', () => {
       activeServices: ['ec2', 'rds'],
       collapsed: {},
       selection: {},
+      pricingSchemaVersion: PRICING_SCHEMA_VERSION,
     });
     const next = pricingReducer(state, { type: 'toggleService', service: 'ec2' });
     expect(next.activeServices).toEqual(['rds']);
@@ -142,6 +192,7 @@ describe('pricingReducer / pruneStaleRates', () => {
           },
         },
       },
+      pricingSchemaVersion: PRICING_SCHEMA_VERSION,
     };
   }
 
@@ -192,6 +243,7 @@ describe('pricingReducer / clearSelection', () => {
           rds: { 'sku.2': { checked: true, qty: 1 } },
         },
       },
+      pricingSchemaVersion: PRICING_SCHEMA_VERSION,
     };
     const next = pricingReducer(state, { type: 'clearSelection', region: 'ap-northeast-1' });
     expect(next.selection['ap-northeast-1']).toEqual({});
@@ -205,6 +257,7 @@ describe('pricingReducer / clearSelection', () => {
         'ap-northeast-1': { ec2: { 'sku.1': { checked: true, qty: 2 } } },
         'us-east-1': { ec2: { 'sku.1': { checked: true, qty: 3 } } },
       },
+      pricingSchemaVersion: PRICING_SCHEMA_VERSION,
     };
     const next = pricingReducer(state, { type: 'clearSelection', region: 'ap-northeast-1' });
     expect(next.selection['us-east-1']).toEqual({

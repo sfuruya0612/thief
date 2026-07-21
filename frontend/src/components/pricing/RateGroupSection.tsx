@@ -14,10 +14,9 @@ export interface RateGroupSectionProps {
   selection: Record<string, { checked: boolean; qty: number }>;
   onToggleRate: (rateId: string) => void;
   instanceFilter: string;
-  // On-Demand / Reserved Instance の行にだけ使う。値が入っている instance_type の集合で、
-  // ここに無い instance_type は「この構成には Savings Plans の設定がありません」と注記する
-  // (旧世代インスタンスの静的なリストを持たず、実データの有無で判定する)。
-  spInstanceTypes?: Set<string>;
+  // SP カードは group が 1 種類しかなく、その名前がカードタイトルと同じ文字列になるため
+  // (issue 0055)、group 見出しの重複表示を呼び出し側 (ServiceCard) の判断で抑制する。
+  hideTitle?: boolean;
 }
 
 const LEASE_ORDER = ['1yr', '3yr'];
@@ -56,7 +55,7 @@ export function RateGroupSection({
   selection,
   onToggleRate,
   instanceFilter,
-  spInstanceTypes,
+  hideTitle,
 }: RateGroupSectionProps) {
   const model = rates[0]?.model ?? 'on_demand';
 
@@ -127,7 +126,7 @@ export function RateGroupSection({
         >
           <Icons.chevron size={12} style={{ transform: collapsed ? 'none' : 'rotate(90deg)' }} />
         </button>
-        <span className="pr-group-title">{group}</span>
+        {!hideTitle && <span className="pr-group-title">{group}</span>}
         {hasConditions && !collapsed && (
           <div className="pr-group-conditions">
             {leaseOptions.length > 1 && (
@@ -177,12 +176,6 @@ export function RateGroupSection({
             <tbody>
               {filteredRates.map((rate) => {
                 const checked = selection[rate.rateId]?.checked ?? false;
-                const instanceType = rate.attributes.instance_type;
-                const noSp =
-                  model !== 'savings_plan' &&
-                  !!instanceType &&
-                  !!spInstanceTypes &&
-                  !spInstanceTypes.has(instanceType);
                 return (
                   <tr key={rate.rateId} className={checked ? 'checked' : ''}>
                     <td className="pr-rate-check">
@@ -201,16 +194,6 @@ export function RateGroupSection({
                         <span className="pr-rate-upfront">
                           {' '}
                           + {formatUnitPrice(rate.upfrontUSD)} 前払い
-                        </span>
-                      )}
-                    </td>
-                    <td className="pr-rate-note">
-                      {noSp && (
-                        <span
-                          className="pr-note-badge"
-                          title="この構成には Savings Plans がありません"
-                        >
-                          SP対象外
                         </span>
                       )}
                     </td>

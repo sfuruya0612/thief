@@ -50,8 +50,8 @@ func TestHandlePricingValidation(t *testing.T) {
 
 func TestHandlePricingServesFromCacheWithoutFetching(t *testing.T) {
 	s := newTestServer(t)
-	want := []byte(`{"service":"ec2","region":"ap-northeast-1","fetched_at":"2026-07-18T09:00:00Z","partial":false,"missing_models":[],"rates":[]}`)
-	if err := pricecache.Save(s.cfg.PriceCacheDir, "ec2", "ap-northeast-1", want, time.Date(2026, 7, 18, 9, 0, 0, 0, time.UTC)); err != nil {
+	want := []byte(`{"service":"ec2","region":"ap-northeast-1","fetched_at":"2026-07-18T09:00:00Z","license_unresolved":false,"rates":[]}`)
+	if err := pricecache.Save(pricingCacheDir(s.cfg.PriceCacheDir), "ec2", "ap-northeast-1", want, time.Date(2026, 7, 18, 9, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("pricecache.Save() err = %v", err)
 	}
 
@@ -71,11 +71,35 @@ func TestHandlePricingServesFromCacheWithoutFetching(t *testing.T) {
 	}
 }
 
+// issue 0055/0054: PriceTable のスキーマ変更 (SP 分離、instance_family 追加) に伴い、
+// pricingCacheDir はバージョン接頭辞 (v2) を付けた別ディレクトリを見る。旧スキーマの
+// キャッシュファイルがバージョン接頭辞なしの base dir に残っていても、新しいバージョン
+// ディレクトリからは見つからず fresh として配信されないことを確認する
+// (=キャッシュ無効化が効いている)。
+func TestHandlePricingSchemaVersionIsolatesOldCache(t *testing.T) {
+	s := newTestServer(t)
+	old := []byte(`{"service":"ec2","region":"ap-northeast-1","partial":false,"missing_models":[],"rates":[]}`)
+	if err := pricecache.Save(s.cfg.PriceCacheDir, "ec2", "ap-northeast-1", old, time.Now()); err != nil {
+		t.Fatalf("pricecache.Save() err = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	// バージョン接頭辞なしの旧キャッシュはヒットしないため、AWS 呼び出しへフォール
+	// バックする。実行環境に認証情報が無いためエラーになり、それがキャッシュヒット
+	// しなかったことの証拠になる (TestHandlePricingServesFromCacheWithoutFetching と
+	// 対になる回帰テスト)。
+	s.handlePricing(w, pricingRequest(t, "default", "ec2", "ap-northeast-1", false))
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("status = %d, want non-200 (old-schema cache at the unprefixed dir must not be served as fresh)", w.Code)
+	}
+}
+
 func TestHandlePricingCacheIOErrorIsRedacted(t *testing.T) {
 	s := newTestServer(t)
 	// キャッシュファイルが置かれるべきパスに代わりにディレクトリを置き、
 	// pricecache.Load が (miss ではなく) ハードエラーを返すようにする。
-	badPath := filepath.Join(s.cfg.PriceCacheDir, "ec2", "ap-northeast-1.json")
+	badPath := filepath.Join(pricingCacheDir(s.cfg.PriceCacheDir), "ec2", "ap-northeast-1.json")
 	if err := os.MkdirAll(badPath, 0o700); err != nil {
 		t.Fatalf("MkdirAll() err = %v", err)
 	}

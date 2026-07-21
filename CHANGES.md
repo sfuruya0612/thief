@@ -146,6 +146,8 @@
   - @sfuruya0612
 - [CHANGE] AWS / Google Cloud のサイドバーカテゴリを公式プロダクトカテゴリに揃える (CloudFormation → Management & Governance、ECR/ECS → Containers、Parameter Store → Management & Governance 等)
   - @sfuruya0612
+- [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
+  - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
   - @sfuruya0612
 - [FIX] ECS Service / Task / Container の state が SDK 生値の大文字表記のままで StatusBadge が未知 state 扱いになる不具合を修正する

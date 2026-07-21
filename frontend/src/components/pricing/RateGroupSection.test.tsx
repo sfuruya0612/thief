@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { PriceRateRow } from '../../types/aws';
 import { RateGroupSection } from './RateGroupSection';
 
@@ -28,7 +28,7 @@ function renderGroup(props: Partial<Parameters<typeof RateGroupSection>[0]> = {}
       selection={props.selection ?? {}}
       onToggleRate={onToggleRate}
       instanceFilter={props.instanceFilter ?? ''}
-      spInstanceTypes={props.spInstanceTypes}
+      hideTitle={props.hideTitle}
     />,
   );
 }
@@ -129,32 +129,7 @@ describe('RateGroupSection', () => {
     expect(screen.getByText('この条件に一致する単価がありません')).toBeInTheDocument();
   });
 
-  it('Savings Plans に無いインスタンスタイプの On-Demand/RI 行に SP対象外 バッジを出す', () => {
-    renderGroup({
-      group: 'On-Demand',
-      rates: [
-        rate({
-          rateId: 'new-gen',
-          label: 'm7i.large / Linux / Shared',
-          attributes: { instance_type: 'm7i.large' },
-        }),
-        rate({
-          rateId: 'old-gen',
-          label: 'm5.large / Linux / Shared',
-          attributes: { instance_type: 'm5.large' },
-        }),
-      ],
-      spInstanceTypes: new Set(['m7i.large']),
-    });
-
-    const rows = screen.getAllByRole('row');
-    const newGenRow = rows.find((r) => within(r).queryByText('m7i.large / Linux / Shared'));
-    const oldGenRow = rows.find((r) => within(r).queryByText('m5.large / Linux / Shared'));
-    expect(oldGenRow && within(oldGenRow).getByText('SP対象外')).toBeInTheDocument();
-    expect(newGenRow && within(newGenRow).queryByText('SP対象外')).toBeNull();
-  });
-
-  it('Savings Plans 行自体には SP対象外 バッジを出さない', () => {
+  it('hideTitle が true の場合は group 見出しを表示しない (SP カード)', () => {
     renderGroup({
       group: 'Compute Savings Plans',
       rates: [
@@ -165,10 +140,15 @@ describe('RateGroupSection', () => {
           attributes: { instance_type: 'm5.large' },
         }),
       ],
-      spInstanceTypes: new Set(),
+      hideTitle: true,
     });
 
-    expect(screen.queryByText('SP対象外')).not.toBeInTheDocument();
+    expect(screen.queryByText('Compute Savings Plans')).not.toBeInTheDocument();
+  });
+
+  it('hideTitle が false/未指定の場合は group 見出しを表示する', () => {
+    renderGroup({ group: 'On-Demand', rates: [rate()] });
+    expect(screen.getByText('On-Demand')).toBeInTheDocument();
   });
 
   it('チェックボックス操作で onToggleRate が rateId 付きで呼ばれる', () => {

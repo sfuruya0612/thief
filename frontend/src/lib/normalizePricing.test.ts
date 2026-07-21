@@ -90,8 +90,7 @@ describe('priceTableFromRaw', () => {
       service: 'ec2',
       region: 'ap-northeast-1',
       fetched_at: '2026-07-18T09:00:00Z',
-      partial: false,
-      missing_models: [],
+      license_unresolved: false,
       rates: [
         rate(),
         rate({ rate_id: 'sku2.term2', model: 'reserved', group: 'Reserved Instance' }),
@@ -102,26 +101,23 @@ describe('priceTableFromRaw', () => {
     expect(row.service).toBe('ec2');
     expect(row.region).toBe('ap-northeast-1');
     expect(row.fetchedAt).toBe('2026-07-18T09:00:00Z');
-    expect(row.partial).toBe(false);
-    expect(row.missingModels).toEqual([]);
+    expect(row.licenseUnresolved).toBe(false);
     expect(row.rates).toHaveLength(2);
     expect(row.rates[0].rateId).toBe('sku.6YS6EN2CT7');
     expect(row.rates[1].rateId).toBe('sku2.term2');
   });
 
-  it('partial / missing_models を素通しする (SP 取得失敗時の縮退表現)', () => {
+  it('license_unresolved を素通しする (SP のライセンス区別が縮退した場合の表現)', () => {
     const raw: PriceTableRaw = {
-      service: 'ec2',
+      service: 'compute-sp',
       region: 'ap-northeast-1',
       fetched_at: '2026-07-18T09:00:00Z',
-      partial: true,
-      missing_models: ['savings_plan'],
+      license_unresolved: true,
       rates: [],
     };
 
     const row = priceTableFromRaw(raw);
-    expect(row.partial).toBe(true);
-    expect(row.missingModels).toEqual(['savings_plan']);
+    expect(row.licenseUnresolved).toBe(true);
     expect(row.rates).toEqual([]);
   });
 });

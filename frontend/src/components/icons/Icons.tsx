@@ -341,6 +341,21 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  // Savings Plans (Compute/EC2 Instance/Database) 専用アイコン。対応する AWS 公式
+  // アイコンが無いため、割引率を表す % 記号ベースの図形を用いる (issue 0055)。
+  savingsPlan: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 16L16 8" />
+          <circle cx="9" cy="9" r="0.6" fill="currentColor" />
+          <circle cx="15" cy="15" r="0.6" fill="currentColor" />
+        </>
+      }
+    />
+  ),
   pricing: (p = {}) => (
     <Icon
       {...p}

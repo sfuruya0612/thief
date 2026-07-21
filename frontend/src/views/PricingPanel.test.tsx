@@ -27,8 +27,7 @@ function table(service: string, overrides: Partial<PriceTableRaw> = {}): PriceTa
     service,
     region: 'ap-northeast-1',
     fetched_at: '2026-07-18T09:00:00Z',
-    partial: false,
-    missing_models: [],
+    license_unresolved: false,
     rates: [],
     ...overrides,
   };
@@ -137,28 +136,34 @@ describe('PricingPanel', () => {
     });
   });
 
-  it('partial なテーブルは Savings Plans 取得失敗を明示する (partial)', async () => {
+  it('license_unresolved なテーブルはライセンス区別が未解決である旨を明示する (license_unresolved)', async () => {
     vi.spyOn(endpoints, 'getPricing').mockImplementation(async (_profile, _region, service) => {
-      if (service === 'rds') {
-        return table('rds', {
-          partial: true,
-          missing_models: ['savings_plan'],
-          rates: [rate({ rate_id: 'sku.rds', group: 'On-Demand', label: 'db.m5.large / MySQL' })],
+      if (service === 'compute-sp') {
+        return table('compute-sp', {
+          license_unresolved: true,
+          rates: [
+            rate({
+              rate_id: 'sku.sp',
+              model: 'savings_plan',
+              group: 'Compute Savings Plans',
+              label: 'm5 / 1yr / No Upfront',
+            }),
+          ],
         });
       }
       return table(service);
     });
     renderPanel();
 
-    const rdsCard = await waitFor(() => {
-      const card = cardFor('RDS');
-      expect(within(card).getByText('db.m5.large / MySQL')).toBeInTheDocument();
+    const spCard = await waitFor(() => {
+      const card = cardFor('Compute Savings Plans');
+      expect(within(card).getByText('m5 / 1yr / No Upfront')).toBeInTheDocument();
       return card;
     });
-    expect(within(rdsCard).getByText('Savings Plans 取得失敗 (縮退表示)')).toBeInTheDocument();
+    expect(within(spCard).getByText('ライセンス区別 未解決 (縮退表示)')).toBeInTheDocument();
     expect(
-      within(rdsCard).getByText(
-        'Savings Plans の取得に失敗したため、On-Demand / Reserved Instance のみ表示しています。',
+      within(spCard).getByText(
+        'ライセンスモデルの区別ができなかったため、Savings Plans の一部の行でライセンス条件を区別せずに表示しています。',
       ),
     ).toBeInTheDocument();
   });

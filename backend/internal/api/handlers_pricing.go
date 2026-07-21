@@ -4,11 +4,29 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/pricecache"
 )
+
+// pricingCacheSchemaVersion is a path prefix that isolates the on-disk price
+// cache from schema changes to the normalized rate table. internal/pricecache
+// has no TTL or schema version of its own by design (its cacheFile envelope
+// only wraps an opaque data blob, deliberately decoupled from
+// internal/aws.PriceTable); the caller owns invalidation instead. Bump this
+// whenever PriceTable's shape or a service's cache key meaning changes, so
+// pre-existing cache files are never served as fresh under the new schema.
+// issue 0054 added the instance_family attribute key; issue 0055 split
+// Savings Plans into their own services and changed what ec2/rds/elasticache/
+// ecs cache entries contain (On-Demand/RI only, no more embedded SP rows) —
+// both ship in the same release, so one version bump covers both.
+const pricingCacheSchemaVersion = "v2"
+
+func pricingCacheDir(base string) string {
+	return filepath.Join(base, pricingCacheSchemaVersion)
+}
 
 // handlePricing serves the normalized price table for one profile/service/
 // region. Unlike other AWS resource handlers, pricing is cached as local
@@ -34,7 +52,7 @@ func (s *Server) handlePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dir := s.cfg.PriceCacheDir
+	dir := pricingCacheDir(s.cfg.PriceCacheDir)
 
 	if !s.refresh(r) {
 		data, _, ok, err := pricecache.Load(dir, service, region)
