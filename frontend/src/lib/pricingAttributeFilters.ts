@@ -29,10 +29,12 @@ export interface AttributeFilterSpec {
 // 値を持たない (storage_type と同様、matchesAttributeSelection がその行を対象外として扱う)。
 export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSpec[]> = {
   ec2: [
+    { key: 'instance_family', label: 'Family' },
     { key: 'os', label: 'OS' },
     { key: 'license_model', label: 'License' },
   ],
   rds: [
+    { key: 'instance_family', label: 'Family' },
     { key: 'engine', label: 'Engine' },
     { key: 'deployment_option', label: 'Deployment' },
     {
@@ -42,7 +44,10 @@ export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSp
     },
     { key: 'license_model', label: 'License' },
   ],
-  elasticache: [{ key: 'engine', label: 'Engine' }],
+  elasticache: [
+    { key: 'instance_family', label: 'Family' },
+    { key: 'engine', label: 'Engine' },
+  ],
   ecs: [],
 };
 

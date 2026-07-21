@@ -26,8 +26,9 @@ describe('PRICING_ATTRIBUTE_FILTERS', () => {
     expect(PRICING_ATTRIBUTE_FILTERS.ecs).toEqual([]);
   });
 
-  it('rds は engine / deployment_option / storage_type / license_model の 4 軸を持つ', () => {
+  it('rds は instance_family / engine / deployment_option / storage_type / license_model の 5 軸を持つ (issue 0054)', () => {
     expect(PRICING_ATTRIBUTE_FILTERS.rds.map((s) => s.key)).toEqual([
+      'instance_family',
       'engine',
       'deployment_option',
       'storage_type',
@@ -40,8 +41,19 @@ describe('PRICING_ATTRIBUTE_FILTERS', () => {
     expect(spec?.valueLabels).toEqual({ standard: 'Standard', io_optimized: 'IO-Optimized' });
   });
 
-  it('ec2 は os / license_model の 2 軸を持つ (issue 0053)', () => {
-    expect(PRICING_ATTRIBUTE_FILTERS.ec2.map((s) => s.key)).toEqual(['os', 'license_model']);
+  it('ec2 は instance_family / os / license_model の 3 軸を持つ (issue 0053, 0054)', () => {
+    expect(PRICING_ATTRIBUTE_FILTERS.ec2.map((s) => s.key)).toEqual([
+      'instance_family',
+      'os',
+      'license_model',
+    ]);
+  });
+
+  it('elasticache は instance_family / engine の 2 軸を持つ (issue 0054)', () => {
+    expect(PRICING_ATTRIBUTE_FILTERS.elasticache.map((s) => s.key)).toEqual([
+      'instance_family',
+      'engine',
+    ]);
   });
 });
 
@@ -58,6 +70,15 @@ describe('attributeValueOptions', () => {
 
   it('rates が空なら空配列を返す', () => {
     expect(attributeValueOptions([], 'os')).toEqual([]);
+  });
+
+  it('instance_family の選択肢を昇順で抽出する (issue 0054)', () => {
+    const rates = [
+      rate({ instance_family: 'm5' }),
+      rate({ instance_family: 'db.r6g' }),
+      rate({ instance_family: 'm5' }),
+    ];
+    expect(attributeValueOptions(rates, 'instance_family')).toEqual(['db.r6g', 'm5']);
   });
 });
 
@@ -101,5 +122,11 @@ describe('matchesAttributeSelection', () => {
     const selected = { storage_type: new Set(['standard']) };
     // Savings Plans の行には storage_type が付与されないため attributes に存在しない。
     expect(matchesAttributeSelection(rate({ engine: 'MySQL' }), selected)).toBe(true);
+  });
+
+  it('instance_family の選択で絞り込める (issue 0054)', () => {
+    const selected = { instance_family: new Set(['m5']) };
+    expect(matchesAttributeSelection(rate({ instance_family: 'm5' }), selected)).toBe(true);
+    expect(matchesAttributeSelection(rate({ instance_family: 'm5a' }), selected)).toBe(false);
   });
 });

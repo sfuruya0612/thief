@@ -205,21 +205,21 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				{
 					RateID: "SKU1.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
 					Label:      "m5.large / Linux / Shared",
-					Attributes: map[string]string{"instance_type": "m5.large", "os": "Linux", "tenancy": "Shared"},
+					Attributes: map[string]string{"instance_type": "m5.large", "instance_family": "m5", "os": "Linux", "tenancy": "Shared"},
 					Term:       PriceTerm{},
 					Unit:       "Hrs", PriceUSD: 0.124, Currency: "USD",
 				},
 				{
 					RateID: "SKU1.RI1", Model: "reserved", Group: "Reserved Instance",
 					Label:      "m5.large / Linux / Shared",
-					Attributes: map[string]string{"instance_type": "m5.large", "os": "Linux", "tenancy": "Shared"},
+					Attributes: map[string]string{"instance_type": "m5.large", "instance_family": "m5", "os": "Linux", "tenancy": "Shared"},
 					Term:       PriceTerm{Lease: strPtr("1yr"), OfferingClass: strPtr("standard"), Payment: strPtr("No Upfront")},
 					Unit:       "Hrs", PriceUSD: 0.078, Currency: "USD",
 				},
 				{
 					RateID: "SKU1.RI2", Model: "reserved", Group: "Reserved Instance",
 					Label:      "m5.large / Linux / Shared",
-					Attributes: map[string]string{"instance_type": "m5.large", "os": "Linux", "tenancy": "Shared"},
+					Attributes: map[string]string{"instance_type": "m5.large", "instance_family": "m5", "os": "Linux", "tenancy": "Shared"},
 					Term:       PriceTerm{Lease: strPtr("1yr"), OfferingClass: strPtr("convertible"), Payment: strPtr("All Upfront")},
 					Unit:       "Hrs", PriceUSD: 0, UpfrontUSD: 812, Currency: "USD",
 				},
@@ -235,7 +235,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				{
 					RateID: "SKU12.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
 					Label:      "m5.large / Windows / Shared / No License required",
-					Attributes: map[string]string{"instance_type": "m5.large", "os": "Windows", "tenancy": "Shared", "license_model": "No License required"},
+					Attributes: map[string]string{"instance_type": "m5.large", "instance_family": "m5", "os": "Windows", "tenancy": "Shared", "license_model": "No License required"},
 					Term:       PriceTerm{},
 					Unit:       "Hrs", PriceUSD: 0.232, Currency: "USD",
 				},
@@ -249,13 +249,13 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				{
 					RateID: "SKU2.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
 					Label:      "db.t3.micro / MySQL / Single-AZ / Standard / No license required",
-					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
+					Attributes: map[string]string{"instance_type": "db.t3.micro", "instance_family": "db.t3", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Unit:       "Hrs", PriceUSD: 0.026, Currency: "USD",
 				},
 				{
 					RateID: "SKU2.RI1", Model: "reserved", Group: "Reserved Instance",
 					Label:      "db.t3.micro / MySQL / Single-AZ / Standard / No license required",
-					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
+					Attributes: map[string]string{"instance_type": "db.t3.micro", "instance_family": "db.t3", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Term:       PriceTerm{Lease: strPtr("1yr"), OfferingClass: strPtr("standard"), Payment: strPtr("No Upfront")},
 					Unit:       "Hrs", PriceUSD: 0.0202, Currency: "USD",
 				},
@@ -273,7 +273,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				{
 					RateID: "SKU10.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
 					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / Standard / No license required",
-					Attributes: map[string]string{"instance_type": "db.r6g.large", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
+					Attributes: map[string]string{"instance_type": "db.r6g.large", "instance_family": "db.r6g", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Unit:       "Hrs", PriceUSD: 0.22, Currency: "USD",
 				},
 			},
@@ -289,7 +289,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				{
 					RateID: "SKU11.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
 					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / IO-Optimized / No license required",
-					Attributes: map[string]string{"instance_type": "db.r6g.large", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "io_optimized"},
+					Attributes: map[string]string{"instance_type": "db.r6g.large", "instance_family": "db.r6g", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "io_optimized"},
 					Unit:       "Hrs", PriceUSD: 0.286, Currency: "USD",
 				},
 			},
@@ -302,7 +302,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				{
 					RateID: "SKU3.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
 					Label:      "cache.t3.micro / Redis",
-					Attributes: map[string]string{"instance_type": "cache.t3.micro", "engine": "Redis"},
+					Attributes: map[string]string{"instance_type": "cache.t3.micro", "instance_family": "cache.t3", "engine": "Redis"},
 					Unit:       "Hrs", PriceUSD: 0.026, Currency: "USD",
 				},
 			},
@@ -569,6 +569,31 @@ func TestSpInstanceType(t *testing.T) {
 	}
 }
 
+// issue 0054: ファミリはインスタンスタイプから末尾のサイズトークンを除いた文字列とする。
+// spInstanceType が返す usageType 由来の省略形 (末尾サイズが短縮されていてもドット区切りは
+// 保たれる) でも、On-Demand/RI と同じ規則でファミリへ正規化できることを確認する。
+func TestInstanceFamily(t *testing.T) {
+	tests := []struct {
+		name         string
+		instanceType string
+		want         string
+	}{
+		{name: "ec2", instanceType: "m5.large", want: "m5"},
+		{name: "rds", instanceType: "db.r6g.4xlarge", want: "db.r6g"},
+		{name: "elasticache", instanceType: "cache.t4g.micro", want: "cache.t4g"},
+		{name: "savings plans abbreviated size (spInstanceType usageType fallback)", instanceType: "db.r7g.4xl", want: "db.r7g"},
+		{name: "empty", instanceType: "", want: ""},
+		{name: "no dot (malformed, returned unchanged)", instanceType: "R7G", want: "R7G"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := instanceFamily(tt.instanceType); got != tt.want {
+				t.Errorf("instanceFamily(%q) = %q, want %q", tt.instanceType, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseUSD(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -722,6 +747,11 @@ func TestInstanceSavingsPlanRate(t *testing.T) {
 		}
 		if got.Attributes["instance_type"] != "db.r7g.4xl" {
 			t.Errorf("Attributes[instance_type] = %q, want %q", got.Attributes["instance_type"], "db.r7g.4xl")
+		}
+		// instance_family は On-Demand/RI と同じファミリ表記 (db.r7g) へ正規化される
+		// (usageType 由来の省略形でもドット区切りは保たれるため instanceFamily がそのまま使える)。
+		if got.Attributes["instance_family"] != "db.r7g" {
+			t.Errorf("Attributes[instance_family] = %q, want %q", got.Attributes["instance_family"], "db.r7g")
 		}
 	})
 
