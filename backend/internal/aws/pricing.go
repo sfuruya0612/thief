@@ -795,7 +795,7 @@ func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region strin
 // ことがあり (issue 0052: RDS の Oracle/Db2 で実データ確認済み)、それらは内部的な Operation
 // コード (例: "CreateDBInstance:0035" と "CreateDBInstance:0029") のみが異なり、Rate や
 // Properties (productDescription/instanceType/region) を含む他の全フィールドは完全一致する。
-// PriceRate.Operation は json:"-" のため dedup キー (json.Marshal) の対象外であり、本関数の
+// PriceRate.Operation は dedup キーに含めないため (dedupeSavingsPlanRateKey 参照)、本関数の
 // 実行時点では license_model もまだ未解決 (getPricing が本関数の後に applySavingsPlanLicenseModel
 // を適用する) なので、Operation 違いだけではまだユーザーから見て意味のある区別になっていない。
 // RateID に Operation を追加して一意にする方式は採らない: 見た目には全く同じ内容の行が
@@ -804,25 +804,70 @@ func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region strin
 // も含めて完全一致する行に限られるため、Operation 違いが本当に異なる price_usd を伴う場合
 // (issue 0053: ライセンスモデル差) は別行として残り、後段の applySavingsPlanLicenseModel が
 // license_model を反映して区別可能にする。
+//
+// dedup キーは可視フィールドを直接連結した文字列 (dedupeSavingsPlanRateKey) で、
+// json.Marshal は使わない (issue 0058: testing.B での計測により、同等規模の入力で
+// json.Marshal 版よりおよそ 2 倍高速かつメモリ確保が半減することを確認した上での変更)。
 func dedupeSavingsPlanRates(rates []PriceRate) []PriceRate {
 	seen := make(map[string]bool, len(rates))
 	out := make([]PriceRate, 0, len(rates))
+	var sb strings.Builder
 	for _, r := range rates {
-		key, err := json.Marshal(r)
-		if err != nil {
-			// PriceRate は基本型・map[string]string・*string のみで構成され Marshal が
-			// 失敗することは実質的にない。万一失敗した場合はデデュープをスキップし、
-			// 行を残す安全側に倒す (取りこぼしより重複表示の方が実害が小さい)。
-			out = append(out, r)
+		key := dedupeSavingsPlanRateKey(&sb, r)
+		if seen[key] {
 			continue
 		}
-		if seen[string(key)] {
-			continue
-		}
-		seen[string(key)] = true
+		seen[key] = true
 		out = append(out, r)
 	}
 	return out
+}
+
+// dedupeSavingsPlanRateKey builds the dedup key for one PriceRate into sb
+// (reused across calls to avoid reallocating the builder's backing buffer per
+// row) and returns a copy of the result (strings.Builder.String() copies the
+// buffer, so the returned string stays valid after sb is reset for the next
+// row). Attribute keys are sorted so two structurally-identical rows always
+// produce the same key regardless of Go's randomized map iteration order.
+func dedupeSavingsPlanRateKey(sb *strings.Builder, r PriceRate) string {
+	sb.Reset()
+	sb.WriteString(r.RateID)
+	sb.WriteByte(0)
+	sb.WriteString(r.Model)
+	sb.WriteByte(0)
+	sb.WriteString(r.Group)
+	sb.WriteByte(0)
+	sb.WriteString(r.Label)
+	sb.WriteByte(0)
+	attrKeys := make([]string, 0, len(r.Attributes))
+	for k := range r.Attributes {
+		attrKeys = append(attrKeys, k)
+	}
+	sort.Strings(attrKeys)
+	for _, k := range attrKeys {
+		sb.WriteString(k)
+		sb.WriteByte('=')
+		sb.WriteString(r.Attributes[k])
+		sb.WriteByte(';')
+	}
+	sb.WriteByte(0)
+	if r.Term.Lease != nil {
+		sb.WriteString(*r.Term.Lease)
+	}
+	sb.WriteByte(0)
+	if r.Term.OfferingClass != nil {
+		sb.WriteString(*r.Term.OfferingClass)
+	}
+	sb.WriteByte(0)
+	if r.Term.Payment != nil {
+		sb.WriteString(*r.Term.Payment)
+	}
+	sb.WriteByte(0)
+	sb.WriteString(r.Unit)
+	sb.WriteByte(0)
+	fmt.Fprintf(sb, "%v\x00%v\x00", r.PriceUSD, r.UpfrontUSD)
+	sb.WriteString(r.Currency)
+	return sb.String()
 }
 
 // applySavingsPlanLicenseModel は、同時に取得した On-Demand/Reserved データから作った
