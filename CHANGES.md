@@ -208,6 +208,8 @@
   - @sfuruya0612
 - [FIX] RDS Oracle (BYOL/License Included) と EC2 Windows (持ち込みライセンス/標準ライセンス) の Savings Plans レートで、ライセンスモデルが異なるだけの行が同一の rate_id/label を持ってしまい、価格だけが異なる紛らわしい重複行として表示される不具合を修正する (Savings Plans にはライセンスモデル情報が無いため、同時に取得する On-Demand/Reserved 側の Operation コード対応表から逆引きして rate_id/label/属性に反映する。On-Demand/Reserved 側のラベルにもライセンスモデルを表示するようにし、絞り込みチップにも license_model 軸を追加する)
   - @sfuruya0612
+- [FIX] EC2 Spot 単価表で ProductDescription `Ubuntu Pro Linux` が正規化されず On-Demand の os チップ (`Ubuntu Pro`) と異なる値 `Ubuntu Pro Linux` で表示される不具合を修正する (実 AWS 確認で判明した OS 語彙を `spotOSFromProductDescription` の分岐に追加する)
+  - @sfuruya0612
 
 ### misc
 

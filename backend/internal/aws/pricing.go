@@ -1077,9 +1077,10 @@ func spInstanceType(property, usageType string) string {
 // zones whose price hasn't changed in that instant; leaving StartTime unset
 // instead pages through up to 90 days of history (see issue 0056 background:
 // "直近約90日分の時系列を全ページ走査する" — too slow/costly for a live
-// request). One hour is a pragmatic middle ground chosen from the SDK docs
-// alone (no live-traffic data available in this environment); tune based on
-// live-AWS coverage if instance types are missing from real responses.
+// request). One hour is a pragmatic middle ground: issue 0060 の実 AWS 確認
+// (ap-northeast-1) では 1 時間窓で 18000 件超・1141 種のインスタンスタイプ
+// (m5/c5/r5 系だけで 153 種) が取得でき、主要タイプの欠落は無かった。窓を
+// 広げる必要が生じたらここを調整する。
 const ec2SpotLookbackWindow = 1 * time.Hour
 
 // getEC2SpotPricing fetches and normalizes EC2 Spot rates. Unlike
@@ -1167,16 +1168,22 @@ func fetchEC2SpotRates(ctx context.Context, client ec2SpotAPI, region string) ([
 
 // spotOSFromProductDescription normalizes DescribeSpotPriceHistory's
 // RIProductDescription into the On-Demand "operatingSystem" vocabulary
-// (Linux/RHEL/SUSE/Windows), so the os attribute chip matches across
-// On-Demand/Reserved and Spot rows (issue 0056) instead of splitting into
-// e.g. "Linux" and "Linux/UNIX (Amazon VPC)". The API's documented filter
-// values are four base descriptions (Linux/UNIX, Red Hat Enterprise Linux,
-// SUSE Linux, Windows) each with an "(Amazon VPC)" variant; the VPC suffix
-// carries no pricing-relevant distinction here and is stripped before
+// (Linux/RHEL/SUSE/Windows/Ubuntu Pro), so the os attribute chip matches
+// across On-Demand/Reserved and Spot rows (issue 0056) instead of splitting
+// into e.g. "Linux" and "Linux/UNIX (Amazon VPC)". The API's documented
+// filter values are four base descriptions (Linux/UNIX, Red Hat Enterprise
+// Linux, SUSE Linux, Windows) each with an "(Amazon VPC)" variant; the VPC
+// suffix carries no pricing-relevant distinction here and is stripped before
 // mapping. ec2types.RIProductDescription's Go enum only declares the
 // Linux/UNIX and Windows consts, but the API is documented to also return
 // the RHEL/SUSE variants as plain strings, so this switches on the raw
 // string rather than the (non-exhaustive) enum consts.
+//
+// issue 0060 の実 AWS 確認 (ap-northeast-1) で、ドキュメント記載の 4 系統に
+// 加えて "Ubuntu Pro Linux" が返ることを確認した。On-Demand 側 (Pricing API
+// の operatingSystem) はこれを "Ubuntu Pro" と表記するため、チップを揃える
+// べく同じ値へ正規化する。未知の記述は base をそのまま返し、チップから
+// 欠落させない (欠落より生の値を出す方が調査可能)。
 func spotOSFromProductDescription(pd ec2types.RIProductDescription) string {
 	base := strings.TrimSuffix(string(pd), " (Amazon VPC)")
 	switch base {
@@ -1188,6 +1195,8 @@ func spotOSFromProductDescription(pd ec2types.RIProductDescription) string {
 		return "SUSE"
 	case "Windows":
 		return "Windows"
+	case "Ubuntu Pro Linux":
+		return "Ubuntu Pro"
 	default:
 		return base
 	}

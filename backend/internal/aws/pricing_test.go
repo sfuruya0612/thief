@@ -1556,6 +1556,8 @@ func TestSpotOSFromProductDescription(t *testing.T) {
 		{pd: "Red Hat Enterprise Linux (Amazon VPC)", want: "RHEL"},
 		{pd: "SUSE Linux", want: "SUSE"},
 		{pd: "SUSE Linux (Amazon VPC)", want: "SUSE"},
+		{pd: "Ubuntu Pro Linux", want: "Ubuntu Pro"},
+		{pd: "Ubuntu Pro Linux (Amazon VPC)", want: "Ubuntu Pro"},
 		{pd: "Some Unknown Description", want: "Some Unknown Description"},
 	}
 	for _, tt := range tests {
