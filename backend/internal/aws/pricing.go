@@ -461,20 +461,36 @@ func curatedInstanceAttributes(service string, attrs map[string]string) map[stri
 	switch service {
 	case "ec2":
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
+		setIfNonEmpty(out, "instance_family", instanceFamily(attrs["instanceType"]))
 		setIfNonEmpty(out, "os", attrs["operatingSystem"])
 		setIfNonEmpty(out, "tenancy", attrs["tenancy"])
 		setIfNonEmpty(out, "license_model", attrs["licenseModel"])
 	case "rds":
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
+		setIfNonEmpty(out, "instance_family", instanceFamily(attrs["instanceType"]))
 		setIfNonEmpty(out, "engine", attrs["databaseEngine"])
 		setIfNonEmpty(out, "deployment_option", attrs["deploymentOption"])
 		setIfNonEmpty(out, "license_model", attrs["licenseModel"])
 		out["storage_type"] = rdsStorageType(attrs["storage"])
 	case "elasticache":
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
+		setIfNonEmpty(out, "instance_family", instanceFamily(attrs["instanceType"]))
 		setIfNonEmpty(out, "engine", attrs["cacheEngine"])
 	}
 	return out
+}
+
+// instanceFamily derives the instance family from an instance type by
+// dropping the trailing size token (the segment after the last dot):
+// "m5.large" -> "m5"; "db.r6g.4xlarge" -> "db.r6g"; "cache.t4g.micro" ->
+// "cache.t4g". Instance types without a dot (malformed input, or an empty
+// string) are returned unchanged so the caller's setIfNonEmpty skips them.
+func instanceFamily(instanceType string) string {
+	idx := strings.LastIndex(instanceType, ".")
+	if idx < 0 {
+		return instanceType
+	}
+	return instanceType[:idx]
 }
 
 // recordOperationLicenseModel は、1 件の Price List ドキュメントの生 attributes から
@@ -732,6 +748,7 @@ func instanceSavingsPlanRate(service string, r sptypes.SavingsPlanOfferingRate, 
 	label := joinNonEmpty(" / ", instanceType, productDescription)
 	attrs := map[string]string{}
 	setIfNonEmpty(attrs, "instance_type", instanceType)
+	setIfNonEmpty(attrs, "instance_family", instanceFamily(instanceType))
 	if service == "ec2" {
 		setIfNonEmpty(attrs, "os", productDescription)
 	} else {
