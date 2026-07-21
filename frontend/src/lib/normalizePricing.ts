@@ -36,8 +36,7 @@ export function priceTableFromRaw(raw: PriceTableRaw): PriceTableRow {
     service: raw.service,
     region: raw.region,
     fetchedAt: raw.fetched_at,
-    partial: raw.partial,
-    missingModels: raw.missing_models,
+    licenseUnresolved: raw.license_unresolved,
     rates: raw.rates.map(priceRateFromRaw),
   };
 }

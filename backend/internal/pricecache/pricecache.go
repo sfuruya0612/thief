@@ -21,14 +21,22 @@ var (
 	ErrInvalidRegion  = errors.New("invalid price cache region")
 )
 
-// validServices is the fixed allowlist of thief pricing service slugs.
-// Bounding it keeps the number of generated cache files bounded (service ×
-// region, at most a few hundred small files), so no cleanup job is needed.
+// validServices is the fixed allowlist of thief pricing service slugs. This
+// must stay in sync with the union of internal/aws's resourceServiceSpecs and
+// savingsPlanServiceSpecs (issue 0055 split Savings Plans into their own
+// services: compute-sp/ec2-instance-sp/database-sp), since ValidateService
+// gates the on-disk cache path independently of internal/aws's own
+// ValidatePricingService. Bounding it keeps the number of generated cache
+// files bounded (service × region, at most a few hundred small files), so no
+// cleanup job is needed.
 var validServices = map[string]bool{
-	"ec2":         true,
-	"rds":         true,
-	"elasticache": true,
-	"ecs":         true,
+	"ec2":             true,
+	"rds":             true,
+	"elasticache":     true,
+	"ecs":             true,
+	"compute-sp":      true,
+	"ec2-instance-sp": true,
+	"database-sp":     true,
 }
 
 var validRegionRe = regexp.MustCompile(`^[a-z0-9-]+$`)

@@ -32,6 +32,11 @@ export interface PricingPersistedState {
   activeServices: string[];
   collapsed: Record<string, boolean>;
   selection: Record<string, Record<string, Record<string, { checked: boolean; qty: number }>>>;
+  // 単調増加のスキーマ版。既定 active なサービスを追加するリリースごとに版を上げ、
+  // 旧版の永続化データに対しては新メンバーを一度だけ activeServices へ補完する
+  // (lib/pricingSelection.ts の PRICING_SCHEMA_VERSION / migratePricingState 参照)。
+  // 未設定は版 0 (最初の 4 サービス構成) を意味する。
+  pricingSchemaVersion?: number;
 }
 
 export function loadState<T>(key: string, fallback: T): T {

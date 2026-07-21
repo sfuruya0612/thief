@@ -978,8 +978,9 @@ export interface PriceTableRaw {
   service: string;
   region: string;
   fetched_at: string;
-  partial: boolean;
-  missing_models: string[];
+  // Savings Plans サービスでのみ意味を持つ。ライセンスモデル逆引き用の補助 On-Demand
+  // 取得が失敗したとき true になる (SP のレート自体は完備している。issue 0055)。
+  license_unresolved: boolean;
   rates: PriceRateRaw[];
 }
 
@@ -987,7 +988,6 @@ export interface PriceTableRow {
   service: string;
   region: string;
   fetchedAt: string;
-  partial: boolean;
-  missingModels: string[];
+  licenseUnresolved: boolean;
   rates: PriceRateRow[];
 }

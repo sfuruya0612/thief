@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,17 +16,28 @@ import (
 	pricingtypes "github.com/aws/aws-sdk-go-v2/service/pricing/types"
 	"github.com/aws/aws-sdk-go-v2/service/savingsplans"
 	sptypes "github.com/aws/aws-sdk-go-v2/service/savingsplans/types"
+	"golang.org/x/sync/singleflight"
 )
 
-// PriceTable is a normalized price rate table for one service/region,
-// combining On-Demand, Reserved Instance, and Savings Plans rates.
+// PriceTable is a normalized price rate table for one service/region. Since
+// issue 0055, each service is either a resource service (On-Demand/Reserved
+// Instance rates only) or a Savings Plans service (Savings Plans rates only);
+// no table mixes both.
 type PriceTable struct {
-	Service       string      `json:"service"`
-	Region        string      `json:"region"`
-	FetchedAt     time.Time   `json:"fetched_at"`
-	Partial       bool        `json:"partial"`
-	MissingModels []string    `json:"missing_models"`
-	Rates         []PriceRate `json:"rates"`
+	Service   string    `json:"service"`
+	Region    string    `json:"region"`
+	FetchedAt time.Time `json:"fetched_at"`
+	// LicenseUnresolved is set by Savings Plans services only, when the
+	// best-effort auxiliary On-Demand fetch used to resolve licenseModel
+	// (issue 0053) fails. The Savings Plans rates themselves are still
+	// present and complete; only the license_model distinction among them is
+	// unavailable. This is a distinct concept from a failed primary fetch
+	// (which aborts the request entirely, see getSavingsPlanPricing) and is
+	// deliberately not represented via a generic partial/missing-models pair,
+	// to avoid colliding with resource services (which never degrade this
+	// way after the SP/resource split).
+	LicenseUnresolved bool        `json:"license_unresolved"`
+	Rates             []PriceRate `json:"rates"`
 }
 
 // PriceRate is one selectable rate row (On-Demand, Reserved Instance, or
@@ -75,9 +85,15 @@ type savingsPlansAPI interface {
 	DescribeSavingsPlansOfferingRates(ctx context.Context, params *savingsplans.DescribeSavingsPlansOfferingRatesInput, optFns ...func(*savingsplans.Options)) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error)
 }
 
-// pricingServiceSpec maps a thief pricing service slug to the AWS Price
-// List service code and Savings Plans identifiers needed to fetch its rates.
-type pricingServiceSpec struct {
+// resourceServiceSpec maps a thief resource pricing service slug (ec2/rds/
+// elasticache/ecs) to the AWS Price List service code needed to fetch its
+// On-Demand/Reserved Instance rates. Since issue 0055, resource services no
+// longer fetch Savings Plans rates (see savingsPlanServiceSpec/
+// savingsPlanServiceSpecs): Savings Plans are independent services because
+// they apply flexibly across multiple resource services (e.g. Compute SP
+// spans EC2 and Fargate), which made them appear duplicated across resource
+// cards under the old combined model.
+type resourceServiceSpec struct {
 	awsServiceCode string
 	// productFamily is the Price List "productFamily" attribute value that
 	// identifies the instance/task-hour line items this service cares about,
@@ -90,123 +106,196 @@ type pricingServiceSpec struct {
 	// table with empty/meaningless labels and non-Hrs units.
 	productFamily string
 	riSupported   bool
-	spServiceCode sptypes.SavingsPlanRateServiceCode
-	spPlanTypes   []sptypes.SavingsPlanType
 }
 
-// pricingServiceSpecs is the fixed allowlist of supported pricing services,
-// matching the RI/SP support matrix confirmed against live AWS data (see
-// issue 0045): EC2 has both RI and SP (Compute + EC2 Instance); RDS/
-// ElastiCache have RI and Database SP only; ECS (Fargate) has no RI, only
-// Compute SP.
-var pricingServiceSpecs = map[string]pricingServiceSpec{
+// resourceServiceSpecs is the fixed allowlist of supported resource pricing
+// services, matching the RI support matrix confirmed against live AWS data
+// (see issue 0045): EC2/RDS/ElastiCache have RI; ECS (Fargate) has no RI.
+var resourceServiceSpecs = map[string]resourceServiceSpec{
 	"ec2": {
 		awsServiceCode: "AmazonEC2",
 		productFamily:  "Compute Instance",
 		riSupported:    true,
-		spServiceCode:  sptypes.SavingsPlanRateServiceCodeEc2,
-		spPlanTypes:    []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeCompute, sptypes.SavingsPlanTypeEc2Instance},
 	},
 	"rds": {
 		awsServiceCode: "AmazonRDS",
 		productFamily:  "Database Instance",
 		riSupported:    true,
-		spServiceCode:  sptypes.SavingsPlanRateServiceCodeRds,
-		spPlanTypes:    []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeDatabase},
 	},
 	"elasticache": {
 		awsServiceCode: "AmazonElastiCache",
 		productFamily:  "Cache Instance",
 		riSupported:    true,
-		spServiceCode:  sptypes.SavingsPlanRateServiceCodeElasticache,
-		spPlanTypes:    []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeDatabase},
 	},
 	"ecs": {
 		awsServiceCode: "AmazonECS",
 		productFamily:  "Compute",
 		riSupported:    false,
-		spServiceCode:  sptypes.SavingsPlanRateServiceCodeFargate,
-		spPlanTypes:    []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeCompute},
+	},
+}
+
+// savingsPlanServiceSpec maps a thief Savings Plans service slug
+// (compute-sp/ec2-instance-sp/database-sp) to the DescribeSavingsPlansOfferingRates
+// filter values and the resource service whose On-Demand data resolves
+// licenseModel (issue 0053) for this SP type.
+type savingsPlanServiceSpec struct {
+	planTypes    []sptypes.SavingsPlanType
+	serviceCodes []sptypes.SavingsPlanRateServiceCode
+	// licenseSource is a resourceServiceSpecs key (or "" for none) whose
+	// On-Demand data is fetched best-effort to build the operation→
+	// licenseModel lookup table (recordOperationLicenseModel) used to
+	// resolve licenseModel on this SP's rates (applySavingsPlanLicenseModel).
+	// ElastiCache and Fargate have no licenseModel concept
+	// (recordOperationLicenseModel only records entries with both operation
+	// and licenseModel non-empty), so RDS alone is sufficient for
+	// database-sp and EC2 alone is sufficient for compute-sp/ec2-instance-sp;
+	// no cross-serviceCode merge of lookup tables is needed.
+	licenseSource string
+}
+
+// savingsPlanServiceSpecs is the fixed allowlist of supported Savings Plans
+// services. Lambda/SageMaker/etc. are valid Compute SP serviceCodes too, but
+// are out of scope for v1 (see issue 0055 design notes).
+var savingsPlanServiceSpecs = map[string]savingsPlanServiceSpec{
+	"compute-sp": {
+		planTypes:     []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeCompute},
+		serviceCodes:  []sptypes.SavingsPlanRateServiceCode{sptypes.SavingsPlanRateServiceCodeEc2, sptypes.SavingsPlanRateServiceCodeFargate},
+		licenseSource: "ec2",
+	},
+	"ec2-instance-sp": {
+		planTypes:     []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeEc2Instance},
+		serviceCodes:  []sptypes.SavingsPlanRateServiceCode{sptypes.SavingsPlanRateServiceCodeEc2},
+		licenseSource: "ec2",
+	},
+	"database-sp": {
+		planTypes:     []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeDatabase},
+		serviceCodes:  []sptypes.SavingsPlanRateServiceCode{sptypes.SavingsPlanRateServiceCodeRds, sptypes.SavingsPlanRateServiceCodeElasticache},
+		licenseSource: "rds",
 	},
 }
 
 // ValidatePricingService returns ErrInvalidPricingService unless service is
-// one of the supported pricing service slugs (ec2/rds/elasticache/ecs).
+// one of the supported pricing service slugs (the union of
+// resourceServiceSpecs and savingsPlanServiceSpecs).
 func ValidatePricingService(service string) error {
-	if _, ok := pricingServiceSpecs[service]; !ok {
-		return fmt.Errorf("%w: %q", ErrInvalidPricingService, service)
+	if _, ok := resourceServiceSpecs[service]; ok {
+		return nil
 	}
-	return nil
+	if _, ok := savingsPlanServiceSpecs[service]; ok {
+		return nil
+	}
+	return fmt.Errorf("%w: %q", ErrInvalidPricingService, service)
 }
 
 // GetPricing returns the normalized price table for service/region, using
-// profile's credentials to call the Price List and Savings Plans APIs.
-// Price List/Savings Plans endpoints are global services; both clients are
-// pinned to us-east-1 (mirroring newCostExplorerClient), and region is used
-// only as an API-side filter value, not a client region.
+// profile's credentials to call the Price List and/or Savings Plans APIs
+// (only the client(s) the service actually needs are created). Price List/
+// Savings Plans endpoints are global services; both clients are pinned to
+// us-east-1 (mirroring newCostExplorerClient), and region is used only as an
+// API-side filter value, not a client region.
 func GetPricing(ctx context.Context, profile, region, service string) (*PriceTable, error) {
-	spec, ok := pricingServiceSpecs[service]
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrInvalidPricingService, service)
+	if spec, ok := resourceServiceSpecs[service]; ok {
+		pricingClient, err := newPricingClient(ctx, profile)
+		if err != nil {
+			return nil, err
+		}
+		return getResourcePricing(ctx, pricingClient, region, service, spec)
 	}
-	pricingClient, err := newPricingClient(ctx, profile)
-	if err != nil {
-		return nil, err
+	if spec, ok := savingsPlanServiceSpecs[service]; ok {
+		spClient, err := newSavingsPlansClient(ctx, profile)
+		if err != nil {
+			return nil, err
+		}
+		var pricingClient pricingAPI
+		if spec.licenseSource != "" {
+			pricingClient, err = newPricingClient(ctx, profile)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return getSavingsPlanPricing(ctx, pricingClient, spClient, region, service, spec)
 	}
-	spClient, err := newSavingsPlansClient(ctx, profile)
-	if err != nil {
-		return nil, err
-	}
-	return getPricing(ctx, pricingClient, spClient, region, service, spec)
+	return nil, fmt.Errorf("%w: %q", ErrInvalidPricingService, service)
 }
 
-func getPricing(ctx context.Context, pc pricingAPI, sp savingsPlansAPI, region, service string, spec pricingServiceSpec) (*PriceTable, error) {
-	var (
-		onDemandRates  []PriceRate
-		opLicenseModel map[string]string
-		onDemandErr    error
-		spRates        []PriceRate
-		spErr          error
-		wg             sync.WaitGroup
-	)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		onDemandRates, opLicenseModel, onDemandErr = fetchOnDemandAndReserved(ctx, pc, region, service, spec)
-	}()
-	go func() {
-		defer wg.Done()
-		spRates, spErr = fetchSavingsPlans(ctx, sp, region, service, spec)
-	}()
-	wg.Wait()
+// getResourcePricing fetches On-Demand/Reserved Instance rates only (see
+// resourceServiceSpec doc). Unlike the pre-0055 combined fetch, there is no
+// partial-degradation path here: a resource service's only data source is
+// this one fetch, so its failure always aborts the request.
+func getResourcePricing(ctx context.Context, pc pricingAPI, region, service string, spec resourceServiceSpec) (*PriceTable, error) {
+	rates, _, err := fetchOnDemandAndReserved(ctx, pc, region, service, spec)
+	if err != nil {
+		return nil, fmt.Errorf("fetch on-demand/reserved pricing for %s: %w", service, err)
+	}
+	sortPriceRates(rates)
+	return &PriceTable{
+		Service: service,
+		Region:  region,
+		Rates:   rates,
+	}, nil
+}
 
-	// 取得の完全性: On-Demand/RI が失敗した表は破棄してエラーを返す
-	// (呼び出し側はこの表をキャッシュに書き込まない)。
-	if onDemandErr != nil {
-		return nil, fmt.Errorf("fetch on-demand/reserved pricing for %s: %w", service, onDemandErr)
+// getSavingsPlanPricing fetches Savings Plans rates (the primary, required
+// data source for this service — its failure aborts the request, unlike the
+// best-effort auxiliary license lookup below) and, if spec.licenseSource is
+// set, best-effort resolves licenseModel via an auxiliary On-Demand fetch
+// scoped to that resource service. Failure of the auxiliary fetch degrades to
+// LicenseUnresolved=true rather than failing the whole request or reusing the
+// old savings_plan-missing partial representation (see PriceTable doc).
+func getSavingsPlanPricing(ctx context.Context, pc pricingAPI, sp savingsPlansAPI, region, service string, spec savingsPlanServiceSpec) (*PriceTable, error) {
+	spRates, err := fetchSavingsPlans(ctx, sp, region, spec)
+	if err != nil {
+		return nil, fmt.Errorf("fetch savings plans pricing for %s: %w", service, err)
 	}
 
 	table := &PriceTable{
-		Service:       service,
-		Region:        region,
-		Partial:       false,
-		MissingModels: []string{},
-		Rates:         onDemandRates,
+		Service: service,
+		Region:  region,
+		Rates:   spRates,
 	}
-	if spErr != nil {
-		// SP のみの失敗は On-Demand/RI の表を活かして縮退させる。不完全さは
-		// partial/missing_models で明示し、「完全」として偽装しない。
-		slog.Warn("fetch savings plans pricing failed; degrading to on-demand/reserved only",
-			"service", service, "region", region, "err", spErr)
-		table.Partial = true
-		table.MissingModels = []string{"savings_plan"}
-	} else {
-		// Savings Plans にはライセンスモデル情報が無いため (issue 0053)、同時に取得した
-		// On-Demand/Reserved 側の対応表で逆引きしてから合算する。
-		table.Rates = append(table.Rates, applySavingsPlanLicenseModel(spRates, opLicenseModel)...)
+	if spec.licenseSource == "" {
+		sortPriceRates(table.Rates)
+		return table, nil
 	}
+
+	opLicense, licErr := fetchAuxLicenseModel(ctx, pc, region, spec.licenseSource)
+	if licErr != nil {
+		slog.Warn("fetch auxiliary on-demand pricing for savings plan license model resolution failed; degrading to unresolved license",
+			"service", service, "region", region, "license_source", spec.licenseSource, "err", licErr)
+		table.LicenseUnresolved = true
+		sortPriceRates(table.Rates)
+		return table, nil
+	}
+	table.Rates = applySavingsPlanLicenseModel(table.Rates, opLicense)
 	sortPriceRates(table.Rates)
 	return table, nil
+}
+
+// licenseAuxGroup dedupes concurrent auxiliary On-Demand fetches (keyed by
+// awsServiceCode+region) issued purely to resolve Savings Plans licenseModel.
+// compute-sp and ec2-instance-sp both use licenseSource="ec2", so concurrent
+// requests for the same region (the frontend fetches all pricing services in
+// parallel) would otherwise call GetProducts for AmazonEC2 twice; under
+// throttling, that doubles the chance the license lookup degrades. This is a
+// robustness measure (see PriceTable.LicenseUnresolved doc), not a
+// performance optimization: whether to also coalesce with the ec2 resource
+// service's own primary fetch is left to issue 0058's measurement.
+var licenseAuxGroup singleflight.Group
+
+func fetchAuxLicenseModel(ctx context.Context, pc pricingAPI, region, licenseSource string) (map[string]string, error) {
+	spec := resourceServiceSpecs[licenseSource]
+	key := spec.awsServiceCode + "|" + region
+	v, err, _ := licenseAuxGroup.Do(key, func() (any, error) {
+		_, opLicense, ferr := fetchOnDemandAndReserved(ctx, pc, region, licenseSource, spec)
+		if ferr != nil {
+			return nil, ferr
+		}
+		return opLicense, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(map[string]string), nil
 }
 
 func newPricingClient(ctx context.Context, profile string) (*pricing.Client, error) {
@@ -283,7 +372,7 @@ func parsePriceDocument(raw string) (*priceListDocument, error) {
 	return &doc, nil
 }
 
-func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, service string, spec pricingServiceSpec) ([]PriceRate, map[string]string, error) {
+func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, service string, spec resourceServiceSpec) ([]PriceRate, map[string]string, error) {
 	filters := []pricingtypes.Filter{
 		{Field: aws.String("regionCode"), Type: pricingtypes.FilterTypeTermMatch, Value: aws.String(region)},
 		{Field: aws.String("productFamily"), Type: pricingtypes.FilterTypeTermMatch, Value: aws.String(spec.productFamily)},
@@ -332,7 +421,7 @@ func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, se
 	return rates, opLicense, nil
 }
 
-func priceRatesFromDocument(service string, spec pricingServiceSpec, doc priceListDocument, opLicense map[string]string) []PriceRate {
+func priceRatesFromDocument(service string, spec resourceServiceSpec, doc priceListDocument, opLicense map[string]string) []PriceRate {
 	// GetProducts の productFamily フィルタ (fetchOnDemandAndReserved) が API 側
 	// 不具合等で効かなかった場合の保険として、パース後にも二重チェックする。
 	if doc.Product.ProductFamily != spec.productFamily {
@@ -344,7 +433,7 @@ func priceRatesFromDocument(service string, spec pricingServiceSpec, doc priceLi
 	return instanceOnDemandRatesFromDocument(service, spec, doc, opLicense)
 }
 
-func instanceOnDemandRatesFromDocument(service string, spec pricingServiceSpec, doc priceListDocument, opLicense map[string]string) []PriceRate {
+func instanceOnDemandRatesFromDocument(service string, spec resourceServiceSpec, doc priceListDocument, opLicense map[string]string) []PriceRate {
 	attrs := doc.Product.Attributes
 	// Savings Plans の Properties にはライセンスモデル情報が無いため (issue 0053)、
 	// On-Demand/Reserved の生属性から operation→licenseModel の対応を副産物として集める。
@@ -604,13 +693,40 @@ func ecsOnDemandRatesFromDocument(doc priceListDocument) []PriceRate {
 
 // ---- Savings Plans (savingsplans:DescribeSavingsPlansOfferingRates) ----
 
-func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region, service string, spec pricingServiceSpec) ([]PriceRate, error) {
+// resourceKindFromServiceCode maps a Savings Plans offering rate's
+// ServiceCode to the resource-kind string (ec2/rds/elasticache/ecs) that
+// savingsPlanRateFrom/instanceSavingsPlanRate/curatedInstanceAttributes use
+// to select normalization logic (os vs. engine attribute, ElastiCache
+// Serverless exclusion, Fargate parsing, etc.). This replaces the pre-0055
+// dispatch on the thief service slug: compute-sp and database-sp each fetch
+// rows for multiple resource kinds in one DescribeSavingsPlansOfferingRates
+// call (e.g. compute-sp mixes AmazonEC2 and AmazonECS/Fargate rows), so the
+// row's own ServiceCode — not the outer thief service — must decide how each
+// row is parsed (dispatching by slug would misparse compute-sp's Fargate rows
+// as EC2 instance rows, and would fail to exclude database-sp's ElastiCache
+// Serverless rows).
+func resourceKindFromServiceCode(sc sptypes.SavingsPlanRateServiceCode) (string, bool) {
+	switch sc {
+	case sptypes.SavingsPlanRateServiceCodeEc2:
+		return "ec2", true
+	case sptypes.SavingsPlanRateServiceCodeFargate:
+		return "ecs", true
+	case sptypes.SavingsPlanRateServiceCodeRds:
+		return "rds", true
+	case sptypes.SavingsPlanRateServiceCodeElasticache:
+		return "elasticache", true
+	default:
+		return "", false
+	}
+}
+
+func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region string, spec savingsPlanServiceSpec) ([]PriceRate, error) {
 	rates := []PriceRate{}
 	var next *string
 	for {
 		out, err := client.DescribeSavingsPlansOfferingRates(ctx, &savingsplans.DescribeSavingsPlansOfferingRatesInput{
-			SavingsPlanTypes: spec.spPlanTypes,
-			ServiceCodes:     []sptypes.SavingsPlanRateServiceCode{spec.spServiceCode},
+			SavingsPlanTypes: spec.planTypes,
+			ServiceCodes:     spec.serviceCodes,
 			Filters: []sptypes.SavingsPlanOfferingRateFilterElement{
 				{Name: sptypes.SavingsPlanRateFilterAttributeRegion, Values: []string{region}},
 			},
@@ -620,7 +736,13 @@ func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region, serv
 			return nil, fmt.Errorf("describe savings plans offering rates: %w", err)
 		}
 		for _, r := range out.SearchResults {
-			if rate, ok := savingsPlanRateFrom(service, r); ok {
+			kind, ok := resourceKindFromServiceCode(r.ServiceCode)
+			if !ok {
+				slog.Warn("skip savings plan offering rate with unrecognized service code",
+					"service_code", string(r.ServiceCode))
+				continue
+			}
+			if rate, ok := savingsPlanRateFrom(kind, r); ok {
 				rates = append(rates, rate)
 			}
 		}

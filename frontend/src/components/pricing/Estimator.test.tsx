@@ -25,8 +25,7 @@ function table(overrides: Partial<PriceTableRow> = {}): PriceTableRow {
     service: 'ec2',
     region: 'ap-northeast-1',
     fetchedAt: '2026-07-18T09:00:00Z',
-    partial: false,
-    missingModels: [],
+    licenseUnresolved: false,
     rates: [rate()],
     ...overrides,
   };

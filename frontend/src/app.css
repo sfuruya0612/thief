@@ -3877,19 +3877,6 @@ td.qe-rt-empty {
 .pr-rate-upfront {
   color: var(--text-3);
 }
-.pr-rate-note {
-  text-align: right;
-  white-space: nowrap;
-}
-.pr-note-badge {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(134, 141, 153, 0.15);
-  color: var(--text-3);
-  font-size: 10px;
-}
-
 /* ---------- Estimator ---------- */
 .pr-estimator {
   width: 320px;

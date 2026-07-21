@@ -135,8 +135,7 @@ describe('estimate', () => {
     service: 'ec2',
     region: 'ap-northeast-1',
     fetchedAt: '2026-07-18T09:00:00Z',
-    partial: false,
-    missingModels: [],
+    licenseUnresolved: false,
     rates: [
       rate({ rateId: 'od-1', model: 'on_demand', priceUSD: 0.1 }),
       rate({

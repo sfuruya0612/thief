@@ -1,7 +1,8 @@
 // AWS Pricing (単価確認・見積もり) 専用パネル。ServicePanel (汎用) や CostExplorerPanel と
 // 同様に AccountView から activeService === 'pricing' で分岐する。
-// 対象は固定 4 サービスのため、rules-of-hooks を守るために usePricing/useRefreshPricing を
-// 可変長配列の map ではなく 4 個ずつ無条件に呼び、enabled で active/inactive をゲートする。
+// 対象は固定 7 サービス (issue 0055 で Savings Plans 3 種が独立サービスとして加わった) の
+// ため、rules-of-hooks を守るために usePricing/useRefreshPricing を可変長配列の map では
+// なく 7 個ずつ無条件に呼び、enabled で active/inactive をゲートする。
 import { useEffect, useMemo, useReducer } from 'react';
 import { usePricing, useRefreshPricing, useRegions } from '../api/queries';
 import { Estimator } from '../components/pricing/Estimator';
@@ -46,23 +47,40 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
   const rdsQuery = usePricing(profile, region, 'rds', activeSet.has('rds'));
   const elasticacheQuery = usePricing(profile, region, 'elasticache', activeSet.has('elasticache'));
   const ecsQuery = usePricing(profile, region, 'ecs', activeSet.has('ecs'));
+  const computeSpQuery = usePricing(profile, region, 'compute-sp', activeSet.has('compute-sp'));
+  const ec2InstanceSpQuery = usePricing(
+    profile,
+    region,
+    'ec2-instance-sp',
+    activeSet.has('ec2-instance-sp'),
+  );
+  const databaseSpQuery = usePricing(profile, region, 'database-sp', activeSet.has('database-sp'));
 
   const ec2Refresh = useRefreshPricing(profile, region, 'ec2');
   const rdsRefresh = useRefreshPricing(profile, region, 'rds');
   const elasticacheRefresh = useRefreshPricing(profile, region, 'elasticache');
   const ecsRefresh = useRefreshPricing(profile, region, 'ecs');
+  const computeSpRefresh = useRefreshPricing(profile, region, 'compute-sp');
+  const ec2InstanceSpRefresh = useRefreshPricing(profile, region, 'ec2-instance-sp');
+  const databaseSpRefresh = useRefreshPricing(profile, region, 'database-sp');
 
   const queries: Record<PricingService, typeof ec2Query> = {
     ec2: ec2Query,
     rds: rdsQuery,
     elasticache: elasticacheQuery,
     ecs: ecsQuery,
+    'compute-sp': computeSpQuery,
+    'ec2-instance-sp': ec2InstanceSpQuery,
+    'database-sp': databaseSpQuery,
   };
   const refreshes: Record<PricingService, typeof ec2Refresh> = {
     ec2: ec2Refresh,
     rds: rdsRefresh,
     elasticache: elasticacheRefresh,
     ecs: ecsRefresh,
+    'compute-sp': computeSpRefresh,
+    'ec2-instance-sp': ec2InstanceSpRefresh,
+    'database-sp': databaseSpRefresh,
   };
 
   // 現テーブルに存在しない rate_id の選択は破棄する (リージョン切替、または単価改定で
@@ -80,7 +98,16 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [region, ec2Query.data, rdsQuery.data, elasticacheQuery.data, ecsQuery.data]);
+  }, [
+    region,
+    ec2Query.data,
+    rdsQuery.data,
+    elasticacheQuery.data,
+    ecsQuery.data,
+    computeSpQuery.data,
+    ec2InstanceSpQuery.data,
+    databaseSpQuery.data,
+  ]);
 
   const rates: PriceTablesByService = useMemo(() => {
     const out: PriceTablesByService = {};
@@ -90,7 +117,15 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ec2Query.data, rdsQuery.data, elasticacheQuery.data, ecsQuery.data]);
+  }, [
+    ec2Query.data,
+    rdsQuery.data,
+    elasticacheQuery.data,
+    ecsQuery.data,
+    computeSpQuery.data,
+    ec2InstanceSpQuery.data,
+    databaseSpQuery.data,
+  ]);
 
   const ssoExpired = useMemo(
     () =>
@@ -99,7 +134,15 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
         return err instanceof ApiError && err.code === 'SSO_TOKEN_EXPIRED';
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ec2Query.error, rdsQuery.error, elasticacheQuery.error, ecsQuery.error],
+    [
+      ec2Query.error,
+      rdsQuery.error,
+      elasticacheQuery.error,
+      ecsQuery.error,
+      computeSpQuery.error,
+      ec2InstanceSpQuery.error,
+      databaseSpQuery.error,
+    ],
   );
 
   const lastFetchedAt = useMemo(() => {
@@ -112,7 +155,16 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     }
     return min;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.activeServices, ec2Query.data, rdsQuery.data, elasticacheQuery.data, ecsQuery.data]);
+  }, [
+    state.activeServices,
+    ec2Query.data,
+    rdsQuery.data,
+    elasticacheQuery.data,
+    ecsQuery.data,
+    computeSpQuery.data,
+    ec2InstanceSpQuery.data,
+    databaseSpQuery.data,
+  ]);
 
   const anyRefreshing = PRICING_SERVICES.some((s) => refreshes[s].isPending);
   const refreshAll = () => {

@@ -372,7 +372,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parsePriceDocument() err = %v", err)
 			}
-			spec := pricingServiceSpecs[tt.service]
+			spec := resourceServiceSpecs[tt.service]
 			got := priceRatesFromDocument(tt.service, spec, *doc, map[string]string{})
 			// doc.Terms.OnDemand/Reserved は map であり Go のイテレーション順序は
 			// 非決定的なため (1 ドキュメントが複数の Reserved term を持つ ec2 ケースで
@@ -426,7 +426,7 @@ func TestRecordOperationLicenseModel(t *testing.T) {
 func TestECSHasNoReservedInstances(t *testing.T) {
 	// ECS の spec は riSupported=false であり、Reserved が実データにも一切
 	// 現れないことをドキュメントで再現する (仕様上の非対応の裏付け)。
-	if pricingServiceSpecs["ecs"].riSupported {
+	if resourceServiceSpecs["ecs"].riSupported {
 		t.Fatal("ecs spec riSupported = true, want false (Fargate has no RI)")
 	}
 }
@@ -881,7 +881,9 @@ func TestFetchSavingsPlansDedupesOperationVariants(t *testing.T) {
 	// 読まないため、フェイク側でも設定不要 (実データでの差異点そのものを再現する必要はなく、
 	// 「PriceRate に変換されると区別がつかなくなる 2 エントリ」であれば十分)。
 	rate1 := newSPRate("APN1-InstanceUsage:db.m7i.12xl", "4.7424000000", offering, props)
+	rate1.ServiceCode = sptypes.SavingsPlanRateServiceCodeRds
 	rate2 := newSPRate("APN1-InstanceUsage:db.m7i.12xl", "4.7424000000", offering, props)
+	rate2.ServiceCode = sptypes.SavingsPlanRateServiceCodeRds
 
 	client := &fakeSavingsPlansClient{
 		describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
@@ -891,7 +893,7 @@ func TestFetchSavingsPlansDedupesOperationVariants(t *testing.T) {
 		},
 	}
 
-	got, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", "rds", pricingServiceSpecs["rds"])
+	got, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["database-sp"])
 	if err != nil {
 		t.Fatalf("fetchSavingsPlans() err = %v", err)
 	}
@@ -1011,7 +1013,7 @@ func TestFetchOnDemandAndReservedPagination(t *testing.T) {
 			return &pricing.GetProductsOutput{PriceList: []string{ec2PriceDoc}}, nil
 		},
 	}
-	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"])
 	if err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v", err)
 	}
@@ -1042,7 +1044,7 @@ func TestFetchOnDemandAndReservedStopsOnEmptyStringNextToken(t *testing.T) {
 			return &pricing.GetProductsOutput{PriceList: []string{ec2PriceDoc}, NextToken: &emptyToken}, nil
 		},
 	}
-	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"])
 	if err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v, want nil (empty-string NextToken must be treated as no more pages)", err)
 	}
@@ -1060,7 +1062,7 @@ func TestFetchOnDemandAndReservedErrorAbortsWithoutPartialData(t *testing.T) {
 			return nil, errors.New("throttled")
 		},
 	}
-	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"])
 	if err == nil {
 		t.Fatal("fetchOnDemandAndReserved() err = nil, want error")
 	}
@@ -1075,7 +1077,7 @@ func TestFetchOnDemandAndReservedSkipsMalformedEntries(t *testing.T) {
 			return &pricing.GetProductsOutput{PriceList: []string{"{not json", ec2PriceDoc}}, nil
 		},
 	}
-	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"])
 	if err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v, want nil (malformed entries are skipped, not fatal)", err)
 	}
@@ -1092,7 +1094,7 @@ func TestFetchOnDemandAndReservedEC2Filters(t *testing.T) {
 			return &pricing.GetProductsOutput{}, nil
 		},
 	}
-	if _, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"]); err != nil {
+	if _, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"]); err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v", err)
 	}
 	if len(captured.Filters) != 5 {
@@ -1108,7 +1110,7 @@ func TestFetchOnDemandAndReservedRDSFilters(t *testing.T) {
 			return &pricing.GetProductsOutput{}, nil
 		},
 	}
-	if _, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "rds", pricingServiceSpecs["rds"]); err != nil {
+	if _, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "rds", resourceServiceSpecs["rds"]); err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v", err)
 	}
 	if len(captured.Filters) != 2 {
@@ -1132,6 +1134,7 @@ func TestFetchSavingsPlansPagination(t *testing.T) {
 				OfferingId: strPtr("o1"), PaymentOption: sptypes.SavingsPlanPaymentOptionNoUpfront,
 				PlanType: sptypes.SavingsPlanTypeCompute, DurationSeconds: 31536000,
 			}, map[string]string{"instanceType": instanceType, "productDescription": "Linux"})
+			rate.ServiceCode = sptypes.SavingsPlanRateServiceCodeEc2
 			if in.NextToken == nil {
 				token := "page2"
 				return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{SearchResults: []sptypes.SavingsPlanOfferingRate{rate}, NextToken: &token}, nil
@@ -1139,7 +1142,7 @@ func TestFetchSavingsPlansPagination(t *testing.T) {
 			return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{SearchResults: []sptypes.SavingsPlanOfferingRate{rate}}, nil
 		},
 	}
-	rates, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["compute-sp"])
 	if err != nil {
 		t.Fatalf("fetchSavingsPlans() err = %v", err)
 	}
@@ -1169,6 +1172,7 @@ func TestFetchSavingsPlansPaginationStopsOnEmptyStringNextToken(t *testing.T) {
 				OfferingId: strPtr("o1"), PaymentOption: sptypes.SavingsPlanPaymentOptionNoUpfront,
 				PlanType: sptypes.SavingsPlanTypeDatabase, DurationSeconds: 31536000,
 			}, map[string]string{"instanceType": "db.m7g.12xl", "productDescription": "MariaDB"})
+			rate.ServiceCode = sptypes.SavingsPlanRateServiceCodeRds
 			emptyToken := ""
 			return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{
 				SearchResults: []sptypes.SavingsPlanOfferingRate{rate},
@@ -1176,7 +1180,7 @@ func TestFetchSavingsPlansPaginationStopsOnEmptyStringNextToken(t *testing.T) {
 			}, nil
 		},
 	}
-	rates, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", "rds", pricingServiceSpecs["rds"])
+	rates, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["database-sp"])
 	if err != nil {
 		t.Fatalf("fetchSavingsPlans() err = %v, want nil (empty-string NextToken must be treated as no more pages)", err)
 	}
@@ -1194,11 +1198,148 @@ func TestFetchSavingsPlansError(t *testing.T) {
 			return nil, errors.New("access denied")
 		},
 	}
-	if _, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"]); err == nil {
+	if _, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["ec2-instance-sp"]); err == nil {
 		t.Fatal("fetchSavingsPlans() err = nil, want error")
 	}
 }
 
+func TestResourceKindFromServiceCode(t *testing.T) {
+	tests := []struct {
+		name        string
+		serviceCode sptypes.SavingsPlanRateServiceCode
+		wantKind    string
+		wantOK      bool
+	}{
+		{name: "ec2", serviceCode: sptypes.SavingsPlanRateServiceCodeEc2, wantKind: "ec2", wantOK: true},
+		{name: "fargate maps to ecs kind", serviceCode: sptypes.SavingsPlanRateServiceCodeFargate, wantKind: "ecs", wantOK: true},
+		{name: "rds", serviceCode: sptypes.SavingsPlanRateServiceCodeRds, wantKind: "rds", wantOK: true},
+		{name: "elasticache", serviceCode: sptypes.SavingsPlanRateServiceCodeElasticache, wantKind: "elasticache", wantOK: true},
+		{name: "unrecognized (e.g. Lambda, out of v1 scope)", serviceCode: sptypes.SavingsPlanRateServiceCodeLambda, wantKind: "", wantOK: false},
+		{name: "empty", serviceCode: "", wantKind: "", wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			kind, ok := resourceKindFromServiceCode(tt.serviceCode)
+			if kind != tt.wantKind || ok != tt.wantOK {
+				t.Errorf("resourceKindFromServiceCode(%q) = (%q, %v), want (%q, %v)", tt.serviceCode, kind, ok, tt.wantKind, tt.wantOK)
+			}
+		})
+	}
+}
+
+// TestFetchSavingsPlansDispatchesMixedServiceCodes は issue 0055 の compute-sp
+// (EC2 と Fargate の行が混在する) / database-sp (RDS と ElastiCache の行が混在する)
+// を想定し、行ごとの ServiceCode によって正しい正規化関数へ振り分けられることを検証する。
+// スラッグ単位で振り分けていた旧実装なら、compute-sp の Fargate 行が instanceSavingsPlanRate
+// (EC2/RDS/ElastiCache 用) に誤って流れ込み、database-sp の ElastiCache Serverless
+// 除外が効かなくなる (どちらも本行の ServiceCode を見ることで正しく振り分けられる)。
+func TestFetchSavingsPlansDispatchesMixedServiceCodes(t *testing.T) {
+	offering := &sptypes.ParentSavingsPlanOffering{
+		OfferingId: strPtr("o1"), PaymentOption: sptypes.SavingsPlanPaymentOptionNoUpfront,
+		PlanType: sptypes.SavingsPlanTypeCompute, DurationSeconds: 31536000,
+	}
+
+	t.Run("compute-sp: EC2 row and Fargate row are each parsed by their own logic", func(t *testing.T) {
+		ec2Rate := newSPRate("APN1-BoxUsage:m5.large", "0.08", offering, map[string]string{
+			"instanceType": "m5.large", "productDescription": "Linux",
+		})
+		ec2Rate.ServiceCode = sptypes.SavingsPlanRateServiceCodeEc2
+		fargateRate := newSPRate("APN1-Fargate-vCPU-Hours:perCPU", "0.03", offering, map[string]string{
+			"tenancy": "shared", "region": "ap-northeast-1",
+		})
+		fargateRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeFargate
+
+		client := &fakeSavingsPlansClient{
+			describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+				return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{
+					SearchResults: []sptypes.SavingsPlanOfferingRate{ec2Rate, fargateRate},
+				}, nil
+			},
+		}
+		got, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["compute-sp"])
+		if err != nil {
+			t.Fatalf("fetchSavingsPlans() err = %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("len(got) = %d, want 2 (EC2 row misparsed as Fargate or vice versa, or one was dropped)", len(got))
+		}
+		var ec2Row, fargateRow *PriceRate
+		for i := range got {
+			switch got[i].Attributes["instance_type"] {
+			case "m5.large":
+				ec2Row = &got[i]
+			default:
+				fargateRow = &got[i]
+			}
+		}
+		if ec2Row == nil || ec2Row.Attributes["os"] != "Linux" {
+			t.Errorf("EC2 row not parsed via instanceSavingsPlanRate: %+v", ec2Row)
+		}
+		if fargateRow == nil || fargateRow.Label != "Fargate vCPU / Linux / x86" {
+			t.Errorf("Fargate row not parsed via ecsSavingsPlanRate: %+v", fargateRow)
+		}
+	})
+
+	t.Run("database-sp: ElastiCache Serverless row is still excluded when dispatched by ServiceCode", func(t *testing.T) {
+		serverlessRate := newSPRate("APN1-ElastiCacheProcessingUnits:Valkey", "0.0000000019", offering, map[string]string{
+			"productDescription": "Valkey",
+		})
+		serverlessRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeElasticache
+		nodeRate := newSPRate("APN1-NodeUsage:cache.m7g.2xlarge", "0.51", offering, map[string]string{
+			"instanceType": "cache.m7g.2xlarge", "productDescription": "Valkey",
+		})
+		nodeRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeElasticache
+
+		client := &fakeSavingsPlansClient{
+			describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+				return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{
+					SearchResults: []sptypes.SavingsPlanOfferingRate{serverlessRate, nodeRate},
+				}, nil
+			},
+		}
+		got, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["database-sp"])
+		if err != nil {
+			t.Fatalf("fetchSavingsPlans() err = %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(got) = %d, want 1 (ElastiCache Serverless processing-unit row must be excluded)", len(got))
+		}
+		if got[0].Attributes["instance_type"] != "cache.m7g.2xlarge" {
+			t.Errorf("unexpected surviving row: %+v", got[0])
+		}
+	})
+
+	t.Run("unrecognized ServiceCode row is dropped, not fatal", func(t *testing.T) {
+		validRate := newSPRate("APN1-BoxUsage:m5.large", "0.08", offering, map[string]string{
+			"instanceType": "m5.large", "productDescription": "Linux",
+		})
+		validRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeEc2
+		unknownRate := newSPRate("APN1-Unknown", "0.01", offering, map[string]string{})
+		unknownRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeLambda
+
+		client := &fakeSavingsPlansClient{
+			describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+				return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{
+					SearchResults: []sptypes.SavingsPlanOfferingRate{validRate, unknownRate},
+				}, nil
+			},
+		}
+		got, err := fetchSavingsPlans(context.Background(), client, "ap-northeast-1", savingsPlanServiceSpecs["compute-sp"])
+		if err != nil {
+			t.Fatalf("fetchSavingsPlans() err = %v, want nil (an unrecognized row must be skipped, not fatal)", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("len(got) = %d, want 1 (unrecognized ServiceCode row must be dropped)", len(got))
+		}
+	})
+}
+
+// TestGetPricingOrchestration は issue 0055 でリソースサービスと Savings Plans
+// サービスに分離されたオーケストレーションを検証する。分離前は 1 つの getPricing が
+// On-Demand/RI (必須) と SP (best-effort、失敗時は partial に縮退) を同時に扱っていたが、
+// 分離後はリソースサービス (getResourcePricing: On-Demand/RI のみ、失敗は即エラー) と
+// SP サービス (getSavingsPlanPricing: SP 自体が必須データ、ライセンス逆引きの補助
+// On-Demand 取得のみ best-effort) に分かれる。
 func TestGetPricingOrchestration(t *testing.T) {
 	okPricing := &fakePricingClient{
 		getProducts: func(*pricing.GetProductsInput) (*pricing.GetProductsOutput, error) {
@@ -1214,8 +1355,9 @@ func TestGetPricingOrchestration(t *testing.T) {
 		describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
 			rate := newSPRate("APN1-BoxUsage:m5.large", "0.08", &sptypes.ParentSavingsPlanOffering{
 				OfferingId: strPtr("o1"), PaymentOption: sptypes.SavingsPlanPaymentOptionNoUpfront,
-				PlanType: sptypes.SavingsPlanTypeCompute, DurationSeconds: 31536000,
+				PlanType: sptypes.SavingsPlanTypeEc2Instance, DurationSeconds: 31536000,
 			}, map[string]string{"instanceType": "m5.large", "productDescription": "Linux"})
+			rate.ServiceCode = sptypes.SavingsPlanRateServiceCodeEc2
 			return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{SearchResults: []sptypes.SavingsPlanOfferingRate{rate}}, nil
 		},
 	}
@@ -1225,16 +1367,35 @@ func TestGetPricingOrchestration(t *testing.T) {
 		},
 	}
 
-	t.Run("both succeed", func(t *testing.T) {
-		table, err := getPricing(context.Background(), okPricing, okSP, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	t.Run("resource service fetches on-demand/RI only (no SP mixed in)", func(t *testing.T) {
+		table, err := getResourcePricing(context.Background(), okPricing, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"])
 		if err != nil {
-			t.Fatalf("getPricing() err = %v", err)
+			t.Fatalf("getResourcePricing() err = %v", err)
 		}
-		if table.Partial {
-			t.Error("Partial = true, want false")
+		if table.LicenseUnresolved {
+			t.Error("LicenseUnresolved = true, want false (resource services never set this field)")
 		}
-		if len(table.MissingModels) != 0 {
-			t.Errorf("MissingModels = %v, want empty", table.MissingModels)
+		for _, r := range table.Rates {
+			if r.Model == "savings_plan" {
+				t.Error("resource service table contains a savings_plan rate; resource services must not fetch SP after issue 0055")
+			}
+		}
+	})
+
+	t.Run("resource service on-demand failure aborts entirely", func(t *testing.T) {
+		_, err := getResourcePricing(context.Background(), failPricing, "ap-northeast-1", "ec2", resourceServiceSpecs["ec2"])
+		if err == nil {
+			t.Fatal("getResourcePricing() err = nil, want error")
+		}
+	})
+
+	t.Run("savings plan service resolves license via auxiliary on-demand fetch", func(t *testing.T) {
+		table, err := getSavingsPlanPricing(context.Background(), okPricing, okSP, "ap-northeast-1", "ec2-instance-sp", savingsPlanServiceSpecs["ec2-instance-sp"])
+		if err != nil {
+			t.Fatalf("getSavingsPlanPricing() err = %v", err)
+		}
+		if table.LicenseUnresolved {
+			t.Error("LicenseUnresolved = true, want false (auxiliary on-demand fetch succeeded)")
 		}
 		hasSP := false
 		for _, r := range table.Rates {
@@ -1247,28 +1408,29 @@ func TestGetPricingOrchestration(t *testing.T) {
 		}
 	})
 
-	t.Run("savings plans failure degrades to partial", func(t *testing.T) {
-		table, err := getPricing(context.Background(), okPricing, failSP, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	t.Run("auxiliary license fetch failure degrades to LicenseUnresolved without failing the request", func(t *testing.T) {
+		table, err := getSavingsPlanPricing(context.Background(), failPricing, okSP, "ap-northeast-1", "ec2-instance-sp", savingsPlanServiceSpecs["ec2-instance-sp"])
 		if err != nil {
-			t.Fatalf("getPricing() err = %v, want nil (SP failure must degrade, not error)", err)
+			t.Fatalf("getSavingsPlanPricing() err = %v, want nil (auxiliary license fetch failure must degrade, not error)", err)
 		}
-		if !table.Partial {
-			t.Error("Partial = false, want true")
+		if !table.LicenseUnresolved {
+			t.Error("LicenseUnresolved = false, want true")
 		}
-		if diff := cmp.Diff([]string{"savings_plan"}, table.MissingModels); diff != "" {
-			t.Errorf("MissingModels mismatch (-want +got):\n%s", diff)
-		}
+		hasSP := false
 		for _, r := range table.Rates {
 			if r.Model == "savings_plan" {
-				t.Error("Rates contains a savings_plan entry despite SP fetch failure")
+				hasSP = true
 			}
+		}
+		if !hasSP {
+			t.Error("SP rates must still be present despite the auxiliary license fetch failing (SP is the primary data source, not the aux fetch)")
 		}
 	})
 
-	t.Run("on-demand failure aborts entirely", func(t *testing.T) {
-		_, err := getPricing(context.Background(), failPricing, okSP, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	t.Run("savings plan fetch failure aborts entirely (SP is the primary data source)", func(t *testing.T) {
+		_, err := getSavingsPlanPricing(context.Background(), okPricing, failSP, "ap-northeast-1", "ec2-instance-sp", savingsPlanServiceSpecs["ec2-instance-sp"])
 		if err == nil {
-			t.Fatal("getPricing() err = nil, want error (on-demand/RI failure must not be cached as partial)")
+			t.Fatal("getSavingsPlanPricing() err = nil, want error (unlike the pre-0055 model, SP failure must not degrade here)")
 		}
 	})
 }
@@ -1325,10 +1487,12 @@ func TestGetPricingResolvesSavingsPlanLicenseModel(t *testing.T) {
 		"instanceType": "db.m8i.2xlarge", "productDescription": "Oracle",
 	})
 	licenseIncludedRate.Operation = &licenseIncludedOp
+	licenseIncludedRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeRds
 	byolRate := newSPRate("APN1-InstanceUsage:db.m8i.2xl", "0.832", offering, map[string]string{
 		"instanceType": "db.m8i.2xlarge", "productDescription": "Oracle",
 	})
 	byolRate.Operation = &byolOp
+	byolRate.ServiceCode = sptypes.SavingsPlanRateServiceCodeRds
 
 	spClient := &fakeSavingsPlansClient{
 		describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
@@ -1338,9 +1502,12 @@ func TestGetPricingResolvesSavingsPlanLicenseModel(t *testing.T) {
 		},
 	}
 
-	table, err := getPricing(context.Background(), pricingClient, spClient, "ap-northeast-1", "rds", pricingServiceSpecs["rds"])
+	table, err := getSavingsPlanPricing(context.Background(), pricingClient, spClient, "ap-northeast-1", "database-sp", savingsPlanServiceSpecs["database-sp"])
 	if err != nil {
-		t.Fatalf("getPricing() err = %v", err)
+		t.Fatalf("getSavingsPlanPricing() err = %v", err)
+	}
+	if table.LicenseUnresolved {
+		t.Error("LicenseUnresolved = true, want false (auxiliary on-demand fetch succeeded)")
 	}
 
 	var spRates []PriceRate
@@ -1374,6 +1541,9 @@ func TestValidatePricingService(t *testing.T) {
 		{service: "rds", wantErr: false},
 		{service: "elasticache", wantErr: false},
 		{service: "ecs", wantErr: false},
+		{service: "compute-sp", wantErr: false},
+		{service: "ec2-instance-sp", wantErr: false},
+		{service: "database-sp", wantErr: false},
 		{service: "s3", wantErr: true},
 		{service: "", wantErr: true},
 	}

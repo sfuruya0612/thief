@@ -49,6 +49,25 @@ export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSp
     { key: 'engine', label: 'Engine' },
   ],
   ecs: [],
+  // issue 0055: compute-sp/ec2-instance-sp は EC2 (と compute-sp のみ Fargate) の行を
+  // 持つ。Fargate 行は instance_family/license_model キーを持たないため、これらの
+  // チップで絞り込んでも Fargate 行は対象外 (常に一致) のまま残る
+  // (matchesAttributeSelection のキー欠落時の挙動と一貫する)。
+  'compute-sp': [
+    { key: 'instance_family', label: 'Family' },
+    { key: 'os', label: 'OS' },
+    { key: 'license_model', label: 'License' },
+  ],
+  'ec2-instance-sp': [
+    { key: 'instance_family', label: 'Family' },
+    { key: 'os', label: 'OS' },
+    { key: 'license_model', label: 'License' },
+  ],
+  'database-sp': [
+    { key: 'instance_family', label: 'Family' },
+    { key: 'engine', label: 'Engine' },
+    { key: 'license_model', label: 'License' },
+  ],
 };
 
 // rates 全体から、指定した attribute key に実在する値の集合を昇順で返す。

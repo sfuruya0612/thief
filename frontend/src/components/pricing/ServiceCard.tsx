@@ -37,13 +37,10 @@ export interface ServiceCardProps {
   refreshing: boolean;
 }
 
-const GROUP_ORDER = [
-  'On-Demand',
-  'Reserved Instance',
-  'Compute Savings Plans',
-  'EC2 Instance Savings Plans',
-  'Database Savings Plans',
-];
+// issue 0055 の SP 分離後、リソースカード (ec2/rds/elasticache/ecs) は On-Demand /
+// Reserved Instance の 2 group のみを持つ。SP カード (compute-sp 等) は常に 1 group
+// (spGroup が返す "Compute Savings Plans" 等) のみのため、SP 種別ごとの順序は不要になった。
+const GROUP_ORDER = ['On-Demand', 'Reserved Instance'];
 
 function groupRates(rates: PriceRateRow[]): [string, PriceRateRow[]][] {
   const byGroup = new Map<string, PriceRateRow[]>();
@@ -96,24 +93,19 @@ export function ServiceCard({
     });
   };
 
-  // グルーピング (On-Demand/RI/SP の区分) は属性フィルタ適用後の行に対して行う。
-  // spInstanceTypes (下記) は「この構成に SP が存在するか」の全体判定用のため、
-  // 属性フィルタの影響を受けない元の table.rates から計算する。
+  // グルーピング (On-Demand/RI の区分。SP カードは常に単一 group) は属性フィルタ
+  // 適用後の行に対して行う。
   const attrFilteredRates = useMemo(
     () => (table ? table.rates.filter((r) => matchesAttributeSelection(r, attrSelection)) : []),
     [table, attrSelection],
   );
   const groups = useMemo(() => groupRates(attrFilteredRates), [attrFilteredRates]);
 
-  const spInstanceTypes = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of table?.rates ?? []) {
-      if (r.model === 'savings_plan' && r.attributes.instance_type) {
-        set.add(r.attributes.instance_type);
-      }
-    }
-    return set;
-  }, [table]);
+  // SP カードは group が 1 種類のみで、その名前 (spGroup が返す "Compute Savings Plans"
+  // 等) はカードタイトル (PRICING_SERVICE_LABELS) と意図的に一致させてある。両者が同じ
+  // 文字列を並べて表示すると冗長なため、単一 group の見出しをカード側で抑制する。
+  const hideSingleGroupTitle =
+    groups.length === 1 && groups[0][0] === PRICING_SERVICE_LABELS[service];
 
   const subtotal = useMemo(() => {
     if (!table) return null;
@@ -149,8 +141,8 @@ export function ServiceCard({
         )}
         <span className="pr-card-spacer" />
         {refreshing && <span className="pr-card-refreshing">更新中…</span>}
-        {table?.partial && (
-          <span className="pr-card-fetched">Savings Plans 取得失敗 (縮退表示)</span>
+        {table?.licenseUnresolved && (
+          <span className="pr-card-fetched">ライセンス区別 未解決 (縮退表示)</span>
         )}
         <button
           type="button"
@@ -183,10 +175,10 @@ export function ServiceCard({
                   更新に失敗しました (表示中はキャッシュされた前回取得分です)
                 </div>
               )}
-              {table.partial && (
+              {table.licenseUnresolved && (
                 <div className="pr-card-partial-note">
-                  Savings Plans の取得に失敗したため、On-Demand / Reserved Instance
-                  のみ表示しています。
+                  ライセンスモデルの区別ができなかったため、Savings Plans
+                  の一部の行でライセンス条件を区別せずに表示しています。
                 </div>
               )}
 
@@ -232,7 +224,7 @@ export function ServiceCard({
                         selection={selection}
                         onToggleRate={onToggleRate}
                         instanceFilter={instanceFilter}
-                        spInstanceTypes={spInstanceTypes}
+                        hideTitle={hideSingleGroupTitle}
                       />
                     ))
                   )}
