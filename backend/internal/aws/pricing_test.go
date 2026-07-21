@@ -38,6 +38,23 @@ const ec2PriceDoc = `{
   }
 }`
 
+// 実際に AWS Price List API から取得した生 JSON (issue 0053 実装時にライブ検証済み: EC2
+// Windows は operation/licenseModel 属性を持ち、"RunInstances:0002" は "No License required"
+// に対応する) をもとにしたテスト用ドキュメント。
+const ec2WindowsPriceDoc = `{
+  "product": {"sku": "SKU12", "productFamily": "Compute Instance", "attributes": {
+    "instanceType": "m5.large", "operatingSystem": "Windows", "tenancy": "Shared",
+    "licenseModel": "No License required", "operation": "RunInstances:0002",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-BoxUsage:m5.large",
+    "capacitystatus": "Used", "preInstalledSw": "NA"
+  }},
+  "terms": {
+    "OnDemand": {"SKU12.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU12.OTC1.RC1": {"rateCode": "SKU12.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "0.2320000000"}}
+    }}}
+  }
+}`
+
 const rdsPriceDoc = `{
   "product": {"sku": "SKU2", "productFamily": "Database Instance", "attributes": {
     "instanceType": "db.t3.micro", "databaseEngine": "MySQL", "deploymentOption": "Single-AZ",
@@ -209,19 +226,35 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			},
 		},
 		{
+			// issue 0053: EC2 の licenseModel/operation は curatedInstanceAttributes/
+			// instanceLabel に反映される (RDS の license_model と同じ扱い)。
+			name:    "ec2 windows with license model",
+			service: "ec2",
+			raw:     ec2WindowsPriceDoc,
+			want: []PriceRate{
+				{
+					RateID: "SKU12.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
+					Label:      "m5.large / Windows / Shared / No License required",
+					Attributes: map[string]string{"instance_type": "m5.large", "os": "Windows", "tenancy": "Shared", "license_model": "No License required"},
+					Term:       PriceTerm{},
+					Unit:       "Hrs", PriceUSD: 0.232, Currency: "USD",
+				},
+			},
+		},
+		{
 			name:    "rds on-demand and reserved",
 			service: "rds",
 			raw:     rdsPriceDoc,
 			want: []PriceRate{
 				{
 					RateID: "SKU2.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
-					Label:      "db.t3.micro / MySQL / Single-AZ / Standard",
+					Label:      "db.t3.micro / MySQL / Single-AZ / Standard / No license required",
 					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Unit:       "Hrs", PriceUSD: 0.026, Currency: "USD",
 				},
 				{
 					RateID: "SKU2.RI1", Model: "reserved", Group: "Reserved Instance",
-					Label:      "db.t3.micro / MySQL / Single-AZ / Standard",
+					Label:      "db.t3.micro / MySQL / Single-AZ / Standard / No license required",
 					Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Term:       PriceTerm{Lease: strPtr("1yr"), OfferingClass: strPtr("standard"), Payment: strPtr("No Upfront")},
 					Unit:       "Hrs", PriceUSD: 0.0202, Currency: "USD",
@@ -239,7 +272,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			want: []PriceRate{
 				{
 					RateID: "SKU10.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
-					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / Standard",
+					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / Standard / No license required",
 					Attributes: map[string]string{"instance_type": "db.r6g.large", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "standard"},
 					Unit:       "Hrs", PriceUSD: 0.22, Currency: "USD",
 				},
@@ -255,7 +288,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			want: []PriceRate{
 				{
 					RateID: "SKU11.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
-					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / IO-Optimized",
+					Label:      "db.r6g.large / Aurora MySQL / Single-AZ / IO-Optimized / No license required",
 					Attributes: map[string]string{"instance_type": "db.r6g.large", "engine": "Aurora MySQL", "deployment_option": "Single-AZ", "license_model": "No license required", "storage_type": "io_optimized"},
 					Unit:       "Hrs", PriceUSD: 0.286, Currency: "USD",
 				},
@@ -340,7 +373,7 @@ func TestPriceRatesFromDocument(t *testing.T) {
 				t.Fatalf("parsePriceDocument() err = %v", err)
 			}
 			spec := pricingServiceSpecs[tt.service]
-			got := priceRatesFromDocument(tt.service, spec, *doc)
+			got := priceRatesFromDocument(tt.service, spec, *doc, map[string]string{})
 			// doc.Terms.OnDemand/Reserved は map であり Go のイテレーション順序は
 			// 非決定的なため (1 ドキュメントが複数の Reserved term を持つ ec2 ケースで
 			// 実際に順序違いのフレーキー失敗を確認した)、本番の getPricing が最終的に
@@ -351,6 +384,43 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			}
 		})
 	}
+}
+
+// issue 0053: Savings Plans の Properties にはライセンスモデル情報が無いため、On-Demand/
+// Reserved の生属性から operation→licenseModel の対応表を副産物として組み立てる。
+func TestRecordOperationLicenseModel(t *testing.T) {
+	t.Run("records operation to license model", func(t *testing.T) {
+		dest := map[string]string{}
+		recordOperationLicenseModel(dest, map[string]string{
+			"operation": "CreateDBInstance:0020", "licenseModel": "License included",
+		})
+		if dest["CreateDBInstance:0020"] != "License included" {
+			t.Errorf(`dest["CreateDBInstance:0020"] = %q, want "License included"`, dest["CreateDBInstance:0020"])
+		}
+	})
+
+	t.Run("missing operation or licenseModel is ignored", func(t *testing.T) {
+		dest := map[string]string{}
+		recordOperationLicenseModel(dest, map[string]string{"operation": "CreateDBInstance:0020"})
+		recordOperationLicenseModel(dest, map[string]string{"licenseModel": "License included"})
+		recordOperationLicenseModel(dest, map[string]string{})
+		if len(dest) != 0 {
+			t.Errorf("dest = %v, want empty", dest)
+		}
+	})
+
+	t.Run("conflicting license model for the same operation keeps the first-seen value", func(t *testing.T) {
+		dest := map[string]string{}
+		recordOperationLicenseModel(dest, map[string]string{
+			"operation": "CreateDBInstance:0020", "licenseModel": "License included",
+		})
+		recordOperationLicenseModel(dest, map[string]string{
+			"operation": "CreateDBInstance:0020", "licenseModel": "Bring your own license",
+		})
+		if dest["CreateDBInstance:0020"] != "License included" {
+			t.Errorf(`dest["CreateDBInstance:0020"] = %q, want first-seen value "License included"`, dest["CreateDBInstance:0020"])
+		}
+	})
 }
 
 func TestECSHasNoReservedInstances(t *testing.T) {
@@ -800,6 +870,87 @@ func TestFetchSavingsPlansDedupesOperationVariants(t *testing.T) {
 	}
 }
 
+// issue 0053: Savings Plans の Properties にはライセンスモデル情報が無いため (RDS Oracle の
+// BYOL/License Included、EC2 Windows の BYOL/標準ライセンスはいずれも offeringId+usageType+
+// productDescription が完全一致するのに price_usd が本当に異なる)、Operation コード経由で
+// On-Demand 側の対応表 (recordOperationLicenseModel が作る) から逆引きする。
+func TestApplySavingsPlanLicenseModel(t *testing.T) {
+	t.Run("resolvable operation gets license_model appended to RateID/Label/Attributes", func(t *testing.T) {
+		rates := []PriceRate{{
+			RateID:     "offer-1#APN1-InstanceUsage:db.m8i.2xl#Oracle",
+			Label:      "db.m8i.2xlarge / Oracle",
+			Attributes: map[string]string{"instance_type": "db.m8i.2xlarge", "engine": "Oracle"},
+			Operation:  "CreateDBInstance:0005",
+		}}
+		opLicense := map[string]string{"CreateDBInstance:0005": "Bring your own license"}
+
+		got := applySavingsPlanLicenseModel(rates, opLicense)
+
+		wantRateID := "offer-1#APN1-InstanceUsage:db.m8i.2xl#Oracle#Bring your own license"
+		if got[0].RateID != wantRateID {
+			t.Errorf("RateID = %q, want %q", got[0].RateID, wantRateID)
+		}
+		wantLabel := "db.m8i.2xlarge / Oracle / Bring your own license"
+		if got[0].Label != wantLabel {
+			t.Errorf("Label = %q, want %q", got[0].Label, wantLabel)
+		}
+		if got[0].Attributes["license_model"] != "Bring your own license" {
+			t.Errorf(`Attributes["license_model"] = %q, want "Bring your own license"`, got[0].Attributes["license_model"])
+		}
+	})
+
+	t.Run("unresolvable operation is left unchanged", func(t *testing.T) {
+		rates := []PriceRate{{
+			RateID:     "offer-1#APN1-InstanceUsage:db.t3.micro#MySQL",
+			Label:      "db.t3.micro / MySQL",
+			Attributes: map[string]string{"instance_type": "db.t3.micro", "engine": "MySQL"},
+			Operation:  "CreateDBInstance:0002",
+		}}
+
+		got := applySavingsPlanLicenseModel(rates, map[string]string{})
+
+		if got[0].RateID != "offer-1#APN1-InstanceUsage:db.t3.micro#MySQL" {
+			t.Errorf("RateID changed unexpectedly: %q", got[0].RateID)
+		}
+		if got[0].Label != "db.t3.micro / MySQL" {
+			t.Errorf("Label changed unexpectedly: %q", got[0].Label)
+		}
+		if _, ok := got[0].Attributes["license_model"]; ok {
+			t.Errorf(`Attributes["license_model"] set unexpectedly: %q`, got[0].Attributes["license_model"])
+		}
+	})
+
+	t.Run("two colliding rows resolve to distinct RateID/Label (issue 0053 reproduction)", func(t *testing.T) {
+		licenseIncluded := PriceRate{
+			RateID:     "offer-1#APN1-InstanceUsage:db.m8i.2xl#Oracle",
+			Label:      "db.m8i.2xlarge / Oracle",
+			Attributes: map[string]string{"instance_type": "db.m8i.2xlarge", "engine": "Oracle"},
+			PriceUSD:   1.6448,
+			Operation:  "CreateDBInstance:0020",
+		}
+		byol := PriceRate{
+			RateID:     "offer-1#APN1-InstanceUsage:db.m8i.2xl#Oracle",
+			Label:      "db.m8i.2xlarge / Oracle",
+			Attributes: map[string]string{"instance_type": "db.m8i.2xlarge", "engine": "Oracle"},
+			PriceUSD:   0.832,
+			Operation:  "CreateDBInstance:0005",
+		}
+		opLicense := map[string]string{
+			"CreateDBInstance:0020": "License included",
+			"CreateDBInstance:0005": "Bring your own license",
+		}
+
+		got := applySavingsPlanLicenseModel([]PriceRate{licenseIncluded, byol}, opLicense)
+
+		if got[0].RateID == got[1].RateID {
+			t.Fatalf("RateID collision: both got %q, want distinct RateIDs", got[0].RateID)
+		}
+		if got[0].Label == got[1].Label {
+			t.Fatalf("Label collision: both got %q, want distinct Labels", got[0].Label)
+		}
+	})
+}
+
 // ---- fakes for orchestration tests ----
 
 type fakePricingClient struct {
@@ -830,7 +981,7 @@ func TestFetchOnDemandAndReservedPagination(t *testing.T) {
 			return &pricing.GetProductsOutput{PriceList: []string{ec2PriceDoc}}, nil
 		},
 	}
-	rates, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
 	if err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v", err)
 	}
@@ -861,7 +1012,7 @@ func TestFetchOnDemandAndReservedStopsOnEmptyStringNextToken(t *testing.T) {
 			return &pricing.GetProductsOutput{PriceList: []string{ec2PriceDoc}, NextToken: &emptyToken}, nil
 		},
 	}
-	rates, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
 	if err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v, want nil (empty-string NextToken must be treated as no more pages)", err)
 	}
@@ -879,7 +1030,7 @@ func TestFetchOnDemandAndReservedErrorAbortsWithoutPartialData(t *testing.T) {
 			return nil, errors.New("throttled")
 		},
 	}
-	rates, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
 	if err == nil {
 		t.Fatal("fetchOnDemandAndReserved() err = nil, want error")
 	}
@@ -894,7 +1045,7 @@ func TestFetchOnDemandAndReservedSkipsMalformedEntries(t *testing.T) {
 			return &pricing.GetProductsOutput{PriceList: []string{"{not json", ec2PriceDoc}}, nil
 		},
 	}
-	rates, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
+	rates, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"])
 	if err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v, want nil (malformed entries are skipped, not fatal)", err)
 	}
@@ -911,7 +1062,7 @@ func TestFetchOnDemandAndReservedEC2Filters(t *testing.T) {
 			return &pricing.GetProductsOutput{}, nil
 		},
 	}
-	if _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"]); err != nil {
+	if _, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "ec2", pricingServiceSpecs["ec2"]); err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v", err)
 	}
 	if len(captured.Filters) != 5 {
@@ -927,7 +1078,7 @@ func TestFetchOnDemandAndReservedRDSFilters(t *testing.T) {
 			return &pricing.GetProductsOutput{}, nil
 		},
 	}
-	if _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "rds", pricingServiceSpecs["rds"]); err != nil {
+	if _, _, err := fetchOnDemandAndReserved(context.Background(), client, "ap-northeast-1", "rds", pricingServiceSpecs["rds"]); err != nil {
 		t.Fatalf("fetchOnDemandAndReserved() err = %v", err)
 	}
 	if len(captured.Filters) != 2 {
@@ -1090,6 +1241,98 @@ func TestGetPricingOrchestration(t *testing.T) {
 			t.Fatal("getPricing() err = nil, want error (on-demand/RI failure must not be cached as partial)")
 		}
 	})
+}
+
+// 実際に AWS Price List API から取得した生 JSON (issue 0053 実装時にライブ検証済み: RDS
+// Oracle の db.m8i.2xlarge は License Included/BYOL の 2 SKU を持ち、operation は
+// それぞれ "CreateDBInstance:0020"/"CreateDBInstance:0005") をもとにしたテスト用ドキュメント。
+const rdsOracleLicenseIncludedDoc = `{
+  "product": {"sku": "SKU20", "productFamily": "Database Instance", "attributes": {
+    "instanceType": "db.m8i.2xlarge", "databaseEngine": "Oracle", "deploymentOption": "Single-AZ",
+    "storage": "EBS Only", "licenseModel": "License included", "operation": "CreateDBInstance:0020",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-InstanceUsage:db.m8i.2xl"
+  }},
+  "terms": {
+    "OnDemand": {"SKU20.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU20.OTC1.RC1": {"rateCode": "SKU20.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "3.2900000000"}}
+    }}}
+  }
+}`
+
+const rdsOracleBYOLDoc = `{
+  "product": {"sku": "SKU21", "productFamily": "Database Instance", "attributes": {
+    "instanceType": "db.m8i.2xlarge", "databaseEngine": "Oracle", "deploymentOption": "Single-AZ",
+    "storage": "EBS Only", "licenseModel": "Bring your own license", "operation": "CreateDBInstance:0005",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-InstanceUsage:db.m8i.2xl"
+  }},
+  "terms": {
+    "OnDemand": {"SKU21.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU21.OTC1.RC1": {"rateCode": "SKU21.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "1.6600000000"}}
+    }}}
+  }
+}`
+
+// TestGetPricingResolvesSavingsPlanLicenseModel は issue 0053 の再現シナリオを end-to-end で
+// 検証する。RDS Oracle の License Included/BYOL は Savings Plans 側では
+// offeringId+usageType+productDescription が完全一致する (Operation コードのみが異なる)
+// ため、On-Demand 側からのライセンスモデル逆引きが無いと price_usd だけが異なる同一 RateID の
+// 行が残ってしまう (dedupeSavingsPlanRates は price_usd が異なるため統合しない)。
+func TestGetPricingResolvesSavingsPlanLicenseModel(t *testing.T) {
+	pricingClient := &fakePricingClient{
+		getProducts: func(*pricing.GetProductsInput) (*pricing.GetProductsOutput, error) {
+			return &pricing.GetProductsOutput{PriceList: []string{rdsOracleLicenseIncludedDoc, rdsOracleBYOLDoc}}, nil
+		},
+	}
+
+	offeringID := "8870e805-fb04-4245-820e-231a54e5121b"
+	offering := &sptypes.ParentSavingsPlanOffering{
+		OfferingId: &offeringID, PaymentOption: sptypes.SavingsPlanPaymentOptionNoUpfront,
+		PlanType: sptypes.SavingsPlanTypeDatabase, DurationSeconds: 31536000,
+	}
+	licenseIncludedOp := "CreateDBInstance:0020"
+	byolOp := "CreateDBInstance:0005"
+	licenseIncludedRate := newSPRate("APN1-InstanceUsage:db.m8i.2xl", "1.6448", offering, map[string]string{
+		"instanceType": "db.m8i.2xlarge", "productDescription": "Oracle",
+	})
+	licenseIncludedRate.Operation = &licenseIncludedOp
+	byolRate := newSPRate("APN1-InstanceUsage:db.m8i.2xl", "0.832", offering, map[string]string{
+		"instanceType": "db.m8i.2xlarge", "productDescription": "Oracle",
+	})
+	byolRate.Operation = &byolOp
+
+	spClient := &fakeSavingsPlansClient{
+		describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+			return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{
+				SearchResults: []sptypes.SavingsPlanOfferingRate{licenseIncludedRate, byolRate},
+			}, nil
+		},
+	}
+
+	table, err := getPricing(context.Background(), pricingClient, spClient, "ap-northeast-1", "rds", pricingServiceSpecs["rds"])
+	if err != nil {
+		t.Fatalf("getPricing() err = %v", err)
+	}
+
+	var spRates []PriceRate
+	for _, r := range table.Rates {
+		if r.Model == "savings_plan" {
+			spRates = append(spRates, r)
+		}
+	}
+	if len(spRates) != 2 {
+		t.Fatalf("savings_plan rates = %d, want 2 (must not collapse into 1: prices genuinely differ)", len(spRates))
+	}
+	if spRates[0].RateID == spRates[1].RateID {
+		t.Errorf("RateID collision: both got %q, want distinct RateIDs (issue 0053)", spRates[0].RateID)
+	}
+	if spRates[0].Label == spRates[1].Label {
+		t.Errorf("Label collision: both got %q, want distinct Labels (issue 0053)", spRates[0].Label)
+	}
+	for _, r := range spRates {
+		if r.Attributes["license_model"] == "" {
+			t.Errorf("rate %+v missing license_model attribute", r)
+		}
+	}
 }
 
 func TestValidatePricingService(t *testing.T) {

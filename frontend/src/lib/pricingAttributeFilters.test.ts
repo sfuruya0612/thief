@@ -26,17 +26,22 @@ describe('PRICING_ATTRIBUTE_FILTERS', () => {
     expect(PRICING_ATTRIBUTE_FILTERS.ecs).toEqual([]);
   });
 
-  it('rds は engine / deployment_option / storage_type の 3 軸を持つ', () => {
+  it('rds は engine / deployment_option / storage_type / license_model の 4 軸を持つ', () => {
     expect(PRICING_ATTRIBUTE_FILTERS.rds.map((s) => s.key)).toEqual([
       'engine',
       'deployment_option',
       'storage_type',
+      'license_model',
     ]);
   });
 
   it('rds の storage_type は表示用ラベルを持つ', () => {
     const spec = PRICING_ATTRIBUTE_FILTERS.rds.find((s) => s.key === 'storage_type');
     expect(spec?.valueLabels).toEqual({ standard: 'Standard', io_optimized: 'IO-Optimized' });
+  });
+
+  it('ec2 は os / license_model の 2 軸を持つ (issue 0053)', () => {
+    expect(PRICING_ATTRIBUTE_FILTERS.ec2.map((s) => s.key)).toEqual(['os', 'license_model']);
   });
 });
 

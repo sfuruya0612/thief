@@ -186,6 +186,8 @@
   - @sfuruya0612
 - [FIX] RDS Savings Plans の Oracle/Db2 レートで、AWS API が内部的な Operation コードのみが異なる完全に同一内容の重複行を返すことがあり、rate_id が同じでも見た目に全く同じ行が複数表示されてしまう不具合を修正する (表示・計算に使う値が完全一致する行を 1 件にまとめる重複除去を Savings Plans 取得処理に追加する)
   - @sfuruya0612
+- [FIX] RDS Oracle (BYOL/License Included) と EC2 Windows (持ち込みライセンス/標準ライセンス) の Savings Plans レートで、ライセンスモデルが異なるだけの行が同一の rate_id/label を持ってしまい、価格だけが異なる紛らわしい重複行として表示される不具合を修正する (Savings Plans にはライセンスモデル情報が無いため、同時に取得する On-Demand/Reserved 側の Operation コード対応表から逆引きして rate_id/label/属性に反映する。On-Demand/Reserved 側のラベルにもライセンスモデルを表示するようにし、絞り込みチップにも license_model 軸を追加する)
+  - @sfuruya0612
 
 ### misc
 
