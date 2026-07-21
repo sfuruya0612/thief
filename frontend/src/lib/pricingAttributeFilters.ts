@@ -22,8 +22,16 @@ export interface AttributeFilterSpec {
 // RDS の storage_type (Standard/IO-Optimized) は Aurora 専用の軸で、Savings Plans の
 // 行には存在しない (attributes.storage_type が未設定になる) ため、matchesAttributeSelection
 // は値を持たない行をこのフィルタの対象外として扱う (SP 行が誤って弾かれないようにするため)。
+//
+// license_model (RDS の Oracle 等の BYOL/License Included、EC2 の Windows BYOL 等) は
+// On-Demand/Reserved だけでなく Savings Plans の行にも付与される (issue 0053: Operation
+// コード経由で On-Demand 側から逆引きする)。ただし対応する Operation が見つからない行では
+// 値を持たない (storage_type と同様、matchesAttributeSelection がその行を対象外として扱う)。
 export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSpec[]> = {
-  ec2: [{ key: 'os', label: 'OS' }],
+  ec2: [
+    { key: 'os', label: 'OS' },
+    { key: 'license_model', label: 'License' },
+  ],
   rds: [
     { key: 'engine', label: 'Engine' },
     { key: 'deployment_option', label: 'Deployment' },
@@ -32,6 +40,7 @@ export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSp
       label: 'Storage',
       valueLabels: { standard: 'Standard', io_optimized: 'IO-Optimized' },
     },
+    { key: 'license_model', label: 'License' },
   ],
   elasticache: [{ key: 'engine', label: 'Engine' }],
   ecs: [],

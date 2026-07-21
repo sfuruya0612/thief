@@ -44,6 +44,13 @@ type PriceRate struct {
 	PriceUSD   float64           `json:"price_usd"`
 	UpfrontUSD float64           `json:"upfront_usd"`
 	Currency   string            `json:"currency"`
+
+	// Operation は savings_plan レートに対してのみ savingsPlanRateFrom が設定する内部専用
+	// フィールド (json:"-" のため API レスポンスには出ない)。SavingsPlanOfferingRate.Operation
+	// をそのまま保持し、applySavingsPlanLicenseModel が On-Demand/Reserved 側から集めた
+	// operation→licenseModel 対応表 (issue 0053) を逆引きするキーとして使う。on_demand/
+	// reserved のレートおよび ECS の savings_plan レートでは常に空文字列のまま。
+	Operation string `json:"-"`
 }
 
 // PriceTerm describes Reserved Instance / Savings Plan purchase conditions.
@@ -155,16 +162,17 @@ func GetPricing(ctx context.Context, profile, region, service string) (*PriceTab
 
 func getPricing(ctx context.Context, pc pricingAPI, sp savingsPlansAPI, region, service string, spec pricingServiceSpec) (*PriceTable, error) {
 	var (
-		onDemandRates []PriceRate
-		onDemandErr   error
-		spRates       []PriceRate
-		spErr         error
-		wg            sync.WaitGroup
+		onDemandRates  []PriceRate
+		opLicenseModel map[string]string
+		onDemandErr    error
+		spRates        []PriceRate
+		spErr          error
+		wg             sync.WaitGroup
 	)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		onDemandRates, onDemandErr = fetchOnDemandAndReserved(ctx, pc, region, service, spec)
+		onDemandRates, opLicenseModel, onDemandErr = fetchOnDemandAndReserved(ctx, pc, region, service, spec)
 	}()
 	go func() {
 		defer wg.Done()
@@ -193,7 +201,9 @@ func getPricing(ctx context.Context, pc pricingAPI, sp savingsPlansAPI, region, 
 		table.Partial = true
 		table.MissingModels = []string{"savings_plan"}
 	} else {
-		table.Rates = append(table.Rates, spRates...)
+		// Savings Plans にはライセンスモデル情報が無いため (issue 0053)、同時に取得した
+		// On-Demand/Reserved 側の対応表で逆引きしてから合算する。
+		table.Rates = append(table.Rates, applySavingsPlanLicenseModel(spRates, opLicenseModel)...)
 	}
 	sortPriceRates(table.Rates)
 	return table, nil
@@ -273,7 +283,7 @@ func parsePriceDocument(raw string) (*priceListDocument, error) {
 	return &doc, nil
 }
 
-func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, service string, spec pricingServiceSpec) ([]PriceRate, error) {
+func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, service string, spec pricingServiceSpec) ([]PriceRate, map[string]string, error) {
 	filters := []pricingtypes.Filter{
 		{Field: aws.String("regionCode"), Type: pricingtypes.FilterTypeTermMatch, Value: aws.String(region)},
 		{Field: aws.String("productFamily"), Type: pricingtypes.FilterTypeTermMatch, Value: aws.String(spec.productFamily)},
@@ -291,6 +301,7 @@ func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, se
 	}
 
 	rates := []PriceRate{}
+	opLicense := map[string]string{}
 	var next *string
 	for {
 		out, err := client.GetProducts(ctx, &pricing.GetProductsInput{
@@ -299,7 +310,7 @@ func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, se
 			NextToken:   next,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("get products: %w", err)
+			return nil, nil, fmt.Errorf("get products: %w", err)
 		}
 		for _, raw := range out.PriceList {
 			doc, perr := parsePriceDocument(raw)
@@ -307,7 +318,7 @@ func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, se
 				slog.Warn("skip malformed price list document", "service", service, "err", perr)
 				continue
 			}
-			rates = append(rates, priceRatesFromDocument(service, spec, *doc)...)
+			rates = append(rates, priceRatesFromDocument(service, spec, *doc, opLicense)...)
 		}
 		// fetchSavingsPlans で確認した「最終ページで NextToken が nil ではなく空
 		// 文字列になる」API の揺れに備え、こちらも空文字列を終端として扱う
@@ -318,10 +329,10 @@ func fetchOnDemandAndReserved(ctx context.Context, client pricingAPI, region, se
 		}
 		next = out.NextToken
 	}
-	return rates, nil
+	return rates, opLicense, nil
 }
 
-func priceRatesFromDocument(service string, spec pricingServiceSpec, doc priceListDocument) []PriceRate {
+func priceRatesFromDocument(service string, spec pricingServiceSpec, doc priceListDocument, opLicense map[string]string) []PriceRate {
 	// GetProducts の productFamily フィルタ (fetchOnDemandAndReserved) が API 側
 	// 不具合等で効かなかった場合の保険として、パース後にも二重チェックする。
 	if doc.Product.ProductFamily != spec.productFamily {
@@ -330,11 +341,14 @@ func priceRatesFromDocument(service string, spec pricingServiceSpec, doc priceLi
 	if service == "ecs" {
 		return ecsOnDemandRatesFromDocument(doc)
 	}
-	return instanceOnDemandRatesFromDocument(service, spec, doc)
+	return instanceOnDemandRatesFromDocument(service, spec, doc, opLicense)
 }
 
-func instanceOnDemandRatesFromDocument(service string, spec pricingServiceSpec, doc priceListDocument) []PriceRate {
+func instanceOnDemandRatesFromDocument(service string, spec pricingServiceSpec, doc priceListDocument, opLicense map[string]string) []PriceRate {
 	attrs := doc.Product.Attributes
+	// Savings Plans の Properties にはライセンスモデル情報が無いため (issue 0053)、
+	// On-Demand/Reserved の生属性から operation→licenseModel の対応を副産物として集める。
+	recordOperationLicenseModel(opLicense, attrs)
 	if strings.Contains(attrs["usagetype"], "ExtendedSupport") {
 		// EOL 延長サポート課金 (RDS/ElastiCache の一部エンジンに存在) は同一
 		// instanceType で複数の紛らわしい重複行を生むため v1 スコープ外とする。
@@ -428,13 +442,13 @@ func reservedRateFromTerm(sku string, term priceTermDoc, label string, attrs map
 func instanceLabel(service string, attrs map[string]string) string {
 	switch service {
 	case "ec2":
-		return joinNonEmpty(" / ", attrs["instanceType"], attrs["operatingSystem"], attrs["tenancy"])
+		return joinNonEmpty(" / ", attrs["instanceType"], attrs["operatingSystem"], attrs["tenancy"], attrs["licenseModel"])
 	case "rds":
 		storageLabel := "Standard"
 		if rdsStorageType(attrs["storage"]) == "io_optimized" {
 			storageLabel = "IO-Optimized"
 		}
-		return joinNonEmpty(" / ", attrs["instanceType"], attrs["databaseEngine"], attrs["deploymentOption"], storageLabel)
+		return joinNonEmpty(" / ", attrs["instanceType"], attrs["databaseEngine"], attrs["deploymentOption"], storageLabel, attrs["licenseModel"])
 	case "elasticache":
 		return joinNonEmpty(" / ", attrs["instanceType"], attrs["cacheEngine"])
 	default:
@@ -449,6 +463,7 @@ func curatedInstanceAttributes(service string, attrs map[string]string) map[stri
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
 		setIfNonEmpty(out, "os", attrs["operatingSystem"])
 		setIfNonEmpty(out, "tenancy", attrs["tenancy"])
+		setIfNonEmpty(out, "license_model", attrs["licenseModel"])
 	case "rds":
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
 		setIfNonEmpty(out, "engine", attrs["databaseEngine"])
@@ -460,6 +475,31 @@ func curatedInstanceAttributes(service string, attrs map[string]string) map[stri
 		setIfNonEmpty(out, "engine", attrs["cacheEngine"])
 	}
 	return out
+}
+
+// recordOperationLicenseModel は、1 件の Price List ドキュメントの生 attributes から
+// operation コードと licenseModel の対応を dest に記録する (issue 0053)。Savings Plans の
+// SavingsPlanOfferingRate.Operation から同じキーで引くための対応表を、On-Demand/Reserved を
+// 解析するこの経路の副産物として組み立てる (追加の API 呼び出しを行わないため)。
+// licenseModel という概念を持たないサービス/エンジン (ElastiCache、MySQL 等) の行は
+// operation/licenseModel のいずれかが空文字列になり、その場合は何も記録しない。
+// 同じ operation に異なる licenseModel が観測された場合は不整合として警告し、既存の値を
+// 優先する (AWS の operation コードはインスタンスタイプを問わず一意な列挙値のはずであり、
+// 実データでの不一致は想定外の入力として扱う)。
+func recordOperationLicenseModel(dest map[string]string, attrs map[string]string) {
+	op := attrs["operation"]
+	lm := attrs["licenseModel"]
+	if op == "" || lm == "" {
+		return
+	}
+	if existing, ok := dest[op]; ok {
+		if existing != lm {
+			slog.Warn("operation code maps to multiple license models; keeping first-seen value",
+				"operation", op, "kept", existing, "ignored", lm)
+		}
+		return
+	}
+	dest[op] = lm
 }
 
 // rdsStorageType normalizes the Price List "storage" attribute into a
@@ -588,11 +628,15 @@ func fetchSavingsPlans(ctx context.Context, client savingsPlansAPI, region, serv
 // ことがあり (issue 0052: RDS の Oracle/Db2 で実データ確認済み)、それらは内部的な Operation
 // コード (例: "CreateDBInstance:0035" と "CreateDBInstance:0029") のみが異なり、Rate や
 // Properties (productDescription/instanceType/region) を含む他の全フィールドは完全一致する。
-// Operation はこのパッケージが PriceRate へ取り込むどのフィールドにも現れない (表示・計算の
-// どちらにも使われない) ため、Operation 違いはユーザーから見て意味のある区別ではない。
+// PriceRate.Operation は json:"-" のため dedup キー (json.Marshal) の対象外であり、本関数の
+// 実行時点では license_model もまだ未解決 (getPricing が本関数の後に applySavingsPlanLicenseModel
+// を適用する) なので、Operation 違いだけではまだユーザーから見て意味のある区別になっていない。
 // RateID に Operation を追加して一意にする方式は採らない: 見た目には全く同じ内容の行が
 // 依然として複数表示される問題 (React key の一意性は満たすが UX 上の重複は解消しない) が残る
-// ため、表示・計算に使う値がすべて一致する行そのものを 1 件に統合する。
+// ため、表示・計算に使う値がすべて一致する行そのものを 1 件に統合する。統合対象は price_usd
+// も含めて完全一致する行に限られるため、Operation 違いが本当に異なる price_usd を伴う場合
+// (issue 0053: ライセンスモデル差) は別行として残り、後段の applySavingsPlanLicenseModel が
+// license_model を反映して区別可能にする。
 func dedupeSavingsPlanRates(rates []PriceRate) []PriceRate {
 	seen := make(map[string]bool, len(rates))
 	out := make([]PriceRate, 0, len(rates))
@@ -612,6 +656,29 @@ func dedupeSavingsPlanRates(rates []PriceRate) []PriceRate {
 		out = append(out, r)
 	}
 	return out
+}
+
+// applySavingsPlanLicenseModel は、同時に取得した On-Demand/Reserved データから作った
+// operation→licenseModel 対応表 (recordOperationLicenseModel 参照) を使って、Savings Plans
+// レートの RateID/Label/Attributes にライセンスモデルを反映する。
+//
+// DescribeSavingsPlansOfferingRates の Properties にはライセンスモデル情報が一切含まれない
+// ため (issue 0053: RDS Oracle の BYOL/License Included、EC2 Windows の BYOL/標準ライセンス
+// はいずれも offeringId+usageType+productDescription が完全一致するのに price_usd が本当に
+// 異なる)、Operation コード経由で On-Demand 側のデータから逆引きする。Operation が対応表に
+// 存在しない行 (オープンソースエンジンや Linux 等、ライセンスモデルという概念がそもそも無い
+// 大多数の行) はそのまま変更しない。
+func applySavingsPlanLicenseModel(rates []PriceRate, opLicense map[string]string) []PriceRate {
+	for i := range rates {
+		lm := opLicense[rates[i].Operation]
+		if lm == "" {
+			continue
+		}
+		rates[i].Label = joinNonEmpty(" / ", rates[i].Label, lm)
+		rates[i].RateID += "#" + lm
+		rates[i].Attributes["license_model"] = lm
+	}
+	return rates
 }
 
 func savingsPlanProperties(props []sptypes.SavingsPlanOfferingRateProperty) map[string]string {
@@ -696,6 +763,7 @@ func instanceSavingsPlanRate(service string, r sptypes.SavingsPlanOfferingRate, 
 		PriceUSD:   price,
 		UpfrontUSD: 0,
 		Currency:   "USD",
+		Operation:  ptrStr(r.Operation),
 	}, true
 }
 
