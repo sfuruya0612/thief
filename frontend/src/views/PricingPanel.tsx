@@ -1,8 +1,11 @@
 // AWS Pricing (単価確認・見積もり) 専用パネル。ServicePanel (汎用) や CostExplorerPanel と
 // 同様に AccountView から activeService === 'pricing' で分岐する。
-// 対象は固定 7 サービス (issue 0055 で Savings Plans 3 種が独立サービスとして加わった) の
-// ため、rules-of-hooks を守るために usePricing/useRefreshPricing を可変長配列の map では
-// なく 7 個ずつ無条件に呼び、enabled で active/inactive をゲートする。
+// 対象は固定 8 サービス (issue 0055 で Savings Plans 3 種、issue 0056 で ec2-spot が
+// 独立サービスとして加わった) のため、rules-of-hooks を守るために usePricing/
+// useRefreshPricing を可変長配列の map ではなく 8 個ずつ無条件に呼び、enabled で
+// active/inactive をゲートする。ec2-spot はバックエンドのディスクキャッシュを経由
+// しないライブ取得サービスのため、usePricing の staleTime のみ他と異なり有限値
+// (EC2_SPOT_STALE_TIME) を渡す。
 import { useEffect, useMemo, useReducer } from 'react';
 import { usePricing, useRefreshPricing, useRegions } from '../api/queries';
 import { Estimator } from '../components/pricing/Estimator';
@@ -30,6 +33,12 @@ function isPricingService(s: string): s is PricingService {
   return (PRICING_SERVICES as readonly string[]).includes(s);
 }
 
+// ec2-spot はディスクキャッシュを経由しないライブ取得のため staleTime を有限値に
+// する (他サービスは Infinity のまま)。refetchOnWindowFocus: false / refetchInterval
+// なしの全体設定のもとでは、この staleTime によってもマウント時と手動更新以外の
+// 自動再取得は起きない (パネルを開いたままにしても継続的には最新化されない)。
+const EC2_SPOT_STALE_TIME = 60_000;
+
 export function PricingPanel({ profile, region, onRegionChange }: PricingPanelProps) {
   const [state, dispatch] = useReducer(pricingReducer, undefined, () =>
     initialPricingState(loadPersisted().pricing),
@@ -55,6 +64,13 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     activeSet.has('ec2-instance-sp'),
   );
   const databaseSpQuery = usePricing(profile, region, 'database-sp', activeSet.has('database-sp'));
+  const ec2SpotQuery = usePricing(
+    profile,
+    region,
+    'ec2-spot',
+    activeSet.has('ec2-spot'),
+    EC2_SPOT_STALE_TIME,
+  );
 
   const ec2Refresh = useRefreshPricing(profile, region, 'ec2');
   const rdsRefresh = useRefreshPricing(profile, region, 'rds');
@@ -63,6 +79,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
   const computeSpRefresh = useRefreshPricing(profile, region, 'compute-sp');
   const ec2InstanceSpRefresh = useRefreshPricing(profile, region, 'ec2-instance-sp');
   const databaseSpRefresh = useRefreshPricing(profile, region, 'database-sp');
+  const ec2SpotRefresh = useRefreshPricing(profile, region, 'ec2-spot');
 
   const queries: Record<PricingService, typeof ec2Query> = {
     ec2: ec2Query,
@@ -72,6 +89,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     'compute-sp': computeSpQuery,
     'ec2-instance-sp': ec2InstanceSpQuery,
     'database-sp': databaseSpQuery,
+    'ec2-spot': ec2SpotQuery,
   };
   const refreshes: Record<PricingService, typeof ec2Refresh> = {
     ec2: ec2Refresh,
@@ -81,6 +99,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     'compute-sp': computeSpRefresh,
     'ec2-instance-sp': ec2InstanceSpRefresh,
     'database-sp': databaseSpRefresh,
+    'ec2-spot': ec2SpotRefresh,
   };
 
   // 現テーブルに存在しない rate_id の選択は破棄する (リージョン切替、または単価改定で
@@ -107,6 +126,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     computeSpQuery.data,
     ec2InstanceSpQuery.data,
     databaseSpQuery.data,
+    ec2SpotQuery.data,
   ]);
 
   const rates: PriceTablesByService = useMemo(() => {
@@ -125,6 +145,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     computeSpQuery.data,
     ec2InstanceSpQuery.data,
     databaseSpQuery.data,
+    ec2SpotQuery.data,
   ]);
 
   const ssoExpired = useMemo(
@@ -142,6 +163,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
       computeSpQuery.error,
       ec2InstanceSpQuery.error,
       databaseSpQuery.error,
+      ec2SpotQuery.error,
     ],
   );
 
@@ -164,6 +186,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
     computeSpQuery.data,
     ec2InstanceSpQuery.data,
     databaseSpQuery.data,
+    ec2SpotQuery.data,
   ]);
 
   const anyRefreshing = PRICING_SERVICES.some((s) => refreshes[s].isPending);

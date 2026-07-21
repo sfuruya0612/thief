@@ -37,7 +37,13 @@ describe('migratePricingState', () => {
       pricingSchemaVersion: 0,
     };
     const next = migratePricingState(persisted);
-    expect(next.activeServices).toEqual(['ec2', 'compute-sp', 'ec2-instance-sp', 'database-sp']);
+    expect(next.activeServices).toEqual([
+      'ec2',
+      'compute-sp',
+      'ec2-instance-sp',
+      'database-sp',
+      'ec2-spot',
+    ]);
     expect(next.pricingSchemaVersion).toBe(PRICING_SCHEMA_VERSION);
   });
 
@@ -48,7 +54,12 @@ describe('migratePricingState', () => {
       selection: {},
     };
     const next = migratePricingState(persisted);
-    expect(next.activeServices).toEqual(['compute-sp', 'ec2-instance-sp', 'database-sp']);
+    expect(next.activeServices).toEqual([
+      'compute-sp',
+      'ec2-instance-sp',
+      'database-sp',
+      'ec2-spot',
+    ]);
   });
 
   it('ユーザーが手動で OFF にした既存サービスは補完で復活させない', () => {
@@ -59,8 +70,33 @@ describe('migratePricingState', () => {
       pricingSchemaVersion: 0,
     };
     const next = migratePricingState(persisted);
-    expect(next.activeServices).toEqual(['rds', 'compute-sp', 'ec2-instance-sp', 'database-sp']);
+    expect(next.activeServices).toEqual([
+      'rds',
+      'compute-sp',
+      'ec2-instance-sp',
+      'database-sp',
+      'ec2-spot',
+    ]);
     expect(next.activeServices).not.toContain('ec2');
+  });
+
+  it('複数リリースにまたがる移行が版ごとに一度ずつ確実に実行される (issue 0055 -> 0056)', () => {
+    // issue 0055 デプロイ後に一度移行済み (版 1) の永続化データを想定する。
+    const persisted: PricingPersistedState = {
+      activeServices: ['ec2', 'compute-sp', 'ec2-instance-sp', 'database-sp'],
+      collapsed: {},
+      selection: {},
+      pricingSchemaVersion: 1,
+    };
+    const next = migratePricingState(persisted);
+    expect(next.activeServices).toEqual([
+      'ec2',
+      'compute-sp',
+      'ec2-instance-sp',
+      'database-sp',
+      'ec2-spot',
+    ]);
+    expect(next.pricingSchemaVersion).toBe(PRICING_SCHEMA_VERSION);
   });
 });
 

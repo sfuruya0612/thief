@@ -94,6 +94,11 @@ export function Estimator({
                   <span>{PRICING_SERVICE_LABELS[b.service as PricingService] ?? b.service}</span>
                   <Money value={b.effectiveMonthly} />
                 </div>
+                {b.service === 'ec2-spot' && (
+                  <p className="pr-estimator-note">
+                    Spot 価格は変動するため、この見積もりは取得時点の参考値です。
+                  </p>
+                )}
                 {entries.map(([rateId, entry]) => {
                   const rate = rateById.get(rateId);
                   if (!rate) return null;

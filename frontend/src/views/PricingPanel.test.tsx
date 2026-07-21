@@ -168,6 +168,33 @@ describe('PricingPanel', () => {
     ).toBeInTheDocument();
   });
 
+  it('ec2-spot はライブ取得の注記と spot モデルの行を表示する (issue 0056)', async () => {
+    vi.spyOn(endpoints, 'getPricing').mockImplementation(async (_profile, _region, service) => {
+      if (service === 'ec2-spot') {
+        return table('ec2-spot', {
+          rates: [
+            rate({
+              rate_id: 'm5.large#Linux',
+              model: 'spot',
+              group: 'Spot',
+              label: 'm5.large / Linux',
+              attributes: { instance_type: 'm5.large', instance_family: 'm5', os: 'Linux' },
+            }),
+          ],
+        });
+      }
+      return table(service);
+    });
+    renderPanel();
+
+    const spotCard = await waitFor(() => {
+      const card = cardFor('EC2 Spot');
+      expect(within(card).getByText('m5.large / Linux')).toBeInTheDocument();
+      return card;
+    });
+    expect(within(spotCard).getByText('ライブ取得 (自動更新なし)')).toBeInTheDocument();
+  });
+
   it('一括削除ボタンでチェック済みの見積もりがすべて解除される', async () => {
     vi.spyOn(endpoints, 'getPricing').mockImplementation(async (_profile, _region, service) => {
       if (service === 'ec2') return table('ec2', { rates: [rate()] });

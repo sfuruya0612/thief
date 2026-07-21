@@ -102,6 +102,8 @@
   - @sfuruya0612
 - [ADD] Pricing 画面の EC2 / RDS / ElastiCache の単価表に、インスタンスファミリ (m5 / db.r6g / cache.t4g 等) のチップによる複数選択の絞り込みを追加する。ファミリはインスタンスタイプから末尾のサイズ部分を除いた文字列で、On-Demand / Reserved Instance / Savings Plans のいずれの行にも適用される。既存のテキスト検索と AND 条件で併用できる
   - @sfuruya0612
+- [ADD] Pricing 画面に EC2 Spot の単価を独立サービス (EC2 Spot) として追加する。指定リージョンの現在の Spot 価格をインスタンスタイプと OS の組ごとにゾーン横断の最小値で 1 行に集約して表示し、ディスクキャッシュを使わずライブ取得する (同時リクエストの重複排除のみ行う)。OS はオンデマンドの表記 (Linux / RHEL / SUSE / Windows) に正規化し、instance_family のチップ絞り込みも適用される
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)

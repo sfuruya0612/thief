@@ -68,6 +68,13 @@ export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSp
     { key: 'engine', label: 'Engine' },
     { key: 'license_model', label: 'License' },
   ],
+  // issue 0056: ec2-spot の os は On-Demand の operatingSystem 語彙 (Linux/RHEL/SUSE/
+  // Windows) へ正規化済み (backend の spotOSFromProductDescription)。license_model は
+  // Spot のレスポンスに情報が無いため対象にしない。
+  'ec2-spot': [
+    { key: 'instance_family', label: 'Family' },
+    { key: 'os', label: 'OS' },
+  ],
 };
 
 // rates 全体から、指定した attribute key に実在する値の集合を昇順で返す。

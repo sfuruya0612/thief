@@ -356,6 +356,9 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  // EC2 Spot (issue 0056) 専用アイコン。対応する AWS 公式アイコンが無いため、
+  // 変動価格を表す稲妻ベースの図形を用いる。
+  spot: (p = {}) => <Icon {...p} d="M13 3L4 14h6l-1 7 9-11h-6z" />,
   pricing: (p = {}) => (
     <Icon
       {...p}

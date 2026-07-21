@@ -29,6 +29,13 @@ var (
 // ValidatePricingService. Bounding it keeps the number of generated cache
 // files bounded (service × region, at most a few hundred small files), so no
 // cleanup job is needed.
+//
+// "ec2-spot" (issue 0056) is deliberately absent: it is a live,
+// dynamically-priced feed with no stable per-region catalog to persist, so
+// the handler routes it around Load/Save entirely (only Fetch's singleflight
+// applies, which doesn't call path()/ValidateService). Adding it here would
+// make ValidateService accept a service the handler must never actually
+// cache.
 var validServices = map[string]bool{
 	"ec2":             true,
 	"rds":             true,

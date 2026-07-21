@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/pricing"
 	pricingtypes "github.com/aws/aws-sdk-go-v2/service/pricing/types"
 	"github.com/aws/aws-sdk-go-v2/service/savingsplans"
@@ -83,6 +85,12 @@ type pricingAPI interface {
 // uses. Tests inject a hand-written fake.
 type savingsPlansAPI interface {
 	DescribeSavingsPlansOfferingRates(ctx context.Context, params *savingsplans.DescribeSavingsPlansOfferingRatesInput, optFns ...func(*savingsplans.Options)) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error)
+}
+
+// ec2SpotAPI is the subset of the EC2 client this package uses for Spot
+// pricing (issue 0056). Tests inject a hand-written fake.
+type ec2SpotAPI interface {
+	DescribeSpotPriceHistory(ctx context.Context, params *ec2.DescribeSpotPriceHistoryInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSpotPriceHistoryOutput, error)
 }
 
 // resourceServiceSpec maps a thief resource pricing service slug (ec2/rds/
@@ -174,10 +182,22 @@ var savingsPlanServiceSpecs = map[string]savingsPlanServiceSpec{
 	},
 }
 
+// EC2SpotService is the pricing service slug for EC2 Spot rates (issue
+// 0056). Unlike resourceServiceSpecs/savingsPlanServiceSpecs members,
+// ec2-spot has no catalog spec: it is a live, dynamically-priced feed
+// (ec2:DescribeSpotPriceHistory) with no stable per-service/region catalog
+// to cache on disk (see getEC2SpotPricing and handlers_pricing.go, which
+// must route ec2-spot around pricecache.Load/Save entirely — only the
+// singleflight in pricecache.Fetch applies).
+const EC2SpotService = "ec2-spot"
+
 // ValidatePricingService returns ErrInvalidPricingService unless service is
 // one of the supported pricing service slugs (the union of
-// resourceServiceSpecs and savingsPlanServiceSpecs).
+// resourceServiceSpecs, savingsPlanServiceSpecs, and EC2SpotService).
 func ValidatePricingService(service string) error {
+	if service == EC2SpotService {
+		return nil
+	}
 	if _, ok := resourceServiceSpecs[service]; ok {
 		return nil
 	}
@@ -188,12 +208,21 @@ func ValidatePricingService(service string) error {
 }
 
 // GetPricing returns the normalized price table for service/region, using
-// profile's credentials to call the Price List and/or Savings Plans APIs
-// (only the client(s) the service actually needs are created). Price List/
-// Savings Plans endpoints are global services; both clients are pinned to
-// us-east-1 (mirroring newCostExplorerClient), and region is used only as an
-// API-side filter value, not a client region.
+// profile's credentials to call the Price List, Savings Plans, and/or EC2
+// APIs (only the client(s) the service actually needs are created). Price
+// List/Savings Plans endpoints are global services; both clients are pinned
+// to us-east-1 (mirroring newCostExplorerClient), and region is used only as
+// an API-side filter value, not a client region. EC2 Spot is the exception:
+// DescribeSpotPriceHistory is a regional endpoint, so its client is created
+// for region itself (see newEC2Client, already used by ec2.go).
 func GetPricing(ctx context.Context, profile, region, service string) (*PriceTable, error) {
+	if service == EC2SpotService {
+		client, err := newEC2Client(ctx, profile, region)
+		if err != nil {
+			return nil, err
+		}
+		return getEC2SpotPricing(ctx, client, region)
+	}
 	if spec, ok := resourceServiceSpecs[service]; ok {
 		pricingClient, err := newPricingClient(ctx, profile)
 		if err != nil {
@@ -993,6 +1022,130 @@ func spInstanceType(property, usageType string) string {
 		return usageType[idx+1:]
 	}
 	return property
+}
+
+// ---- EC2 Spot (ec2:DescribeSpotPriceHistory) ----
+
+// ec2SpotLookbackWindow bounds how far back DescribeSpotPriceHistory looks
+// for the "current" snapshot. Spot price history entries are recorded only
+// when a zone's price changes, so StartTime=now would return nothing for
+// zones whose price hasn't changed in that instant; leaving StartTime unset
+// instead pages through up to 90 days of history (see issue 0056 background:
+// "直近約90日分の時系列を全ページ走査する" — too slow/costly for a live
+// request). One hour is a pragmatic middle ground chosen from the SDK docs
+// alone (no live-traffic data available in this environment); tune based on
+// live-AWS coverage if instance types are missing from real responses.
+const ec2SpotLookbackWindow = 1 * time.Hour
+
+// getEC2SpotPricing fetches and normalizes EC2 Spot rates. Unlike
+// getResourcePricing/getSavingsPlanPricing, callers must not route this
+// through pricecache.Load/Save (see handlers_pricing.go): Spot is always a
+// live fetch, only deduped via pricecache.Fetch's singleflight.
+func getEC2SpotPricing(ctx context.Context, client ec2SpotAPI, region string) (*PriceTable, error) {
+	rates, err := fetchEC2SpotRates(ctx, client, region)
+	if err != nil {
+		return nil, fmt.Errorf("fetch ec2 spot pricing: %w", err)
+	}
+	sortPriceRates(rates)
+	return &PriceTable{
+		Service: EC2SpotService,
+		Region:  region,
+		Rates:   rates,
+	}, nil
+}
+
+// fetchEC2SpotRates aggregates DescribeSpotPriceHistory rows into one rate
+// per (instance_type, os) pair, taking the minimum price seen across
+// Availability Zones (issue 0056 design decision: v1 shows a region-level
+// representative value, not a per-zone row, to keep row counts in line with
+// the existing On-Demand/Reserved table and avoid an AZ dimension the rest
+// of the pricing table doesn't have). The RateID is built from instance_type
+// and os only (no zone), which stays unique post-aggregation.
+func fetchEC2SpotRates(ctx context.Context, client ec2SpotAPI, region string) ([]PriceRate, error) {
+	type spotKey struct{ instanceType, os string }
+	minPrice := make(map[spotKey]float64)
+
+	startTime := time.Now().UTC().Add(-ec2SpotLookbackWindow)
+	var next *string
+	for {
+		out, err := client.DescribeSpotPriceHistory(ctx, &ec2.DescribeSpotPriceHistoryInput{
+			StartTime: aws.Time(startTime),
+			NextToken: next,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("describe spot price history: %w", err)
+		}
+		for _, sp := range out.SpotPriceHistory {
+			price, ok := parseUSD(ptrStr(sp.SpotPrice))
+			if !ok {
+				continue
+			}
+			instanceType := string(sp.InstanceType)
+			os := spotOSFromProductDescription(sp.ProductDescription)
+			if instanceType == "" || os == "" {
+				continue
+			}
+			k := spotKey{instanceType, os}
+			if cur, ok := minPrice[k]; !ok || price < cur {
+				minPrice[k] = price
+			}
+		}
+		// fetchSavingsPlans で確認した「最終ページで NextToken が nil ではなく空
+		// 文字列になる」API の揺れに備え、こちらも空文字列を終端として扱う。
+		if out.NextToken == nil || *out.NextToken == "" {
+			break
+		}
+		next = out.NextToken
+	}
+
+	rates := make([]PriceRate, 0, len(minPrice))
+	for k, price := range minPrice {
+		attrs := map[string]string{}
+		setIfNonEmpty(attrs, "instance_type", k.instanceType)
+		setIfNonEmpty(attrs, "instance_family", instanceFamily(k.instanceType))
+		setIfNonEmpty(attrs, "os", k.os)
+		rates = append(rates, PriceRate{
+			RateID:     k.instanceType + "#" + k.os,
+			Model:      "spot",
+			Group:      "Spot",
+			Label:      joinNonEmpty(" / ", k.instanceType, k.os),
+			Attributes: attrs,
+			Term:       PriceTerm{},
+			Unit:       "Hrs",
+			PriceUSD:   price,
+			UpfrontUSD: 0,
+			Currency:   "USD",
+		})
+	}
+	return rates, nil
+}
+
+// spotOSFromProductDescription normalizes DescribeSpotPriceHistory's
+// RIProductDescription into the On-Demand "operatingSystem" vocabulary
+// (Linux/RHEL/SUSE/Windows), so the os attribute chip matches across
+// On-Demand/Reserved and Spot rows (issue 0056) instead of splitting into
+// e.g. "Linux" and "Linux/UNIX (Amazon VPC)". The API's documented filter
+// values are four base descriptions (Linux/UNIX, Red Hat Enterprise Linux,
+// SUSE Linux, Windows) each with an "(Amazon VPC)" variant; the VPC suffix
+// carries no pricing-relevant distinction here and is stripped before
+// mapping. ec2types.RIProductDescription's Go enum only declares the
+// Linux/UNIX and Windows consts, but the API is documented to also return
+// the RHEL/SUSE variants as plain strings, so this switches on the raw
+// string rather than the (non-exhaustive) enum consts.
+func spotOSFromProductDescription(pd ec2types.RIProductDescription) string {
+	base := strings.TrimSuffix(string(pd), " (Amazon VPC)")
+	switch base {
+	case "Linux/UNIX":
+		return "Linux"
+	case "Red Hat Enterprise Linux":
+		return "RHEL"
+	case "SUSE Linux":
+		return "SUSE"
+	case "Windows":
+		return "Windows"
+	default:
+		return base
+	}
 }
 
 // ---- shared helpers ----

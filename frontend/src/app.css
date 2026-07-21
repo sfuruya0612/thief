@@ -3726,6 +3726,10 @@ td.qe-rt-empty {
   color: var(--text-3);
   font-size: 11px;
 }
+.pr-card-live-note {
+  color: var(--text-3);
+  font-size: 11px;
+}
 .pr-card-body {
   padding: 10px 12px 14px;
   display: flex;

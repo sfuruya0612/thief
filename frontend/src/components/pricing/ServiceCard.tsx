@@ -40,7 +40,8 @@ export interface ServiceCardProps {
 // issue 0055 の SP 分離後、リソースカード (ec2/rds/elasticache/ecs) は On-Demand /
 // Reserved Instance の 2 group のみを持つ。SP カード (compute-sp 等) は常に 1 group
 // (spGroup が返す "Compute Savings Plans" 等) のみのため、SP 種別ごとの順序は不要になった。
-const GROUP_ORDER = ['On-Demand', 'Reserved Instance'];
+// issue 0056: ec2-spot カードも常に 1 group ("Spot") のみを持つ。
+const GROUP_ORDER = ['On-Demand', 'Reserved Instance', 'Spot'];
 
 function groupRates(rates: PriceRateRow[]): [string, PriceRateRow[]][] {
   const byGroup = new Map<string, PriceRateRow[]>();
@@ -141,6 +142,14 @@ export function ServiceCard({
         )}
         <span className="pr-card-spacer" />
         {refreshing && <span className="pr-card-refreshing">更新中…</span>}
+        {service === 'ec2-spot' && (
+          <span
+            className="pr-card-live-note"
+            title="ディスクキャッシュを使わないライブ取得です。開いた時と更新ボタン押下時にのみ最新化されます"
+          >
+            ライブ取得 (自動更新なし)
+          </span>
+        )}
         {table?.licenseUnresolved && (
           <span className="pr-card-fetched">ライセンス区別 未解決 (縮退表示)</span>
         )}

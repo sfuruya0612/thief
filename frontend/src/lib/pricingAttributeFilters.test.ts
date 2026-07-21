@@ -55,6 +55,13 @@ describe('PRICING_ATTRIBUTE_FILTERS', () => {
       'engine',
     ]);
   });
+
+  it('ec2-spot は instance_family / os の 2 軸を持つ (issue 0056)', () => {
+    expect(PRICING_ATTRIBUTE_FILTERS['ec2-spot'].map((s) => s.key)).toEqual([
+      'instance_family',
+      'os',
+    ]);
+  });
 });
 
 describe('attributeValueOptions', () => {

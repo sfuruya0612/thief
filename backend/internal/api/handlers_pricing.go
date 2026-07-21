@@ -54,7 +54,16 @@ func (s *Server) handlePricing(w http.ResponseWriter, r *http.Request) {
 
 	dir := pricingCacheDir(s.cfg.PriceCacheDir)
 
-	if !s.refresh(r) {
+	// EC2 Spot (issue 0056) is a live, dynamically-priced feed with no stable
+	// per-service/region catalog to persist: it must never be read from or
+	// written to the on-disk cache, even on a plain (non-refresh) request.
+	// This branch has to sit before pricecache.Load, not just before Save —
+	// ec2-spot is deliberately absent from pricecache's validServices
+	// allowlist (see pricecache.go), so calling Load for it would 400 via
+	// ValidateService before GetPricing ever runs.
+	isLiveOnly := service == awsinternal.EC2SpotService
+
+	if !isLiveOnly && !s.refresh(r) {
 		data, _, ok, err := pricecache.Load(dir, service, region)
 		if err != nil {
 			// キャッシュ I/O エラーは絶対パス等の詳細をクライアントへ返さず、
@@ -81,8 +90,10 @@ func (s *Server) handlePricing(w http.ResponseWriter, r *http.Request) {
 		if merr != nil {
 			return nil, merr
 		}
-		if serr := pricecache.Save(dir, service, region, payload, table.FetchedAt); serr != nil {
-			return nil, serr
+		if !isLiveOnly {
+			if serr := pricecache.Save(dir, service, region, payload, table.FetchedAt); serr != nil {
+				return nil, serr
+			}
 		}
 		return payload, nil
 	})
