@@ -1,0 +1,61 @@
+{
+  "format": {
+    "unitPerHour": "/hr",
+    "unitPerVCpuHour": "/vCPU-hr",
+    "unitPerGbHour": "/GB-hr"
+  },
+  "estimator": {
+    "title": "Estimate",
+    "clearAllTitle": "Remove all items added to the estimate",
+    "clearAll": "Clear all",
+    "clearAllConfirm": "This will remove all items added to the estimate. Are you sure?",
+    "totalRecurringMonthly": "Monthly recurring",
+    "totalUpfrontOnce": "Upfront (one-time)",
+    "totalEffectiveMonthly": "Effective monthly",
+    "note": "Calculated at 730 hours/month (approx. 365×24/12).",
+    "empty": "Check rows in the rate table to add them to the estimate",
+    "spotNote": "Spot prices fluctuate, so this estimate is a reference value at the time of retrieval.",
+    "removeTitle": "Remove from estimate",
+    "qty": "Qty",
+    "lineRecurring": "Recurring",
+    "lineUpfront": "Upfront",
+    "lineEffective": "Effective"
+  },
+  "pricingToolbar": {
+    "freshnessUpdated": "Local cache · Last updated {{at}}",
+    "freshnessNotFetched": "Local cache · Not fetched",
+    "refreshing": "Updating…",
+    "refresh": "Update",
+    "officialPricingPage": "AWS official pricing page"
+  },
+  "rateGroupSection": {
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "noMatch": "No rates match this condition",
+    "upfront": "upfront",
+    "effective": "Effective",
+    "monthly": "Monthly",
+    "onDemandComparison": "vs On-Demand"
+  },
+  "serviceCard": {
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "selectedCount": "{{selected}}/{{total}} selected",
+    "effectiveMonthly": "Effective monthly",
+    "refreshing": "Updating…",
+    "liveNoteTitle": "Live retrieval without disk cache. Updated only when opened and when the refresh button is pressed",
+    "liveNote": "Live retrieval (no auto-update)",
+    "licenseUnresolvedBadge": "License distinction unresolved (degraded view)",
+    "refreshTitle": "Re-fetch the rates for this service",
+    "retry": "Retry",
+    "inlineError": "Update failed (showing the previously fetched cached data)",
+    "licenseUnresolvedNote": "The license model could not be distinguished, so some Savings Plans rows are shown without distinguishing license conditions.",
+    "ecsNoRi": "ECS (Fargate) does not support Reserved Instances.",
+    "noRates": "No applicable rates.",
+    "filterPlaceholder": "Filter by instance type, etc.…",
+    "noMatch": "No rates match this condition."
+  },
+  "pricingPanel": {
+    "empty": "Select a service to display from the service selector above."
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "bigQueryView": {
+    "snippetNamePrompt": "Snippet name",
+    "savedQueryNamePrompt": "Saved query name",
+    "copyCsv": "Copy CSV",
+    "runHint": "⌘Enter to run",
+    "cancel": "Cancel",
+    "starting": "Starting…",
+    "estimating": "Estimating…",
+    "dryRunResult": "Dry run: <mono>{{bytes}}</mono> processed · ~ <mono>{{cost}}</mono>",
+    "historyLabel": "History",
+    "bytesLabel": "Bytes processed",
+    "runningResult": "Running query…",
+    "runToSeeResults": "Run a query to see results here",
+    "savedEmpty": "No saved queries yet",
+    "saveCurrentQuery": "＋ Save current query",
+    "snippetEmpty": "No snippets yet",
+    "saveCurrentSnippet": "＋ Save current query as snippet",
+    "treeFooter": "Click to insert · ⌥Click for SELECT *",
+    "noDatasets": "No datasets"
+  }
+}

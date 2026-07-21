@@ -1,0 +1,9 @@
+{
+  "sso": {
+    "expired": "The SSO session for <strong>{{profile}}</strong> has expired. Please log in again.",
+    "pending": "Complete the authorization in your browser. It reflects automatically once done.",
+    "failed": "Failed to log in again.",
+    "loginButton": "SSO re-login",
+    "loginButtonPending": "Logging in…"
+  }
+}

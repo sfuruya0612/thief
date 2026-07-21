@@ -14,6 +14,7 @@ import type {
   QueryStatusRow,
   SnippetRaw,
 } from '../types/query';
+import i18n from '../i18n';
 import { formatTimestampShort } from './queryFormat';
 
 // BigQuery のジョブ状態 (PENDING/RUNNING/DONE + エラー有無) を共通 5 状態へ正規化する
@@ -23,21 +24,18 @@ export function bqRunState(state: string, errorMessage?: string): QueryRunState 
   return 'queued';
 }
 
-// BigQuery の状態表示ラベル (デザイン 2a の「● 完了」に合わせて日本語)
-const BQ_STATE_LABELS: Record<QueryRunState, string> = {
-  queued: '待機中',
-  running: '実行中',
-  succeeded: '完了',
-  failed: '失敗',
-  cancelled: 'キャンセル',
-};
+// BigQuery の状態表示ラベル (デザイン 2a の「● 完了」に合わせる)。
+// UI 言語切替に追従させるため呼び出し時に i18n から引く。
+function bqStateLabel(state: QueryRunState): string {
+  return i18n.t(`query:normalizeQuery.state.${state}`);
+}
 
 export function bqJobStatusFromRaw(raw: BQJobStatusRaw): QueryStatusRow {
   const state = bqRunState(raw.state, raw.error_message);
   return {
     id: raw.job_id,
     state,
-    stateLabel: BQ_STATE_LABELS[state],
+    stateLabel: bqStateLabel(state),
     errorMessage: raw.error_message,
     elapsedMs: raw.elapsed_ms,
     bytes: raw.total_bytes_processed,
@@ -51,7 +49,7 @@ export function bqHistoryFromRaw(raw: BQHistoryItemRaw): QueryHistoryRow {
   return {
     id: raw.job_id,
     state,
-    stateLabel: BQ_STATE_LABELS[state],
+    stateLabel: bqStateLabel(state),
     sql: raw.sql,
     elapsedMs: raw.elapsed_ms,
     bytes: raw.total_bytes_processed,

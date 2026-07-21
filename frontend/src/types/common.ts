@@ -39,6 +39,8 @@ export type Density = 'compact' | 'cozy' | 'comfortable';
 export type Accent = 'indigo' | 'amber' | 'blue' | 'green' | 'purple' | 'pink';
 export type DrawerPos = 'right' | 'bottom';
 export type Layout = 'tabs-top';
+// UI 表示言語 (issue 0050)。既定は 'ja' (既存の日本語ハードコード UI と挙動を変えない)。
+export type Lang = 'ja' | 'en';
 
 export interface Tweaks {
   theme: Theme;
@@ -46,6 +48,7 @@ export interface Tweaks {
   accent: Accent;
   layout: Layout;
   drawerPos: DrawerPos;
+  lang: Lang;
 }
 
 // GET /api/aws/profiles のバックエンド JSON 形状。

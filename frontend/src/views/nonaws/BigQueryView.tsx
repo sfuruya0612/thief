@@ -3,6 +3,7 @@
 // + 結果パネル (結果 / 履歴 / 保存クエリ / スニペット)。
 // 旧 datasets & tables 一覧はスキーマツリーに統合した。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { format as formatSql } from 'sql-formatter';
 import {
   useBQCancelJob,
@@ -55,6 +56,7 @@ export function BigQueryView({ projectId }: BigQueryViewProps = {}) {
 type SchemaMap = Record<string, Record<string, string[]>>;
 
 function BigQueryEditor({ projectId }: BigQueryViewProps) {
+  const { t } = useTranslation('gcp');
   const scope = projectId ?? '';
   const tabsApi = useEditorTabs('bigquery', scope, DEFAULT_SQL);
   const { activeTab } = tabsApi;
@@ -151,14 +153,14 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
   );
 
   const saveSnippet = useCallback(() => {
-    const name = window.prompt('スニペット名', activeTab.name);
+    const name = window.prompt(t('bigQueryView.snippetNamePrompt'), activeTab.name);
     if (name) snippets.add(name, activeTab.sql);
-  }, [activeTab.name, activeTab.sql, snippets]);
+  }, [activeTab.name, activeTab.sql, snippets, t]);
 
   const saveQuery = useCallback(() => {
-    const name = window.prompt('保存クエリ名', activeTab.name);
+    const name = window.prompt(t('bigQueryView.savedQueryNamePrompt'), activeTab.name);
     if (name) saved.add(name, activeTab.sql);
-  }, [activeTab.name, activeTab.sql, saved]);
+  }, [activeTab.name, activeTab.sql, saved, t]);
 
   const copyCsv = useCallback(() => {
     void navigator.clipboard.writeText(toCsv(resultData.columns, resultData.rows));
@@ -203,7 +205,7 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
       </span>
       <span className="qe-status-mono dim">{shortId(status.id)}</span>
       <button className="btn sm" onClick={copyCsv} disabled={resultData.rows.length === 0}>
-        CSVコピー
+        {t('bigQueryView.copyCsv')}
       </button>
     </>
   ) : null;
@@ -234,7 +236,7 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
               onClose={tabsApi.closeTab}
               onAdd={() => tabsApi.addTab()}
               onRename={tabsApi.renameTab}
-              right={<span className="qe-hint">⌘Enter で実行</span>}
+              right={<span className="qe-hint">{t('bigQueryView.runHint')}</span>}
             />
             <SqlEditor
               key={activeTab.id}
@@ -272,20 +274,24 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
                       {formatDurationSeconds(status.elapsedMs)}
                     </span>
                     <button className="qe-cancel" onClick={doCancel} disabled={cancel.isPending}>
-                      キャンセル
+                      {t('bigQueryView.cancel')}
                     </button>
                   </>
                 ) : start.isPending ? (
-                  <span className="qe-muted">起動中…</span>
+                  <span className="qe-muted">{t('bigQueryView.starting')}</span>
                 ) : dryRun.isPending ? (
-                  <span className="qe-muted">見積もり中…</span>
+                  <span className="qe-muted">{t('bigQueryView.estimating')}</span>
                 ) : dryRunBytes !== undefined ? (
                   <span className="qe-muted">
-                    ドライラン: <span className="qe-status-mono">{formatBytes(dryRunBytes)}</span>{' '}
-                    処理 · 約{' '}
-                    <span className="qe-status-mono">
-                      {formatApproxUSD(estimateBQCostUSD(dryRunBytes))}
-                    </span>
+                    <Trans
+                      i18nKey="bigQueryView.dryRunResult"
+                      ns="gcp"
+                      values={{
+                        bytes: formatBytes(dryRunBytes),
+                        cost: formatApproxUSD(estimateBQCostUSD(dryRunBytes)),
+                      }}
+                      components={{ mono: <span className="qe-status-mono" /> }}
+                    />
                   </span>
                 ) : null}
               </span>
@@ -296,7 +302,7 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
           <ResultsPanel
             active={resultsTab}
             onChange={setResultsTab}
-            historyLabel="履歴"
+            historyLabel={t('bigQueryView.historyLabel')}
             status={resultsTab === 'results' ? resultsStatus : null}
           >
             {resultsTab === 'results' &&
@@ -313,7 +319,7 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
                 />
               ) : (
                 <div className="qe-tab-empty">
-                  {running ? 'クエリを実行中…' : 'クエリを実行すると結果がここに表示されます'}
+                  {running ? t('bigQueryView.runningResult') : t('bigQueryView.runToSeeResults')}
                 </div>
               ))}
             {resultsTab === 'history' && (
@@ -321,7 +327,7 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
                 {history.error ? <ErrorBanner error={history.error} /> : null}
                 <QueryHistoryTable
                   items={history.data ?? []}
-                  bytesLabel="処理量"
+                  bytesLabel={t('bigQueryView.bytesLabel')}
                   formatDuration={formatDurationSeconds}
                   onOpen={openFromHistory}
                   onRerun={rerunFromHistory}
@@ -332,12 +338,12 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
             {resultsTab === 'saved' && (
               <NamedQueryList
                 items={saved.items}
-                emptyText="保存クエリはまだありません"
+                emptyText={t('bigQueryView.savedEmpty')}
                 onOpen={openNamedQuery}
                 onDelete={saved.remove}
                 header={
                   <button className="btn sm" onClick={saveQuery}>
-                    ＋ 現在のクエリを保存
+                    {t('bigQueryView.saveCurrentQuery')}
                   </button>
                 }
               />
@@ -347,13 +353,13 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
                 {snippets.error ? <ErrorBanner error={snippets.error} /> : null}
                 <NamedQueryList
                   items={snippets.items}
-                  emptyText="スニペットはまだありません"
+                  emptyText={t('bigQueryView.snippetEmpty')}
                   onOpen={openNamedQuery}
                   onInsert={(s) => insertText(s.sql)}
                   onDelete={snippets.remove}
                   header={
                     <button className="btn sm" onClick={saveSnippet}>
-                      ＋ 現在のクエリをスニペットに保存
+                      {t('bigQueryView.saveCurrentSnippet')}
                     </button>
                   }
                 />
@@ -377,6 +383,7 @@ interface BQSchemaTreeProps {
 }
 
 function BQSchemaTree({ projectId, onInsert, onTables, onColumns }: BQSchemaTreeProps) {
+  const { t } = useTranslation('gcp');
   const { data: datasets, isLoading, error } = useBQDatasets(projectId);
   const [search, setSearch] = useState('');
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
@@ -398,7 +405,7 @@ function BQSchemaTree({ projectId, onInsert, onTables, onColumns }: BQSchemaTree
     <SchemaTreePanel
       search={search}
       onSearch={setSearch}
-      footer={<>クリックで挿入 · ⌥クリックでSELECT *</>}
+      footer={<>{t('bigQueryView.treeFooter')}</>}
     >
       {isLoading ? (
         <Loading />
@@ -421,7 +428,7 @@ function BQSchemaTree({ projectId, onInsert, onTables, onColumns }: BQSchemaTree
             />
           ))}
           {(datasets ?? []).length === 0 && !error && (
-            <div className="qe-tab-empty">データセットがありません</div>
+            <div className="qe-tab-empty">{t('bigQueryView.noDatasets')}</div>
           )}
         </>
       )}

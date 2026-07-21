@@ -2,6 +2,7 @@
 // 積み上げグラフ + クロス集計表をまとめて描画する。Datadog / TiDB の Cost タブから使う。
 // 期間・グループ選択・フィルタの state はタブ切替で消えないよう親 (ビュー) 側が保持する。
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CostChart } from './charts/CostChart';
 import { CostCrossTable } from './tables/CostCrossTable';
 import { Loading } from './Loading';
@@ -48,6 +49,7 @@ export function MonthlyCostPanel<R, G extends string>({
   aggregate,
   groupValueOf,
 }: MonthlyCostPanelProps<R, G>) {
+  const { t } = useTranslation('cost');
   // グループ名フィルタは取得済みデータに対してブラウザ側で絞り込むだけにし、都度 API を
   // 呼び出さない (AWS Cost Explorer と同じ方式)。
   const filteredRows = useMemo(() => {
@@ -103,12 +105,12 @@ export function MonthlyCostPanel<R, G extends string>({
 
         {MONTH_RANGE_PRESETS.map((p) => (
           <button
-            key={p.label}
+            key={p.labelKey}
             className="btn sm ghost"
             onClick={() => onApplyPreset(p.months)}
-            title={p.label}
+            title={t(p.labelKey)}
           >
-            {p.label}
+            {t(p.labelKey)}
           </button>
         ))}
 

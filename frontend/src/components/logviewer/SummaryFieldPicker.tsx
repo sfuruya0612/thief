@@ -1,6 +1,7 @@
 // Cloud Logging の SUMMARY 列に先頭表示するフィールドを選択するポップオーバー。
 // Google Cloud Logs Explorer の「サマリー フィールド」相当。選択順がそのまま表示順になる。
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface SummaryFieldPickerProps {
   // 現在ロード済みの行から集めた選択候補のフィールドキー。
@@ -18,6 +19,7 @@ export function SummaryFieldPicker({
   onToggle,
   onClear,
 }: SummaryFieldPickerProps) {
+  const { t } = useTranslation('logviewer');
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -38,11 +40,12 @@ export function SummaryFieldPicker({
   return (
     <div className="lv-field-picker" ref={wrapperRef}>
       <button className={`btn sm ${open ? 'active' : ''}`} onClick={() => setOpen((v) => !v)}>
-        フィールド{selected.length > 0 ? ` (${selected.length})` : ''} ▾
+        {t('summaryFieldPicker.button')}
+        {selected.length > 0 ? ` (${selected.length})` : ''} ▾
       </button>
       {open && (
         <div className="lv-field-picker-menu">
-          <div className="lv-field-picker-head">SUMMARY に先頭表示するフィールド</div>
+          <div className="lv-field-picker-head">{t('summaryFieldPicker.head')}</div>
           {selected.length > 0 && (
             <div className="lv-field-picker-selected">
               {selected.map((key, i) => (
@@ -51,7 +54,7 @@ export function SummaryFieldPicker({
                   <span className="lv-field-picker-key">{key}</span>
                   <button
                     className="lv-field-picker-remove"
-                    title="選択解除"
+                    title={t('summaryFieldPicker.removeTitle')}
                     onClick={() => onToggle(key)}
                   >
                     ×
@@ -62,7 +65,7 @@ export function SummaryFieldPicker({
           )}
           <div className="lv-field-picker-candidates">
             {candidates.length === 0 && selected.length === 0 && (
-              <div className="lv-field-picker-empty">候補フィールドがありません</div>
+              <div className="lv-field-picker-empty">{t('summaryFieldPicker.empty')}</div>
             )}
             {candidates.map((key) => (
               <label key={key} className="lv-field-picker-item">
@@ -73,7 +76,7 @@ export function SummaryFieldPicker({
           </div>
           {selected.length > 0 && (
             <button className="lv-field-picker-clear" onClick={onClear}>
-              選択をクリア
+              {t('summaryFieldPicker.clear')}
             </button>
           )}
         </div>

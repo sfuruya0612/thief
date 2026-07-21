@@ -6,6 +6,7 @@
 // 件数バッジは選択中サービスのみ即時取得され、他はキャッシュを読むだけの観測用クエリで表示する
 // (Sidebar.tsx と同じ方針)。
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { GCP_SERVICE_GROUPS, GCP_SERVICES } from '../lib/serviceMeta';
 import { startSidebarResize } from '../lib/sidebarResize';
 import type { GcpProject } from '../types/gcp';
@@ -35,11 +36,12 @@ export function GcpSidebar({
   onService,
   onWidthChange,
 }: GcpSidebarProps) {
+  const { t } = useTranslation('sidebar');
   return (
     <aside className="sidebar">
       <div className="profile-card">
         <div className="profile-card-field">
-          <span className="label">アクティブセッション</span>
+          <span className="label">{t('gcpSidebar.activeSession')}</span>
           <GcpActiveSessionCard project={project} projects={projects} />
         </div>
       </div>

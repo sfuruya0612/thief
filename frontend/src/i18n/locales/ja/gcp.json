@@ -1,0 +1,22 @@
+{
+  "bigQueryView": {
+    "snippetNamePrompt": "スニペット名",
+    "savedQueryNamePrompt": "保存クエリ名",
+    "copyCsv": "CSVコピー",
+    "runHint": "⌘Enter で実行",
+    "cancel": "キャンセル",
+    "starting": "起動中…",
+    "estimating": "見積もり中…",
+    "dryRunResult": "ドライラン: <mono>{{bytes}}</mono> 処理 · 約 <mono>{{cost}}</mono>",
+    "historyLabel": "履歴",
+    "bytesLabel": "処理量",
+    "runningResult": "クエリを実行中…",
+    "runToSeeResults": "クエリを実行すると結果がここに表示されます",
+    "savedEmpty": "保存クエリはまだありません",
+    "saveCurrentQuery": "＋ 現在のクエリを保存",
+    "snippetEmpty": "スニペットはまだありません",
+    "saveCurrentSnippet": "＋ 現在のクエリをスニペットに保存",
+    "treeFooter": "クリックで挿入 · ⌥クリックでSELECT *",
+    "noDatasets": "データセットがありません"
+  }
+}

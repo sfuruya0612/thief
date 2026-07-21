@@ -1,6 +1,7 @@
 // AWS 用セッションタブの組立レイヤ。useProfiles (App.tsx で 1 回だけ呼ぶ) の
 // 状態を SessionTabs / AddSessionPicker の表示用データに還元して配線する。
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AwsSessions } from '../../hooks/useProfiles';
 import { awsPickerItems } from '../../lib/sessionMeta';
 import { Icons } from '../icons/Icons';
@@ -12,6 +13,7 @@ export interface AwsSessionTabsProps {
 }
 
 export function AwsSessionTabs({ sessions }: AwsSessionTabsProps) {
+  const { t } = useTranslation('session');
   const { profiles, openProfiles, activeProfile, isError, refetchProfiles } = sessions;
 
   // AWS のドットは環境色を使わない (モック 4b: 環境による特別扱いなし)。
@@ -37,25 +39,25 @@ export function AwsSessionTabs({ sessions }: AwsSessionTabsProps) {
     <SessionTabs
       items={items}
       activeId={activeProfile}
-      addLabel="＋ プロファイルを追加"
+      addLabel={t('awsSessionTabs.addLabel')}
       missingIds={missingIds}
       picker={(close, visibleCount) => (
         <AddSessionPicker
           items={pickerItems}
-          placeholder="プロファイルを検索…"
-          headerNote={`~/.aws/config · ${profiles.length}件`}
+          placeholder={t('awsSessionTabs.searchPlaceholder')}
+          headerNote={t('awsSessionTabs.headerNote', { n: profiles.length })}
           headerAction={
             <button
               className="btn sm ghost"
               style={{ padding: '1px 4px' }}
-              title="プロファイル一覧を再取得"
+              title={t('awsSessionTabs.refreshTitle')}
               onClick={() => refetchProfiles()}
             >
               <Icons.refresh size={11} />
             </button>
           }
-          footerHint="↑↓ で選択 · ⏎ で開く · 期限切れは開いた後に再認証を案内"
-          emptyText="一致するプロファイルがありません"
+          footerHint={t('awsSessionTabs.footerHint')}
+          emptyText={t('awsSessionTabs.emptyText')}
           loadError={isError}
           onRetry={refetchProfiles}
           onSelect={(id) => {

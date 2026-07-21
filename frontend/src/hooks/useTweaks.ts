@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import type { Tweaks } from '../types/common';
 import { loadPersisted, savePersisted } from '../lib/storage';
+import { setI18nLanguage } from '../i18n';
 
 // index.html EDITMODE のデフォルトに合わせる
 export const DEFAULT_TWEAKS: Tweaks = {
@@ -9,6 +10,7 @@ export const DEFAULT_TWEAKS: Tweaks = {
   accent: 'green',
   layout: 'tabs-top',
   drawerPos: 'bottom',
+  lang: 'ja',
 };
 
 // Tweaks はどこから useTweaks() を呼んでも同一の値を参照する必要があるため、
@@ -56,6 +58,8 @@ export function useTweaks() {
     root.setAttribute('data-theme', tweaks.theme);
     root.setAttribute('data-density', tweaks.density);
     root.setAttribute('data-accent', tweaks.accent);
+
+    setI18nLanguage(tweaks.lang);
   }, [tweaks]);
 
   const update = useCallback((patch: Partial<Tweaks>) => {

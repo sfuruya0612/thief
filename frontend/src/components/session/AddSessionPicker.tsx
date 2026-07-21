@@ -3,6 +3,7 @@
 // パターンを移植した。開設済み (disabled) 行はグレーアウトして選択不可にする。
 // 外側クリックでの close はアンカー側 (SessionTabs) が担当する。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SessionPickerItem } from '../../lib/sessionMeta';
 import { nextEnabledIndex } from '../../lib/sessionTabsState';
 import { Icons } from '../icons/Icons';
@@ -40,6 +41,7 @@ export function AddSessionPicker({
   onSelect,
   onClose,
 }: AddSessionPickerProps) {
+  const { t } = useTranslation('session');
   const [search, setSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,10 +114,10 @@ export function AddSessionPicker({
       <ul className="session-picker-list" role="listbox">
         {loadError && (
           <li className="session-picker-empty session-picker-error">
-            一覧の取得に失敗しました
+            {t('addSessionPicker.loadError')}
             {onRetry && (
               <button className="btn sm ghost" onClick={onRetry}>
-                再試行
+                {t('addSessionPicker.retry')}
               </button>
             )}
           </li>
@@ -139,7 +141,7 @@ export function AddSessionPicker({
             {item.meta && <span className="session-picker-item-meta">{item.meta}</span>}
             <span className="session-picker-item-right">
               {item.disabled ? (
-                <span className="session-picker-item-hint">開いています</span>
+                <span className="session-picker-item-hint">{t('addSessionPicker.opened')}</span>
               ) : (
                 <>
                   {item.badge && (
@@ -147,7 +149,11 @@ export function AddSessionPicker({
                       {item.badge.label}
                     </span>
                   )}
-                  {i === activeIndex && <span className="session-picker-item-hint">⏎ 開く</span>}
+                  {i === activeIndex && (
+                    <span className="session-picker-item-hint">
+                      {t('addSessionPicker.enterHint')}
+                    </span>
+                  )}
                 </>
               )}
             </span>

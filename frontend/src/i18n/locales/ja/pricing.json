@@ -1,0 +1,61 @@
+{
+  "format": {
+    "unitPerHour": "/時間",
+    "unitPerVCpuHour": "/vCPU時間",
+    "unitPerGbHour": "/GB時間"
+  },
+  "estimator": {
+    "title": "見積もり",
+    "clearAllTitle": "見積もりに追加した項目をすべて削除する",
+    "clearAll": "一括削除",
+    "clearAllConfirm": "見積もりに追加した項目をすべて削除します。よろしいですか？",
+    "totalRecurringMonthly": "月額継続",
+    "totalUpfrontOnce": "前払い一括",
+    "totalEffectiveMonthly": "実効月額",
+    "note": "730 時間/月 (365×24/12 の近似) で計算しています。",
+    "empty": "単価表の行をチェックすると見積もりに追加されます",
+    "spotNote": "Spot 価格は変動するため、この見積もりは取得時点の参考値です。",
+    "removeTitle": "見積もりから外す",
+    "qty": "数量",
+    "lineRecurring": "継続",
+    "lineUpfront": "前払い",
+    "lineEffective": "実効"
+  },
+  "pricingToolbar": {
+    "freshnessUpdated": "ローカルキャッシュ · 最終更新 {{at}}",
+    "freshnessNotFetched": "ローカルキャッシュ · 未取得",
+    "refreshing": "更新中…",
+    "refresh": "更新",
+    "officialPricingPage": "AWS 公式料金ページ"
+  },
+  "rateGroupSection": {
+    "expand": "展開",
+    "collapse": "折りたたむ",
+    "noMatch": "この条件に一致する単価がありません",
+    "upfront": "前払い",
+    "effective": "実効",
+    "monthly": "月額",
+    "onDemandComparison": "On-Demand比"
+  },
+  "serviceCard": {
+    "expand": "展開",
+    "collapse": "折りたたむ",
+    "selectedCount": "{{selected}}/{{total}} 選択中",
+    "effectiveMonthly": "実効月額",
+    "refreshing": "更新中…",
+    "liveNoteTitle": "ディスクキャッシュを使わないライブ取得です。開いた時と更新ボタン押下時にのみ最新化されます",
+    "liveNote": "ライブ取得 (自動更新なし)",
+    "licenseUnresolvedBadge": "ライセンス区別 未解決 (縮退表示)",
+    "refreshTitle": "このサービスの単価を再取得する",
+    "retry": "再試行",
+    "inlineError": "更新に失敗しました (表示中はキャッシュされた前回取得分です)",
+    "licenseUnresolvedNote": "ライセンスモデルの区別ができなかったため、Savings Plans の一部の行でライセンス条件を区別せずに表示しています。",
+    "ecsNoRi": "ECS (Fargate) はリザーブドインスタンスに対応していません。",
+    "noRates": "該当する単価がありません。",
+    "filterPlaceholder": "インスタンスタイプ等で絞り込み…",
+    "noMatch": "この条件に一致する単価がありません。"
+  },
+  "pricingPanel": {
+    "empty": "上のサービス選択から表示するサービスを選んでください。"
+  }
+}

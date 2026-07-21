@@ -4,6 +4,7 @@
 // このコンポーネントのローカル state で持つ (チェック/数量のみ永続化対象であり、
 // 条件セレクタ自体は永続化しない)。
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatPercent, formatPricingUnit, formatUnitPrice } from '../../lib/format';
 import { effectiveHourlyRate, monthlyRecurring, savingsPercent } from '../../lib/pricingEstimate';
 import type { PriceRateRow } from '../../types/aws';
@@ -63,6 +64,7 @@ export function RateGroupSection({
   hideTitle,
   onDemandHourlyByLabel,
 }: RateGroupSectionProps) {
+  const { t } = useTranslation('pricing');
   const model = rates[0]?.model ?? 'on_demand';
 
   const leaseOptions = useMemo(
@@ -128,7 +130,7 @@ export function RateGroupSection({
           className="pr-group-collapse"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          title={collapsed ? '展開' : '折りたたむ'}
+          title={collapsed ? t('rateGroupSection.expand') : t('rateGroupSection.collapse')}
         >
           <Icons.chevron size={12} style={{ transform: collapsed ? 'none' : 'rotate(90deg)' }} />
         </button>
@@ -176,7 +178,7 @@ export function RateGroupSection({
 
       {!collapsed &&
         (filteredRates.length === 0 ? (
-          <div className="pr-group-empty">この条件に一致する単価がありません</div>
+          <div className="pr-group-empty">{t('rateGroupSection.noMatch')}</div>
         ) : (
           <table className="pr-rate-table">
             <tbody>
@@ -206,7 +208,7 @@ export function RateGroupSection({
                           {rate.upfrontUSD > 0 && (
                             <span className="pr-rate-upfront">
                               {' '}
-                              + {formatUnitPrice(rate.upfrontUSD)} 前払い
+                              + {formatUnitPrice(rate.upfrontUSD)} {t('rateGroupSection.upfront')}
                             </span>
                           )}
                         </>
@@ -233,6 +235,7 @@ function ReservedRatePrice({
   rate: PriceRateRow;
   onDemandHourly: number | undefined;
 }) {
+  const { t } = useTranslation('pricing');
   const effective = effectiveHourlyRate(rate);
   const monthly = monthlyRecurring(rate);
   const savings = savingsPercent(effective, onDemandHourly);
@@ -243,13 +246,20 @@ function ReservedRatePrice({
           {formatUnitPrice(effective)}
           {formatPricingUnit(rate.unit)}
         </span>
-        <span className="pr-rate-effective-label">実効</span>
+        <span className="pr-rate-effective-label">{t('rateGroupSection.effective')}</span>
       </div>
       <div className="pr-rate-ri-detail">
-        <span>月額 {formatUnitPrice(monthly)}</span>
-        {rate.upfrontUSD > 0 && <span>前払い {formatUnitPrice(rate.upfrontUSD)}</span>}
+        <span>
+          {t('rateGroupSection.monthly')} {formatUnitPrice(monthly)}
+        </span>
+        {rate.upfrontUSD > 0 && (
+          <span>
+            {t('rateGroupSection.upfront')} {formatUnitPrice(rate.upfrontUSD)}
+          </span>
+        )}
         <span className={savings !== null && savings < 0 ? 'pr-rate-savings-negative' : undefined}>
-          On-Demand比 {savings === null ? '—' : formatPercent(savings)}
+          {t('rateGroupSection.onDemandComparison')}{' '}
+          {savings === null ? '—' : formatPercent(savings)}
         </span>
       </div>
     </>

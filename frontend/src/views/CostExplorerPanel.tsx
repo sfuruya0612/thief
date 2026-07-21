@@ -1,6 +1,7 @@
 // Cost Explorer 専用パネル。ServicePanel (汎用 15 サービス共通) とは異なり、
 // リソース一覧ではなくコストの chart + クロス集計テーブルを表示するため専用実装とする。
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCost } from '../api/queries';
 import { CostChart } from '../components/charts/CostChart';
 import { CostCrossTable } from '../components/tables/CostCrossTable';
@@ -36,10 +37,10 @@ const METRIC_OPTIONS: { value: CostMetricType; label: string }[] = [
 // 期間ショートカット。クリックすると開始/終了日入力を一括で埋める (それ以降は日付入力を
 // 自由に編集できる。API 呼び出しは開始/終了日の確定値に対してのみ行われる)。
 const RANGE_PRESETS = [
-  { label: '直近 1 週間', days: 7 },
-  { label: '直近 1 ヶ月', days: 30 },
-  { label: '直近 3 ヶ月', days: 90 },
-  { label: '直近 6 ヶ月', days: 180 },
+  { labelKey: 'costExplorerPanel.presets.last1Week', days: 7 },
+  { labelKey: 'costExplorerPanel.presets.last1Month', days: 30 },
+  { labelKey: 'costExplorerPanel.presets.last3Months', days: 90 },
+  { labelKey: 'costExplorerPanel.presets.last6Months', days: 180 },
 ];
 
 function toDateInputValue(d: Date): string {
@@ -58,6 +59,7 @@ function defaultDateRange(): { start: string; end: string } {
 const MAX_SERIES = 8;
 
 export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
+  const { t } = useTranslation('cost');
   const initialRange = useMemo(defaultDateRange, []);
   const [granularity, setGranularity] = useState('DAILY');
   const [groupBy, setGroupBy] = useState('SERVICE');
@@ -151,12 +153,12 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
 
         {RANGE_PRESETS.map((p) => (
           <button
-            key={p.label}
+            key={p.labelKey}
             className="btn sm ghost"
             onClick={() => applyPreset(p.days)}
-            title={p.label}
+            title={t(p.labelKey)}
           >
-            {p.label}
+            {t(p.labelKey)}
           </button>
         ))}
 

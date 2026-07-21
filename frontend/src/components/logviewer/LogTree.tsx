@@ -2,6 +2,7 @@
 // CloudWatch Logs (ロググループの prefix ツリー) と Cloud Logging (リソースタイプ別) の
 // 両方で使う。親ノードは開閉、葉ノードは複数選択のチェックボックス。
 import { type ReactNode, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LogTreeNode } from '../../lib/logGroupTree';
 
 export interface LogTreeProps {
@@ -24,6 +25,7 @@ export function LogTree({
   emptyMessage,
   loading,
 }: LogTreeProps) {
+  const { t } = useTranslation('logviewer');
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -61,9 +63,9 @@ export function LogTree({
       </div>
       <div className="lv-tree-nodes">
         {loading ? (
-          <div className="lv-tree-empty">読み込み中…</div>
+          <div className="lv-tree-empty">{t('logTree.loading')}</div>
         ) : filtered.length === 0 ? (
-          <div className="lv-tree-empty">{emptyMessage ?? '該当なし'}</div>
+          <div className="lv-tree-empty">{emptyMessage ?? t('logTree.empty')}</div>
         ) : (
           filtered.map((parent) => {
             // 検索中は親を常に開いた状態にする。

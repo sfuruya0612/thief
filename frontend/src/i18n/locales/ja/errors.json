@@ -1,0 +1,9 @@
+{
+  "sso": {
+    "expired": "<strong>{{profile}}</strong> の SSO セッションが期限切れです。再ログインしてください。",
+    "pending": "ブラウザで認可を完了してください。完了すると自動的に反映されます。",
+    "failed": "再ログインに失敗しました。",
+    "loginButton": "SSO 再ログイン",
+    "loginButtonPending": "ログイン中…"
+  }
+}

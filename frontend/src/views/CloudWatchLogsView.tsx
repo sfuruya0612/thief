@@ -3,6 +3,7 @@
 // Live Tail (StartLiveTail, WebSocket) の 2 モード。Athena/Cloud Logging と同じ「専用ビュー埋め込み」
 // パターンで AccountView から使う。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCWLogEvents, useCWLogGroups } from '../api/queries';
 import { cwLogsTailUrl } from '../api/terminal';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -45,6 +46,7 @@ export function CloudWatchLogsView({ profile, region }: CloudWatchLogsViewProps)
 }
 
 function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
+  const { t } = useTranslation('logviewer');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterInput, setFilterInput] = useState('');
   const [appliedFilter, setAppliedFilter] = useState('');
@@ -228,33 +230,39 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
   const liveStatusText = () => {
     switch (liveTail.status) {
       case 'connecting':
-        return '接続中…';
+        return t('cloudWatchLogsView.liveStatus.connecting');
       case 'connected':
-        return `受信中 (${liveTail.lines.length} 件)`;
+        return t('cloudWatchLogsView.liveStatus.receiving', { n: liveTail.lines.length });
       case 'closed':
-        return `終了${liveTail.message ? `: ${liveTail.message}` : ''}`;
+        return `${t('cloudWatchLogsView.liveStatus.closed')}${liveTail.message ? `: ${liveTail.message}` : ''}`;
       case 'error':
-        return `エラー${liveTail.message ? `: ${liveTail.message}` : ''}`;
+        return `${t('cloudWatchLogsView.liveStatus.error')}${liveTail.message ? `: ${liveTail.message}` : ''}`;
       default:
-        return '待機中…';
+        return t('cloudWatchLogsView.liveStatus.waiting');
     }
   };
 
   const footer = live ? (
     <span className="lv-live-status">
       <span className="lv-live-dot on" />
-      ライブテール中 · {liveStatusText()}
+      {t('cloudWatchLogsView.liveStatus.active')} · {liveStatusText()}
     </span>
   ) : (
     <>
-      <span>{eventsQuery.isFetching ? '取得中…' : `${staticRows.length} 件表示中 · 新しい順`}</span>
+      <span>
+        {eventsQuery.isFetching
+          ? t('cloudWatchLogsView.footer.fetching')
+          : t('cloudWatchLogsView.footer.shown', { n: staticRows.length })}
+      </span>
       {eventsQuery.hasNextPage && (
         <button
           className="lv-more-btn"
           onClick={() => void eventsQuery.fetchNextPage()}
           disabled={eventsQuery.isFetchingNextPage}
         >
-          {eventsQuery.isFetchingNextPage ? '読み込み中…' : 'さらに読み込む'}
+          {eventsQuery.isFetchingNextPage
+            ? t('cloudWatchLogsView.footer.loadingMore')
+            : t('cloudWatchLogsView.footer.loadMore')}
         </button>
       )}
     </>
@@ -264,8 +272,12 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
     rows.length > 0 ? (
       <>
         <div className="lv-hist-caption">
-          <span>イベント数</span>
-          <span>{live ? 'ライブ更新中…' : `計 ${rows.length} 件`}</span>
+          <span>{t('cloudWatchLogsView.histCaption.eventCount')}</span>
+          <span>
+            {live
+              ? t('cloudWatchLogsView.histCaption.liveUpdating')
+              : t('cloudWatchLogsView.histCaption.total', { n: rows.length })}
+          </span>
         </div>
         <LogHistogram buckets={buckets} mode="mono" />
         <div className="lv-hist-axis">
@@ -289,7 +301,9 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
           customEnd={customEnd}
           onCustomStartChange={setCustomStart}
           onCustomEndChange={setCustomEnd}
-          exportLabel={jsonCopy.copied ? 'コピー済み' : 'エクスポート (JSON)'}
+          exportLabel={
+            jsonCopy.copied ? t('cloudWatchLogsView.copied') : t('cloudWatchLogsView.exportJson')
+          }
           onExport={exportJson}
           exportDisabled={rows.length === 0}
         />
@@ -306,13 +320,13 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
           nodes={treeNodes}
           selected={selected}
           onToggle={toggleGroup}
-          searchPlaceholder="ロググループを検索…"
+          searchPlaceholder={t('cloudWatchLogsView.treeSearchPlaceholder')}
           loading={groupsQuery.isLoading}
-          emptyMessage="ロググループがありません"
+          emptyMessage={t('cloudWatchLogsView.treeEmpty')}
           footer={
             selected.size > 0
-              ? `${selected.size} グループ選択中${selected.size > 1 ? ' · 横断検索' : ''}`
-              : 'ロググループを選択'
+              ? `${t('cloudWatchLogsView.treeFooterSelected', { n: selected.size })}${selected.size > 1 ? t('cloudWatchLogsView.treeFooterCrossSearch') : ''}`
+              : t('cloudWatchLogsView.treeFooterSelect')
           }
         />
       }
@@ -326,7 +340,7 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') runSearch();
             }}
-            placeholder='フィルタパターン (例: ERROR または { $.level = "error" })'
+            placeholder={t('cloudWatchLogsView.filterPlaceholder')}
           />
           <div className="lv-filter-actions">
             {FILTER_SNIPPETS.map((s) => (
@@ -335,7 +349,7 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
               </button>
             ))}
             <button className="lv-run-btn" onClick={runSearch} disabled={selected.size === 0}>
-              検索
+              {t('cloudWatchLogsView.search')}
             </button>
           </div>
         </>
@@ -358,15 +372,17 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
           getMessage={(r) => r.message}
           renderDetail={renderDetail}
           tintMessageByLevel
-          copyLabel={csvCopy.copied ? 'コピー済み' : 'CSVコピー'}
+          copyLabel={
+            csvCopy.copied ? t('cloudWatchLogsView.copied') : t('cloudWatchLogsView.copyCsv')
+          }
           onCopy={exportCsv}
           footer={footer}
           emptyMessage={
             selected.size === 0
-              ? 'ロググループを選択して「検索」を押してください'
+              ? t('cloudWatchLogsView.emptyNoSelection')
               : live
-                ? 'ライブテール待機中…'
-                : '「検索」を押すとログイベントがここに表示されます'
+                ? t('cloudWatchLogsView.emptyLiveWaiting')
+                : t('cloudWatchLogsView.emptyRunSearch')
           }
           bodyRef={bodyRef}
           onScroll={onScroll}

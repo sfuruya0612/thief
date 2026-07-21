@@ -4,6 +4,7 @@
 // 実 <table> (auto table layout) + thead sticky で描画し、SUMMARY 列が長い場合はパネル全体
 // (ヘッダー含む) が 1 本のスクロールバーで横スクロールする (行ごとの個別スクロールにはしない)。
 import { Fragment, type ReactNode, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatLogClock } from '../../lib/logFormat';
 import type { SeverityLevel } from '../../lib/logSeverity';
 
@@ -144,18 +145,19 @@ export interface LogFieldRowProps {
 
 // LogFieldRow は展開時の 1 フィールド行 (ラベル: 値 + 任意のアクション)。
 export function LogFieldRow({ label, value, onAddFilter, onCopy, trace }: LogFieldRowProps) {
+  const { t } = useTranslation('logviewer');
   return (
     <div className="lv-field">
       <span className="lv-field-label">{label}:</span>
       <span className="lv-field-value">{value}</span>
       {onAddFilter && (
         <button className="lv-field-action" onClick={onAddFilter}>
-          ＋ フィルタ
+          {t('logList.addFilter')}
         </button>
       )}
       {onCopy && (
-        <button className="lv-field-action" onClick={onCopy} title="値をコピー">
-          コピー
+        <button className="lv-field-action" onClick={onCopy} title={t('logList.copyValueTitle')}>
+          {t('logList.copy')}
         </button>
       )}
       {trace && (

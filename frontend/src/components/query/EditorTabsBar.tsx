@@ -1,5 +1,6 @@
 // エディタパネル上部のタブバー。ダブルクリックでリネーム、× でクローズ、＋ で追加。
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { QueryTab } from '../../types/query';
 
 export interface EditorTabsBarProps {
@@ -21,6 +22,7 @@ export function EditorTabsBar({
   onRename,
   right,
 }: EditorTabsBarProps) {
+  const { t } = useTranslation('query');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
@@ -33,18 +35,18 @@ export function EditorTabsBar({
 
   return (
     <div className="qe-tabs">
-      {tabs.map((t) => (
+      {tabs.map((tab) => (
         <div
-          key={t.id}
-          className={`qe-tab ${t.id === activeTabId ? 'active' : ''}`}
-          onClick={() => onSelect(t.id)}
+          key={tab.id}
+          className={`qe-tab ${tab.id === activeTabId ? 'active' : ''}`}
+          onClick={() => onSelect(tab.id)}
           onDoubleClick={() => {
-            setEditingId(t.id);
-            setDraft(t.name);
+            setEditingId(tab.id);
+            setDraft(tab.name);
           }}
-          title={t.name}
+          title={tab.name}
         >
-          {editingId === t.id ? (
+          {editingId === tab.id ? (
             <input
               className="qe-tab-rename"
               value={draft}
@@ -58,21 +60,21 @@ export function EditorTabsBar({
               }}
             />
           ) : (
-            <span className="qe-tab-name">{t.name}</span>
+            <span className="qe-tab-name">{tab.name}</span>
           )}
           <button
             className="qe-tab-close"
-            title="タブを閉じる"
+            title={t('editorTabsBar.closeTab')}
             onClick={(e) => {
               e.stopPropagation();
-              onClose(t.id);
+              onClose(tab.id);
             }}
           >
             ×
           </button>
         </div>
       ))}
-      <button className="qe-tab-add" title="新しいタブ" onClick={onAdd}>
+      <button className="qe-tab-add" title={t('editorTabsBar.newTab')} onClick={onAdd}>
         ＋
       </button>
       <span className="qe-tabs-right">{right}</span>

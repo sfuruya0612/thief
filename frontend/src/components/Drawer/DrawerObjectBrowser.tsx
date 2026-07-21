@@ -4,6 +4,7 @@
 // 一覧取得は backend 側で最大 1000 件に打ち切られるため、prefix 絞り込みは
 // フロントエンドでのフィルタではなく検索ボタン押下でサーバへ再取得を要求する。
 import { useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { ColumnDef } from '../tables/columns';
 import { DataTable } from '../DataTable';
@@ -80,6 +81,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   sizeOf,
   usePreview,
 }: DrawerObjectBrowserProps<TObject, TRow>) {
+  const { t } = useTranslation('drawerStorage');
   const [prefixInput, setPrefixInput] = useState('');
   const [committedPrefix, setCommittedPrefix] = useState('');
   const { data, isLoading, error } = useObjects(committedPrefix);
@@ -117,7 +119,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
               <button
                 className="btn sm"
                 disabled={!eligible}
-                title={reason || 'プレビューを開く'}
+                title={reason || t('drawerObjectBrowser.openPreview')}
                 onClick={() => setPreviewRow(r)}
               >
                 Preview
@@ -130,7 +132,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
         },
       },
     ],
-    [baseColumns, downloadHref, previewKeyOf, sizeOf],
+    [baseColumns, downloadHref, previewKeyOf, sizeOf, t],
   );
 
   const onUpload = () => {
@@ -185,15 +187,12 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
           }}
         />
         <button className="btn sm" onClick={runSearch}>
-          検索
+          {t('drawerObjectBrowser.search')}
         </button>
       </span>
 
       {data?.truncated && (
-        <div className="s3-truncated-notice">
-          取得件数が上限 (1000 件) に達したため一部のみ表示しています。prefix
-          で絞り込んで再検索してください。
-        </div>
+        <div className="s3-truncated-notice">{t('drawerObjectBrowser.truncatedNotice')}</div>
       )}
 
       <div className="s3-upload">
@@ -218,7 +217,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
             disabled={upload.isPending}
           />
           <span className="s3-upload-text">
-            {selected ? selected.name : 'ファイルを選択またはドロップ'}
+            {selected ? selected.name : t('drawerObjectBrowser.selectOrDropFile')}
           </span>
         </label>
         <button

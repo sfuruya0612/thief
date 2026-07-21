@@ -2,6 +2,7 @@
 // ヘッダー右に Catalog / Database / Workgroup セレクタ、左スキーマツリー
 // (database → table → columns、パーティション列は橙表示)、エディタ + 結果パネル。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { format as formatSql } from 'sql-formatter';
 import {
   useAthenaCatalogs,
@@ -64,6 +65,7 @@ function isSSOExpired(...errors: unknown[]): boolean {
 }
 
 function AthenaEditor({ profile, region }: AthenaViewProps) {
+  const { t } = useTranslation('query');
   const tabsApi = useEditorTabs('athena', profile, '');
   const { activeTab } = tabsApi;
   const editorRef = useRef<SqlEditorHandle | null>(null);
@@ -189,14 +191,14 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
   );
 
   const saveSnippet = useCallback(() => {
-    const name = window.prompt('スニペット名', activeTab.name);
+    const name = window.prompt(t('athenaView.snippetNamePrompt'), activeTab.name);
     if (name) snippets.add(name, activeTab.sql);
-  }, [activeTab.name, activeTab.sql, snippets]);
+  }, [activeTab.name, activeTab.sql, snippets, t]);
 
   const saveQuery = useCallback(() => {
-    const name = window.prompt('保存クエリ名', activeTab.name);
+    const name = window.prompt(t('athenaView.savedNamePrompt'), activeTab.name);
     if (name) saved.add(name, activeTab.sql);
-  }, [activeTab.name, activeTab.sql, saved]);
+  }, [activeTab.name, activeTab.sql, saved, t]);
 
   const copyCsv = useCallback(() => {
     void navigator.clipboard.writeText(toCsv(resultData.columns, resultData.rows));
@@ -234,7 +236,7 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
       </span>
       <span className="qe-status-mono dim">{shortId(status.id)}</span>
       <button className="btn sm" onClick={copyCsv} disabled={resultData.rows.length === 0}>
-        CSVコピー
+        {t('athenaView.copyCsv')}
       </button>
     </>
   ) : null;
@@ -288,11 +290,11 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
             ))}
             {(workgroups.data ?? []).length === 0 && <option value={workgroup}>{workgroup}</option>}
           </select>
-          <span className="qe-selector-label">出力先</span>
+          <span className="qe-selector-label">{t('athenaView.outputLabel')}</span>
           <input
             className="qe-output-input"
-            placeholder="s3://bucket/prefix/ (省略時は workgroup 設定)"
-            title="クエリ結果の S3 出力先。workgroup 側に設定が無い場合は指定が必須"
+            placeholder={t('athenaView.outputPlaceholder')}
+            title={t('athenaView.outputTitle')}
             value={ctx.outputLocation ?? ''}
             onChange={(e) => setCtx((c) => ({ ...c, outputLocation: e.target.value }))}
           />
@@ -325,17 +327,18 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
               right={
                 outputLocation ? (
                   <span className="qe-hint">
-                    結果出力: <span className="qe-status-mono">{s3Dir(outputLocation)}</span>
+                    {t('athenaView.resultOutput')}{' '}
+                    <span className="qe-status-mono">{s3Dir(outputLocation)}</span>
                     <button
                       className="qe-copy"
-                      title="出力先をコピー"
+                      title={t('athenaView.copyOutput')}
                       onClick={() => void navigator.clipboard.writeText(s3Dir(outputLocation))}
                     >
                       ⧉
                     </button>
                   </span>
                 ) : (
-                  <span className="qe-hint">⌘Enter で実行</span>
+                  <span className="qe-hint">{t('athenaView.runHint')}</span>
                 )
               }
             />
@@ -372,14 +375,14 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
                       {formatDurationClock(status.elapsedMs)} · {formatBytes(status.bytes)} scanned
                     </span>
                     <button className="qe-cancel" onClick={doCancel} disabled={stop.isPending}>
-                      キャンセル
+                      {t('athenaView.cancel')}
                     </button>
                   </>
                 ) : start.isPending ? (
-                  <span className="qe-muted">起動中…</span>
+                  <span className="qe-muted">{t('athenaView.starting')}</span>
                 ) : lastFinished ? (
                   <span className="qe-muted">
-                    直近実行:{' '}
+                    {t('athenaView.lastRun')}{' '}
                     <span className="qe-status-mono">
                       {formatDurationClock(lastFinished.elapsedMs)} ·{' '}
                       {formatBytes(lastFinished.bytes)}
@@ -395,12 +398,14 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
           <ResultsPanel
             active={resultsTab}
             onChange={setResultsTab}
-            historyLabel="実行履歴"
+            historyLabel={t('athenaView.historyLabel')}
             status={
               resultsTab === 'results' ? (
                 resultsStatus
               ) : resultsTab === 'history' ? (
-                <span className="qe-muted">workgroup: {workgroup || '-'} · 直近50件</span>
+                <span className="qe-muted">
+                  {t('athenaView.historyStatus', { workgroup: workgroup || '-' })}
+                </span>
               ) : null
             }
           >
@@ -430,13 +435,13 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
                 />
               ) : (
                 <div className="qe-tab-empty">
-                  {running ? 'クエリを実行中…' : 'クエリを実行すると結果がここに表示されます'}
+                  {running ? t('athenaView.runningResults') : t('athenaView.emptyResults')}
                 </div>
               ))}
             {resultsTab === 'history' && (
               <QueryHistoryTable
                 items={history.data ?? []}
-                bytesLabel="スキャン量"
+                bytesLabel={t('athenaView.bytesLabel')}
                 formatDuration={formatDurationClock}
                 onOpen={openFromHistory}
                 onRerun={rerunFromHistory}
@@ -446,12 +451,12 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
             {resultsTab === 'saved' && (
               <NamedQueryList
                 items={saved.items}
-                emptyText="保存クエリはまだありません"
+                emptyText={t('athenaView.savedEmpty')}
                 onOpen={openNamedQuery}
                 onDelete={saved.remove}
                 header={
                   <button className="btn sm" onClick={saveQuery}>
-                    ＋ 現在のクエリを保存
+                    {t('athenaView.saveCurrentQuery')}
                   </button>
                 }
               />
@@ -461,13 +466,13 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
                 {snippets.error ? <ErrorBanner error={snippets.error} /> : null}
                 <NamedQueryList
                   items={snippets.items}
-                  emptyText="スニペットはまだありません"
+                  emptyText={t('athenaView.snippetEmpty')}
                   onOpen={openNamedQuery}
                   onInsert={(s) => insertText(s.sql)}
                   onDelete={snippets.remove}
                   header={
                     <button className="btn sm" onClick={saveSnippet}>
-                      ＋ 現在のクエリをスニペットに保存
+                      {t('athenaView.saveCurrentSnippet')}
                     </button>
                   }
                 />
@@ -502,6 +507,7 @@ function AthenaSchemaTree({
   tablesLoading,
   onInsert,
 }: AthenaSchemaTreeProps) {
+  const { t } = useTranslation('query');
   const [search, setSearch] = useState('');
   const [expandedTable, setExpandedTable] = useState<string | null>(null);
 
@@ -513,9 +519,11 @@ function AthenaSchemaTree({
       search={search}
       onSearch={setSearch}
       footer={
-        <>
-          パーティション列は <span className="qe-partition-hint">橙</span> で表示
-        </>
+        <Trans
+          i18nKey="athenaView.partitionHint"
+          ns="query"
+          components={{ hint: <span className="qe-partition-hint" /> }}
+        />
       }
     >
       {databasesLoading ? (
@@ -579,12 +587,14 @@ function AthenaSchemaTree({
                     );
                   })}
                 {selected && !tablesLoading && visibleTables.length === 0 && (
-                  <div className="qe-tree-empty">テーブルがありません</div>
+                  <div className="qe-tree-empty">{t('athenaView.noTables')}</div>
                 )}
               </div>
             );
           })}
-          {databases.length === 0 && <div className="qe-tab-empty">データベースがありません</div>}
+          {databases.length === 0 && (
+            <div className="qe-tab-empty">{t('athenaView.noDatabases')}</div>
+          )}
         </>
       )}
     </SchemaTreePanel>

@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TWEAKS, resetTweaksForTest, useTweaks } from './useTweaks';
 import { STORAGE_KEY, type PersistedState } from '../lib/storage';
+import i18n from '../i18n';
 
 function loadStoredTweaks(): PersistedState['tweaks'] {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -85,5 +86,20 @@ describe('useTweaks', () => {
     const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as PersistedState;
     expect(persisted.region).toBe('ap-northeast-1');
     expect(persisted.tweaks?.theme).toBe('dark');
+  });
+
+  it('lang の update が i18next の表示言語へ反映される (issue 0050)', () => {
+    const { result } = renderHook(() => useTweaks());
+    expect(i18n.language).toBe('ja');
+
+    act(() => {
+      result.current.update({ lang: 'en' });
+    });
+    expect(i18n.language).toBe('en');
+
+    act(() => {
+      result.current.update({ lang: 'ja' });
+    });
+    expect(i18n.language).toBe('ja');
   });
 });

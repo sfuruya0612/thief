@@ -1,4 +1,5 @@
 // 表示用フォーマッタ
+import i18n from '../i18n';
 
 // ISO8601 の launch_time から "128d 6h" 形式の稼働時間文字列を生成する
 export function formatUptime(launchTimeIso: string): string {
@@ -38,11 +39,11 @@ export function formatUnitPrice(v: number): string {
 export function formatPricingUnit(unit: string): string {
   switch (unit) {
     case 'Hrs':
-      return '/時間';
+      return i18n.t('pricing:format.unitPerHour');
     case 'vCPU-Hours':
-      return '/vCPU時間';
+      return i18n.t('pricing:format.unitPerVCpuHour');
     case 'GB-Hours':
-      return '/GB時間';
+      return i18n.t('pricing:format.unitPerGbHour');
     default:
       return unit ? `/${unit}` : '';
   }

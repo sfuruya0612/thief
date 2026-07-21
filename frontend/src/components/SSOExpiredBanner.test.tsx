@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SSOExpiredBanner } from './SSOExpiredBanner';
+import i18n from '../i18n';
 
 afterEach(cleanup);
 
@@ -63,5 +64,13 @@ describe('SSOExpiredBanner', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SSO 再ログイン' }));
 
     await waitFor(() => expect(screen.getByText('再ログインに失敗しました。')).toBeInTheDocument());
+  });
+
+  it('英語表示時は英語の文言で表示する (issue 0050)', async () => {
+    await i18n.changeLanguage('en');
+    renderWithQC();
+
+    expect(screen.getByText(/has expired\. Please log in again\./)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SSO re-login' })).toBeInTheDocument();
   });
 });

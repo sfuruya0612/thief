@@ -1,6 +1,7 @@
 // ツールバーの「スニペット ▾」ドロップダウン。
 // 一覧からの挿入と「現在のクエリをスニペットに保存」を提供する。
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { NamedQuery } from '../../types/query';
 
 export interface SnippetDropdownProps {
@@ -16,6 +17,7 @@ export function SnippetDropdown({
   onSaveCurrent,
   onDelete,
 }: SnippetDropdownProps) {
+  const { t } = useTranslation('query');
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -33,11 +35,11 @@ export function SnippetDropdown({
   return (
     <div className="qe-snippet-dd" ref={wrapperRef}>
       <button className={`btn sm ${open ? 'active' : ''}`} onClick={() => setOpen((v) => !v)}>
-        スニペット ▾
+        {t('snippetDropdown.button')}
       </button>
       {open && (
         <div className="qe-snippet-menu">
-          <div className="qe-snippet-menu-head">クエリスニペット</div>
+          <div className="qe-snippet-menu-head">{t('snippetDropdown.heading')}</div>
           <div className="qe-snippet-menu-list">
             {snippets.map((s) => (
               <div
@@ -54,7 +56,7 @@ export function SnippetDropdown({
                 </div>
                 <button
                   className="qe-snippet-item-delete"
-                  title="スニペットを削除"
+                  title={t('snippetDropdown.deleteSnippet')}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(s.id);
@@ -65,7 +67,7 @@ export function SnippetDropdown({
               </div>
             ))}
             {snippets.length === 0 && (
-              <div className="qe-snippet-empty">スニペットはまだありません</div>
+              <div className="qe-snippet-empty">{t('snippetDropdown.empty')}</div>
             )}
           </div>
           <button
@@ -75,7 +77,7 @@ export function SnippetDropdown({
               setOpen(false);
             }}
           >
-            ＋ 現在のクエリをスニペットに保存
+            {t('snippetDropdown.saveCurrent')}
           </button>
         </div>
       )}

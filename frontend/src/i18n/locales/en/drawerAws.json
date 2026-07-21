@@ -1,0 +1,13 @@
+{
+  "dynamoItems": {
+    "countUnit": "{{n}} items",
+    "previewLabel": "Preview (up to {{count}} items, Scan)",
+    "resultLabel": "{{mode}} results (up to {{count}} items)",
+    "filterPlaceholder": "Filter…"
+  },
+  "ecsTasks": {
+    "execDisabledNotEnabled": "ECS Exec is not enabled for this task",
+    "execDisabledNotRunning": "The container has not started in an Exec-capable state yet",
+    "execStartTooltip": "Start Exec in the terminal"
+  }
+}

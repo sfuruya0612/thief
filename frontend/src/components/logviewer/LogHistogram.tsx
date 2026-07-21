@@ -1,6 +1,7 @@
 // ログビューアのヒストグラム表示。buildHistogram (lib/logHistogram.ts) が作ったバケット列を
 // 棒グラフで描く。mode='mono' は単色 + severity で色分け (CloudWatch)、'stacked' は
 // severity 積み上げ (Cloud Logging)。
+import { useTranslation } from 'react-i18next';
 import { type HistogramBucket, dominantLevel } from '../../lib/logHistogram';
 
 export interface LogHistogramProps {
@@ -9,6 +10,7 @@ export interface LogHistogramProps {
 }
 
 export function LogHistogram({ buckets, mode }: LogHistogramProps) {
+  const { t } = useTranslation('logviewer');
   const max = Math.max(1, ...buckets.map((b) => b.total));
 
   return (
@@ -18,7 +20,7 @@ export function LogHistogram({ buckets, mode }: LogHistogramProps) {
           const level = dominantLevel(b);
           const h = (b.total / max) * 100;
           return (
-            <div key={i} className="lv-hcol" title={`${b.total} 件`}>
+            <div key={i} className="lv-hcol" title={t('logHistogram.bucketTotal', { n: b.total })}>
               <div className={`lv-hbar lv-hbar-${level}`} style={{ height: `${h}%` }} />
             </div>
           );

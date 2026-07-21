@@ -20,8 +20,9 @@ export function lastMonthsRange(months: number): { start: string; end: string } 
   return { start: toMonthInputValue(start), end: toMonthInputValue(end) };
 }
 
+// labelKey は cost namespace の翻訳キー。表示側 (MonthlyCostPanel) が t() で解決する。
 export const MONTH_RANGE_PRESETS = [
-  { label: '直近 3 ヶ月', months: 3 },
-  { label: '直近 6 ヶ月', months: 6 },
-  { label: '直近 12 ヶ月', months: 12 },
+  { labelKey: 'monthRange.presets.last3Months', months: 3 },
+  { labelKey: 'monthRange.presets.last6Months', months: 6 },
+  { labelKey: 'monthRange.presets.last12Months', months: 12 },
 ];

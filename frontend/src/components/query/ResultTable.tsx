@@ -1,6 +1,7 @@
 // クエリ結果テーブル。列ヘッダクリックでソート、列ごとの部分一致フィルター、
 // クライアントサイドページング (50 行/ページ)、未取得ページの追加読み込みを提供する。
 import { useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface ResultTableProps {
   columns: string[];
@@ -34,6 +35,7 @@ export function ResultTable({
   onLoadMore,
   footerRight,
 }: ResultTableProps) {
+  const { t } = useTranslation('query');
   const [sort, setSort] = useState<{ col: number; dir: 'asc' | 'desc' } | null>(null);
   const [filters, setFilters] = useState<Record<number, string>>({});
   const [page, setPage] = useState(0);
@@ -83,13 +85,15 @@ export function ResultTable({
 
   const rangeLabel =
     sorted.length === 0
-      ? '0 行'
-      : `${sorted.length.toLocaleString()} 行中 ${(start + 1).toLocaleString()}–${(
-          start + pageRows.length
-        ).toLocaleString()} を表示`;
+      ? t('resultTable.rangeZero')
+      : t('resultTable.range', {
+          total: sorted.length.toLocaleString(),
+          from: (start + 1).toLocaleString(),
+          to: (start + pageRows.length).toLocaleString(),
+        });
   const totalLabel =
     totalRows !== undefined && totalRows > rows.length
-      ? ` (全 ${totalRows.toLocaleString()} 行)`
+      ? t('resultTable.total', { total: totalRows.toLocaleString() })
       : '';
 
   return (
@@ -118,7 +122,7 @@ export function ResultTable({
               {columns.map((_, i) => (
                 <th key={i}>
                   <input
-                    placeholder="フィルター…"
+                    placeholder={t('resultTable.filterPlaceholder')}
                     value={filters[i] ?? ''}
                     onChange={(e) => {
                       setFilters((prev) => ({ ...prev, [i]: e.target.value }));
@@ -143,7 +147,7 @@ export function ResultTable({
             {sorted.length === 0 && (
               <tr>
                 <td className="qe-rt-empty" colSpan={columns.length + 1}>
-                  結果がありません
+                  {t('resultTable.empty')}
                 </td>
               </tr>
             )}
@@ -157,7 +161,7 @@ export function ResultTable({
         </span>
         {hasMore && (
           <button className="btn sm ghost" onClick={onLoadMore} disabled={isFetchingMore}>
-            {isFetchingMore ? '読み込み中…' : 'さらに読み込む'}
+            {isFetchingMore ? t('resultTable.loadingMore') : t('resultTable.loadMore')}
           </button>
         )}
         <span className="qe-rt-pager">

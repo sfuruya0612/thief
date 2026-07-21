@@ -2,6 +2,7 @@
 // txt/json はテキスト表示 (json は整形)、csv はテーブル表示する。
 // 編集モードでは表示形式に関わらず生テキストを直接編集し、保存前に上書き確認を挟む。
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loading } from '../Loading';
 import { ResultTable } from '../query/ResultTable';
 import { ApiError } from '../../types/common';
@@ -56,6 +57,7 @@ export function DrawerObjectPreview({
   onClose,
   onSave,
 }: DrawerObjectPreviewProps) {
+  const { t } = useTranslation('drawerStorage');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -73,7 +75,7 @@ export function DrawerObjectPreview({
   };
 
   const handleSave = async () => {
-    if (!window.confirm(`${fileName} を上書きします。よろしいですか？`)) return;
+    if (!window.confirm(t('drawerObjectPreview.overwriteConfirm', { fileName }))) return;
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -92,20 +94,20 @@ export function DrawerObjectPreview({
         <h3 style={{ margin: 0 }}>Preview: {fileName}</h3>
         {!editing && content !== undefined && (
           <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>
-            編集
+            {t('drawerObjectPreview.edit')}
           </button>
         )}
         {editing && (
           <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
             <button className="btn sm" onClick={cancelEdit} disabled={isSaving}>
-              キャンセル
+              {t('drawerObjectPreview.cancel')}
             </button>
             <button
               className="btn sm primary"
               onClick={() => void handleSave()}
               disabled={isSaving}
             >
-              {isSaving ? '保存中…' : '保存'}
+              {isSaving ? t('drawerObjectPreview.saving') : t('drawerObjectPreview.save')}
             </button>
           </span>
         )}

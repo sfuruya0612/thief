@@ -4,6 +4,7 @@
 //   BINARY = 端末バイト列 (双方向)
 //   TEXT   = JSON 制御。{"type":"resize","cols":N,"rows":N} (送信) / {"type":"exit"|"error","message":...} (受信)
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
@@ -21,6 +22,7 @@ export interface TerminalProps {
 }
 
 export function Terminal({ wsUrl }: TerminalProps) {
+  const { t } = useTranslation('drawerStorage');
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [message, setMessage] = useState<string | null>(null);
@@ -127,9 +129,13 @@ export function Terminal({ wsUrl }: TerminalProps) {
     <div className="terminal-panel">
       {status !== 'connected' && (
         <div className={`terminal-status terminal-status-${status}`}>
-          {status === 'connecting' && '接続中...'}
-          {status === 'closed' && (message ? `セッション終了: ${message}` : 'セッション終了')}
-          {status === 'error' && (message ? `エラー: ${message}` : '接続エラー')}
+          {status === 'connecting' && t('terminal.connecting')}
+          {status === 'closed' &&
+            (message
+              ? t('terminal.sessionEndedWithMessage', { message })
+              : t('terminal.sessionEnded'))}
+          {status === 'error' &&
+            (message ? t('terminal.errorWithMessage', { message }) : t('terminal.connectError'))}
         </div>
       )}
       <div ref={containerRef} className="terminal-container" />

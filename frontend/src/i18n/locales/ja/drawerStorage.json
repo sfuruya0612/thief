@@ -1,0 +1,34 @@
+{
+  "objectPreview": {
+    "binaryNotPreviewable": "バイナリファイルはプレビューできません",
+    "tooLarge": "5 MB 以上のオブジェクトはプレビューできません"
+  },
+  "drawerObjectBrowser": {
+    "openPreview": "プレビューを開く",
+    "search": "検索",
+    "truncatedNotice": "取得件数が上限 (1000 件) に達したため一部のみ表示しています。prefix で絞り込んで再検索してください。",
+    "selectOrDropFile": "ファイルを選択またはドロップ"
+  },
+  "drawerObjectPreview": {
+    "overwriteConfirm": "{{fileName}} を上書きします。よろしいですか？",
+    "edit": "編集",
+    "cancel": "キャンセル",
+    "saving": "保存中…",
+    "save": "保存"
+  },
+  "drawerTerminal": {
+    "loadingTasks": "タスク一覧を取得中...",
+    "noRunningTasks": "実行中のタスクがありません",
+    "selectTask": "タスクを選択",
+    "loadingContainers": "コンテナ一覧を取得中...",
+    "selectContainer": "コンテナを選択",
+    "noExecContainers": "Exec 可能なコンテナがありません (enableExecuteCommand を確認)"
+  },
+  "terminal": {
+    "connecting": "接続中...",
+    "sessionEnded": "セッション終了",
+    "sessionEndedWithMessage": "セッション終了: {{message}}",
+    "connectError": "接続エラー",
+    "errorWithMessage": "エラー: {{message}}"
+  }
+}

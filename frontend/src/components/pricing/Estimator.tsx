@@ -1,6 +1,7 @@
 // 右レールの見積もり。チェック済みの行を数量入力付きの明細として並べ、月額継続/前払い一括/
 // 実効月額の 3 系統を常に分けて表示する (性質の異なる金額を 1 つの合計に混ぜない)。
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Money } from '../primitives/Money';
 import {
   estimate,
@@ -39,6 +40,7 @@ export function Estimator({
   onToggleRate,
   onClearAll,
 }: EstimatorProps) {
+  const { t } = useTranslation('pricing');
   const result = useMemo(() => estimate(selection, rates), [selection, rates]);
   const hasEntries = result.byService.length > 0;
 
@@ -57,7 +59,7 @@ export function Estimator({
   }, [rates]);
 
   const handleClearAll = () => {
-    if (window.confirm('見積もりに追加した項目をすべて削除します。よろしいですか？')) {
+    if (window.confirm(t('estimator.clearAllConfirm'))) {
       onClearAll();
     }
   };
@@ -66,37 +68,37 @@ export function Estimator({
     <aside className="pr-estimator">
       <div className="pr-estimator-head">
         <div className="pr-estimator-title-row">
-          <h2>見積もり</h2>
+          <h2>{t('estimator.title')}</h2>
           <button
             type="button"
             className="btn sm ghost"
             onClick={handleClearAll}
             disabled={!hasEntries}
-            title="見積もりに追加した項目をすべて削除する"
+            title={t('estimator.clearAllTitle')}
           >
-            一括削除
+            {t('estimator.clearAll')}
           </button>
         </div>
         <div className="pr-estimator-totals">
           <div className="pr-estimator-total">
-            <span className="label">月額継続</span>
+            <span className="label">{t('estimator.totalRecurringMonthly')}</span>
             <Money value={result.totalRecurringMonthly} />
           </div>
           <div className="pr-estimator-total">
-            <span className="label">前払い一括</span>
+            <span className="label">{t('estimator.totalUpfrontOnce')}</span>
             <Money value={result.totalUpfrontOnce} />
           </div>
           <div className="pr-estimator-total">
-            <span className="label">実効月額</span>
+            <span className="label">{t('estimator.totalEffectiveMonthly')}</span>
             <Money value={result.totalEffectiveMonthly} />
           </div>
         </div>
-        <p className="pr-estimator-note">730 時間/月 (365×24/12 の近似) で計算しています。</p>
+        <p className="pr-estimator-note">{t('estimator.note')}</p>
       </div>
 
       <div className="pr-estimator-body">
         {result.byService.length === 0 ? (
-          <div className="pr-estimator-empty">単価表の行をチェックすると見積もりに追加されます</div>
+          <div className="pr-estimator-empty">{t('estimator.empty')}</div>
         ) : (
           result.byService.map((b) => {
             const rateById = rateByIdByService[b.service] ?? new Map<string, PriceRateRow>();
@@ -108,9 +110,7 @@ export function Estimator({
                   <Money value={b.effectiveMonthly} />
                 </div>
                 {b.service === 'ec2-spot' && (
-                  <p className="pr-estimator-note">
-                    Spot 価格は変動するため、この見積もりは取得時点の参考値です。
-                  </p>
+                  <p className="pr-estimator-note">{t('estimator.spotNote')}</p>
                 )}
                 {entries.map(([rateId, entry]) => {
                   const rate = rateById.get(rateId);
@@ -127,14 +127,14 @@ export function Estimator({
                           type="button"
                           className="pr-estimator-line-remove"
                           onClick={() => onToggleRate(b.service, rateId)}
-                          title="見積もりから外す"
+                          title={t('estimator.removeTitle')}
                         >
                           <Icons.x size={11} />
                         </button>
                       </div>
                       {term && <div className="pr-estimator-line-term">{term}</div>}
                       <label className="pr-estimator-line-qty">
-                        数量
+                        {t('estimator.qty')}
                         <input
                           type="number"
                           min={0}
@@ -149,13 +149,13 @@ export function Estimator({
                       </label>
                       <div className="pr-estimator-line-amounts">
                         <span>
-                          継続 <Money value={sub.recurringMonthly} />
+                          {t('estimator.lineRecurring')} <Money value={sub.recurringMonthly} />
                         </span>
                         <span>
-                          前払い <Money value={sub.upfrontOnce} />
+                          {t('estimator.lineUpfront')} <Money value={sub.upfrontOnce} />
                         </span>
                         <span>
-                          実効 <Money value={sub.effectiveMonthly} />
+                          {t('estimator.lineEffective')} <Money value={sub.effectiveMonthly} />
                         </span>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 // tables.jsx DataTable の汎用化移植
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ColumnDef } from './tables/columns';
 import { Loading } from './Loading';
 import { useColumnResize } from '../hooks/useColumnResize';
@@ -45,6 +46,7 @@ export function DataTable<T extends { id: string; state?: string }>({
   isLoading,
   rowClassName,
 }: DataTableProps<T>) {
+  const { t } = useTranslation('app');
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -155,7 +157,7 @@ export function DataTable<T extends { id: string; state?: string }>({
                   <input
                     className="dt-col-filter"
                     value={colFilters[c.key] ?? ''}
-                    placeholder="フィルター…"
+                    placeholder={t('dataTable.filterPlaceholder')}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) =>
                       setColFilters((prev) => ({ ...prev, [c.key]: e.target.value }))
