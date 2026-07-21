@@ -223,7 +223,9 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
           {state.activeServices.length === 0 ? (
             <div className="pr-stack-empty">{t('pricingPanel.empty')}</div>
           ) : (
-            state.activeServices.filter(isPricingService).map((service) => {
+            // カード順は state.activeServices の永続化順ではなく PRICING_SERVICES の
+            // 固定順に揃える (issue 0063)。アクティブなサービスだけを描画する。
+            PRICING_SERVICES.filter((service) => activeSet.has(service)).map((service) => {
               const q = queries[service];
               const r = refreshes[service];
               return (
