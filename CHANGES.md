@@ -104,6 +104,8 @@
   - @sfuruya0612
 - [ADD] Pricing 画面に EC2 Spot の単価を独立サービス (EC2 Spot) として追加する。指定リージョンの現在の Spot 価格をインスタンスタイプと OS の組ごとにゾーン横断の最小値で 1 行に集約して表示し、ディスクキャッシュを使わずライブ取得する (同時リクエストの重複排除のみ行う)。OS はオンデマンドの表記 (Linux / RHEL / SUSE / Windows) に正規化し、instance_family のチップ絞り込みも適用される
   - @sfuruya0612
+- [ADD] Pricing 画面の Reserved Instances の単価表に、前払い料金・継続月額・実効時間単価 (前払いを契約期間で按分して継続時間単価に加えた値)・On-Demand 比の節減率を表示する。実効時間単価を主表示にすることで、All Upfront / Partial Upfront / No Upfront の支払オプションをまたいで割安さを比較できるようにする。同一インスタンスタイプ・条件の On-Demand 行が見つからない場合、節減率は「—」で欠損を示す
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)

@@ -4,7 +4,8 @@
 // このコンポーネントのローカル state で持つ (チェック/数量のみ永続化対象であり、
 // 条件セレクタ自体は永続化しない)。
 import { useMemo, useState } from 'react';
-import { formatPricingUnit, formatUnitPrice } from '../../lib/format';
+import { formatPercent, formatPricingUnit, formatUnitPrice } from '../../lib/format';
+import { effectiveHourlyRate, monthlyRecurring, savingsPercent } from '../../lib/pricingEstimate';
 import type { PriceRateRow } from '../../types/aws';
 import { Icons } from '../icons/Icons';
 
@@ -17,6 +18,10 @@ export interface RateGroupSectionProps {
   // SP カードは group が 1 種類しかなく、その名前がカードタイトルと同じ文字列になるため
   // (issue 0055)、group 見出しの重複表示を呼び出し側 (ServiceCard) の判断で抑制する。
   hideTitle?: boolean;
+  // Reserved Instance 行の On-Demand 比節減率を出すための、同一 label の On-Demand
+  // 時間単価の対応表 (issue 0057)。ServiceCard が table.rates 全体から作って渡す。
+  // On-Demand/Savings Plans の行では参照しない。
+  onDemandHourlyByLabel?: Map<string, number>;
 }
 
 const LEASE_ORDER = ['1yr', '3yr'];
@@ -56,6 +61,7 @@ export function RateGroupSection({
   onToggleRate,
   instanceFilter,
   hideTitle,
+  onDemandHourlyByLabel,
 }: RateGroupSectionProps) {
   const model = rates[0]?.model ?? 'on_demand';
 
@@ -188,13 +194,22 @@ export function RateGroupSection({
                     </td>
                     <td className="pr-rate-label">{rate.label}</td>
                     <td className="pr-rate-price">
-                      {formatUnitPrice(rate.priceUSD)}
-                      {formatPricingUnit(rate.unit)}
-                      {rate.upfrontUSD > 0 && (
-                        <span className="pr-rate-upfront">
-                          {' '}
-                          + {formatUnitPrice(rate.upfrontUSD)} 前払い
-                        </span>
+                      {rate.model === 'reserved' ? (
+                        <ReservedRatePrice
+                          rate={rate}
+                          onDemandHourly={onDemandHourlyByLabel?.get(rate.label)}
+                        />
+                      ) : (
+                        <>
+                          {formatUnitPrice(rate.priceUSD)}
+                          {formatPricingUnit(rate.unit)}
+                          {rate.upfrontUSD > 0 && (
+                            <span className="pr-rate-upfront">
+                              {' '}
+                              + {formatUnitPrice(rate.upfrontUSD)} 前払い
+                            </span>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>
@@ -204,5 +219,39 @@ export function RateGroupSection({
           </table>
         ))}
     </div>
+  );
+}
+
+// Reserved Instance 行の価格表示 (issue 0057)。支払オプションをまたいで比較できる
+// 実効時間単価 (前払い按分込み) を主表示にし、内訳 (前払い、継続月額) と On-Demand 比
+// 節減率を添える。All Upfront (継続時間単価が 0 になる) でも実効時間単価は前払いの
+// 按分だけで正しく算出される。
+function ReservedRatePrice({
+  rate,
+  onDemandHourly,
+}: {
+  rate: PriceRateRow;
+  onDemandHourly: number | undefined;
+}) {
+  const effective = effectiveHourlyRate(rate);
+  const monthly = monthlyRecurring(rate);
+  const savings = savingsPercent(effective, onDemandHourly);
+  return (
+    <>
+      <div className="pr-rate-effective-row">
+        <span className="pr-rate-effective">
+          {formatUnitPrice(effective)}
+          {formatPricingUnit(rate.unit)}
+        </span>
+        <span className="pr-rate-effective-label">実効</span>
+      </div>
+      <div className="pr-rate-ri-detail">
+        <span>月額 {formatUnitPrice(monthly)}</span>
+        {rate.upfrontUSD > 0 && <span>前払い {formatUnitPrice(rate.upfrontUSD)}</span>}
+        <span className={savings !== null && savings < 0 ? 'pr-rate-savings-negative' : undefined}>
+          On-Demand比 {savings === null ? '—' : formatPercent(savings)}
+        </span>
+      </div>
+    </>
   );
 }

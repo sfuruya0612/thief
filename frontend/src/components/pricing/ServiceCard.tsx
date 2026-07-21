@@ -108,6 +108,18 @@ export function ServiceCard({
   const hideSingleGroupTitle =
     groups.length === 1 && groups[0][0] === PRICING_SERVICE_LABELS[service];
 
+  // Reserved Instance 行の On-Demand 比節減率 (issue 0057) に使う、同一 label の
+  // On-Demand 時間単価の対応表。属性フィルタの影響を受けないよう table.rates 全体
+  // (attrFilteredRates ではなく) から作る。On-Demand と RI は同一ドキュメント由来で
+  // label が一致する (backend/internal/aws/pricing.go 参照)。
+  const onDemandHourlyByLabel = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of table?.rates ?? []) {
+      if (r.model === 'on_demand') map.set(r.label, r.priceUSD);
+    }
+    return map;
+  }, [table]);
+
   const subtotal = useMemo(() => {
     if (!table) return null;
     return estimate({ [service]: selection }, { [service]: table });
@@ -234,6 +246,7 @@ export function ServiceCard({
                         onToggleRate={onToggleRate}
                         instanceFilter={instanceFilter}
                         hideTitle={hideSingleGroupTitle}
+                        onDemandHourlyByLabel={onDemandHourlyByLabel}
                       />
                     ))
                   )}

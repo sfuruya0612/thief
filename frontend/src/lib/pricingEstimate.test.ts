@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PriceRateRow } from '../types/aws';
 import {
+  effectiveHourlyRate,
   estimate,
   HOURS_PER_MONTH,
+  monthlyRecurring,
+  savingsPercent,
   subtotal,
   type PriceSelectionByService,
   type PriceTablesByService,
@@ -127,6 +130,78 @@ describe('subtotal', () => {
     );
     expect(Number.isFinite(s.effectiveMonthly)).toBe(true);
     expect(s.effectiveMonthly).toBe(0);
+  });
+});
+
+// issue 0057: RI 単価表に前払い/月額/実効時間単価/節減率を表示するための算出関数。
+describe('effectiveHourlyRate', () => {
+  it('No Upfront: 前払いが 0 のため継続時間単価と一致する', () => {
+    const r = rate({
+      model: 'reserved',
+      priceUSD: 0.08,
+      upfrontUSD: 0,
+      term: { lease: '1yr', offeringClass: 'standard', payment: 'No Upfront' },
+    });
+    expect(effectiveHourlyRate(r)).toBeCloseTo(0.08);
+  });
+
+  it('All Upfront (1yr): 継続時間単価が 0 でも前払いの按分だけで正しく算出される', () => {
+    const r = rate({
+      model: 'reserved',
+      priceUSD: 0,
+      upfrontUSD: 876, // 876 / (730 * 12) = 0.1
+      term: { lease: '1yr', offeringClass: 'standard', payment: 'All Upfront' },
+    });
+    expect(effectiveHourlyRate(r)).toBeCloseTo(0.1);
+  });
+
+  it('All Upfront (3yr): 契約月数 36 (26280 時間) で按分する', () => {
+    const r = rate({
+      model: 'reserved',
+      priceUSD: 0,
+      upfrontUSD: 2628, // 2628 / (730 * 36) = 0.1
+      term: { lease: '3yr', offeringClass: 'standard', payment: 'All Upfront' },
+    });
+    expect(effectiveHourlyRate(r)).toBeCloseTo(0.1);
+  });
+
+  it('Partial Upfront: 継続時間単価と前払いの按分を加算する', () => {
+    const r = rate({
+      model: 'reserved',
+      priceUSD: 0.05,
+      upfrontUSD: 438, // 438 / (730 * 12) = 0.05
+      term: { lease: '1yr', offeringClass: 'standard', payment: 'Partial Upfront' },
+    });
+    expect(effectiveHourlyRate(r)).toBeCloseTo(0.1);
+  });
+});
+
+describe('monthlyRecurring', () => {
+  it('継続時間単価 × 730 を返す', () => {
+    expect(monthlyRecurring(rate({ priceUSD: 0.1 }))).toBeCloseTo(0.1 * HOURS_PER_MONTH);
+  });
+
+  it('All Upfront (継続時間単価 0) では 0 になる', () => {
+    expect(monthlyRecurring(rate({ priceUSD: 0, upfrontUSD: 1200 }))).toBe(0);
+  });
+});
+
+describe('savingsPercent', () => {
+  it('RI が On-Demand より安い場合は正の節減率を返す', () => {
+    // 実効 0.08、On-Demand 0.1 → 20% 節減
+    expect(savingsPercent(0.08, 0.1)).toBeCloseTo(20);
+  });
+
+  it('RI が On-Demand より高い異常値でも隠さず負の値を返す', () => {
+    expect(savingsPercent(0.12, 0.1)).toBeCloseTo(-20);
+  });
+
+  it('同一 label の On-Demand が見つからない場合は null を返す', () => {
+    expect(savingsPercent(0.08, undefined)).toBeNull();
+  });
+
+  it('On-Demand 時間単価が 0 以下の場合は算出不能として null を返す', () => {
+    expect(savingsPercent(0.08, 0)).toBeNull();
   });
 });
 

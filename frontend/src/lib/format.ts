@@ -48,6 +48,12 @@ export function formatPricingUnit(unit: string): string {
   }
 }
 
+// Pricing の RI 実効時間単価の On-Demand 比節減率 (issue 0057)。符号をそのまま表示する
+// (正: 割安、負: 割高な異常値。隠さず表示するため符号を反転・除去しない)。
+export function formatPercent(v: number): string {
+  return `${v.toFixed(1)}%`;
+}
+
 // キャッシュ鮮度表示用の "MM/DD HH:mm" (ローカル時刻)。不正な日時は空文字を返す。
 export function formatFetchedAt(iso: string): string {
   const d = new Date(iso);
