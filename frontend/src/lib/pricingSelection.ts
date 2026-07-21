@@ -6,6 +6,9 @@ import type { PricingPersistedState } from './storage';
 // issue 0055: Savings Plans を compute-sp/ec2-instance-sp/database-sp の独立した
 // サービスに分離し、ec2/rds/elasticache/ecs のカードは On-Demand/Reserved Instance
 // (ecs は On-Demand) のみを表示するようにした。
+// issue 0056: EC2 Spot を独立サービス ec2-spot として追加した。ec2-spot はバックエンド
+// のディスクキャッシュを経由しないライブ取得サービスで、staleTime も他サービスと異なる
+// (usePricing の呼び出し側 (PricingPanel) で有限値を渡す)。
 export const PRICING_SERVICES = [
   'ec2',
   'rds',
@@ -14,6 +17,7 @@ export const PRICING_SERVICES = [
   'compute-sp',
   'ec2-instance-sp',
   'database-sp',
+  'ec2-spot',
 ] as const;
 export type PricingService = (typeof PRICING_SERVICES)[number];
 
@@ -32,11 +36,13 @@ export const PRICING_SERVICE_LABELS: Record<PricingService, string> = {
   'compute-sp': 'Compute Savings Plans',
   'ec2-instance-sp': 'EC2 Instance Savings Plans',
   'database-sp': 'Database Savings Plans',
+  'ec2-spot': 'EC2 Spot',
 };
 
 // components/icons/Icons.tsx・AwsIcons.tsx のキーへのマッピング (ElastiCache のみ 'cache' に読み替える)。
 // Savings Plans には対応する AWS 公式アイコンが無いため、3 種とも Icons.tsx のインライン
-// SVG (savingsPlan) を使う。
+// SVG (savingsPlan) を使う。EC2 Spot も対応する AWS 公式アイコンが無いため、専用の
+// インライン SVG (spot) を使う (issue 0056)。
 export const PRICING_SERVICE_ICON_KEY: Record<PricingService, string> = {
   ec2: 'ec2',
   rds: 'rds',
@@ -45,18 +51,21 @@ export const PRICING_SERVICE_ICON_KEY: Record<PricingService, string> = {
   'compute-sp': 'savingsPlan',
   'ec2-instance-sp': 'savingsPlan',
   'database-sp': 'savingsPlan',
+  'ec2-spot': 'spot',
 };
 
 // PricingPersistedState.pricingSchemaVersion の現在値。既定 active なメンバーを
 // PRICING_SERVICES に追加するリリースごとに 1 つずつ版を上げ、PRICING_SCHEMA_MIGRATIONS
 // にその版で追加されたメンバーを追記する (既存のエントリは変更しない)。
-export const PRICING_SCHEMA_VERSION = 1;
+export const PRICING_SCHEMA_VERSION = 2;
 
 // 版ごとに新規追加された既定 active サービス。migratePricingState はこの版番号を
 // 単調に辿り、各版で追加されたメンバーだけを補完する (PRICING_SERVICES 全体を無条件に
 // 足し込むと、ユーザーが既に OFF にしていた既存サービスまで復活してしまうため)。
 const PRICING_SCHEMA_MIGRATIONS: Record<number, PricingService[]> = {
   1: ['compute-sp', 'ec2-instance-sp', 'database-sp'],
+  // issue 0056: EC2 Spot を追加。
+  2: ['ec2-spot'],
 };
 
 // 永続化された Pricing 状態を、単調増加のスキーマ版に基づいて一度だけ移行する。

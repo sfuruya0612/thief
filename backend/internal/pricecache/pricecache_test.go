@@ -23,6 +23,9 @@ func TestValidateService(t *testing.T) {
 		{name: "compute-sp", service: "compute-sp", wantErr: nil},
 		{name: "ec2-instance-sp", service: "ec2-instance-sp", wantErr: nil},
 		{name: "database-sp", service: "database-sp", wantErr: nil},
+		// issue 0056: ec2-spot はライブ取得専用でディスクキャッシュ (Load/Save) を
+		// 経由しないため、意図的に validServices へ加えない (非対称)。
+		{name: "ec2-spot is intentionally not a disk-cached service", service: "ec2-spot", wantErr: ErrInvalidService},
 		{name: "unknown", service: "s3", wantErr: ErrInvalidService},
 		{name: "empty", service: "", wantErr: ErrInvalidService},
 		{name: "path traversal", service: "../etc", wantErr: ErrInvalidService},

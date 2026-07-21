@@ -219,12 +219,24 @@ export function useCostForecast(profile: string, region: string) {
 // 単価はアカウント非依存のため queryKey に profile を含めない (プロファイル間で共有する)。
 // バックエンドのファイルキャッシュ (TTL なし) を正とし、staleTime: Infinity で自動再取得は
 // しない。更新は useRefreshPricing (mutation) からのみ行う。
+//
+// ec2-spot (issue 0056) はバックエンドのディスクキャッシュを経由しないライブ取得の
+// ため、staleTime を有限値にして呼び出す (PricingPanel 参照)。ただし
+// refetchOnWindowFocus: false / refetchInterval なしの全体設定のもとでは、有限
+// staleTime でも自動再取得はマウント時 (refetchOnMount) と手動更新に限られ、パネルを
+// 開いたままにしても継続的には最新化されない (鮮度の実現範囲は UI 側で明示する)。
 // ============================================================
-export function usePricing(profile: string, region: string, service: string, enabled = true) {
+export function usePricing(
+  profile: string,
+  region: string,
+  service: string,
+  enabled = true,
+  staleTime: number = Infinity,
+) {
   return useQuery({
     queryKey: ['aws', 'pricing', service, region],
     queryFn: async () => priceTableFromRaw(await getPricing(profile, region, service)),
-    staleTime: Infinity,
+    staleTime,
     enabled: enabled && !!profile && !!region,
   });
 }

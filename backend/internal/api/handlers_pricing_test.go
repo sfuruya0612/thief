@@ -95,6 +95,39 @@ func TestHandlePricingSchemaVersionIsolatesOldCache(t *testing.T) {
 	}
 }
 
+// issue 0056: ec2-spot はライブの動的価格フィードであり、ディスクキャッシュ
+// (pricecache の Load/Save) を一切経由してはならない。pricecache.validServices に
+// "ec2-spot" が登録されていないため、pricecache.Save 自体が ec2-spot を拒否する
+// (path() 内の ValidateService で弾かれる) が、それでもハンドラより先にファイルが
+// 置かれていた場合に備え、pricecache のバリデーションを経由せず直接ファイルを書いて
+// Load 前分岐の効果を検証する。
+func TestHandlePricingEC2SpotBypassesDiskCache(t *testing.T) {
+	s := newTestServer(t)
+	spotDir := filepath.Join(pricingCacheDir(s.cfg.PriceCacheDir), "ec2-spot")
+	if err := os.MkdirAll(spotDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll() err = %v", err)
+	}
+	staleData := `{"service":"ec2-spot","region":"ap-northeast-1","fetched_at":"2020-01-01T00:00:00Z","license_unresolved":false,"rates":[{"rate_id":"stale#Linux","model":"spot","group":"Spot","label":"stale","attributes":{},"term":{"lease":null,"offering_class":null,"payment":null},"unit":"Hrs","price_usd":0.01,"upfront_usd":0,"currency":"USD"}]}`
+	cacheFilePayload := `{"fetched_at":"2020-01-01T00:00:00Z","data":` + staleData + `}`
+	if err := os.WriteFile(filepath.Join(spotDir, "ap-northeast-1.json"), []byte(cacheFilePayload), 0o600); err != nil {
+		t.Fatalf("WriteFile() err = %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	// ec2-spot が Load 前で分岐していれば、直接書き込んだこの stale ファイルは
+	// 読まれず、実行環境に認証情報が無い profile "default" での EC2 クライアント
+	// 生成/呼び出しが失敗してエラーになる (TestHandlePricingSchemaVersionIsolatesOldCache
+	// と同じ「エラーになること自体がキャッシュ非経由の証拠」というパターン)。
+	s.handlePricing(w, pricingRequest(t, "default", "ec2-spot", "ap-northeast-1", false))
+
+	if w.Code == http.StatusOK {
+		t.Fatalf("status = %d, want non-200 (ec2-spot must never be served from the on-disk cache, even if a file exists there)", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "stale#Linux") {
+		t.Error("response contains the stale cached rate id; ec2-spot must bypass pricecache.Load entirely")
+	}
+}
+
 func TestHandlePricingCacheIOErrorIsRedacted(t *testing.T) {
 	s := newTestServer(t)
 	// キャッシュファイルが置かれるべきパスに代わりにディレクトリを置き、

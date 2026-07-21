@@ -933,8 +933,9 @@ export interface CWLogEventPageRaw {
 // Pricing (AWS Price List / Savings Plans の正規化レート表)
 // ============================================================
 
-// backend/internal/aws/pricing.go の PriceRate.Model と同じ 3 値のみを取る。
-export type PriceModel = 'on_demand' | 'reserved' | 'savings_plan';
+// backend/internal/aws/pricing.go の PriceRate.Model と同じ 4 値のみを取る
+// ('spot' は issue 0056 で EC2 Spot 独立サービスの追加に伴い増えた)。
+export type PriceModel = 'on_demand' | 'reserved' | 'savings_plan' | 'spot';
 
 export interface PriceTermRaw {
   lease: string | null;

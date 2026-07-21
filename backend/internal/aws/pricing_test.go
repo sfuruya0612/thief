@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/pricing"
 	"github.com/aws/aws-sdk-go-v2/service/savingsplans"
 	sptypes "github.com/aws/aws-sdk-go-v2/service/savingsplans/types"
@@ -1001,6 +1004,14 @@ func (f *fakeSavingsPlansClient) DescribeSavingsPlansOfferingRates(_ context.Con
 	return f.describe(p)
 }
 
+type fakeEC2SpotClient struct {
+	describe func(*ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error)
+}
+
+func (f *fakeEC2SpotClient) DescribeSpotPriceHistory(_ context.Context, p *ec2.DescribeSpotPriceHistoryInput, _ ...func(*ec2.Options)) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+	return f.describe(p)
+}
+
 func TestFetchOnDemandAndReservedPagination(t *testing.T) {
 	calls := 0
 	client := &fakePricingClient{
@@ -1532,6 +1543,197 @@ func TestGetPricingResolvesSavingsPlanLicenseModel(t *testing.T) {
 	}
 }
 
+func TestSpotOSFromProductDescription(t *testing.T) {
+	tests := []struct {
+		pd   ec2types.RIProductDescription
+		want string
+	}{
+		{pd: "Linux/UNIX", want: "Linux"},
+		{pd: "Linux/UNIX (Amazon VPC)", want: "Linux"},
+		{pd: "Windows", want: "Windows"},
+		{pd: "Windows (Amazon VPC)", want: "Windows"},
+		{pd: "Red Hat Enterprise Linux", want: "RHEL"},
+		{pd: "Red Hat Enterprise Linux (Amazon VPC)", want: "RHEL"},
+		{pd: "SUSE Linux", want: "SUSE"},
+		{pd: "SUSE Linux (Amazon VPC)", want: "SUSE"},
+		{pd: "Some Unknown Description", want: "Some Unknown Description"},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.pd), func(t *testing.T) {
+			if got := spotOSFromProductDescription(tt.pd); got != tt.want {
+				t.Errorf("spotOSFromProductDescription(%q) = %q, want %q", tt.pd, got, tt.want)
+			}
+		})
+	}
+}
+
+func spotPrice(instanceType, price, az string, pd ec2types.RIProductDescription) ec2types.SpotPrice {
+	return ec2types.SpotPrice{
+		InstanceType:       ec2types.InstanceType(instanceType),
+		SpotPrice:          strPtr(price),
+		AvailabilityZone:   strPtr(az),
+		ProductDescription: pd,
+	}
+}
+
+func TestFetchEC2SpotRates(t *testing.T) {
+	t.Run("aggregates zone-min price per instance_type x os", func(t *testing.T) {
+		client := &fakeEC2SpotClient{
+			describe: func(*ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+				return &ec2.DescribeSpotPriceHistoryOutput{
+					SpotPriceHistory: []ec2types.SpotPrice{
+						spotPrice("m5.large", "0.05", "ap-northeast-1a", "Linux/UNIX"),
+						// Linux/UNIX と Linux/UNIX (Amazon VPC) は同じ os ("Linux") に正規化される
+						// ため、同じキーに集約され最小値が採られることを検証する。
+						spotPrice("m5.large", "0.03", "ap-northeast-1c", "Linux/UNIX (Amazon VPC)"),
+						spotPrice("m5.large", "0.09", "ap-northeast-1a", "Windows"),
+					},
+				}, nil
+			},
+		}
+		rates, err := fetchEC2SpotRates(context.Background(), client, "ap-northeast-1")
+		if err != nil {
+			t.Fatalf("fetchEC2SpotRates() err = %v", err)
+		}
+		if len(rates) != 2 {
+			t.Fatalf("len(rates) = %d, want 2 (m5.large/Linux, m5.large/Windows)", len(rates))
+		}
+		byRateID := map[string]PriceRate{}
+		for _, r := range rates {
+			byRateID[r.RateID] = r
+		}
+		linux, ok := byRateID["m5.large#Linux"]
+		if !ok {
+			t.Fatal(`missing rate "m5.large#Linux"`)
+		}
+		if linux.PriceUSD != 0.03 {
+			t.Errorf("linux.PriceUSD = %v, want 0.03 (zone minimum across the two Linux rows)", linux.PriceUSD)
+		}
+		if linux.Model != "spot" || linux.Group != "Spot" {
+			t.Errorf("linux.Model/Group = %q/%q, want spot/Spot", linux.Model, linux.Group)
+		}
+		if linux.Attributes["instance_family"] != "m5" {
+			t.Errorf(`linux.Attributes["instance_family"] = %q, want "m5"`, linux.Attributes["instance_family"])
+		}
+		windows, ok := byRateID["m5.large#Windows"]
+		if !ok {
+			t.Fatal(`missing rate "m5.large#Windows"`)
+		}
+		if windows.PriceUSD != 0.09 {
+			t.Errorf("windows.PriceUSD = %v, want 0.09", windows.PriceUSD)
+		}
+	})
+
+	t.Run("paginates until NextToken is nil or empty string", func(t *testing.T) {
+		calls := 0
+		client := &fakeEC2SpotClient{
+			describe: func(in *ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+				calls++
+				if in.NextToken == nil {
+					token := "page2"
+					return &ec2.DescribeSpotPriceHistoryOutput{
+						SpotPriceHistory: []ec2types.SpotPrice{spotPrice("m5.large", "0.05", "ap-northeast-1a", "Linux/UNIX")},
+						NextToken:        &token,
+					}, nil
+				}
+				empty := ""
+				return &ec2.DescribeSpotPriceHistoryOutput{
+					SpotPriceHistory: []ec2types.SpotPrice{spotPrice("m5.xlarge", "0.1", "ap-northeast-1a", "Linux/UNIX")},
+					NextToken:        &empty,
+				}, nil
+			},
+		}
+		rates, err := fetchEC2SpotRates(context.Background(), client, "ap-northeast-1")
+		if err != nil {
+			t.Fatalf("fetchEC2SpotRates() err = %v", err)
+		}
+		if calls != 2 {
+			t.Errorf("DescribeSpotPriceHistory called %d times, want 2 (pagination stops on empty-string NextToken)", calls)
+		}
+		if len(rates) != 2 {
+			t.Errorf("len(rates) = %d, want 2", len(rates))
+		}
+	})
+
+	t.Run("skips rows with unparseable price or empty instance type/os", func(t *testing.T) {
+		client := &fakeEC2SpotClient{
+			describe: func(*ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+				return &ec2.DescribeSpotPriceHistoryOutput{
+					SpotPriceHistory: []ec2types.SpotPrice{
+						spotPrice("m5.large", "", "ap-northeast-1a", "Linux/UNIX"),
+						spotPrice("", "0.05", "ap-northeast-1a", "Linux/UNIX"),
+					},
+				}, nil
+			},
+		}
+		rates, err := fetchEC2SpotRates(context.Background(), client, "ap-northeast-1")
+		if err != nil {
+			t.Fatalf("fetchEC2SpotRates() err = %v", err)
+		}
+		if len(rates) != 0 {
+			t.Errorf("len(rates) = %d, want 0 (malformed rows must be skipped)", len(rates))
+		}
+	})
+
+	t.Run("error aborts without partial data", func(t *testing.T) {
+		client := &fakeEC2SpotClient{
+			describe: func(*ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+				return nil, errors.New("boom")
+			},
+		}
+		_, err := fetchEC2SpotRates(context.Background(), client, "ap-northeast-1")
+		if err == nil {
+			t.Fatal("fetchEC2SpotRates() err = nil, want error")
+		}
+	})
+
+	t.Run("sets StartTime within the lookback window (bounded live fetch)", func(t *testing.T) {
+		var gotStartTime *time.Time
+		client := &fakeEC2SpotClient{
+			describe: func(in *ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+				gotStartTime = in.StartTime
+				return &ec2.DescribeSpotPriceHistoryOutput{}, nil
+			},
+		}
+		before := time.Now().UTC().Add(-ec2SpotLookbackWindow)
+		if _, err := fetchEC2SpotRates(context.Background(), client, "ap-northeast-1"); err != nil {
+			t.Fatalf("fetchEC2SpotRates() err = %v", err)
+		}
+		after := time.Now().UTC().Add(-ec2SpotLookbackWindow)
+		if gotStartTime == nil {
+			t.Fatal("StartTime = nil, want non-nil")
+		}
+		if gotStartTime.Before(before.Add(-time.Second)) || gotStartTime.After(after.Add(time.Second)) {
+			t.Errorf("StartTime = %v, want within [%v, %v]", gotStartTime, before, after)
+		}
+	})
+}
+
+func TestGetEC2SpotPricing(t *testing.T) {
+	client := &fakeEC2SpotClient{
+		describe: func(*ec2.DescribeSpotPriceHistoryInput) (*ec2.DescribeSpotPriceHistoryOutput, error) {
+			return &ec2.DescribeSpotPriceHistoryOutput{
+				SpotPriceHistory: []ec2types.SpotPrice{
+					spotPrice("m5.large", "0.05", "ap-northeast-1a", "Linux/UNIX"),
+				},
+			}, nil
+		},
+	}
+	table, err := getEC2SpotPricing(context.Background(), client, "ap-northeast-1")
+	if err != nil {
+		t.Fatalf("getEC2SpotPricing() err = %v", err)
+	}
+	if table.Service != EC2SpotService {
+		t.Errorf("table.Service = %q, want %q", table.Service, EC2SpotService)
+	}
+	if table.Region != "ap-northeast-1" {
+		t.Errorf("table.Region = %q, want ap-northeast-1", table.Region)
+	}
+	if len(table.Rates) != 1 {
+		t.Fatalf("len(table.Rates) = %d, want 1", len(table.Rates))
+	}
+}
+
 func TestValidatePricingService(t *testing.T) {
 	tests := []struct {
 		service string
@@ -1544,6 +1746,7 @@ func TestValidatePricingService(t *testing.T) {
 		{service: "compute-sp", wantErr: false},
 		{service: "ec2-instance-sp", wantErr: false},
 		{service: "database-sp", wantErr: false},
+		{service: "ec2-spot", wantErr: false},
 		{service: "s3", wantErr: true},
 		{service: "", wantErr: true},
 	}
