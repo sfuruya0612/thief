@@ -4,6 +4,7 @@
 // タスク一覧・コンテナ一覧を取得し、選択した上で Exec Command を開始する
 // (タスクが単一/コンテナが単一の場合は自動選択する)。
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { BaseRow } from '../../types/common';
 import { ec2SessionUrl, ecsExecUrl } from '../../api/terminal';
 import { useECSContainers, useECSTasks } from '../../api/queries';
@@ -76,6 +77,7 @@ function ECSExecTerminalDropdown({
   region: string;
   cluster: string;
 }) {
+  const { t } = useTranslation('drawerStorage');
   const { data: tasks, isLoading: tasksLoading } = useECSTasks(profile, region, cluster);
   const [taskArn, setTaskArn] = useState('');
 
@@ -107,10 +109,10 @@ function ECSExecTerminalDropdown({
   }, [containers]);
 
   if (tasksLoading) {
-    return <div className="empty-hint">タスク一覧を取得中...</div>;
+    return <div className="empty-hint">{t('drawerTerminal.loadingTasks')}</div>;
   }
   if (!tasks || tasks.length === 0) {
-    return <div className="empty-hint">実行中のタスクがありません</div>;
+    return <div className="empty-hint">{t('drawerTerminal.noRunningTasks')}</div>;
   }
 
   const execEnabledContainers = containers?.filter((c) => c.execEnabled) ?? [];
@@ -125,7 +127,7 @@ function ECSExecTerminalDropdown({
             onChange={(e) => setTaskArn(e.target.value)}
             title="Task"
           >
-            <option value="">タスクを選択</option>
+            <option value="">{t('drawerTerminal.selectTask')}</option>
             {tasks.map((t) => (
               <option key={t.arn} value={t.arn}>
                 {t.group || '-'} / {arnSuffix(t.arn)}
@@ -134,7 +136,9 @@ function ECSExecTerminalDropdown({
             ))}
           </select>
         )}
-        {taskArn && containersLoading && <span className="muted">コンテナ一覧を取得中...</span>}
+        {taskArn && containersLoading && (
+          <span className="muted">{t('drawerTerminal.loadingContainers')}</span>
+        )}
         {taskArn && !containersLoading && execEnabledContainers.length > 1 && (
           <select
             className="btn sm"
@@ -142,7 +146,7 @@ function ECSExecTerminalDropdown({
             onChange={(e) => setContainerName(e.target.value)}
             title="Container"
           >
-            <option value="">コンテナを選択</option>
+            <option value="">{t('drawerTerminal.selectContainer')}</option>
             {execEnabledContainers.map((c) => (
               <option key={c.name} value={c.name}>
                 {c.name}
@@ -153,9 +157,7 @@ function ECSExecTerminalDropdown({
       </div>
 
       {taskArn && !containersLoading && execEnabledContainers.length === 0 && (
-        <div className="empty-hint">
-          Exec 可能なコンテナがありません (enableExecuteCommand を確認)
-        </div>
+        <div className="empty-hint">{t('drawerTerminal.noExecContainers')}</div>
       )}
 
       {taskArn && containerName && (

@@ -1,5 +1,6 @@
 // セッションタブ / ピッカー / アクティブセッションカードの表示ロジック。
 // 環境色ドットの判定、SSO 状態バッジ、ピッカー項目の構築を純関数で提供する。
+import i18n from '../i18n';
 import type { GcpProject } from '../types/gcp';
 import type { Profile } from '../types/common';
 
@@ -43,11 +44,11 @@ export function profileBadge(p: Profile): SessionBadge | null {
   if (p.authType !== 'sso') return null;
   switch (p.ssoStatus) {
     case 'valid':
-      return { label: 'SSO 有効', tone: 'ok' };
+      return { label: i18n.t('session:sessionMeta.badgeSsoValid'), tone: 'ok' };
     case 'expired':
-      return { label: '期限切れ', tone: 'warn' };
+      return { label: i18n.t('session:sessionMeta.badgeExpired'), tone: 'warn' };
     case 'not_logged_in':
-      return { label: '未ログイン', tone: 'warn' };
+      return { label: i18n.t('session:sessionMeta.badgeNotLoggedIn'), tone: 'warn' };
     default:
       return null;
   }
@@ -59,7 +60,7 @@ export function profileAuthLabel(p: Profile): string {
     case 'sso':
       return 'SSO';
     case 'access_key':
-      return 'アクセスキー';
+      return i18n.t('session:sessionMeta.authAccessKey');
     case 'assume_role':
       return 'AssumeRole';
     case 'credential_process':
@@ -84,12 +85,12 @@ export function formatSsoExpiry(iso: string, now: Date): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return '';
   const diffMs = t - now.getTime();
-  if (diffMs <= 0) return '期限切れ';
+  if (diffMs <= 0) return i18n.t('session:sessionMeta.expiryExpired');
   const totalMin = Math.floor(diffMs / 60_000);
   const hours = Math.floor(totalMin / 60);
   const minutes = totalMin % 60;
-  if (hours > 0) return `残り ${hours} 時間 ${minutes} 分`;
-  return `残り ${minutes} 分`;
+  if (hours > 0) return i18n.t('session:sessionMeta.expiryHoursMinutes', { hours, minutes });
+  return i18n.t('session:sessionMeta.expiryMinutes', { minutes });
 }
 
 // AWS プロファイルのピッカー項目を構築する。開設済み (open に含まれる) 行は

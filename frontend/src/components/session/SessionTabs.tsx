@@ -2,6 +2,7 @@
 // AwsSessionTabs / GcpSessionTabs が表示用の items / picker に還元して渡す。
 // タブが収まらないときはモック 7a の「他 N ▾」メニュー方式で畳む。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SessionEnv } from '../../lib/sessionMeta';
 import { SESSION_TAB_METRICS, computeVisibleTabCount } from '../../lib/sessionTabsLayout';
 
@@ -46,6 +47,7 @@ export function SessionTabs({
   onSwapToVisible,
   visibleCountOverride,
 }: SessionTabsProps) {
+  const { t } = useTranslation('session');
   const rootRef = useRef<HTMLDivElement>(null);
   const [barWidth, setBarWidth] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -126,10 +128,10 @@ export function SessionTabs({
   }, [items, visibleCount, onSwapToVisible]);
 
   const hint = (() => {
-    if (hiddenTabs.length > 0) return 'ドラッグで並べ替え';
+    if (hiddenTabs.length > 0) return t('sessionTabs.hintReorder');
     if (items.length === 0) return '';
-    if (items.length === 1) return '各タブがエディタ・履歴を保持';
-    return `各タブがエディタ・履歴を保持 · ⌃1–${Math.min(items.length, 9)} で切替`;
+    if (items.length === 1) return t('sessionTabs.hintSingle');
+    return t('sessionTabs.hintMulti', { max: Math.min(items.length, 9) });
   })();
 
   return (
@@ -141,7 +143,7 @@ export function SessionTabs({
             key={item.id}
             role="tab"
             aria-selected={item.id === activeId}
-            title={isMissing ? `${item.label} (一覧に見つかりません)` : item.label}
+            title={isMissing ? t('sessionTabs.missingTitle', { label: item.label }) : item.label}
             className={`session-tab ${item.id === activeId ? 'active' : ''} ${
               dragIndex === i ? 'dragging' : ''
             } ${dropIndex === i && dragIndex !== null && dragIndex !== i ? 'drop-target' : ''}`}
@@ -171,7 +173,7 @@ export function SessionTabs({
             <span className="session-tab-name">{item.label}</span>
             <button
               className="session-tab-close"
-              aria-label={`${item.label} を閉じる`}
+              aria-label={t('sessionTabs.closeTab', { label: item.label })}
               onClick={(e) => {
                 e.stopPropagation();
                 onClose(item.id);
@@ -194,11 +196,11 @@ export function SessionTabs({
               setPickerOpen(false);
             }}
           >
-            他 {hiddenTabs.length} ▾
+            {t('sessionTabs.more', { n: hiddenTabs.length })}
           </button>
           {moreOpen && (
             <div className="session-more-menu" role="menu">
-              <div className="session-more-menu-head">表示されていないセッション · 接続は維持</div>
+              <div className="session-more-menu-head">{t('sessionTabs.moreMenuHead')}</div>
               <ul>
                 {hiddenTabs.map((item) => {
                   const isMissing = missing.has(item.id);
@@ -207,7 +209,11 @@ export function SessionTabs({
                       key={item.id}
                       role="menuitem"
                       className="session-more-item"
-                      title={isMissing ? `${item.label} (一覧に見つかりません)` : item.label}
+                      title={
+                        isMissing
+                          ? t('sessionTabs.missingTitle', { label: item.label })
+                          : item.label
+                      }
                       onClick={() => {
                         onSwapToVisible(item.id, visibleCount);
                         setMoreOpen(false);
@@ -219,7 +225,7 @@ export function SessionTabs({
                       <span className="session-more-item-name">{item.label}</span>
                       <button
                         className="session-tab-close"
-                        aria-label={`${item.label} を閉じる`}
+                        aria-label={t('sessionTabs.closeTab', { label: item.label })}
                         onClick={(e) => {
                           e.stopPropagation();
                           onClose(item.id);
@@ -231,9 +237,7 @@ export function SessionTabs({
                   );
                 })}
               </ul>
-              <div className="session-more-menu-foot">
-                選択すると右端のタブと入替 · 実行中ジョブは継続
-              </div>
+              <div className="session-more-menu-foot">{t('sessionTabs.moreMenuFoot')}</div>
             </div>
           )}
         </div>

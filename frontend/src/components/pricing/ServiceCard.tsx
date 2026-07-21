@@ -3,6 +3,7 @@
 // データ取得はサービスごとに独立するため、あるカードがローディング中でも他カードは表示済みになりうる
 // (状態はカードごとに個別に持つ)。
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { estimate } from '../../lib/pricingEstimate';
 import {
   attributeValueOptions,
@@ -73,6 +74,7 @@ export function ServiceCard({
   onRefresh,
   refreshing,
 }: ServiceCardProps) {
+  const { t } = useTranslation('pricing');
   const [instanceFilter, setInstanceFilter] = useState('');
   const [attrSelection, setAttrSelection] = useState<Record<string, Set<string>>>({});
 
@@ -138,39 +140,36 @@ export function ServiceCard({
           className="pr-card-collapse"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
-          title={collapsed ? '展開' : '折りたたむ'}
+          title={collapsed ? t('serviceCard.expand') : t('serviceCard.collapse')}
         >
           <Icons.chevron size={14} style={{ transform: collapsed ? 'none' : 'rotate(90deg)' }} />
         </button>
         {IconEl && <IconEl size={16} />}
         <span className="pr-card-title">{PRICING_SERVICE_LABELS[service]}</span>
         <span className="pr-card-count">
-          {selectedCount}/{totalCount} 選択中
+          {t('serviceCard.selectedCount', { selected: selectedCount, total: totalCount })}
         </span>
         {subtotal && subtotal.byService.length > 0 && (
           <span className="pr-card-subtotal">
-            実効月額 {formatMoney(subtotal.totalEffectiveMonthly)}
+            {t('serviceCard.effectiveMonthly')} {formatMoney(subtotal.totalEffectiveMonthly)}
           </span>
         )}
         <span className="pr-card-spacer" />
-        {refreshing && <span className="pr-card-refreshing">更新中…</span>}
+        {refreshing && <span className="pr-card-refreshing">{t('serviceCard.refreshing')}</span>}
         {service === 'ec2-spot' && (
-          <span
-            className="pr-card-live-note"
-            title="ディスクキャッシュを使わないライブ取得です。開いた時と更新ボタン押下時にのみ最新化されます"
-          >
-            ライブ取得 (自動更新なし)
+          <span className="pr-card-live-note" title={t('serviceCard.liveNoteTitle')}>
+            {t('serviceCard.liveNote')}
           </span>
         )}
         {table?.licenseUnresolved && (
-          <span className="pr-card-fetched">ライセンス区別 未解決 (縮退表示)</span>
+          <span className="pr-card-fetched">{t('serviceCard.licenseUnresolvedBadge')}</span>
         )}
         <button
           type="button"
           className="btn sm ghost"
           onClick={onRefresh}
           disabled={refreshing}
-          title="このサービスの単価を再取得する"
+          title={t('serviceCard.refreshTitle')}
         >
           <Icons.refresh size={12} />
         </button>
@@ -184,7 +183,7 @@ export function ServiceCard({
             <div className="pr-card-error">
               <ErrorBanner error={error} />
               <button className="btn sm" onClick={onRetry}>
-                再試行
+                {t('serviceCard.retry')}
               </button>
             </div>
           )}
@@ -192,15 +191,10 @@ export function ServiceCard({
           {!isLoading && table && (
             <>
               {Boolean(error) && (
-                <div className="pr-card-inline-error">
-                  更新に失敗しました (表示中はキャッシュされた前回取得分です)
-                </div>
+                <div className="pr-card-inline-error">{t('serviceCard.inlineError')}</div>
               )}
               {table.licenseUnresolved && (
-                <div className="pr-card-partial-note">
-                  ライセンスモデルの区別ができなかったため、Savings Plans
-                  の一部の行でライセンス条件を区別せずに表示しています。
-                </div>
+                <div className="pr-card-partial-note">{t('serviceCard.licenseUnresolvedNote')}</div>
               )}
 
               {service === 'ecs' && (
@@ -208,14 +202,12 @@ export function ServiceCard({
                   <div className="pr-group-head">
                     <span className="pr-group-title">Reserved Instance</span>
                   </div>
-                  <div className="pr-group-empty">
-                    ECS (Fargate) はリザーブドインスタンスに対応していません。
-                  </div>
+                  <div className="pr-group-empty">{t('serviceCard.ecsNoRi')}</div>
                 </div>
               )}
 
               {table.rates.length === 0 ? (
-                <div className="pr-card-empty">該当する単価がありません。</div>
+                <div className="pr-card-empty">{t('serviceCard.noRates')}</div>
               ) : (
                 <>
                   <div className="pr-card-filter">
@@ -224,7 +216,7 @@ export function ServiceCard({
                       <input
                         value={instanceFilter}
                         onChange={(e) => setInstanceFilter(e.target.value)}
-                        placeholder="インスタンスタイプ等で絞り込み…"
+                        placeholder={t('serviceCard.filterPlaceholder')}
                       />
                     </span>
                   </div>
@@ -235,7 +227,7 @@ export function ServiceCard({
                     onToggle={toggleAttrValue}
                   />
                   {groups.length === 0 ? (
-                    <div className="pr-card-empty">この条件に一致する単価がありません。</div>
+                    <div className="pr-card-empty">{t('serviceCard.noMatch')}</div>
                   ) : (
                     groups.map(([group, rates]) => (
                       <RateGroupSection

@@ -3,6 +3,7 @@
 // JSON 展開可能なログ一覧。静的検索 (entries.list, ページング) と Live Tail (entries.tail,
 // WebSocket) の 2 モード。CloudWatch Logs と共通のログビューアコンポーネントを使う。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useGcpLogEntries } from '../../api/queries';
 import { gcpLoggingTailUrl } from '../../api/terminal';
 import { ErrorBanner } from '../../components/ErrorBanner';
@@ -81,9 +82,9 @@ const GCP_RESOURCE_TREE: LogTreeNode[] = [
 ];
 
 const FILTER_SNIPPETS = [
-  { label: 'ERROR 以上', snippet: 'severity>=ERROR' },
-  { label: 'WARNING 以上', snippet: 'severity>=WARNING' },
-  { label: 'INFO のみ', snippet: 'severity=INFO' },
+  { labelKey: 'cloudLoggingView.snippets.errorPlus', snippet: 'severity>=ERROR' },
+  { labelKey: 'cloudLoggingView.snippets.warningPlus', snippet: 'severity>=WARNING' },
+  { labelKey: 'cloudLoggingView.snippets.infoOnly', snippet: 'severity=INFO' },
 ];
 
 const copyRaw = (text: string) => void navigator.clipboard?.writeText(text);
@@ -116,6 +117,7 @@ export function CloudLoggingView({ projectId }: CloudLoggingViewProps) {
 }
 
 function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
+  const { t } = useTranslation('logviewer');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterInput, setFilterInput] = useState('');
   const [appliedFilter, setAppliedFilter] = useState('');
@@ -314,7 +316,7 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
               trace={
                 tUrl
                   ? {
-                      label: 'Trace を開く ↗',
+                      label: t('cloudLoggingView.traceOpen'),
                       onOpen: () => window.open(tUrl, '_blank', 'noopener'),
                     }
                   : undefined
@@ -325,39 +327,45 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
         </div>
       );
     },
-    [addFilterClause],
+    [addFilterClause, t],
   );
 
   const liveStatusText = () => {
     switch (liveTail.status) {
       case 'connecting':
-        return '接続中…';
+        return t('cloudLoggingView.liveStatus.connecting');
       case 'connected':
-        return `受信中 (${liveTail.lines.length} 件)`;
+        return t('cloudLoggingView.liveStatus.receiving', { n: liveTail.lines.length });
       case 'closed':
-        return `終了${liveTail.message ? `: ${liveTail.message}` : ''}`;
+        return `${t('cloudLoggingView.liveStatus.closed')}${liveTail.message ? `: ${liveTail.message}` : ''}`;
       case 'error':
-        return `エラー${liveTail.message ? `: ${liveTail.message}` : ''}`;
+        return `${t('cloudLoggingView.liveStatus.error')}${liveTail.message ? `: ${liveTail.message}` : ''}`;
       default:
-        return '待機中…';
+        return t('cloudLoggingView.liveStatus.waiting');
     }
   };
 
   const footer = live ? (
     <span className="lv-live-status">
       <span className="lv-live-dot on" />
-      ライブテール中 · {liveStatusText()}
+      {t('cloudLoggingView.liveStatus.active')} · {liveStatusText()}
     </span>
   ) : (
     <>
-      <span>{staticQuery.isFetching ? '取得中…' : `${staticRows.length} 件表示中 · 新しい順`}</span>
+      <span>
+        {staticQuery.isFetching
+          ? t('cloudLoggingView.footer.fetching')
+          : t('cloudLoggingView.footer.shown', { n: staticRows.length })}
+      </span>
       {staticQuery.hasNextPage && (
         <button
           className="lv-more-btn"
           onClick={() => void staticQuery.fetchNextPage()}
           disabled={staticQuery.isFetchingNextPage}
         >
-          {staticQuery.isFetchingNextPage ? '読み込み中…' : 'さらに読み込む'}
+          {staticQuery.isFetchingNextPage
+            ? t('cloudLoggingView.footer.loadingMore')
+            : t('cloudLoggingView.footer.loadMore')}
         </button>
       )}
     </>
@@ -368,10 +376,15 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
       <>
         <div className="lv-hist-caption">
           <span className="lv-hist-legend">
-            イベント数 / <span className="lv-sev-err">ERROR</span>{' '}
-            <span className="lv-sev-warn">WARNING</span> <span className="lv-sev-info">INFO</span>
+            {t('cloudLoggingView.histCaption.legendPrefix')}{' '}
+            <span className="lv-sev-err">ERROR</span> <span className="lv-sev-warn">WARNING</span>{' '}
+            <span className="lv-sev-info">INFO</span>
           </span>
-          <span>{live ? 'ライブ更新中…' : `計 ${rows.length} 件`}</span>
+          <span>
+            {live
+              ? t('cloudLoggingView.histCaption.liveUpdating')
+              : t('cloudLoggingView.histCaption.total', { n: rows.length })}
+          </span>
         </div>
         <LogHistogram buckets={buckets} mode="stacked" />
         <div className="lv-hist-axis">
@@ -395,7 +408,9 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
           customEnd={customEnd}
           onCustomStartChange={setCustomStart}
           onCustomEndChange={setCustomEnd}
-          exportLabel={csvCopy.copied ? 'コピー済み' : 'エクスポート (CSV)'}
+          exportLabel={
+            csvCopy.copied ? t('cloudLoggingView.copied') : t('cloudLoggingView.exportCsv')
+          }
           onExport={exportCsv}
           exportDisabled={rows.length === 0}
         />
@@ -406,8 +421,12 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
           nodes={GCP_RESOURCE_TREE}
           selected={selected}
           onToggle={toggleType}
-          searchPlaceholder="リソースを検索…"
-          footer={selected.size > 0 ? `${selected.size} リソース選択中` : 'リソースタイプを選択'}
+          searchPlaceholder={t('cloudLoggingView.treeSearchPlaceholder')}
+          footer={
+            selected.size > 0
+              ? t('cloudLoggingView.treeFooterSelected', { n: selected.size })
+              : t('cloudLoggingView.treeFooterSelect')
+          }
         />
       }
       filterBar={
@@ -420,19 +439,17 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runSearch();
             }}
-            placeholder={
-              'Logging query language\n(例: severity>=ERROR AND jsonPayload.route=~"/v1/pay.*")'
-            }
+            placeholder={t('cloudLoggingView.filterPlaceholder')}
             rows={2}
           />
           <div className="lv-filter-actions">
             {FILTER_SNIPPETS.map((s) => (
               <button key={s.snippet} className="btn sm" onClick={() => addFilterClause(s.snippet)}>
-                {s.label}
+                {t(s.labelKey)}
               </button>
             ))}
             <button className="lv-run-btn" onClick={runSearch}>
-              実行
+              {t('cloudLoggingView.run')}
             </button>
           </div>
         </>
@@ -463,11 +480,13 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
               onClear={clearSummaryFields}
             />
           }
-          copyLabel={jsonCopy.copied ? 'コピー済み' : 'JSONコピー'}
+          copyLabel={
+            jsonCopy.copied ? t('cloudLoggingView.copied') : t('cloudLoggingView.copyJson')
+          }
           onCopy={exportJson}
           footer={footer}
           emptyMessage={
-            live ? 'ライブテール待機中…' : '「実行」を押すとログエントリがここに表示されます'
+            live ? t('cloudLoggingView.emptyLiveWaiting') : t('cloudLoggingView.emptyRunSearch')
           }
           bodyRef={bodyRef}
           onScroll={onScroll}

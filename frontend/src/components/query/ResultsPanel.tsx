@@ -1,5 +1,7 @@
 // 下ペインのタブシェル (結果 / 履歴 / 保存クエリ / スニペット) とステータス表示スロット
 import type { ReactNode } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 export type ResultsTabKey = 'results' | 'history' | 'saved' | 'snippets';
 
@@ -12,11 +14,14 @@ export interface ResultsPanelProps {
   children: ReactNode;
 }
 
-const TAB_DEFS: Array<{ key: ResultsTabKey; label: (historyLabel: string) => string }> = [
-  { key: 'results', label: () => '結果' },
-  { key: 'history', label: (h) => h },
-  { key: 'saved', label: () => '保存クエリ' },
-  { key: 'snippets', label: () => 'スニペット' },
+const TAB_DEFS: Array<{
+  key: ResultsTabKey;
+  label: (t: TFunction, historyLabel: string) => string;
+}> = [
+  { key: 'results', label: (t) => t('resultsPanel.tabs.results') },
+  { key: 'history', label: (_t, h) => h },
+  { key: 'saved', label: (t) => t('resultsPanel.tabs.saved') },
+  { key: 'snippets', label: (t) => t('resultsPanel.tabs.snippets') },
 ];
 
 export function ResultsPanel({
@@ -26,16 +31,17 @@ export function ResultsPanel({
   status,
   children,
 }: ResultsPanelProps) {
+  const { t } = useTranslation('query');
   return (
     <div className="qe-panel qe-results">
       <div className="qe-results-tabs">
-        {TAB_DEFS.map((t) => (
+        {TAB_DEFS.map((def) => (
           <button
-            key={t.key}
-            className={active === t.key ? 'active' : ''}
-            onClick={() => onChange(t.key)}
+            key={def.key}
+            className={active === def.key ? 'active' : ''}
+            onClick={() => onChange(def.key)}
           >
-            {t.label(historyLabel)}
+            {def.label(t, historyLabel)}
           </button>
         ))}
         <span className="qe-results-status">{status}</span>

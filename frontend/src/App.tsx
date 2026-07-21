@@ -2,6 +2,7 @@
 // AWS 以外 (GCP/Datadog/TiDB) はトップレベルビュー切替で表示する
 // profile/region の select はサイドバー (Sidebar.tsx の profile-card) に集約している
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AppView } from './types/common';
 import { useHealthCheck } from './api/queries';
@@ -69,6 +70,7 @@ function usePersistedSidebarWidth() {
 }
 
 export function App() {
+  const { t } = useTranslation('app');
   const health = useHealthCheck();
   const { tweaks, update } = useTweaks();
   const aws = useProfiles();
@@ -135,10 +137,7 @@ export function App() {
             onSidebarWidthChange={setSidebarWidth}
           />
         ) : (
-          <SessionEmptyState
-            title="プロファイルを開いてください"
-            hint="上のタブバーの「＋ プロファイルを追加」から接続するプロファイルを選択します"
-          />
+          <SessionEmptyState title={t('emptyState.aws.title')} hint={t('emptyState.aws.hint')} />
         ))}
       {view === 'gcp' &&
         (gcpProject ? (
@@ -152,10 +151,7 @@ export function App() {
             onSidebarWidthChange={setSidebarWidth}
           />
         ) : (
-          <SessionEmptyState
-            title="プロジェクトを開いてください"
-            hint="上のタブバーの「＋ プロジェクトを追加」から接続するプロジェクトを選択します"
-          />
+          <SessionEmptyState title={t('emptyState.gcp.title')} hint={t('emptyState.gcp.hint')} />
         ))}
       {view === 'datadog' && <DatadogView />}
       {view === 'tidb' && <TiDBView />}

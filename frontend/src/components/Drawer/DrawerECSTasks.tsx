@@ -1,5 +1,7 @@
 // ECS クラスタの Task 一覧を表示する Drawer タブ
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useECSTasks } from '../../api/queries';
 import { ecsTaskColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
@@ -22,9 +24,9 @@ type ECSTaskTableRow = ECSTaskRow & { id: string; state: string };
 
 // exec 不可コンテナの理由: タスク全体で ECS Exec が無効か、コンテナがまだ Exec 可能な状態まで
 // 起動していない (RuntimeID 未割り当て) かのいずれか
-function execDisabledReason(task: ECSTaskTableRow, runtimeId: string): string {
-  if (!task.enableExecuteCommand) return 'このタスクは ECS Exec が有効になっていません';
-  if (!runtimeId) return 'コンテナがまだ Exec 可能な状態で起動していません';
+function execDisabledReason(task: ECSTaskTableRow, runtimeId: string, t: TFunction): string {
+  if (!task.enableExecuteCommand) return t('ecsTasks.execDisabledNotEnabled');
+  if (!runtimeId) return t('ecsTasks.execDisabledNotRunning');
   return '';
 }
 
@@ -38,6 +40,7 @@ function ECSTaskDetail({
   onClose: () => void;
   onExec?: (target: { taskArn: string; container: string }) => void;
 }) {
+  const { t } = useTranslation('drawerAws');
   return (
     <div
       className="section"
@@ -98,7 +101,7 @@ function ECSTaskDetail({
         </thead>
         <tbody>
           {task.containers.map((c) => {
-            const disabledReason = execDisabledReason(task, c.runtimeId);
+            const disabledReason = execDisabledReason(task, c.runtimeId, t);
             return (
               <tr key={c.name}>
                 <td className="primary">{c.name}</td>
@@ -113,7 +116,7 @@ function ECSTaskDetail({
                   <button
                     className="btn sm"
                     disabled={!c.execEnabled}
-                    title={disabledReason || 'ターミナルで Exec を開始する'}
+                    title={disabledReason || t('ecsTasks.execStartTooltip')}
                     onClick={() => onExec?.({ taskArn: task.arn, container: c.name })}
                   >
                     Exec

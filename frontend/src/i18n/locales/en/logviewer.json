@@ -1,0 +1,105 @@
+{
+  "logHistogram": {
+    "bucketTotal": "{{n}} events"
+  },
+  "logList": {
+    "addFilter": "+ Filter",
+    "copyValueTitle": "Copy value",
+    "copy": "Copy"
+  },
+  "logToolbarActions": {
+    "liveTailTitle": "Toggle live tail on/off",
+    "liveTail": "Live Tail",
+    "rangeTitle": "Display range",
+    "presets": {
+      "15m": "Last 15 min",
+      "1h": "Last 1 hour",
+      "6h": "Last 6 hours",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "custom": "Custom"
+    }
+  },
+  "logTree": {
+    "loading": "Loading…",
+    "empty": "No matches"
+  },
+  "summaryFieldPicker": {
+    "button": "Fields",
+    "head": "Fields to show first in SUMMARY",
+    "removeTitle": "Remove",
+    "empty": "No candidate fields",
+    "clear": "Clear selection"
+  },
+  "cloudWatchLogsView": {
+    "liveStatus": {
+      "connecting": "Connecting…",
+      "receiving": "Receiving ({{n}} events)",
+      "closed": "Closed",
+      "error": "Error",
+      "waiting": "Waiting…",
+      "active": "Live tailing"
+    },
+    "footer": {
+      "fetching": "Fetching…",
+      "shown": "Showing {{n}} events · newest first",
+      "loadingMore": "Loading…",
+      "loadMore": "Load more"
+    },
+    "histCaption": {
+      "eventCount": "Events",
+      "liveUpdating": "Live updating…",
+      "total": "{{n}} total"
+    },
+    "exportJson": "Export (JSON)",
+    "copied": "Copied",
+    "treeSearchPlaceholder": "Search log groups…",
+    "treeEmpty": "No log groups",
+    "treeFooterSelected": "{{n}} groups selected",
+    "treeFooterCrossSearch": " · cross search",
+    "treeFooterSelect": "Select log groups",
+    "filterPlaceholder": "Filter pattern (e.g. ERROR or { $.level = \"error\" })",
+    "search": "Search",
+    "copyCsv": "Copy CSV",
+    "emptyNoSelection": "Select log groups and press \"Search\"",
+    "emptyLiveWaiting": "Waiting for live tail…",
+    "emptyRunSearch": "Press \"Search\" to show log events here"
+  },
+  "cloudLoggingView": {
+    "liveStatus": {
+      "connecting": "Connecting…",
+      "receiving": "Receiving ({{n}} events)",
+      "closed": "Closed",
+      "error": "Error",
+      "waiting": "Waiting…",
+      "active": "Live tailing"
+    },
+    "footer": {
+      "fetching": "Fetching…",
+      "shown": "Showing {{n}} events · newest first",
+      "loadingMore": "Loading…",
+      "loadMore": "Load more"
+    },
+    "histCaption": {
+      "legendPrefix": "Events /",
+      "liveUpdating": "Live updating…",
+      "total": "{{n}} total"
+    },
+    "snippets": {
+      "errorPlus": "ERROR and above",
+      "warningPlus": "WARNING and above",
+      "infoOnly": "INFO only"
+    },
+    "traceOpen": "Open Trace ↗",
+    "exportCsv": "Export (CSV)",
+    "copied": "Copied",
+    "treeSearchPlaceholder": "Search resources…",
+    "treeFooterSelected": "{{n}} resources selected",
+    "treeFooterSelect": "Select resource types",
+    "filterPlaceholder": "Logging query language\n(e.g. severity>=ERROR AND jsonPayload.route=~\"/v1/pay.*\")",
+    "run": "Run",
+    "copyJson": "Copy JSON",
+    "emptyLiveWaiting": "Waiting for live tail…",
+    "emptyRunSearch": "Press \"Run\" to show log entries here"
+  }
+}

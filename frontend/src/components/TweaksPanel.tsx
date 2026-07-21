@@ -1,5 +1,6 @@
 // tweaks.jsx を TSX に移植し useTweaks と接続する
-import type { Accent, DrawerPos, Theme, Tweaks } from '../types/common';
+import { useTranslation } from 'react-i18next';
+import type { Accent, DrawerPos, Lang, Theme, Tweaks } from '../types/common';
 import { useTweaks } from '../hooks/useTweaks';
 import { Icons } from './icons/Icons';
 
@@ -19,6 +20,7 @@ const ACCENTS: Array<[Accent, string]> = [
 ];
 
 function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
+  const { t } = useTranslation('tweaks');
   const drawerPos: DrawerPos = tweaks.drawerPos ?? 'right';
   return (
     <div className="tweaks-panel open">
@@ -68,6 +70,20 @@ function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
                 style={{ background: color }}
                 title={name}
               />
+            ))}
+          </div>
+        </div>
+        <div className="trow">
+          <span className="lbl">{t('lang.label')}</span>
+          <div className="seg">
+            {(['ja', 'en'] as Lang[]).map((l) => (
+              <button
+                key={l}
+                className={tweaks.lang === l ? 'active' : ''}
+                onClick={() => update({ lang: l })}
+              >
+                {t(`lang.${l}`)}
+              </button>
             ))}
           </div>
         </div>

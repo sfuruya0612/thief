@@ -3,6 +3,7 @@
 // ここへ移設した。タブや一覧では呼ばず、アクティブセッション 1 箇所のみで
 // 発火させる (プロファイル数ぶんの STS 呼び出しを避ける)。
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProfileIdentity } from '../../api/queries';
 import {
   formatSsoExpiry,
@@ -18,6 +19,7 @@ export interface AwsActiveSessionCardProps {
 }
 
 export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCardProps) {
+  const { t } = useTranslation('session');
   const meta = profiles.find((p) => p.name === profile);
   // config 由来の accountId をまず表示し、STS で確定した値が来たら上書きする
   const identity = useProfileIdentity(profile);
@@ -61,7 +63,7 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
         <div className="account-id">{displayAccountId || '-'}</div>
         {expiry && (
           <div>
-            有効期限{' '}
+            {t('awsActiveSessionCard.expiryLabel')}{' '}
             <span className={`session-card-expiry ${expiring ? 'expiring' : ''}`}>{expiry}</span>
           </div>
         )}
@@ -71,13 +73,13 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
           <code title={loginCmd}>{loginCmd}</code>
           <button
             className="btn sm ghost"
-            title="再認証コマンドをコピー"
+            title={t('awsActiveSessionCard.copyReauthTitle')}
             onClick={() => {
               void navigator.clipboard.writeText(loginCmd);
               setCopied(true);
             }}
           >
-            {copied ? 'コピーしました' : 'コピー'}
+            {copied ? t('awsActiveSessionCard.copied') : t('awsActiveSessionCard.copy')}
           </button>
         </div>
       )}

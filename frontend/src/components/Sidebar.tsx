@@ -4,6 +4,7 @@
 // 本体の useResources (ServicePanel 側) が同じ queryKey で fetch した際、
 // react-query のキャッシュ共有によりここにも値が反映される。
 import { skipToken, useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { AwsIcons } from './icons/AwsIcons';
 import { Icons } from './icons/Icons';
 import { AWS_SERVICE_GROUPS, SERVICES } from '../lib/serviceMeta';
@@ -38,6 +39,7 @@ export function Sidebar({
   onService,
   onWidthChange,
 }: SidebarProps) {
+  const { t } = useTranslation('sidebar');
   // リージョン一覧は DescribeRegions から動的に取得する
   // 取得前は現在選択中の region のみを単一オプションとして表示するフォールバックにする
   const { data: regions } = useRegions(profile);
@@ -47,7 +49,7 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="profile-card">
         <div className="profile-card-field">
-          <span className="label">アクティブセッション</span>
+          <span className="label">{t('sidebar.activeSession')}</span>
           <AwsActiveSessionCard profile={profile} profiles={profiles} />
         </div>
         <div className="profile-card-field">

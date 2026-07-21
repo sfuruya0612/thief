@@ -2,6 +2,7 @@
 // 旧 GcpSidebar から移設し、ピッカーのヘッダーに置く (一覧の鮮度が問題になる
 // のは追加操作のときのため)。
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useRefreshGcpProjects } from '../../api/queries';
 import type { GcpSessions } from '../../hooks/useGcpProjects';
 import { gcpPickerItems, projectEnv } from '../../lib/sessionMeta';
@@ -14,6 +15,7 @@ export interface GcpSessionTabsProps {
 }
 
 export function GcpSessionTabs({ sessions }: GcpSessionTabsProps) {
+  const { t } = useTranslation('session');
   const { projects, openProjects, activeProject, isError } = sessions;
   const refreshProjects = useRefreshGcpProjects();
 
@@ -37,12 +39,12 @@ export function GcpSessionTabs({ sessions }: GcpSessionTabsProps) {
     <SessionTabs
       items={items}
       activeId={activeProject}
-      addLabel="＋ プロジェクトを追加"
+      addLabel={t('gcpSessionTabs.addLabel')}
       missingIds={missingIds}
       picker={(close, visibleCount) => (
         <AddSessionPicker
           items={pickerItems}
-          placeholder="プロジェクトを検索…"
+          placeholder={t('gcpSessionTabs.searchPlaceholder')}
           headerNote="gcloud projects list"
           headerAction={
             <button
@@ -55,8 +57,8 @@ export function GcpSessionTabs({ sessions }: GcpSessionTabsProps) {
               <Icons.refresh size={11} />
             </button>
           }
-          footerHint="別アカウントのプロジェクトは gcloud auth login で認証後に表示"
-          emptyText="一致するプロジェクトがありません"
+          footerHint={t('gcpSessionTabs.footerHint')}
+          emptyText={t('gcpSessionTabs.emptyText')}
           loadError={isError}
           onRetry={() => refreshProjects.mutate()}
           narrow

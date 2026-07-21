@@ -1,0 +1,13 @@
+{
+  "dynamoItems": {
+    "countUnit": "{{n}} 件",
+    "previewLabel": "Preview (最大 {{count}} 件、Scan)",
+    "resultLabel": "{{mode}} 結果 (最大 {{count}} 件)",
+    "filterPlaceholder": "フィルター…"
+  },
+  "ecsTasks": {
+    "execDisabledNotEnabled": "このタスクは ECS Exec が有効になっていません",
+    "execDisabledNotRunning": "コンテナがまだ Exec 可能な状態で起動していません",
+    "execStartTooltip": "ターミナルで Exec を開始する"
+  }
+}

@@ -2,6 +2,7 @@
 // 同じ基準 (既知のバイナリ拡張子でなく、かつ 5 MB 未満) をフロント側の行アクション活性判定・
 // グレーアウト判定に使う。中身がバイナリかどうかの最終判断はサーバ側 (UTF-8 + NUL 検査) で
 // 行われるため、ここでの判定はあくまで一覧時点のヒント (拡張子とサイズのみで決まる)。
+import i18n from '../i18n';
 
 // PREVIEW_MAX_SIZE は backend の maxPreviewSize (5 << 20) と同じ値を保つこと。
 export const PREVIEW_MAX_SIZE = 5 * 1024 * 1024;
@@ -140,10 +141,10 @@ export function isPreviewEligible(key: string, size: number): boolean {
 // previewDisabledReason はプレビュー不可の理由文言を返す (可能な場合は空文字)。
 export function previewDisabledReason(key: string, size: number): string {
   if (isBinaryExtension(key)) {
-    return 'バイナリファイルはプレビューできません';
+    return i18n.t('drawerStorage:objectPreview.binaryNotPreviewable');
   }
   if (size >= PREVIEW_MAX_SIZE) {
-    return '5 MB 以上のオブジェクトはプレビューできません';
+    return i18n.t('drawerStorage:objectPreview.tooLarge');
   }
   return '';
 }

@@ -1,0 +1,80 @@
+{
+  "editorTabsBar": {
+    "closeTab": "タブを閉じる",
+    "newTab": "新しいタブ"
+  },
+  "namedQueryList": {
+    "open": "開く",
+    "insert": "挿入",
+    "delete": "削除"
+  },
+  "queryHistoryTable": {
+    "loading": "読み込み中…",
+    "empty": "実行履歴がありません",
+    "elapsed": "実行時間",
+    "startedAt": "実行日時",
+    "open": "開く",
+    "rerun": "再実行"
+  },
+  "resultsPanel": {
+    "tabs": {
+      "results": "結果",
+      "saved": "保存クエリ",
+      "snippets": "スニペット"
+    }
+  },
+  "resultTable": {
+    "rangeZero": "0 行",
+    "range": "{{total}} 行中 {{from}}–{{to}} を表示",
+    "total": " (全 {{total}} 行)",
+    "filterPlaceholder": "フィルター…",
+    "empty": "結果がありません",
+    "loadingMore": "読み込み中…",
+    "loadMore": "さらに読み込む"
+  },
+  "schemaTree": {
+    "searchPlaceholder": "テーブルを検索…"
+  },
+  "snippetDropdown": {
+    "button": "スニペット ▾",
+    "heading": "クエリスニペット",
+    "deleteSnippet": "スニペットを削除",
+    "empty": "スニペットはまだありません",
+    "saveCurrent": "＋ 現在のクエリをスニペットに保存"
+  },
+  "athenaView": {
+    "snippetNamePrompt": "スニペット名",
+    "savedNamePrompt": "保存クエリ名",
+    "copyCsv": "CSVコピー",
+    "outputLabel": "出力先",
+    "outputPlaceholder": "s3://bucket/prefix/ (省略時は workgroup 設定)",
+    "outputTitle": "クエリ結果の S3 出力先。workgroup 側に設定が無い場合は指定が必須",
+    "resultOutput": "結果出力:",
+    "copyOutput": "出力先をコピー",
+    "runHint": "⌘Enter で実行",
+    "cancel": "キャンセル",
+    "starting": "起動中…",
+    "lastRun": "直近実行:",
+    "historyLabel": "実行履歴",
+    "historyStatus": "workgroup: {{workgroup}} · 直近50件",
+    "runningResults": "クエリを実行中…",
+    "emptyResults": "クエリを実行すると結果がここに表示されます",
+    "bytesLabel": "スキャン量",
+    "savedEmpty": "保存クエリはまだありません",
+    "saveCurrentQuery": "＋ 現在のクエリを保存",
+    "snippetEmpty": "スニペットはまだありません",
+    "saveCurrentSnippet": "＋ 現在のクエリをスニペットに保存",
+    "partitionHint": "パーティション列は <hint>橙</hint> で表示",
+    "noTables": "テーブルがありません",
+    "noDatabases": "データベースがありません"
+  },
+  "normalizeQuery": {
+    "state": {
+      "queued": "待機中",
+      "running": "実行中",
+      "succeeded": "完了",
+      "failed": "失敗",
+      "cancelled": "キャンセル"
+    }
+  }
+}

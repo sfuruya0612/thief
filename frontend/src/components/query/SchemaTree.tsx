@@ -1,6 +1,7 @@
 // スキーマツリーの表示部品 (検索ボックス + ツリー行 + フッターヒント)。
 // データの取得と組み立ては各ビュー (BigQueryView / AthenaView) の責務。
 import { useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   RESOURCE_PANEL_CSS_VAR,
   RESOURCE_PANEL_MAX_WIDTH,
@@ -17,6 +18,7 @@ export interface SchemaTreePanelProps {
 }
 
 export function SchemaTreePanel({ search, onSearch, footer, children }: SchemaTreePanelProps) {
+  const { t } = useTranslation('query');
   const panelRef = useRef<HTMLDivElement>(null);
   const { setWidth } = useResourcePanelWidth();
 
@@ -24,7 +26,7 @@ export function SchemaTreePanel({ search, onSearch, footer, children }: SchemaTr
     <div className="qe-panel qe-schema" ref={panelRef}>
       <div className="qe-schema-search">
         <input
-          placeholder="テーブルを検索…"
+          placeholder={t('schemaTree.searchPlaceholder')}
           value={search}
           onChange={(e) => onSearch(e.target.value)}
         />

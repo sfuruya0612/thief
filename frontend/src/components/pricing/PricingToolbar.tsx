@@ -1,5 +1,6 @@
 // Pricing 画面のツールバー。リージョン選択はグローバル (Sidebar と同じ region/onRegionChange
 // を共有する。切替は他パネルにも波及する) で、Pricing 専用の状態は持たない。
+import { useTranslation } from 'react-i18next';
 import { formatFetchedAt } from '../../lib/format';
 import { Icons } from '../icons/Icons';
 
@@ -21,6 +22,7 @@ export function PricingToolbar({
   onRefreshAll,
   refreshing,
 }: PricingToolbarProps) {
+  const { t } = useTranslation('pricing');
   return (
     <div className="toolbar">
       <div className="title">
@@ -42,12 +44,12 @@ export function PricingToolbar({
         </select>
         <span className="pr-freshness">
           {lastFetchedAt
-            ? `ローカルキャッシュ · 最終更新 ${formatFetchedAt(lastFetchedAt)}`
-            : 'ローカルキャッシュ · 未取得'}
+            ? t('pricingToolbar.freshnessUpdated', { at: formatFetchedAt(lastFetchedAt) })
+            : t('pricingToolbar.freshnessNotFetched')}
         </span>
         <button className="btn sm" onClick={onRefreshAll} disabled={refreshing}>
           <Icons.refresh size={12} />
-          {refreshing ? '更新中…' : '更新'}
+          {refreshing ? t('pricingToolbar.refreshing') : t('pricingToolbar.refresh')}
         </button>
         <a
           className="btn sm ghost"
@@ -55,7 +57,7 @@ export function PricingToolbar({
           target="_blank"
           rel="noopener noreferrer"
         >
-          AWS 公式料金ページ
+          {t('pricingToolbar.officialPricingPage')}
           <Icons.external size={11} />
         </a>
       </div>

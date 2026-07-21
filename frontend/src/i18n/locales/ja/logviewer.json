@@ -1,0 +1,105 @@
+{
+  "logHistogram": {
+    "bucketTotal": "{{n}} 件"
+  },
+  "logList": {
+    "addFilter": "＋ フィルタ",
+    "copyValueTitle": "値をコピー",
+    "copy": "コピー"
+  },
+  "logToolbarActions": {
+    "liveTailTitle": "ライブテールの ON/OFF",
+    "liveTail": "ライブテール",
+    "rangeTitle": "表示期間",
+    "presets": {
+      "15m": "直近 15 分",
+      "1h": "直近 1 時間",
+      "6h": "直近 6 時間",
+      "24h": "直近 24 時間",
+      "7d": "直近 7 日",
+      "custom": "カスタム"
+    }
+  },
+  "logTree": {
+    "loading": "読み込み中…",
+    "empty": "該当なし"
+  },
+  "summaryFieldPicker": {
+    "button": "フィールド",
+    "head": "SUMMARY に先頭表示するフィールド",
+    "removeTitle": "選択解除",
+    "empty": "候補フィールドがありません",
+    "clear": "選択をクリア"
+  },
+  "cloudWatchLogsView": {
+    "liveStatus": {
+      "connecting": "接続中…",
+      "receiving": "受信中 ({{n}} 件)",
+      "closed": "終了",
+      "error": "エラー",
+      "waiting": "待機中…",
+      "active": "ライブテール中"
+    },
+    "footer": {
+      "fetching": "取得中…",
+      "shown": "{{n}} 件表示中 · 新しい順",
+      "loadingMore": "読み込み中…",
+      "loadMore": "さらに読み込む"
+    },
+    "histCaption": {
+      "eventCount": "イベント数",
+      "liveUpdating": "ライブ更新中…",
+      "total": "計 {{n}} 件"
+    },
+    "exportJson": "エクスポート (JSON)",
+    "copied": "コピー済み",
+    "treeSearchPlaceholder": "ロググループを検索…",
+    "treeEmpty": "ロググループがありません",
+    "treeFooterSelected": "{{n}} グループ選択中",
+    "treeFooterCrossSearch": " · 横断検索",
+    "treeFooterSelect": "ロググループを選択",
+    "filterPlaceholder": "フィルタパターン (例: ERROR または { $.level = \"error\" })",
+    "search": "検索",
+    "copyCsv": "CSVコピー",
+    "emptyNoSelection": "ロググループを選択して「検索」を押してください",
+    "emptyLiveWaiting": "ライブテール待機中…",
+    "emptyRunSearch": "「検索」を押すとログイベントがここに表示されます"
+  },
+  "cloudLoggingView": {
+    "liveStatus": {
+      "connecting": "接続中…",
+      "receiving": "受信中 ({{n}} 件)",
+      "closed": "終了",
+      "error": "エラー",
+      "waiting": "待機中…",
+      "active": "ライブテール中"
+    },
+    "footer": {
+      "fetching": "取得中…",
+      "shown": "{{n}} 件表示中 · 新しい順",
+      "loadingMore": "読み込み中…",
+      "loadMore": "さらに読み込む"
+    },
+    "histCaption": {
+      "legendPrefix": "イベント数 /",
+      "liveUpdating": "ライブ更新中…",
+      "total": "計 {{n}} 件"
+    },
+    "snippets": {
+      "errorPlus": "ERROR 以上",
+      "warningPlus": "WARNING 以上",
+      "infoOnly": "INFO のみ"
+    },
+    "traceOpen": "Trace を開く ↗",
+    "exportCsv": "エクスポート (CSV)",
+    "copied": "コピー済み",
+    "treeSearchPlaceholder": "リソースを検索…",
+    "treeFooterSelected": "{{n}} リソース選択中",
+    "treeFooterSelect": "リソースタイプを選択",
+    "filterPlaceholder": "Logging query language\n(例: severity>=ERROR AND jsonPayload.route=~\"/v1/pay.*\")",
+    "run": "実行",
+    "copyJson": "JSONコピー",
+    "emptyLiveWaiting": "ライブテール待機中…",
+    "emptyRunSearch": "「実行」を押すとログエントリがここに表示されます"
+  }
+}

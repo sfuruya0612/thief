@@ -1,0 +1,47 @@
+{
+  "sessionTabs": {
+    "hintReorder": "Drag to reorder",
+    "hintSingle": "Each tab keeps its editor and history",
+    "hintMulti": "Each tab keeps its editor and history · Switch with ⌃1–{{max}}",
+    "missingTitle": "{{label}} (not found in list)",
+    "closeTab": "Close {{label}}",
+    "more": "{{n}} more ▾",
+    "moreMenuHead": "Hidden sessions · connections kept",
+    "moreMenuFoot": "Selecting swaps with the rightmost tab · running jobs continue"
+  },
+  "awsSessionTabs": {
+    "addLabel": "＋ Add profile",
+    "searchPlaceholder": "Search profiles…",
+    "headerNote": "~/.aws/config · {{n}} items",
+    "refreshTitle": "Reload profile list",
+    "footerHint": "↑↓ to select · ⏎ to open · expired profiles are guided to re-auth after opening",
+    "emptyText": "No matching profiles"
+  },
+  "gcpSessionTabs": {
+    "addLabel": "＋ Add project",
+    "searchPlaceholder": "Search projects…",
+    "footerHint": "Projects in other accounts appear after authenticating with gcloud auth login",
+    "emptyText": "No matching projects"
+  },
+  "awsActiveSessionCard": {
+    "expiryLabel": "Expires",
+    "copyReauthTitle": "Copy re-auth command",
+    "copied": "Copied",
+    "copy": "Copy"
+  },
+  "addSessionPicker": {
+    "loadError": "Failed to load list",
+    "retry": "Retry",
+    "opened": "Open",
+    "enterHint": "⏎ Open"
+  },
+  "sessionMeta": {
+    "badgeSsoValid": "SSO valid",
+    "badgeExpired": "Expired",
+    "badgeNotLoggedIn": "Not logged in",
+    "authAccessKey": "Access key",
+    "expiryExpired": "Expired",
+    "expiryHoursMinutes": "{{hours}}h {{minutes}}m left",
+    "expiryMinutes": "{{minutes}}m left"
+  }
+}

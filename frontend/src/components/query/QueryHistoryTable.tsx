@@ -1,4 +1,5 @@
 // 実行履歴タブのテーブル。状態ピル / クエリ / 実行時間 / スキャン量 / 実行日時 / アクション。
+import { useTranslation } from 'react-i18next';
 import type { QueryHistoryRow } from '../../types/query';
 import { formatBytes } from '../tables/columns';
 import { StatePill } from './StatePill';
@@ -21,11 +22,12 @@ export function QueryHistoryTable({
   onRerun,
   isLoading,
 }: QueryHistoryTableProps) {
+  const { t } = useTranslation('query');
   if (isLoading) {
-    return <div className="qe-tab-empty">読み込み中…</div>;
+    return <div className="qe-tab-empty">{t('queryHistoryTable.loading')}</div>;
   }
   if (items.length === 0) {
-    return <div className="qe-tab-empty">実行履歴がありません</div>;
+    return <div className="qe-tab-empty">{t('queryHistoryTable.empty')}</div>;
   }
   return (
     <div className="qe-rt-scroll">
@@ -35,12 +37,12 @@ export function QueryHistoryTable({
             <th style={{ width: 110 }}>State</th>
             <th>Query</th>
             <th className="num" style={{ width: 100 }}>
-              実行時間
+              {t('queryHistoryTable.elapsed')}
             </th>
             <th className="num" style={{ width: 110 }}>
               {bytesLabel}
             </th>
-            <th style={{ width: 110 }}>実行日時</th>
+            <th style={{ width: 110 }}>{t('queryHistoryTable.startedAt')}</th>
             <th style={{ width: 120 }} />
           </tr>
         </thead>
@@ -57,9 +59,9 @@ export function QueryHistoryTable({
               <td className="num">{item.bytes > 0 ? formatBytes(item.bytes) : '–'}</td>
               <td>{item.startedAt || '–'}</td>
               <td className="qe-history-actions">
-                <button onClick={() => onOpen(item)}>開く</button>
+                <button onClick={() => onOpen(item)}>{t('queryHistoryTable.open')}</button>
                 <span> · </span>
-                <button onClick={() => onRerun(item)}>再実行</button>
+                <button onClick={() => onRerun(item)}>{t('queryHistoryTable.rerun')}</button>
               </td>
             </tr>
           ))}

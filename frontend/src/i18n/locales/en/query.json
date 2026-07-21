@@ -1,0 +1,80 @@
+{
+  "editorTabsBar": {
+    "closeTab": "Close tab",
+    "newTab": "New tab"
+  },
+  "namedQueryList": {
+    "open": "Open",
+    "insert": "Insert",
+    "delete": "Delete"
+  },
+  "queryHistoryTable": {
+    "loading": "Loading…",
+    "empty": "No query history",
+    "elapsed": "Elapsed",
+    "startedAt": "Started at",
+    "open": "Open",
+    "rerun": "Rerun"
+  },
+  "resultsPanel": {
+    "tabs": {
+      "results": "Results",
+      "saved": "Saved queries",
+      "snippets": "Snippets"
+    }
+  },
+  "resultTable": {
+    "rangeZero": "0 rows",
+    "range": "{{from}}–{{to}} of {{total}} rows",
+    "total": " (of {{total}} total)",
+    "filterPlaceholder": "Filter…",
+    "empty": "No results",
+    "loadingMore": "Loading…",
+    "loadMore": "Load more"
+  },
+  "schemaTree": {
+    "searchPlaceholder": "Search tables…"
+  },
+  "snippetDropdown": {
+    "button": "Snippets ▾",
+    "heading": "Query snippets",
+    "deleteSnippet": "Delete snippet",
+    "empty": "No snippets yet",
+    "saveCurrent": "+ Save current query as snippet"
+  },
+  "athenaView": {
+    "snippetNamePrompt": "Snippet name",
+    "savedNamePrompt": "Saved query name",
+    "copyCsv": "Copy CSV",
+    "outputLabel": "Output",
+    "outputPlaceholder": "s3://bucket/prefix/ (defaults to workgroup setting)",
+    "outputTitle": "S3 output location for query results. Required when the workgroup has no configured location.",
+    "resultOutput": "Output:",
+    "copyOutput": "Copy output location",
+    "runHint": "⌘Enter to run",
+    "cancel": "Cancel",
+    "starting": "Starting…",
+    "lastRun": "Last run:",
+    "historyLabel": "Query history",
+    "historyStatus": "workgroup: {{workgroup}} · latest 50",
+    "runningResults": "Running query…",
+    "emptyResults": "Run a query to see results here",
+    "bytesLabel": "Scanned",
+    "savedEmpty": "No saved queries yet",
+    "saveCurrentQuery": "+ Save current query",
+    "snippetEmpty": "No snippets yet",
+    "saveCurrentSnippet": "+ Save current query as snippet",
+    "partitionHint": "Partition columns shown in <hint>orange</hint>",
+    "noTables": "No tables",
+    "noDatabases": "No databases"
+  },
+  "normalizeQuery": {
+    "state": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  }
+}

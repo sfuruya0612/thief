@@ -1,0 +1,47 @@
+{
+  "sessionTabs": {
+    "hintReorder": "ドラッグで並べ替え",
+    "hintSingle": "各タブがエディタ・履歴を保持",
+    "hintMulti": "各タブがエディタ・履歴を保持 · ⌃1–{{max}} で切替",
+    "missingTitle": "{{label}} (一覧に見つかりません)",
+    "closeTab": "{{label}} を閉じる",
+    "more": "他 {{n}} ▾",
+    "moreMenuHead": "表示されていないセッション · 接続は維持",
+    "moreMenuFoot": "選択すると右端のタブと入替 · 実行中ジョブは継続"
+  },
+  "awsSessionTabs": {
+    "addLabel": "＋ プロファイルを追加",
+    "searchPlaceholder": "プロファイルを検索…",
+    "headerNote": "~/.aws/config · {{n}}件",
+    "refreshTitle": "プロファイル一覧を再取得",
+    "footerHint": "↑↓ で選択 · ⏎ で開く · 期限切れは開いた後に再認証を案内",
+    "emptyText": "一致するプロファイルがありません"
+  },
+  "gcpSessionTabs": {
+    "addLabel": "＋ プロジェクトを追加",
+    "searchPlaceholder": "プロジェクトを検索…",
+    "footerHint": "別アカウントのプロジェクトは gcloud auth login で認証後に表示",
+    "emptyText": "一致するプロジェクトがありません"
+  },
+  "awsActiveSessionCard": {
+    "expiryLabel": "有効期限",
+    "copyReauthTitle": "再認証コマンドをコピー",
+    "copied": "コピーしました",
+    "copy": "コピー"
+  },
+  "addSessionPicker": {
+    "loadError": "一覧の取得に失敗しました",
+    "retry": "再試行",
+    "opened": "開いています",
+    "enterHint": "⏎ 開く"
+  },
+  "sessionMeta": {
+    "badgeSsoValid": "SSO 有効",
+    "badgeExpired": "期限切れ",
+    "badgeNotLoggedIn": "未ログイン",
+    "authAccessKey": "アクセスキー",
+    "expiryExpired": "期限切れ",
+    "expiryHoursMinutes": "残り {{hours}} 時間 {{minutes}} 分",
+    "expiryMinutes": "残り {{minutes}} 分"
+  }
+}

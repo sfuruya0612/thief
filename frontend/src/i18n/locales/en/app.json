@@ -1,0 +1,19 @@
+{
+  "emptyState": {
+    "aws": {
+      "title": "Open a profile",
+      "hint": "Select a profile to connect from “＋ Add profile” in the tab bar above"
+    },
+    "gcp": {
+      "title": "Open a project",
+      "hint": "Select a project to connect from “＋ Add project” in the tab bar above"
+    }
+  },
+  "connectionWaiting": {
+    "title": "Waiting for connection to the backend",
+    "hint": "It recovers automatically once the backend starts"
+  },
+  "dataTable": {
+    "filterPlaceholder": "Filter…"
+  }
+}

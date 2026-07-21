@@ -1,6 +1,7 @@
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import i18n from './i18n';
 
 // vite.config.ts の test.globals は false のため、@testing-library/react が
 // afterEach グローバルの存在を検知して行う自動クリーンアップ登録が発火しない
@@ -9,6 +10,9 @@ import '@testing-library/jest-dom/vitest';
 // 後続テストに前のテストの DOM が混入する。
 afterEach(() => {
   cleanup();
+  // 言語切り替えを検証するテストが i18n.changeLanguage を呼んでも、
+  // 同一プロセス内の他テストファイルへ言語設定が漏れないようにする (issue 0050)。
+  void i18n.changeLanguage('ja');
 });
 
 // Node 22+ は experimental な localStorage グローバルを持ち、--localstorage-file 未指定時は

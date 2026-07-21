@@ -1,0 +1,34 @@
+{
+  "objectPreview": {
+    "binaryNotPreviewable": "Binary files cannot be previewed",
+    "tooLarge": "Objects 5 MB or larger cannot be previewed"
+  },
+  "drawerObjectBrowser": {
+    "openPreview": "Open preview",
+    "search": "Search",
+    "truncatedNotice": "Reached the maximum of 1000 results; only some are shown. Narrow down with a prefix and search again.",
+    "selectOrDropFile": "Select or drop a file"
+  },
+  "drawerObjectPreview": {
+    "overwriteConfirm": "Overwrite {{fileName}}. Are you sure?",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save"
+  },
+  "drawerTerminal": {
+    "loadingTasks": "Loading tasks...",
+    "noRunningTasks": "No running tasks",
+    "selectTask": "Select a task",
+    "loadingContainers": "Loading containers...",
+    "selectContainer": "Select a container",
+    "noExecContainers": "No exec-capable containers (check enableExecuteCommand)"
+  },
+  "terminal": {
+    "connecting": "Connecting...",
+    "sessionEnded": "Session ended",
+    "sessionEndedWithMessage": "Session ended: {{message}}",
+    "connectError": "Connection error",
+    "errorWithMessage": "Error: {{message}}"
+  }
+}

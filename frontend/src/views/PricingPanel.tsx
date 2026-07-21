@@ -7,6 +7,7 @@
 // しないライブ取得サービスのため、usePricing の staleTime のみ他と異なり有限値
 // (EC2_SPOT_STALE_TIME) を渡す。
 import { useEffect, useMemo, useReducer } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePricing, useRefreshPricing, useRegions } from '../api/queries';
 import { Estimator } from '../components/pricing/Estimator';
 import { PricingToolbar } from '../components/pricing/PricingToolbar';
@@ -40,6 +41,7 @@ function isPricingService(s: string): s is PricingService {
 const EC2_SPOT_STALE_TIME = 60_000;
 
 export function PricingPanel({ profile, region, onRegionChange }: PricingPanelProps) {
+  const { t } = useTranslation('pricing');
   const [state, dispatch] = useReducer(pricingReducer, undefined, () =>
     initialPricingState(loadPersisted().pricing),
   );
@@ -219,9 +221,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
       <div className="pr-body">
         <div className="pr-stack">
           {state.activeServices.length === 0 ? (
-            <div className="pr-stack-empty">
-              上のサービス選択から表示するサービスを選んでください。
-            </div>
+            <div className="pr-stack-empty">{t('pricingPanel.empty')}</div>
           ) : (
             state.activeServices.filter(isPricingService).map((service) => {
               const q = queries[service];

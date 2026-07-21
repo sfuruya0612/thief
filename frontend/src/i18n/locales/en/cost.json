@@ -1,0 +1,17 @@
+{
+  "monthRange": {
+    "presets": {
+      "last3Months": "Last 3 months",
+      "last6Months": "Last 6 months",
+      "last12Months": "Last 12 months"
+    }
+  },
+  "costExplorerPanel": {
+    "presets": {
+      "last1Week": "Last 1 week",
+      "last1Month": "Last 1 month",
+      "last3Months": "Last 3 months",
+      "last6Months": "Last 6 months"
+    }
+  }
+}

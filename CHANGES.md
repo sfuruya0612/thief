@@ -110,6 +110,8 @@
   - @sfuruya0612
 - [ADD] Pricing 画面の Reserved Instances の単価表に、前払い料金・継続月額・実効時間単価 (前払いを契約期間で按分して継続時間単価に加えた値)・On-Demand 比の節減率を表示する。実効時間単価を主表示にすることで、All Upfront / Partial Upfront / No Upfront の支払オプションをまたいで割安さを比較できるようにする。同一インスタンスタイプ・条件の On-Demand 行が見つからない場合、節減率は「—」で欠損を示す
   - @sfuruya0612
+- [ADD] UI の表示言語を日本語 / 英語で切り替えられるようにする。`react-i18next` を導入し、機能領域別の名前空間 (JSON) にハードコード文字列を外部化する。切り替えは Tweaks パネルの Language 行から行い、選択した言語は他の Tweaks 設定と同様に永続化される。バックエンド由来のエラーメッセージ (SDK/API の生テキスト) は翻訳せず英語のまま表示し、フロント側で持つ固定文言 (SSO 期限切れバナー等) のみを翻訳対象とする
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)

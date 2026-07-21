@@ -4,6 +4,7 @@
 // PK/SK に加えて、任意の属性名 + 値による絞り込み (FilterExpression) も PK/SK と併用できる。
 // 取得件数は LIMIT_OPTIONS から選択でき、未選択時は DEFAULT_LIMIT (10件)。
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDynamoItems, useDynamoSchema } from '../../api/queries';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import { DrawerLoading } from './DrawerLoading';
@@ -28,6 +29,7 @@ export interface DrawerDynamoItemsProps {
 }
 
 export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsProps) {
+  const { t } = useTranslation('drawerAws');
   const { data: schema, isLoading: schemaLoading } = useDynamoSchema(profile, region, table);
   const [pkInput, setPkInput] = useState('');
   const [skInput, setSkInput] = useState('');
@@ -140,7 +142,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
             >
               {LIMIT_OPTIONS.map((n) => (
                 <option key={n} value={n}>
-                  {n} 件
+                  {t('dynamoItems.countUnit', { n })}
                 </option>
               ))}
             </select>
@@ -159,8 +161,11 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
           </div>
           <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 8 }}>
             {isPreview
-              ? `Preview (最大 ${rows.length} 件、Scan)`
-              : `${submittedPk ? 'Query' : 'Scan'} 結果 (最大 ${rows.length} 件)`}
+              ? t('dynamoItems.previewLabel', { count: rows.length })
+              : t('dynamoItems.resultLabel', {
+                  mode: submittedPk ? 'Query' : 'Scan',
+                  count: rows.length,
+                })}
           </div>
           {itemsLoading ? (
             <DrawerLoading />
@@ -191,7 +196,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
                         <input
                           className="dt-col-filter"
                           value={colFilters[c] ?? ''}
-                          placeholder="フィルター…"
+                          placeholder={t('dynamoItems.filterPlaceholder')}
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) =>
                             setColFilters((prev) => ({ ...prev, [c]: e.target.value }))
