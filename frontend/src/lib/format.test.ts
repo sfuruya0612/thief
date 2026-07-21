@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatFetchedAt,
   formatMoney,
+  formatPercent,
   formatPricingUnit,
   formatUnitPrice,
   formatUptime,
@@ -46,6 +47,16 @@ describe('formatUnitPrice', () => {
 
   it('末尾 0 が出ない場合は 2 桁までに丸める', () => {
     expect(formatUnitPrice(0.1)).toBe('$0.10');
+  });
+});
+
+describe('formatPercent', () => {
+  it('正の値はそのまま% 表示する (RI が割安)', () => {
+    expect(formatPercent(12.34)).toBe('12.3%');
+  });
+
+  it('負の値も符号を保ったまま表示する (RI が割高な異常値を隠さない)', () => {
+    expect(formatPercent(-5)).toBe('-5.0%');
   });
 });
 

@@ -29,6 +29,7 @@ function renderGroup(props: Partial<Parameters<typeof RateGroupSection>[0]> = {}
       onToggleRate={onToggleRate}
       instanceFilter={props.instanceFilter ?? ''}
       hideTitle={props.hideTitle}
+      onDemandHourlyByLabel={props.onDemandHourlyByLabel}
     />,
   );
 }
@@ -109,6 +110,110 @@ describe('RateGroupSection', () => {
     // offeringClass は standard のみのためセレクタは出ない (1 個の select は lease 用のみ)
     expect(document.querySelectorAll('.pr-group-conditions select')).toHaveLength(1);
     expect(screen.getByText('db.m5.large 1yr No Upfront')).toBeInTheDocument();
+  });
+
+  // issue 0057: RI 行に前払い/月額/実効時間単価/On-Demand 比節減率を表示する。
+  describe('Reserved Instance の実効値・節減率表示', () => {
+    it('No Upfront: 実効時間単価は継続時間単価と一致し、節減率が算出される', () => {
+      renderGroup({
+        group: 'Reserved Instance',
+        rates: [
+          rate({
+            rateId: 'ri-no-upfront',
+            model: 'reserved',
+            group: 'Reserved Instance',
+            label: 'm5.large / Linux / Shared',
+            priceUSD: 0.08,
+            upfrontUSD: 0,
+            term: { lease: '1yr', offeringClass: 'standard', payment: 'No Upfront' },
+          }),
+        ],
+        onDemandHourlyByLabel: new Map([['m5.large / Linux / Shared', 0.1]]),
+      });
+
+      expect(screen.getByText('$0.08/時間')).toBeInTheDocument();
+      expect(screen.getByText('実効')).toBeInTheDocument();
+      expect(screen.getByText('月額 $58.40')).toBeInTheDocument();
+      expect(screen.getByText('On-Demand比 20.0%')).toBeInTheDocument();
+      // No Upfront は前払いが 0 のため前払い表示は出ない
+      expect(screen.queryByText(/前払い \$/)).not.toBeInTheDocument();
+    });
+
+    it('All Upfront: 継続時間単価が $0.00 でも実効時間単価は前払いの按分で正しく表示される', () => {
+      renderGroup({
+        group: 'Reserved Instance',
+        rates: [
+          rate({
+            rateId: 'ri-all-upfront',
+            model: 'reserved',
+            group: 'Reserved Instance',
+            label: 'm5.large / Linux / Shared',
+            priceUSD: 0,
+            upfrontUSD: 876, // 876 / (730*12) = 0.1
+            term: { lease: '1yr', offeringClass: 'standard', payment: 'All Upfront' },
+          }),
+        ],
+        onDemandHourlyByLabel: new Map([['m5.large / Linux / Shared', 0.1]]),
+      });
+
+      expect(screen.getByText('$0.10/時間')).toBeInTheDocument(); // 実効時間単価
+      expect(screen.getByText('月額 $0.00')).toBeInTheDocument(); // 継続分は 0
+      expect(screen.getByText('前払い $876.00')).toBeInTheDocument();
+      expect(screen.getByText('On-Demand比 0.0%')).toBeInTheDocument();
+    });
+
+    it('Partial Upfront: 継続時間単価と前払いの按分を加算した実効時間単価になる', () => {
+      renderGroup({
+        group: 'Reserved Instance',
+        rates: [
+          rate({
+            rateId: 'ri-partial-upfront',
+            model: 'reserved',
+            group: 'Reserved Instance',
+            label: 'm5.large / Linux / Shared',
+            priceUSD: 0.05,
+            upfrontUSD: 438, // 438 / (730*12) = 0.05
+            term: { lease: '1yr', offeringClass: 'standard', payment: 'Partial Upfront' },
+          }),
+        ],
+        onDemandHourlyByLabel: new Map([['m5.large / Linux / Shared', 0.1]]),
+      });
+
+      expect(screen.getByText('$0.10/時間')).toBeInTheDocument(); // 実効時間単価 (0.05+0.05)
+      expect(screen.getByText('前払い $438.00')).toBeInTheDocument();
+      expect(screen.getByText('On-Demand比 0.0%')).toBeInTheDocument();
+    });
+
+    it('同一 label の On-Demand が見つからない場合、節減率は — になる', () => {
+      renderGroup({
+        group: 'Reserved Instance',
+        rates: [
+          rate({
+            rateId: 'ri-no-match',
+            model: 'reserved',
+            group: 'Reserved Instance',
+            label: 'm5.large / Linux / Shared',
+            priceUSD: 0.08,
+            upfrontUSD: 0,
+            term: { lease: '1yr', offeringClass: 'standard', payment: 'No Upfront' },
+          }),
+        ],
+        onDemandHourlyByLabel: new Map(),
+      });
+
+      expect(screen.getByText('On-Demand比 —')).toBeInTheDocument();
+    });
+
+    it('On-Demand の行には実効値・節減率を表示しない', () => {
+      renderGroup({
+        group: 'On-Demand',
+        rates: [rate({ label: 'm5.large / Linux / Shared', priceUSD: 0.1 })],
+        onDemandHourlyByLabel: new Map([['m5.large / Linux / Shared', 0.1]]),
+      });
+
+      expect(screen.queryByText('実効')).not.toBeInTheDocument();
+      expect(screen.queryByText(/On-Demand比/)).not.toBeInTheDocument();
+    });
   });
 
   it('instanceFilter は label と attributes の両方に部分一致する', () => {

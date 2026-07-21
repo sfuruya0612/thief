@@ -3881,6 +3881,33 @@ td.qe-rt-empty {
 .pr-rate-upfront {
   color: var(--text-3);
 }
+/* Reserved Instance の実効時間単価表示 (issue 0057) */
+.pr-rate-effective-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.pr-rate-effective {
+  font-weight: 600;
+}
+.pr-rate-effective-label {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.pr-rate-ri-detail {
+  margin-top: 2px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.pr-rate-savings-negative {
+  color: var(--err);
+}
 /* ---------- Estimator ---------- */
 .pr-estimator {
   width: 320px;

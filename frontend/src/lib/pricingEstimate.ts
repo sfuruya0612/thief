@@ -40,6 +40,34 @@ export function subtotal(qty: number, rate: PriceRateRow): PriceSubtotal {
   };
 }
 
+// RI 行 1 件 (qty=1) の、前払いを契約期間の総時間数で按分して継続時間単価に加えた
+// 実効時間単価。All Upfront (price_usd=0) では按分額のみが、No Upfront
+// (upfront_usd=0) では price_usd のみが残る。subtotal(1, rate).effectiveMonthly を
+// HOURS_PER_MONTH で割った値と一致する (単価表 (issue 0057) と見積もりの按分定義を
+// 揃えるため、同じ contractMonthsFromLease を使う)。
+export function effectiveHourlyRate(rate: PriceRateRow): number {
+  const months = contractMonthsFromLease(rate.term.lease);
+  const amortizedHourly = months > 0 ? rate.upfrontUSD / (HOURS_PER_MONTH * months) : 0;
+  return rate.priceUSD + amortizedHourly;
+}
+
+// 前払いを含まない、継続分のみの月額 (price_usd × 730)。All Upfront では 0 になる。
+export function monthlyRecurring(rate: PriceRateRow): number {
+  return rate.priceUSD * HOURS_PER_MONTH;
+}
+
+// 実効時間単価の On-Demand 比節減率 (%)。正: RI が割安、負: RI が割高
+// (異常値だが呼び出し側でそのまま表示させる。隠さない)。onDemandHourly が undefined
+// (同一 label の On-Demand 行が見つからない) または 0 以下 (算出不能) のときは null を
+// 返し、呼び出し側で「—」等の欠損表示に用いる。
+export function savingsPercent(
+  effectiveHourly: number,
+  onDemandHourly: number | undefined,
+): number | null {
+  if (onDemandHourly === undefined || onDemandHourly <= 0) return null;
+  return ((onDemandHourly - effectiveHourly) / onDemandHourly) * 100;
+}
+
 export interface PriceSelectionEntry {
   checked: boolean;
   qty: number;
