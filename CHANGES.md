@@ -24,6 +24,12 @@
   - @sfuruya0612
 - [UPDATE] 見積もりパネル (`Estimator`) の rateId 対応表をレンダーごとの再構築からメモ化に変更し、サービス・行数が多い場合の無駄な再計算をなくす
   - @sfuruya0612
+- [UPDATE] Theme (Dark/Light) の切り替えをトップバーのアイコンボタンから廃止し、Tweaks パネルの Theme 行のみに集約する
+  - @sfuruya0612
+- [UPDATE] AWS Pricing のサービス表示順を EC2, EC2 Spot, ECS, RDS, ElastiCache, Compute Savings Plans, EC2 Instance Savings Plans, Database Savings Plans の固定順に統一する (永続化済みユーザーにも適用する)
+  - @sfuruya0612
+- [UPDATE] Tweaks パネルの項目順を Theme, Language, Detail panel, Accent に並べ替える
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする

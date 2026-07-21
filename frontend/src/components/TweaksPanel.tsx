@@ -46,6 +46,20 @@ function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
           </div>
         </div>
         <div className="trow">
+          <span className="lbl">{t('lang.label')}</span>
+          <div className="seg">
+            {(['ja', 'en'] as Lang[]).map((l) => (
+              <button
+                key={l}
+                className={tweaks.lang === l ? 'active' : ''}
+                onClick={() => update({ lang: l })}
+              >
+                {t(`lang.${l}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="trow">
           <span className="lbl">Detail panel</span>
           <div className="seg">
             {(['right', 'bottom'] as DrawerPos[]).map((p) => (
@@ -70,20 +84,6 @@ function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
                 style={{ background: color }}
                 title={name}
               />
-            ))}
-          </div>
-        </div>
-        <div className="trow">
-          <span className="lbl">{t('lang.label')}</span>
-          <div className="seg">
-            {(['ja', 'en'] as Lang[]).map((l) => (
-              <button
-                key={l}
-                className={tweaks.lang === l ? 'active' : ''}
-                onClick={() => update({ lang: l })}
-              >
-                {t(`lang.${l}`)}
-              </button>
             ))}
           </div>
         </div>

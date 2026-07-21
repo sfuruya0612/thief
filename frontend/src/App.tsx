@@ -72,7 +72,7 @@ function usePersistedSidebarWidth() {
 export function App() {
   const { t } = useTranslation('app');
   const health = useHealthCheck();
-  const { tweaks, update } = useTweaks();
+  const { tweaks } = useTweaks();
   const aws = useProfiles();
   const { profiles, activeProfile, error } = aws;
   const gcp = useActiveGcpProject();
@@ -100,10 +100,6 @@ export function App() {
     }
   }, [queryClient, view]);
 
-  const handleToggleTheme = useCallback(() => {
-    update({ theme: tweaks.theme === 'dark' ? 'light' : 'dark' });
-  }, [tweaks.theme, update]);
-
   if (!health.isSuccess) {
     return <ConnectionWaiting />;
   }
@@ -111,8 +107,6 @@ export function App() {
   return (
     <div className="app">
       <TopBar
-        theme={tweaks.theme}
-        onToggleTheme={handleToggleTheme}
         onToggleTweaks={() => setTweaksOpen((v) => !v)}
         onRefresh={handleRefresh}
         view={view}

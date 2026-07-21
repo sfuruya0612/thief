@@ -9,15 +9,18 @@ import type { PricingPersistedState } from './storage';
 // issue 0056: EC2 Spot を独立サービス ec2-spot として追加した。ec2-spot はバックエンド
 // のディスクキャッシュを経由しないライブ取得サービスで、staleTime も他サービスと異なる
 // (usePricing の呼び出し側 (PricingPanel) で有限値を渡す)。
+// 表示順は issue 0063 で決定した固定順 (EC2, EC2 Spot, ECS, RDS, ElastiCache,
+// Compute SP, EC2 Instance SP, Database SP)。ServiceSelectorBar と PricingPanel の
+// カード一覧はいずれもこの配列順で描画する (state.activeServices の永続化順ではなく)。
 export const PRICING_SERVICES = [
   'ec2',
+  'ec2-spot',
+  'ecs',
   'rds',
   'elasticache',
-  'ecs',
   'compute-sp',
   'ec2-instance-sp',
   'database-sp',
-  'ec2-spot',
 ] as const;
 export type PricingService = (typeof PRICING_SERVICES)[number];
 

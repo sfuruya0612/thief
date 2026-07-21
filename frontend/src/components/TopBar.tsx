@@ -1,7 +1,7 @@
 // app.jsx TopBar の移植
 // + AWS/GCP/Datadog/TiDB のトップレベルビュー切替
 // profile/region セレクタはサイドバーの profile-card へ移設済み (Sidebar.tsx を参照)
-import type { AppView, Theme } from '../types/common';
+import type { AppView } from '../types/common';
 import { Icons } from './icons/Icons';
 
 const VIEWS: Array<[AppView, string]> = [
@@ -12,22 +12,13 @@ const VIEWS: Array<[AppView, string]> = [
 ];
 
 export interface TopBarProps {
-  theme: Theme;
-  onToggleTheme: () => void;
   onToggleTweaks: () => void;
   onRefresh: () => void;
   view: AppView;
   onViewChange: (view: AppView) => void;
 }
 
-export function TopBar({
-  theme,
-  onToggleTheme,
-  onToggleTweaks,
-  onRefresh,
-  view,
-  onViewChange,
-}: TopBarProps) {
+export function TopBar({ onToggleTweaks, onRefresh, view, onViewChange }: TopBarProps) {
   return (
     <div className="topbar">
       <div className="brand">
@@ -49,13 +40,6 @@ export function TopBar({
       <div className="spacer" />
       <button className="iconbtn" title="Refresh" onClick={onRefresh}>
         <Icons.refresh />
-      </button>
-      <button
-        className="iconbtn"
-        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'}`}
-        onClick={onToggleTheme}
-      >
-        {theme === 'dark' ? <Icons.sun /> : <Icons.moon />}
       </button>
       <button className="iconbtn" title="Tweaks" onClick={onToggleTweaks}>
         <Icons.settings />
