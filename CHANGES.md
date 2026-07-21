@@ -20,6 +20,10 @@
   - @sfuruya0612
 - [UPDATE] BigQuery / Athena のスキーマツリーで、データセット (データベース) 一覧・テーブル一覧の初回取得中に他ページと共通の pacman loader を表示するようにする
   - @sfuruya0612
+- [UPDATE] Savings Plans の重複判定キーを `json.Marshal` から可視フィールドを直接連結した文字列に変更し、`testing.B` で計測した通りリージョンあたり数百〜数千件規模で処理時間を約 2 倍、メモリ確保を約 4 割削減する
+  - @sfuruya0612
+- [UPDATE] 見積もりパネル (`Estimator`) の rateId 対応表をレンダーごとの再構築からメモ化に変更し、サービス・行数が多い場合の無駄な再計算をなくす
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする
