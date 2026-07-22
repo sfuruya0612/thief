@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import type { PriceRateRow } from '../../types/aws';
 import { RateGroupSection } from './RateGroupSection';
 
@@ -314,5 +315,136 @@ describe('RateGroupSection', () => {
 
     fireEvent.click(btn);
     expect(screen.getByTitle('展開')).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+// 手書き windowing の挙動 (hooks/useWindowedRows.ts, lib/windowedRows.ts)。
+// jsdom はレイアウトを持たない (getBoundingClientRect / clientHeight / offsetHeight が 0) ため、
+// この describe 内でのみ測定値を固定値へ差し替える (外側の describe には影響させない)。
+describe('RateGroupSection windowing', () => {
+  const proto = HTMLElement.prototype;
+  const savedRect = Object.getOwnPropertyDescriptor(proto, 'getBoundingClientRect');
+  const savedClientHeight = Object.getOwnPropertyDescriptor(proto, 'clientHeight');
+  const savedOffsetHeight = Object.getOwnPropertyDescriptor(proto, 'offsetHeight');
+
+  const VIEWPORT_HEIGHT = 200;
+  const ROW_HEIGHT = 20;
+
+  beforeEach(() => {
+    Object.defineProperty(proto, 'getBoundingClientRect', {
+      configurable: true,
+      value: () =>
+        ({
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        }) as DOMRect,
+    });
+    Object.defineProperty(proto, 'clientHeight', {
+      configurable: true,
+      get: () => VIEWPORT_HEIGHT,
+    });
+    Object.defineProperty(proto, 'offsetHeight', { configurable: true, get: () => ROW_HEIGHT });
+  });
+
+  afterEach(() => {
+    if (savedRect) Object.defineProperty(proto, 'getBoundingClientRect', savedRect);
+    if (savedClientHeight) Object.defineProperty(proto, 'clientHeight', savedClientHeight);
+    if (savedOffsetHeight) Object.defineProperty(proto, 'offsetHeight', savedOffsetHeight);
+  });
+
+  // findScrollParent が検出できるよう overflow-y: auto のスクロール祖先で包む。
+  function renderInScroll(ui: ReactElement) {
+    return render(<div style={{ overflowY: 'auto' }}>{ui}</div>);
+  }
+  function dataRows(c: HTMLElement): HTMLElement[] {
+    return Array.from(c.querySelectorAll('tbody tr:not(.pr-rate-spacer)'));
+  }
+  function spacerRows(c: HTMLElement): HTMLElement[] {
+    return Array.from(c.querySelectorAll('tbody tr.pr-rate-spacer'));
+  }
+  function manyRates(n: number): PriceRateRow[] {
+    return Array.from({ length: n }, (_, i) =>
+      rate({
+        rateId: `r${i}`,
+        label: `m5.${i}xlarge`,
+        attributes: { instance_type: `m5.${i}xlarge` },
+      }),
+    );
+  }
+
+  it('しきい値未満の行数では全行を描画し、スペーサーを出さない', () => {
+    const { container } = renderInScroll(
+      <RateGroupSection
+        group="On-Demand"
+        rates={manyRates(5)}
+        selection={{}}
+        onToggleRate={() => {}}
+        instanceFilter=""
+      />,
+    );
+    expect(dataRows(container)).toHaveLength(5);
+    expect(spacerRows(container)).toHaveLength(0);
+  });
+
+  it('しきい値以上の行数では可視範囲だけを描画し、末尾にスペーサーを挿入する', () => {
+    const rates = manyRates(200);
+    const { container } = renderInScroll(
+      <RateGroupSection
+        group="On-Demand"
+        rates={rates}
+        selection={{}}
+        onToggleRate={() => {}}
+        instanceFilter=""
+      />,
+    );
+    const visible = dataRows(container);
+    // ビューポート 200px / 行高 20px = 10 行 + overscan。全 200 行よりはるかに少ない。
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.length).toBeLessThan(40);
+    expect(visible.length).toBeLessThan(rates.length);
+    // scrollTop=0 では topPad=0 なので末尾スペーサーのみ存在し、その高さは正 (残り行分)。
+    const spacers = spacerRows(container);
+    expect(spacers.length).toBeGreaterThanOrEqual(1);
+    const bottomSpacerTd = spacers[spacers.length - 1].querySelector('td') as HTMLElement;
+    expect(parseFloat(bottomSpacerTd.style.height)).toBeGreaterThan(0);
+  });
+
+  it('windowing 中でも先頭行のチェック操作は正しい rateId で通知される', () => {
+    const onToggle = vi.fn();
+    const { container } = renderInScroll(
+      <RateGroupSection
+        group="On-Demand"
+        rates={manyRates(200)}
+        selection={{}}
+        onToggleRate={onToggle}
+        instanceFilter=""
+      />,
+    );
+    const firstCheckbox = container.querySelector(
+      'tbody tr:not(.pr-rate-spacer) input[type=checkbox]',
+    ) as HTMLInputElement;
+    fireEvent.click(firstCheckbox);
+    expect(onToggle).toHaveBeenCalledWith('r0');
+  });
+
+  it('インスタンスフィルタで行数がしきい値未満に絞られると全描画に戻る', () => {
+    const { container } = renderInScroll(
+      <RateGroupSection
+        group="On-Demand"
+        rates={manyRates(200)}
+        selection={{}}
+        onToggleRate={() => {}}
+        instanceFilter="m5.7xlarge"
+      />,
+    );
+    expect(dataRows(container)).toHaveLength(1);
+    expect(spacerRows(container)).toHaveLength(0);
   });
 });

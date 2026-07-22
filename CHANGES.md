@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] AWS Pricing の単価表 (`RateGroupSection`) に手書きの行仮想化 (windowing) を導入し、60 行以上のグループでは可視範囲の行のみを DOM に描画するようにする (EC2 On-Demand など数百行規模のグループの初回描画コストを削減する。仮想化ライブラリの追加はせず、スクロール領域単位の共有 ResizeObserver で sibling のレイアウト変化にも追従する)
+  - @sfuruya0612
 - [UPDATE] backend の listen アドレスと WebSocket 許可オリジンを環境変数 (`THIEF_LISTEN_ADDR` / `THIEF_WEB_ORIGINS`) で設定可能にする
   - @sfuruya0612
 - [UPDATE] backend の設定解決でレガシー CLI 互換の環境変数 `THIEF_PROFILE` / `THIEF_REGION` を解決するようにする
