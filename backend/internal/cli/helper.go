@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"strings"
 
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/util"
@@ -40,6 +43,34 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 	// BigQuery (bq コマンドの永続フラグ)
 	override("project", func(v string) { cfg.BigQuery.ProjectID = v })
 	return cfg, nil
+}
+
+// readUpdateValue は値更新コマンド (ssm param put / secretsmanager put) の新しい値を解決する。
+// --value フラグが明示指定されていればその値を、そうでなければ stdin 全体を読み、末尾の
+// 改行を 1 つだけ取り除いて返す (`echo secret | thief ...` が "secret" を送れるようにし、
+// かつ機密値をシェル履歴に残さず渡せるようにするため)。
+func readUpdateValue(cmd *cobra.Command, stdin io.Reader) (string, error) {
+	if f := cmd.Flag("value"); f != nil && f.Changed {
+		return f.Value.String(), nil
+	}
+	b, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", fmt.Errorf("read value from stdin: %w", err)
+	}
+	return stripOneTrailingNewline(string(b)), nil
+}
+
+// stripOneTrailingNewline は末尾の改行を 1 つだけ取り除く ("\r\n" は 2 バイト、"\n" は 1 バイト)。
+// 末尾に複数の改行がある場合は最後の 1 つだけを対象とする。
+func stripOneTrailingNewline(s string) string {
+	switch {
+	case strings.HasSuffix(s, "\r\n"):
+		return s[:len(s)-2]
+	case strings.HasSuffix(s, "\n"):
+		return s[:len(s)-1]
+	default:
+		return s
+	}
 }
 
 // toRows converts a slice of Row-implementing items to [][]string for table formatting.

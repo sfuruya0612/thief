@@ -9,5 +9,12 @@
     "execDisabledNotEnabled": "このタスクは ECS Exec が有効になっていません",
     "execDisabledNotRunning": "コンテナがまだ Exec 可能な状態で起動していません",
     "execStartTooltip": "ターミナルで Exec を開始する"
+  },
+  "valueEditor": {
+    "title": "値の編集",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "保存しました",
+    "overwriteConfirm": "{{name}} の値を上書きします。よろしいですか？"
   }
 }

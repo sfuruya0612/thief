@@ -32,6 +32,10 @@
   - @sfuruya0612
 - [UPDATE] Tweaks パネルの項目順を Theme, Language, Detail panel, Accent に並べ替える
   - @sfuruya0612
+- [ADD] Secrets Manager のシークレット値を Web UI (Drawer の Edit タブ) / API / CLI (secretsmanager put) から更新できるようにする (PutSecretValue で新しいバージョンを作成し、説明・タグ・暗号化キーは保持する)
+  - @sfuruya0612
+- [ADD] SSM Parameter Store のパラメータ値を Web UI (Drawer の Edit タブ) / API / CLI (ssm param put) から更新できるようにする (Overwrite で値のみを更新し、型と KMS キーは保持する)
+  - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
 - [ADD] ECS タスクコンテナへの Exec Command をブラウザから開始できるようにする

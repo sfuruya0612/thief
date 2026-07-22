@@ -18,6 +18,8 @@ import { DrawerELBListeners } from './DrawerELBListeners';
 import { DrawerELBTargets } from './DrawerELBTargets';
 import { DrawerGCSObjects } from './DrawerGCSObjects';
 import { DrawerS3Objects } from './DrawerS3Objects';
+import { DrawerSecretEdit } from './DrawerSecretEdit';
+import { DrawerSSMEdit } from './DrawerSSMEdit';
 import { DrawerTags } from './DrawerTags';
 import { DrawerTerminal, type ECSExecTarget } from './DrawerTerminal';
 import type { OverviewEntry } from './overviewRows';
@@ -39,8 +41,8 @@ const DRAWER_TABS: Record<string, string[]> = {
   kinesis: ['Overview', 'Tags'],
   waf: ['Overview', 'Tags'],
   dynamo: ['Overview', 'Items', 'Tags'],
-  ssm: ['Overview', 'Tags'],
-  secrets: ['Overview', 'Tags'],
+  ssm: ['Overview', 'Edit', 'Tags'],
+  secrets: ['Overview', 'Edit', 'Tags'],
   cfn: ['Overview', 'Events', 'Resources', 'Tags'],
   gcs: ['Overview', 'Objects'],
 };
@@ -317,6 +319,12 @@ export function Drawer({
               )}
               {tab === 'Items' && service === 'dynamo' && (
                 <DrawerDynamoItems profile={profile} region={region} table={resource.name} />
+              )}
+              {tab === 'Edit' && service === 'ssm' && (
+                <DrawerSSMEdit profile={profile} region={region} name={resource.name} />
+              )}
+              {tab === 'Edit' && service === 'secrets' && (
+                <DrawerSecretEdit profile={profile} region={region} name={resource.name} />
               )}
             </div>
           </>

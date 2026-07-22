@@ -105,6 +105,8 @@ import {
   postSnippet,
   postSSOLogin,
   type TiDBCostQueryOptions,
+  updateSecretValue,
+  updateSSMParameter,
   uploadGcsObject,
   uploadS3Object,
 } from './endpoints';
@@ -267,6 +269,33 @@ export function useRegions(profile: string) {
     },
     staleTime: Infinity,
     enabled: !!profile,
+  });
+}
+
+// ============================================================
+// Secrets Manager / SSM Parameter Store (Drawer の Edit タブ)
+// ============================================================
+// 更新成功後は一覧クエリ (useResources と同じ queryKey) を invalidate して、Overview の
+// 表示値と Edit タブの現在値を最新化する。
+export function useSecretUpdate(profile: string, region: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, value }: { name: string; value: string }) =>
+      updateSecretValue(profile, region, name, value),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['aws', 'secrets', profile, region] });
+    },
+  });
+}
+
+export function useSSMUpdate(profile: string, region: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, value }: { name: string; value: string }) =>
+      updateSSMParameter(profile, region, name, value),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['aws', 'ssm', profile, region] });
+    },
   });
 }
 

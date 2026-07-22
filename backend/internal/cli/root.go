@@ -38,6 +38,7 @@ including AWS, BigQuery, Datadog, and TiDB.`,
 		newBQCmd(),
 		newS3Cmd(),
 		newSSMCmd(),
+		newSecretsManagerCmd(),
 		// backend 専用のコマンド群
 		newLambdaCmd(),
 		newKinesisCmd(),

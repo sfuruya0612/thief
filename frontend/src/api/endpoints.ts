@@ -160,6 +160,37 @@ export function getRegions(profile: string): Promise<RegionRaw[]> {
 }
 
 // ============================================================
+// Secrets Manager / SSM Parameter Store (値の更新)
+// ============================================================
+// name は階層名 (例: /app/prod/db) を含みうるため URL パスではなくボディで送る。
+// backend は 204 No Content を返す。更新後は一覧キャッシュを invalidate して最新値を反映する。
+export function updateSecretValue(
+  profile: string,
+  region: string,
+  name: string,
+  value: string,
+): Promise<void> {
+  return apiPost<void>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/secretsmanager`,
+    { name, value },
+    { region },
+  );
+}
+
+export function updateSSMParameter(
+  profile: string,
+  region: string,
+  name: string,
+  value: string,
+): Promise<void> {
+  return apiPost<void>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/ssm/parameters`,
+    { name, value },
+    { region },
+  );
+}
+
+// ============================================================
 // S3 Objects (Drawer の Objects タブ)
 // ============================================================
 // バックエンドは {objects, truncated} エンベロープを返す (1000 件で打ち切られた場合の通知用)。

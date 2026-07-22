@@ -272,6 +272,25 @@ func ssmFromMeta(p ssmtypes.ParameterMetadata) SSMParameterResource {
 	}
 }
 
+// PutSSMParameter は既存パラメータの値を上書き更新する (Overwrite=true)。
+// Type や KMS キー (SecureString の KeyId) を指定しないことで、既存の型・暗号化キーを
+// 保持したまま値だけを更新する。呼び出しごとにパラメータのバージョンが 1 つ繰り上がる。
+// エラーメッセージや slog に value を含めないこと (機密値のため)。
+func PutSSMParameter(ctx context.Context, profile, region, name, value string) error {
+	client, err := newSSMClient(ctx, profile, region)
+	if err != nil {
+		return err
+	}
+	if _, err := client.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(name),
+		Value:     aws.String(value),
+		Overwrite: aws.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("put ssm parameter %s: %w", name, err)
+	}
+	return nil
+}
+
 // newSSMClient は SSM API クライアントを生成する。
 func newSSMClient(ctx context.Context, profile, region string) (*ssm.Client, error) {
 	return NewClient(ctx, profile, region, func(cfg aws.Config) *ssm.Client {
