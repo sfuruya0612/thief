@@ -3866,6 +3866,13 @@ td.qe-rt-empty {
   padding: 5px 10px;
   vertical-align: middle;
 }
+/* windowing のスペーサー行。指定した高さちょうどを占めるよう境界と余白を持たせない */
+/* (RateGroupSection の手書き windowing。hooks/useWindowedRows.ts 参照)。 */
+.pr-rate-table tr.pr-rate-spacer,
+.pr-rate-table tr.pr-rate-spacer td {
+  border: 0;
+  padding: 0;
+}
 .pr-rate-check {
   width: 24px;
 }

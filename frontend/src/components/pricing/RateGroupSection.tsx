@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatPercent, formatPricingUnit, formatUnitPrice } from '../../lib/format';
 import { effectiveHourlyRate, monthlyRecurring, savingsPercent } from '../../lib/pricingEstimate';
+import { useWindowedRows } from '../../hooks/useWindowedRows';
 import type { PriceRateRow } from '../../types/aws';
 import { Icons } from '../icons/Icons';
 
@@ -28,6 +29,14 @@ export interface RateGroupSectionProps {
 const LEASE_ORDER = ['1yr', '3yr'];
 const OFFERING_CLASS_ORDER = ['standard', 'convertible'];
 const PAYMENT_ORDER = ['No Upfront', 'Partial Upfront', 'All Upfront'];
+
+// この行数以上のグループだけ windowing を有効化する。少数行では DOM 生成コストより
+// スペーサー管理・スクロール購読のオーバーヘッドが勝るため、そのまま全描画する。
+const WINDOW_THRESHOLD = 60;
+// 行高の初期推定値 (px)。実測が済むまでの初回描画用。Reserved 行は ReservedRatePrice が
+// 2 段組みで背が高いため別値。実測後は useWindowedRows がこの値を測定値へ補正する。
+const ROW_HEIGHT_ESTIMATE = 28;
+const RESERVED_ROW_HEIGHT_ESTIMATE = 44;
 
 function sortByPreferredOrder(values: string[], order: string[]): string[] {
   return [...values].sort((a, b) => {
@@ -122,8 +131,15 @@ export function RateGroupSection({
     instanceFilter,
   ]);
 
+  const rowCount = filteredRates.length;
+  const { range, rootRef, listRef, rowRef } = useWindowedRows({
+    rowCount,
+    enabled: !collapsed && rowCount >= WINDOW_THRESHOLD,
+    estimateRowHeight: model === 'reserved' ? RESERVED_ROW_HEIGHT_ESTIMATE : ROW_HEIGHT_ESTIMATE,
+  });
+
   return (
-    <div className="pr-group">
+    <div className="pr-group" ref={rootRef}>
       <div className="pr-group-head">
         <button
           type="button"
@@ -181,11 +197,20 @@ export function RateGroupSection({
           <div className="pr-group-empty">{t('rateGroupSection.noMatch')}</div>
         ) : (
           <table className="pr-rate-table">
-            <tbody>
-              {filteredRates.map((rate) => {
+            <tbody ref={listRef}>
+              {range.topPad > 0 && (
+                <tr aria-hidden="true" className="pr-rate-spacer">
+                  <td colSpan={3} style={{ height: range.topPad }} />
+                </tr>
+              )}
+              {filteredRates.slice(range.start, range.end).map((rate, i) => {
                 const checked = selection[rate.rateId]?.checked ?? false;
                 return (
-                  <tr key={rate.rateId} className={checked ? 'checked' : ''}>
+                  <tr
+                    key={rate.rateId}
+                    ref={i === 0 ? rowRef : undefined}
+                    className={checked ? 'checked' : ''}
+                  >
                     <td className="pr-rate-check">
                       <input
                         type="checkbox"
@@ -217,6 +242,11 @@ export function RateGroupSection({
                   </tr>
                 );
               })}
+              {range.bottomPad > 0 && (
+                <tr aria-hidden="true" className="pr-rate-spacer">
+                  <td colSpan={3} style={{ height: range.bottomPad }} />
+                </tr>
+              )}
             </tbody>
           </table>
         ))}
