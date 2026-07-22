@@ -76,7 +76,32 @@ func newSSMCmd() *cobra.Command {
 	}
 	getCmd.Flags().BoolP("with-decryption", "", false, "Decrypt SecureString parameter values")
 
-	paramCmd.AddCommand(lsCmd, getCmd)
+	putCmd := &cobra.Command{
+		Use:   "put <name>",
+		Short: "Update an SSM parameter value",
+		Long: "Overwrites the value of an existing SSM Parameter Store parameter (Overwrite=true). " +
+			"The parameter type and KMS key are retained. " +
+			"Provide the new value with --value, or omit it to read the value from stdin.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			value, err := readUpdateValue(cmd, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			if err := awsinternal.PutSSMParameter(context.Background(), cfg.Profile, cfg.Region, args[0], value); err != nil {
+				return err
+			}
+			cmd.Printf("Updated SSM parameter %s\n", args[0])
+			return nil
+		},
+	}
+	putCmd.Flags().StringP("value", "", "", "New parameter value (if omitted, read from stdin)")
+
+	paramCmd.AddCommand(lsCmd, getCmd, putCmd)
 	ssmCmd.AddCommand(paramCmd)
 	return ssmCmd
 }

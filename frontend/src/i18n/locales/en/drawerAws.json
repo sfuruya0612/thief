@@ -9,5 +9,12 @@
     "execDisabledNotEnabled": "ECS Exec is not enabled for this task",
     "execDisabledNotRunning": "The container has not started in an Exec-capable state yet",
     "execStartTooltip": "Start Exec in the terminal"
+  },
+  "valueEditor": {
+    "title": "Edit value",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "overwriteConfirm": "Overwrite the value of {{name}}. Are you sure?"
   }
 }

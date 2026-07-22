@@ -69,3 +69,13 @@ type SnippetRequest struct {
 	Name string `json:"name"`
 	SQL  string `json:"sql"`
 }
+
+// ValueUpdateRequest is the body for the value-update endpoints
+// POST /api/aws/profiles/{profile}/secretsmanager and
+// POST /api/aws/profiles/{profile}/ssm/parameters.
+// Name はリソース名 (階層名を含みうるため URL パスではなくボディで受け取る)。
+// Value は更新後の値で、空文字列も許容する。
+type ValueUpdateRequest struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
