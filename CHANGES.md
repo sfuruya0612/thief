@@ -213,6 +213,8 @@
 
 ### misc
 
+- govulncheck が検出した golang.org/x/text の脆弱性 (GO-2026-5970) を解消するため golang.org/x/text を v0.38.0 から v0.39.0 に更新する (indirect 依存。go get に伴い x/mod / x/telemetry / x/tools も追随して更新される)
+  - @sfuruya0612
 - モノレポ移行以前の旧 CLI 単体モジュール (ルート `cmd/` / `internal/` / `main.go` / `go.mod`) とそのドキュメント生成ツール (`docs/`) を削除する
   - @sfuruya0612
 - API サーバのキャッシュ応答ハンドラ約 40 箇所のボイラープレート (Load → エラー → キャッシュヘッダ → JSON) を serveCached ヘルパに共通化する
