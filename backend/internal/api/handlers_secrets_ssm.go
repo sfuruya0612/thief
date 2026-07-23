@@ -59,3 +59,37 @@ func (s *Server) handleSSMPut(w http.ResponseWriter, r *http.Request) {
 	s.resourceCache.Invalidate(cacheKey("ssm-list", profile, region))
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleSecretValue は単一シークレットの復号済みの値をオンデマンドで返す。
+// name はクエリで受ける (階層名を含みうるため)。値はキャッシュしない。
+func (s *Server) handleSecretValue(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		writeBadRequest(w, "name query parameter is required")
+		return
+	}
+	value, err := awsinternal.GetSecretValue(r.Context(), profile, region, name)
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeJSON(w, ValueResponse{Value: value})
+}
+
+// handleSSMValue は単一 SSM パラメータの復号済みの値をオンデマンドで返す。
+// name はクエリで受ける (階層名を含みうるため)。値はキャッシュしない。
+func (s *Server) handleSSMValue(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		writeBadRequest(w, "name query parameter is required")
+		return
+	}
+	value, err := awsinternal.GetSSMParameter(r.Context(), profile, region, name, true)
+	if err != nil {
+		writeAWSError(w, err)
+		return
+	}
+	writeJSON(w, ValueResponse{Value: value})
+}

@@ -11,10 +11,11 @@
     "execStartTooltip": "ターミナルで Exec を開始する"
   },
   "valueEditor": {
-    "title": "値の編集",
+    "title": "値",
+    "edit": "編集",
+    "cancel": "キャンセル",
     "save": "保存",
     "saving": "保存中…",
-    "saved": "保存しました",
     "overwriteConfirm": "{{name}} の値を上書きします。よろしいですか？"
   }
 }

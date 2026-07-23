@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, within } from '@testing-library/react';
+import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { DrawerValueEditor } from './DrawerValueEditor';
 
 const noopSave = () => Promise.resolve();
+const noop = () => {};
 
 function renderEditor(overrides: Partial<Parameters<typeof DrawerValueEditor>[0]> = {}) {
   return render(
@@ -13,35 +14,36 @@ function renderEditor(overrides: Partial<Parameters<typeof DrawerValueEditor>[0]
       error={null}
       confirmName="/app/db"
       onSave={noopSave}
+      onClose={noop}
       {...overrides}
     />,
   );
 }
 
+// プレビューから「編集」を押して編集モードに入り、textarea を返す。
+function enterEdit(container: HTMLElement): HTMLTextAreaElement {
+  fireEvent.click(within(container).getByRole('button', { name: '編集' }));
+  return container.querySelector('textarea') as HTMLTextAreaElement;
+}
+
 describe('DrawerValueEditor', () => {
-  it('現在値を textarea に読み込み、参考属性を表示する', () => {
+  it('プレビューで現在値と参考属性を表示し、初期は textarea を出さない', () => {
     const { container } = renderEditor();
-    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
-    expect(textarea.value).toBe('current-value');
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.textContent).toContain('current-value');
     expect(container.textContent).toContain('/app/db');
   });
 
-  it('未変更のときは保存ボタンを無効化する', () => {
-    const view = within(renderEditor().container);
-    expect(view.getByRole('button', { name: '保存' })).toBeDisabled();
-  });
-
-  it('値を変更すると保存ボタンが有効になる', () => {
+  it('「編集」を押すと編集モードに切り替わり現在値を textarea に読み込む', () => {
     const { container } = renderEditor();
-    const view = within(container);
-    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: 'new-value' } });
-    expect(view.getByRole('button', { name: '保存' })).toBeEnabled();
+    const textarea = enterEdit(container);
+    expect(textarea.value).toBe('current-value');
   });
 
-  it('ローディング中は textarea を表示しない', () => {
+  it('ローディング中は textarea も「編集」ボタンも出さない', () => {
     const { container } = renderEditor({ value: undefined, isLoading: true });
     expect(container.querySelector('textarea')).toBeNull();
+    expect(within(container).queryByRole('button', { name: '編集' })).toBeNull();
   });
 
   it('取得エラー時はエラーメッセージを表示し textarea を出さない', () => {
@@ -53,10 +55,11 @@ describe('DrawerValueEditor', () => {
     expect(container.textContent).toContain('sso token expired');
   });
 
-  it('現在値を取得できていない場合は保存ボタンを無効のままにする', () => {
-    // value が undefined (行が見つからない等) のときは盲目的な上書きを防ぐため保存不可。
-    const view = within(renderEditor({ value: undefined }).container);
-    expect(view.getByRole('button', { name: '保存' })).toBeDisabled();
+  it('Close ボタンで onClose を呼ぶ', () => {
+    const onClose = vi.fn();
+    const view = within(renderEditor({ onClose }).container);
+    fireEvent.click(view.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('上書き確認をキャンセルすると onSave を呼ばない', () => {
@@ -64,7 +67,7 @@ describe('DrawerValueEditor', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const { container } = renderEditor({ onSave });
     const view = within(container);
-    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = enterEdit(container);
     fireEvent.change(textarea, { target: { value: 'new-value' } });
     fireEvent.click(view.getByRole('button', { name: '保存' }));
     expect(confirmSpy).toHaveBeenCalled();
@@ -72,16 +75,17 @@ describe('DrawerValueEditor', () => {
     confirmSpy.mockRestore();
   });
 
-  it('上書き確認を承認すると編集後の値で onSave を呼び、保存完了を表示する', async () => {
+  it('上書き確認を承認すると編集後の値で onSave を呼び、プレビューに戻る', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = renderEditor({ onSave });
     const view = within(container);
-    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = enterEdit(container);
     fireEvent.change(textarea, { target: { value: 'new-value' } });
-    await fireEvent.click(view.getByRole('button', { name: '保存' }));
+    fireEvent.click(view.getByRole('button', { name: '保存' }));
     expect(onSave).toHaveBeenCalledWith('new-value');
-    expect(await view.findByText('保存しました')).not.toBeNull();
+    // 保存成功で編集を閉じ、プレビュー (textarea なし) に戻る。
+    await waitFor(() => expect(container.querySelector('textarea')).toBeNull());
     confirmSpy.mockRestore();
   });
 
@@ -90,9 +94,9 @@ describe('DrawerValueEditor', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = renderEditor({ onSave });
     const view = within(container);
-    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = enterEdit(container);
     fireEvent.change(textarea, { target: { value: 'new-value' } });
-    await fireEvent.click(view.getByRole('button', { name: '保存' }));
+    fireEvent.click(view.getByRole('button', { name: '保存' }));
     expect(await view.findByText(/permission denied/)).not.toBeNull();
     confirmSpy.mockRestore();
   });

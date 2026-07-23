@@ -34,9 +34,9 @@
   - @sfuruya0612
 - [UPDATE] S3 バケット一覧取得で、バケットごとの属性 (リージョン / 暗号化 / 公開設定) の解決を逐次実行から errgroup による並列実行 (同時実行数 30) に変更し、バケット数が多い場合のロード時間を短縮する
   - @sfuruya0612
-- [ADD] Secrets Manager のシークレット値を Web UI (Drawer の Edit タブ) / API / CLI (secretsmanager put) から更新できるようにする (PutSecretValue で新しいバージョンを作成し、説明・タグ・暗号化キーは保持する)
+- [ADD] Secrets Manager のシークレット値を Web UI (Drawer の Value タブ) / API / CLI (secretsmanager put) から更新できるようにする (PutSecretValue で新しいバージョンを作成し、説明・タグ・暗号化キーは保持する)
   - @sfuruya0612
-- [ADD] SSM Parameter Store のパラメータ値を Web UI (Drawer の Edit タブ) / API / CLI (ssm param put) から更新できるようにする (Overwrite で値のみを更新し、型と KMS キーは保持する)
+- [ADD] SSM Parameter Store のパラメータ値を Web UI (Drawer の Value タブ) / API / CLI (ssm param put) から更新できるようにする (Overwrite で値のみを更新し、型と KMS キーは保持する)
   - @sfuruya0612
 - [ADD] EC2 インスタンスへの SSM Start Session をブラウザから開始できるようにする
   - @sfuruya0612
@@ -44,9 +44,9 @@
   - @sfuruya0612
 - [ADD] ECR のリポジトリ一覧とイメージタグ一覧を閲覧できるようにする
   - @sfuruya0612
-- [ADD] SSM Parameter Store のパラメータ Key / Value を閲覧できるようにする
+- [ADD] SSM Parameter Store のパラメータ一覧 (名前、型、バージョンなどのメタデータ) を閲覧し、Drawer の Value タブで値をプレビューしてから編集できるようにする (値は一覧に含めず、タブを開いたときにオンデマンド取得する)
   - @sfuruya0612
-- [ADD] Secrets Manager のシークレット Key / Value を閲覧できるようにする
+- [ADD] Secrets Manager のシークレット一覧 (名前、説明、最終更新などのメタデータ) を閲覧し、Drawer の Value タブで値をプレビューしてから編集できるようにする (値は一覧に含めず、タブを開いたときにオンデマンド取得する)
   - @sfuruya0612
 - [ADD] サイドバー幅をドラッグで変更できるようにする
   - @sfuruya0612

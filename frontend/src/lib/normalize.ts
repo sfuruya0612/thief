@@ -423,7 +423,6 @@ export function ssmFromRaw(raw: SSMParamRaw, region: string): SSMParamRow {
     tier: raw.tier,
     version: raw.version,
     lastModified: raw.last_modified,
-    value: raw.value,
   };
 }
 
@@ -435,7 +434,6 @@ export function secretFromRaw(raw: SecretRaw, region: string): SecretRow {
     state: raw.state,
     description: raw.description,
     lastChanged: raw.last_changed,
-    value: raw.value,
   };
 }
 

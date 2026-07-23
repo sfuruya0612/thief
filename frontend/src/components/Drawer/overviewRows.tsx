@@ -137,7 +137,6 @@ export function ssmOverviewRows(r: SSMParamRow): OverviewEntry[] {
     ['Name', r.name],
     ['Type', r.type],
     ['Tier', r.tier],
-    ['Value', r.value || dash],
     ['Version', r.version],
     ['Last modified', r.lastModified || dash],
     ['Region', r.region],
@@ -147,7 +146,6 @@ export function ssmOverviewRows(r: SSMParamRow): OverviewEntry[] {
 export function secretOverviewRows(r: SecretRow): OverviewEntry[] {
   return [
     ['Name', r.name],
-    ['Value', r.value || dash],
     ['Description', r.description || dash],
     ['Last changed', r.lastChanged || dash],
     ['Region', r.region],

@@ -603,27 +603,14 @@ export const ssmColumns: ColumnDef<SSMParamRow>[] = [
   {
     key: 'name',
     header: 'Name',
-    width: '26%',
+    width: '42%',
     cell: (r) => <span className="primary truncate">{r.name}</span>,
   },
   {
     key: 'type',
     header: 'Type',
-    width: '12%',
+    width: '15%',
     cell: (r) => <span style={mutedMono}>{r.type}</span>,
-  },
-  {
-    key: 'value',
-    header: 'Value',
-    width: '34%',
-    cell: (r) => (
-      <span
-        className="truncate"
-        style={{ ...monoStyle, display: 'inline-block', maxWidth: '100%' }}
-      >
-        {r.value || <Dash />}
-      </span>
-    ),
   },
   {
     key: 'version',
@@ -635,7 +622,7 @@ export const ssmColumns: ColumnDef<SSMParamRow>[] = [
   {
     key: 'lastModified',
     header: 'Last modified',
-    width: '20%',
+    width: '35%',
     cell: (r) => (r.lastModified ? <span style={dimMono}>{r.lastModified}</span> : <Dash />),
   },
 ];
@@ -647,32 +634,19 @@ export const secretColumns: ColumnDef<SecretRow>[] = [
   {
     key: 'name',
     header: 'Name',
-    width: '26%',
+    width: '42%',
     cell: (r) => <span className="primary truncate">{r.name}</span>,
-  },
-  {
-    key: 'value',
-    header: 'Value',
-    width: '34%',
-    cell: (r) => (
-      <span
-        className="truncate"
-        style={{ ...monoStyle, display: 'inline-block', maxWidth: '100%' }}
-      >
-        {r.value || <Dash />}
-      </span>
-    ),
   },
   {
     key: 'description',
     header: 'Description',
-    width: '22%',
+    width: '33%',
     cell: (r) => <span className="truncate">{r.description || <Dash />}</span>,
   },
   {
     key: 'lastChanged',
     header: 'Last changed',
-    width: '18%',
+    width: '25%',
     cell: (r) => (r.lastChanged ? <span style={dimMono}>{r.lastChanged}</span> : <Dash />),
   },
 ];

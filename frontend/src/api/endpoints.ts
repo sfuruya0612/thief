@@ -21,6 +21,7 @@ import type {
   RDSParameterRaw,
   RegionRaw,
   S3ObjectRaw,
+  ValueRaw,
 } from '../types/aws';
 import type {
   CallerIdentityRaw,
@@ -190,6 +191,26 @@ export function updateSSMParameter(
     { name, value },
     { region },
   );
+}
+
+// 値は一覧に含めずオンデマンドで取得する。name は階層名 (例: /app/prod/db) を含みうるため
+// URL パスではなくクエリで送る。backend は復号済みの値を {value} で返す。
+export function getSecretValue(profile: string, region: string, name: string): Promise<ValueRaw> {
+  return apiGet<ValueRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/secretsmanager/value`, {
+    region,
+    name,
+  });
+}
+
+export function getSSMParameterValue(
+  profile: string,
+  region: string,
+  name: string,
+): Promise<ValueRaw> {
+  return apiGet<ValueRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/ssm/parameters/value`, {
+    region,
+    name,
+  });
 }
 
 // ============================================================
