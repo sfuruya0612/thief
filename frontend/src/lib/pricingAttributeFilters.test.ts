@@ -49,10 +49,11 @@ describe('PRICING_ATTRIBUTE_FILTERS', () => {
     ]);
   });
 
-  it('elasticache は instance_family / engine の 2 軸を持つ (issue 0054)', () => {
+  it('elasticache は instance_family / engine / sync_durability の 3 軸を持つ (issue 0054, 0069)', () => {
     expect(PRICING_ATTRIBUTE_FILTERS.elasticache.map((s) => s.key)).toEqual([
       'instance_family',
       'engine',
+      'sync_durability',
     ]);
   });
 
