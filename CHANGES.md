@@ -176,6 +176,8 @@
   - @sfuruya0612
 - [FIX] CloudFront の state 表記不一致で Deployed / In Progress の集計が全て Other に入る不具合を修正する
   - @sfuruya0612
+- [FIX] AWS Pricing の Elasticache OnDemand で、Valkey の同期耐久性オプション課金 (SyncDurability) が通常のノード課金と同一ラベルに重複表示され、cache.r7g / cache.m6g などで 1 インスタンスタイプが複数行になっていたのを、SyncDurability メーターを除外して解消する
+  - @sfuruya0612
 - [FIX] ECS Service / Task / Container の state が SDK 生値の大文字表記のままで StatusBadge が未知 state 扱いになる不具合を修正する
   - @sfuruya0612
 - [FIX] Lambda の state を AWS 実 state (pending / active / inactive / failed) に統一し、統計を Resources / Active / Inactive / Other に適正化する

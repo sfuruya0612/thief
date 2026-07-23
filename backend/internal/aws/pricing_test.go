@@ -126,6 +126,34 @@ const elastiCacheExtendedSupportDoc = `{
   }
 }`
 
+// Valkey の通常ノード課金 (NodeUsage)。SyncDurability と同一 instanceType/cacheEngine だが
+// こちらはノード基本料金なので残す (標準 On-Demand 単価)。
+const elastiCacheValkeyDoc = `{
+  "product": {"sku": "SKU13", "productFamily": "Cache Instance", "attributes": {
+    "instanceType": "cache.r7g.large", "cacheEngine": "Valkey",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-NodeUsage:cache.r7g.large"
+  }},
+  "terms": {
+    "OnDemand": {"SKU13.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU13.OTC1.RC1": {"rateCode": "SKU13.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "0.2104000000"}}
+    }}}
+  }
+}`
+
+// Valkey の同期耐久性オプション課金 (SyncDurability)。NodeUsage とは別メーターで、同一
+// label "cache.r7g.large / Valkey" を重複させるため除外対象 (ExtendedSupport と同様)。
+const elastiCacheSyncDurabilityDoc = `{
+  "product": {"sku": "SKU14", "productFamily": "Cache Instance", "attributes": {
+    "instanceType": "cache.r7g.large", "cacheEngine": "Valkey",
+    "regionCode": "ap-northeast-1", "usagetype": "APN1-SyncDurability-NodeUsage:cache.r7g.large"
+  }},
+  "terms": {
+    "OnDemand": {"SKU14.OTC1": {"offerTermCode": "OTC1", "termAttributes": {}, "priceDimensions": {
+      "SKU14.OTC1.RC1": {"rateCode": "SKU14.OTC1.RC1", "unit": "Hrs", "pricePerUnit": {"USD": "0.0379000000"}}
+    }}}
+  }
+}`
+
 const ecsFargateVCPUDoc = `{
   "product": {"sku": "SKU5", "productFamily": "Compute", "attributes": {
     "regionCode": "ap-northeast-1", "usagetype": "APN1-Fargate-vCPU-Hours:perCPU", "tenancy": "Shared"
@@ -314,6 +342,28 @@ func TestPriceRatesFromDocument(t *testing.T) {
 			name:    "elasticache extended support excluded",
 			service: "elasticache",
 			raw:     elastiCacheExtendedSupportDoc,
+			want:    nil,
+		},
+		{
+			// 通常の Valkey NodeUsage は残る (SyncDurability 除外が NodeUsage を巻き込まないこと)。
+			name:    "elasticache valkey node usage kept",
+			service: "elasticache",
+			raw:     elastiCacheValkeyDoc,
+			want: []PriceRate{
+				{
+					RateID: "SKU13.OTC1.RC1", Model: "on_demand", Group: "On-Demand",
+					Label:      "cache.r7g.large / Valkey",
+					Attributes: map[string]string{"instance_type": "cache.r7g.large", "instance_family": "cache.r7g", "engine": "Valkey"},
+					Unit:       "Hrs", PriceUSD: 0.2104, Currency: "USD",
+				},
+			},
+		},
+		{
+			// Valkey の同期耐久性オプション (SyncDurability) は別メーターで同一 label を
+			// 重複させるため除外する (ExtendedSupport と同じ扱い、issue 0069)。
+			name:    "elasticache valkey sync durability excluded",
+			service: "elasticache",
+			raw:     elastiCacheSyncDurabilityDoc,
 			want:    nil,
 		},
 		{

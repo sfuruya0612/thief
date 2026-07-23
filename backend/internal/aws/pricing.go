@@ -467,9 +467,12 @@ func instanceOnDemandRatesFromDocument(service string, spec resourceServiceSpec,
 	// Savings Plans の Properties にはライセンスモデル情報が無いため (issue 0053)、
 	// On-Demand/Reserved の生属性から operation→licenseModel の対応を副産物として集める。
 	recordOperationLicenseModel(opLicense, attrs)
-	if strings.Contains(attrs["usagetype"], "ExtendedSupport") {
-		// EOL 延長サポート課金 (RDS/ElastiCache の一部エンジンに存在) は同一
-		// instanceType で複数の紛らわしい重複行を生むため v1 スコープ外とする。
+	// EOL 延長サポート課金 (ExtendedSupport、RDS/ElastiCache の一部エンジンに存在) と
+	// ElastiCache Valkey の同期耐久性オプション課金 (SyncDurability) は、いずれも同一
+	// instanceType のノード基本料金 (NodeUsage) とは別メーターであり、同一 label で複数の
+	// 紛らわしい重複行を生むため v1 スコープ外とする。
+	if strings.Contains(attrs["usagetype"], "ExtendedSupport") ||
+		strings.Contains(attrs["usagetype"], "SyncDurability") {
 		return nil
 	}
 	label := instanceLabel(service, attrs)
