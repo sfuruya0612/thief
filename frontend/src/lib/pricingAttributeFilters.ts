@@ -47,6 +47,7 @@ export const PRICING_ATTRIBUTE_FILTERS: Record<PricingService, AttributeFilterSp
   elasticache: [
     { key: 'instance_family', label: 'Family' },
     { key: 'engine', label: 'Engine' },
+    { key: 'sync_durability', label: 'Sync durability' },
   ],
   ecs: [],
   // issue 0055: compute-sp/ec2-instance-sp は EC2 (と compute-sp のみ Fargate) の行を

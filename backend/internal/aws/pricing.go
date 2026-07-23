@@ -467,12 +467,11 @@ func instanceOnDemandRatesFromDocument(service string, spec resourceServiceSpec,
 	// Savings Plans の Properties にはライセンスモデル情報が無いため (issue 0053)、
 	// On-Demand/Reserved の生属性から operation→licenseModel の対応を副産物として集める。
 	recordOperationLicenseModel(opLicense, attrs)
-	// EOL 延長サポート課金 (ExtendedSupport、RDS/ElastiCache の一部エンジンに存在) と
-	// ElastiCache Valkey の同期耐久性オプション課金 (SyncDurability) は、いずれも同一
-	// instanceType のノード基本料金 (NodeUsage) とは別メーターであり、同一 label で複数の
-	// 紛らわしい重複行を生むため v1 スコープ外とする。
-	if strings.Contains(attrs["usagetype"], "ExtendedSupport") ||
-		strings.Contains(attrs["usagetype"], "SyncDurability") {
+	// EOL 延長サポート課金 (ExtendedSupport、RDS/ElastiCache の一部エンジンに存在) は
+	// 同一 instanceType で複数の紛らわしい重複行を生むため v1 スコープ外とする。
+	// ElastiCache Valkey の同期耐久性オプション課金 (SyncDurability) は除外せず、label と
+	// sync_durability 属性で通常のノード課金と区別できるようにする (チップ絞り込みの対象)。
+	if strings.Contains(attrs["usagetype"], "ExtendedSupport") {
 		return nil
 	}
 	label := instanceLabel(service, attrs)
@@ -571,7 +570,15 @@ func instanceLabel(service string, attrs map[string]string) string {
 		}
 		return joinNonEmpty(" / ", attrs["instanceType"], attrs["databaseEngine"], attrs["deploymentOption"], storageLabel, attrs["licenseModel"])
 	case "elasticache":
-		return joinNonEmpty(" / ", attrs["instanceType"], attrs["cacheEngine"])
+		// 同期耐久性オプション課金 (SyncDurability) と通常のノード課金 (Standard) は同一
+		// instanceType/cacheEngine で label が潰れて区別が付かないため、末尾に付けて分ける
+		// (RDS の storage_type と同じ方針)。SyncDurability メーターは Valkey にのみ存在するが、
+		// 各行が Standard か SyncDurability かを一貫して示すため Redis/Memcached も含め全行に付す。
+		syncDurability := "Standard"
+		if strings.Contains(attrs["usagetype"], "SyncDurability") {
+			syncDurability = "SyncDurability"
+		}
+		return joinNonEmpty(" / ", attrs["instanceType"], attrs["cacheEngine"], syncDurability)
 	default:
 		return attrs["instanceType"]
 	}
@@ -597,6 +604,13 @@ func curatedInstanceAttributes(service string, attrs map[string]string) map[stri
 		setIfNonEmpty(out, "instance_type", attrs["instanceType"])
 		setIfNonEmpty(out, "instance_family", instanceFamily(attrs["instanceType"]))
 		setIfNonEmpty(out, "engine", attrs["cacheEngine"])
+		// 同期耐久性オプション課金 (SyncDurability) か通常のノード課金 (Standard) かを
+		// チップ絞り込み用に持つ。
+		if strings.Contains(attrs["usagetype"], "SyncDurability") {
+			out["sync_durability"] = "SyncDurability"
+		} else {
+			out["sync_durability"] = "Standard"
+		}
 	}
 	return out
 }
