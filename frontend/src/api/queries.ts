@@ -99,7 +99,9 @@ import {
   getResources,
   getS3ObjectPreview,
   getS3Objects,
+  getSecretValue,
   getSnippets,
+  getSSMParameterValue,
   getTiDBClusters,
   getTiDBCost,
   getTiDBProjects,
@@ -277,17 +279,39 @@ export function useRegions(profile: string) {
 }
 
 // ============================================================
-// Secrets Manager / SSM Parameter Store (Drawer の Edit タブ)
+// Secrets Manager / SSM Parameter Store (Drawer の Value タブ)
 // ============================================================
-// 更新成功後は一覧クエリ (useResources と同じ queryKey) を invalidate して、Overview の
-// 表示値と Edit タブの現在値を最新化する。
+// 値は一覧に含めないため、Value タブを開いたときにオンデマンドで取得する。機密値をキャッシュに
+// 常時載せない方針のため staleTime を設けず、開くたびに取得する (S3 オブジェクトプレビューと
+// 同じ考え方)。
+export function useSecretValue(profile: string, region: string, name: string) {
+  return useQuery({
+    queryKey: ['aws', 'secret-value', profile, region, name],
+    queryFn: async () => (await getSecretValue(profile, region, name)).value,
+    enabled: !!profile && !!name,
+  });
+}
+
+export function useSSMValue(profile: string, region: string, name: string) {
+  return useQuery({
+    queryKey: ['aws', 'ssm-value', profile, region, name],
+    queryFn: async () => (await getSSMParameterValue(profile, region, name)).value,
+    enabled: !!profile && !!name,
+  });
+}
+
+// 更新成功後は一覧クエリ (メタデータの LastChanged / Version) と値クエリの両方を invalidate して、
+// Overview と Value タブを最新化する。
 export function useSecretUpdate(profile: string, region: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ name, value }: { name: string; value: string }) =>
       updateSecretValue(profile, region, name, value),
-    onSuccess: () => {
+    onSuccess: (_data, { name }) => {
       void queryClient.invalidateQueries({ queryKey: ['aws', 'secrets', profile, region] });
+      void queryClient.invalidateQueries({
+        queryKey: ['aws', 'secret-value', profile, region, name],
+      });
     },
   });
 }
@@ -297,8 +321,11 @@ export function useSSMUpdate(profile: string, region: string) {
   return useMutation({
     mutationFn: ({ name, value }: { name: string; value: string }) =>
       updateSSMParameter(profile, region, name, value),
-    onSuccess: () => {
+    onSuccess: (_data, { name }) => {
       void queryClient.invalidateQueries({ queryKey: ['aws', 'ssm', profile, region] });
+      void queryClient.invalidateQueries({
+        queryKey: ['aws', 'ssm-value', profile, region, name],
+      });
     },
   });
 }

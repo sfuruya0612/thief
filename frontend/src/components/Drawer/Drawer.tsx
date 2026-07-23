@@ -43,8 +43,8 @@ const DRAWER_TABS: Record<string, string[]> = {
   kinesis: ['Overview', 'Tags'],
   waf: ['Overview', 'Tags'],
   dynamo: ['Overview', 'Items', 'Tags'],
-  ssm: ['Overview', 'Edit', 'Tags'],
-  secrets: ['Overview', 'Edit', 'Tags'],
+  ssm: ['Overview', 'Value', 'Tags'],
+  secrets: ['Overview', 'Value', 'Tags'],
   cfn: ['Overview', 'Events', 'Resources', 'Tags'],
   gcs: ['Overview', 'Objects'],
 };
@@ -328,11 +328,21 @@ export function Drawer({
               {tab === 'Items' && service === 'dynamo' && (
                 <DrawerDynamoItems profile={profile} region={region} table={resource.name} />
               )}
-              {tab === 'Edit' && service === 'ssm' && (
-                <DrawerSSMEdit profile={profile} region={region} name={resource.name} />
+              {tab === 'Value' && service === 'ssm' && (
+                <DrawerSSMEdit
+                  profile={profile}
+                  region={region}
+                  name={resource.name}
+                  onClose={onClose}
+                />
               )}
-              {tab === 'Edit' && service === 'secrets' && (
-                <DrawerSecretEdit profile={profile} region={region} name={resource.name} />
+              {tab === 'Value' && service === 'secrets' && (
+                <DrawerSecretEdit
+                  profile={profile}
+                  region={region}
+                  name={resource.name}
+                  onClose={onClose}
+                />
               )}
             </div>
           </>

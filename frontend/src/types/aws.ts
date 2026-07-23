@@ -747,7 +747,7 @@ export interface WAFRow {
 
 // ============================================================
 // SSM Parameter Store (キー: ssm)
-// Value は一覧レスポンスに復号済みの値を含む (機密値の露出を許容する運用方針による)
+// 値は一覧に含めない。値は Drawer の Value タブでオンデマンド取得する。
 // ============================================================
 export interface SSMParamRaw {
   id: string;
@@ -757,7 +757,6 @@ export interface SSMParamRaw {
   tier: string;
   version: number;
   last_modified: string;
-  value: string;
 }
 
 export interface SSMParamRow {
@@ -769,12 +768,11 @@ export interface SSMParamRow {
   tier: string;
   version: number;
   lastModified: string;
-  value: string;
 }
 
 // ============================================================
 // Secrets Manager (キー: secrets)
-// Value は一覧レスポンスに復号済みの値を含む (SSM Parameter Store と同方針)
+// 値は一覧に含めない。値は Drawer の Value タブでオンデマンド取得する。
 // ============================================================
 export interface SecretRaw {
   id: string;
@@ -782,7 +780,6 @@ export interface SecretRaw {
   state: string;
   description: string;
   last_changed: string;
-  value: string;
 }
 
 export interface SecretRow {
@@ -792,6 +789,12 @@ export interface SecretRow {
   state: string;
   description: string;
   lastChanged: string;
+}
+
+// ============================================================
+// Secrets Manager / SSM Parameter Store の値 (オンデマンド取得。backend ValueResponse)
+// ============================================================
+export interface ValueRaw {
   value: string;
 }
 

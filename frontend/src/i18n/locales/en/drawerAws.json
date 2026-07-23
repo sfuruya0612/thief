@@ -11,10 +11,11 @@
     "execStartTooltip": "Start Exec in the terminal"
   },
   "valueEditor": {
-    "title": "Edit value",
+    "title": "Value",
+    "edit": "Edit",
+    "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving…",
-    "saved": "Saved",
     "overwriteConfirm": "Overwrite the value of {{name}}. Are you sure?"
   }
 }

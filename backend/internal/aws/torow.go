@@ -48,11 +48,11 @@ func (r SSOAccountResource) ToRow() []string {
 }
 
 func (r SSMParameterResource) ToRow() []string {
-	return []string{r.Name, r.Type, r.Tier, fmt.Sprintf("%d", r.Version), r.LastModified, r.Value}
+	return []string{r.Name, r.Type, r.Tier, fmt.Sprintf("%d", r.Version), r.LastModified}
 }
 
 func (r SecretResource) ToRow() []string {
-	return []string{r.Name, r.Description, r.LastChanged, r.Value}
+	return []string{r.Name, r.Description, r.LastChanged}
 }
 
 func (r CFNStackResource) ToRow() []string {

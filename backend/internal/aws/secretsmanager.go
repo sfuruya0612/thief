@@ -11,17 +11,13 @@ import (
 )
 
 // SecretResource represents a Secrets Manager secret.
-//
-// Value は一覧レスポンスに復号済みの値をそのまま含める (ssm.go の SSMParameterResource と同方針)。
-// これにより機密値が backend の 1 時間キャッシュ (cacheTTL) とフロントの react-query キャッシュに
-// 平文で載ることを許容している。slog には Value を渡さないこと。
+// 値は一覧に含めない。機密値をキャッシュに常時載せず、GetSecretValue でオンデマンド取得する。
 type SecretResource struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	State       string `json:"state"`
 	Description string `json:"description"`
 	LastChanged string `json:"last_changed"`
-	Value       string `json:"value"`
 }
 
 func (r SecretResource) ResourceID() string    { return r.ID }
@@ -30,7 +26,7 @@ func (r SecretResource) ResourceState() string { return "active" }
 func (r SecretResource) ServiceName() string   { return "secrets" }
 
 // ListSecretResources returns all Secrets Manager secrets for the given profile/region.
-// 一覧には復号済みの値を含める (シークレットごとに GetSecretValue を呼び出す)。
+// 値は含めない (メタデータのみ)。値は GetSecretValue でオンデマンド取得する。
 func ListSecretResources(ctx context.Context, profile, region string) ([]SecretResource, error) {
 	client, err := newSecretsManagerClient(ctx, profile, region)
 	if err != nil {
@@ -48,19 +44,16 @@ func ListSecretResources(ctx context.Context, profile, region string) ([]SecretR
 			resources = append(resources, secretFromEntry(s))
 		}
 	}
-
-	for i := range resources {
-		value, err := getSecretValue(ctx, client, resources[i].Name)
-		if err != nil {
-			return nil, err
-		}
-		resources[i].Value = value
-	}
 	return resources, nil
 }
 
-// getSecretValue fetches the decrypted value of a single secret.
-func getSecretValue(ctx context.Context, client *secretsmanager.Client, name string) (string, error) {
+// GetSecretValue は単一シークレットの復号済みの値を返す。値をキャッシュに載せずオンデマンドで
+// 取得する経路。エラーメッセージや slog に value を含めないこと (機密値のため)。
+func GetSecretValue(ctx context.Context, profile, region, name string) (string, error) {
+	client, err := newSecretsManagerClient(ctx, profile, region)
+	if err != nil {
+		return "", err
+	}
 	out, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(name),
 	})

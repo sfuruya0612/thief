@@ -48,6 +48,13 @@ type SSMValueResponse struct {
 	Value string `json:"value"`
 }
 
+// ValueResponse is returned by the on-demand value endpoints
+// GET /api/aws/profiles/{profile}/secretsmanager/value and
+// GET /api/aws/profiles/{profile}/ssm/parameters/value.
+type ValueResponse struct {
+	Value string `json:"value"`
+}
+
 // BigQueryQueryRequest is the body for POST /api/bigquery/query and
 // POST /api/bigquery/query/dryrun.
 type BigQueryQueryRequest struct {
