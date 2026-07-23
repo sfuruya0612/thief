@@ -23,6 +23,7 @@ import {
   tidbProjectFromRaw,
 } from '../lib/normalizeNonAws';
 import {
+  cacheParameterFromRaw,
   callerIdentityFromRaw,
   cfnStackDetailFromRaw,
   cfnStackEventFromRaw,
@@ -39,6 +40,7 @@ import {
   elbTargetHealthFromRaw,
   objectPreviewFromRaw,
   profileFromRaw,
+  rdsParameterFromRaw,
   s3ObjectFromRaw,
 } from '../lib/normalize';
 import {
@@ -61,6 +63,7 @@ import {
   getBQQueryResults,
   getBQSchema,
   getBQTables,
+  getCacheParameters,
   getCFNStackDetail,
   getCFNStackEvents,
   getCFNStackResources,
@@ -91,6 +94,7 @@ import {
   getPricing,
   getProfileIdentity,
   getProfiles,
+  getRDSParameters,
   getRegions,
   getResources,
   getS3ObjectPreview,
@@ -462,6 +466,29 @@ export function useELBTargetHealth(profile: string, region: string, tgArn: strin
       (await getELBTargetHealth(profile, region, tgArn)).map(elbTargetHealthFromRaw),
     staleTime: 60_000,
     enabled: !!profile && !!tgArn,
+  });
+}
+
+// ============================================================
+// RDS / ElastiCache パラメータグループ (Drawer の Parameters タブ)
+// enabled: !!group でパラメータグループ確定時のみ取得する。
+// ============================================================
+export function useRDSParameters(profile: string, region: string, group: string) {
+  return useQuery({
+    queryKey: ['aws', 'rds-parameters', profile, region, group],
+    queryFn: async () => (await getRDSParameters(profile, region, group)).map(rdsParameterFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!group,
+  });
+}
+
+export function useCacheParameters(profile: string, region: string, group: string) {
+  return useQuery({
+    queryKey: ['aws', 'elasticache-parameters', profile, region, group],
+    queryFn: async () =>
+      (await getCacheParameters(profile, region, group)).map(cacheParameterFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!group,
   });
 }
 

@@ -48,6 +48,7 @@ export interface RDSRaw {
   endpoint: string;
   port: number;
   vpc_id: string;
+  parameter_groups: string[];
   tags: Record<string, string>;
   cost_monthly: number;
   launch_time: string;
@@ -65,9 +66,34 @@ export interface RDSRow {
   endpoint: string;
   port: number;
   vpcId: string;
+  parameterGroups: string[];
   tags: Record<string, string>;
   uptime?: string;
   launched?: string;
+}
+
+// RDS パラメータ一覧 (Drawer の Parameters タブでパラメータグループごとに取得するサブリソース)
+export interface RDSParameterRaw {
+  name: string;
+  value: string;
+  allowed_values: string;
+  apply_type: string;
+  data_type: string;
+  source: string;
+  is_modifiable: boolean;
+  description: string;
+}
+
+export interface RDSParameterRow {
+  id: string;
+  name: string;
+  value: string;
+  allowedValues: string;
+  applyType: string;
+  dataType: string;
+  source: string;
+  isModifiable: boolean;
+  description: string;
 }
 
 // ============================================================
@@ -149,6 +175,7 @@ export interface CacheRaw {
   num_nodes: number;
   endpoint: string;
   port: number;
+  parameter_group: string;
   cost_monthly: number;
 }
 
@@ -163,6 +190,33 @@ export interface CacheRow {
   numNodes: number;
   endpoint: string;
   port: number;
+  parameterGroup: string;
+}
+
+// ElastiCache パラメータ一覧 (Drawer の Parameters タブでパラメータグループごとに取得するサブリソース)
+export interface CacheParameterRaw {
+  name: string;
+  value: string;
+  allowed_values: string;
+  change_type: string;
+  data_type: string;
+  source: string;
+  is_modifiable: boolean;
+  minimum_engine_version: string;
+  description: string;
+}
+
+export interface CacheParameterRow {
+  id: string;
+  name: string;
+  value: string;
+  allowedValues: string;
+  changeType: string;
+  dataType: string;
+  source: string;
+  isModifiable: boolean;
+  minimumEngineVersion: string;
+  description: string;
 }
 
 // ============================================================

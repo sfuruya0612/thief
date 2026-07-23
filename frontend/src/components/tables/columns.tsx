@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react';
 import type {
   APIGWRow,
+  CacheParameterRow,
   CacheRow,
   CFNStackEventRow,
   CFNStackResourceRow,
@@ -26,6 +27,7 @@ import type {
   KinesisRow,
   LambdaRow,
   NATGWRow,
+  RDSParameterRow,
   RDSRow,
   S3ObjectRow,
   S3Row,
@@ -176,6 +178,109 @@ export const rdsColumns: ColumnDef<RDSRow>[] = [
     header: 'Uptime',
     width: '13%',
     cell: (r) => (r.uptime ? <span style={mutedMono}>{r.uptime}</span> : <Dash />),
+  },
+];
+
+// ============================================================
+// RDS / ElastiCache パラメータグループ (Drawer の Parameters タブのサブリソース列)
+// ============================================================
+export const rdsParameterColumns: ColumnDef<RDSParameterRow>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    width: '26%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  {
+    key: 'value',
+    header: 'Value',
+    width: '22%',
+    cell: (r) =>
+      r.value ? (
+        <span
+          className="truncate"
+          style={{ ...monoStyle, display: 'inline-block', maxWidth: '100%' }}
+          title={r.value}
+        >
+          {r.value}
+        </span>
+      ) : (
+        <Dash />
+      ),
+  },
+  {
+    key: 'applyType',
+    header: 'Apply type',
+    width: '12%',
+    cell: (r) => <span style={mutedMono}>{r.applyType}</span>,
+  },
+  {
+    key: 'dataType',
+    header: 'Data type',
+    width: '12%',
+    cell: (r) => <span style={mutedMono}>{r.dataType}</span>,
+  },
+  {
+    key: 'isModifiable',
+    header: 'Modifiable',
+    width: '10%',
+    cell: (r) => (r.isModifiable ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />),
+  },
+  {
+    key: 'source',
+    header: 'Source',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.source}</span>,
+  },
+];
+
+export const cacheParameterColumns: ColumnDef<CacheParameterRow>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    width: '26%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  {
+    key: 'value',
+    header: 'Value',
+    width: '22%',
+    cell: (r) =>
+      r.value ? (
+        <span
+          className="truncate"
+          style={{ ...monoStyle, display: 'inline-block', maxWidth: '100%' }}
+          title={r.value}
+        >
+          {r.value}
+        </span>
+      ) : (
+        <Dash />
+      ),
+  },
+  {
+    key: 'changeType',
+    header: 'Change type',
+    width: '12%',
+    cell: (r) => <span style={mutedMono}>{r.changeType}</span>,
+  },
+  {
+    key: 'dataType',
+    header: 'Data type',
+    width: '12%',
+    cell: (r) => <span style={mutedMono}>{r.dataType}</span>,
+  },
+  {
+    key: 'isModifiable',
+    header: 'Modifiable',
+    width: '10%',
+    cell: (r) => (r.isModifiable ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />),
+  },
+  {
+    key: 'source',
+    header: 'Source',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.source}</span>,
   },
 ];
 
