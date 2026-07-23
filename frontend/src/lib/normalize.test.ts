@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cacheParameterFromRaw,
   callerIdentityFromRaw,
   cfnFromRaw,
   cfnStackDetailFromRaw,
@@ -12,6 +13,7 @@ import {
   ecsTaskFromRaw,
   objectPreviewFromRaw,
   profileFromRaw,
+  rdsParameterFromRaw,
   s3ObjectFromRaw,
 } from './normalize';
 
@@ -209,6 +211,60 @@ describe('s3ObjectFromRaw', () => {
     expect(row.key).toBe('');
     expect(row.size).toBe(0);
     expect(row.storageClass).toBe('');
+  });
+});
+
+describe('rdsParameterFromRaw', () => {
+  it('snake_case を camelCase に変換し name から id を導出する', () => {
+    const row = rdsParameterFromRaw({
+      name: 'max_connections',
+      value: '100',
+      allowed_values: '1-16384',
+      apply_type: 'dynamic',
+      data_type: 'integer',
+      source: 'user',
+      is_modifiable: true,
+      description: 'maximum number of connections',
+    });
+    expect(row).toEqual({
+      id: 'max_connections',
+      name: 'max_connections',
+      value: '100',
+      allowedValues: '1-16384',
+      applyType: 'dynamic',
+      dataType: 'integer',
+      source: 'user',
+      isModifiable: true,
+      description: 'maximum number of connections',
+    });
+  });
+});
+
+describe('cacheParameterFromRaw', () => {
+  it('snake_case を camelCase に変換し name から id を導出する', () => {
+    const row = cacheParameterFromRaw({
+      name: 'maxmemory-policy',
+      value: 'noeviction',
+      allowed_values: 'volatile-lru,allkeys-lru,noeviction',
+      change_type: 'immediate',
+      data_type: 'string',
+      source: 'system',
+      is_modifiable: true,
+      minimum_engine_version: '2.8.6',
+      description: 'max memory eviction policy',
+    });
+    expect(row).toEqual({
+      id: 'maxmemory-policy',
+      name: 'maxmemory-policy',
+      value: 'noeviction',
+      allowedValues: 'volatile-lru,allkeys-lru,noeviction',
+      changeType: 'immediate',
+      dataType: 'string',
+      source: 'system',
+      isModifiable: true,
+      minimumEngineVersion: '2.8.6',
+      description: 'max memory eviction policy',
+    });
   });
 });
 

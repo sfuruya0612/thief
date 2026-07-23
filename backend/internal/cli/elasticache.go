@@ -18,6 +18,15 @@ var elasticacheColumns = []util.Column{
 	{Header: "CacheClusterStatus"},
 }
 
+var elasticacheParameterColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "Value"},
+	{Header: "ChangeType"},
+	{Header: "DataType"},
+	{Header: "IsModifiable"},
+	{Header: "Source"},
+}
+
 func newElastiCacheCmd() *cobra.Command {
 	elasticacheCmd := &cobra.Command{
 		Use:   "elasticache",
@@ -39,6 +48,26 @@ func newElastiCacheCmd() *cobra.Command {
 		},
 	}
 
-	elasticacheCmd.AddCommand(lsCmd)
+	parametersCmd := &cobra.Command{
+		Use:   "parameters",
+		Short: "List parameters in a cache parameter group",
+		Long:  "Retrieves and displays all parameters in the specified cache parameter group.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			group, err := cmd.Flags().GetString("group")
+			if err != nil {
+				return err
+			}
+			return runList(cmd, ListConfig[awsinternal.ElastiCacheParameterInfo]{
+				Columns:  elasticacheParameterColumns,
+				EmptyMsg: "No parameters found",
+				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.ElastiCacheParameterInfo, error) {
+					return awsinternal.ListElastiCacheParameterInfos(ctx, cfg.Profile, cfg.Region, group)
+				},
+			})
+		},
+	}
+	parametersCmd.Flags().StringP("group", "", "", "Cache parameter group name")
+
+	elasticacheCmd.AddCommand(lsCmd, parametersCmd)
 	return elasticacheCmd
 }

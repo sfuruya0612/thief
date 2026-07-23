@@ -27,6 +27,15 @@ var rdsClusterColumns = []util.Column{
 	{Header: "Status"},
 }
 
+var rdsParameterColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "Value"},
+	{Header: "ApplyType"},
+	{Header: "DataType"},
+	{Header: "IsModifiable"},
+	{Header: "Source"},
+}
+
 func newRDSCmd() *cobra.Command {
 	rdsCmd := &cobra.Command{
 		Use:   "rds",
@@ -64,6 +73,26 @@ func newRDSCmd() *cobra.Command {
 		},
 	}
 
-	rdsCmd.AddCommand(lsCmd, clusterCmd)
+	parametersCmd := &cobra.Command{
+		Use:   "parameters",
+		Short: "List parameters in an RDS DB parameter group",
+		Long:  "Retrieves and displays all parameters in the specified DB parameter group.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			group, err := cmd.Flags().GetString("group")
+			if err != nil {
+				return err
+			}
+			return runList(cmd, ListConfig[awsinternal.RDSParameterInfo]{
+				Columns:  rdsParameterColumns,
+				EmptyMsg: "No parameters found",
+				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.RDSParameterInfo, error) {
+					return awsinternal.ListRDSParameterInfos(ctx, cfg.Profile, cfg.Region, group)
+				},
+			})
+		},
+	}
+	parametersCmd.Flags().StringP("group", "", "", "DB parameter group name")
+
+	rdsCmd.AddCommand(lsCmd, clusterCmd, parametersCmd)
 	return rdsCmd
 }

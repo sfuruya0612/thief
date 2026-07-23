@@ -84,10 +84,34 @@ func (s *Server) handleRDS(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleRDSParameters(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	group := r.URL.Query().Get("group")
+	if group == "" {
+		writeBadRequest(w, "group query parameter is required")
+		return
+	}
+	s.serveCached(w, r, cacheKey("rds-parameters", profile, region, group), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListRDSParameters(r.Context(), profile, region, group)
+	})
+}
+
 func (s *Server) handleElastiCache(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	s.serveCached(w, r, cacheKey("elasticache", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.ListElastiCacheResources(r.Context(), profile, region)
+	})
+}
+
+func (s *Server) handleElastiCacheParameters(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	group := r.URL.Query().Get("group")
+	if group == "" {
+		writeBadRequest(w, "group query parameter is required")
+		return
+	}
+	s.serveCached(w, r, cacheKey("elasticache-parameters", profile, region, group), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListElastiCacheParameters(r.Context(), profile, region, group)
 	})
 }
 

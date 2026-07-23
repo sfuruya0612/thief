@@ -13,6 +13,8 @@ import type {
 import type {
   APIGWRaw,
   APIGWRow,
+  CacheParameterRaw,
+  CacheParameterRow,
   CacheRaw,
   CacheRow,
   CFNStackDetailRaw,
@@ -67,6 +69,8 @@ import type {
   LambdaRow,
   NATGWRaw,
   NATGWRow,
+  RDSParameterRaw,
+  RDSParameterRow,
   RDSRaw,
   RDSRow,
   S3ObjectRaw,
@@ -165,9 +169,24 @@ export function rdsFromRaw(raw: RDSRaw, region: string): RDSRow {
     endpoint: raw.endpoint,
     port: raw.port,
     vpcId: raw.vpc_id,
+    parameterGroups: raw.parameter_groups ?? [],
     tags: raw.tags ?? {},
     uptime: uptimeOrUndef(raw.launch_time),
     launched: launchedDate(raw.launch_time),
+  };
+}
+
+export function rdsParameterFromRaw(raw: RDSParameterRaw): RDSParameterRow {
+  return {
+    id: raw.name,
+    name: raw.name,
+    value: raw.value,
+    allowedValues: raw.allowed_values,
+    applyType: raw.apply_type,
+    dataType: raw.data_type,
+    source: raw.source,
+    isModifiable: raw.is_modifiable,
+    description: raw.description,
   };
 }
 
@@ -213,6 +232,22 @@ export function cacheFromRaw(raw: CacheRaw, region: string): CacheRow {
     numNodes: raw.num_nodes,
     endpoint: raw.endpoint,
     port: raw.port,
+    parameterGroup: raw.parameter_group,
+  };
+}
+
+export function cacheParameterFromRaw(raw: CacheParameterRaw): CacheParameterRow {
+  return {
+    id: raw.name,
+    name: raw.name,
+    value: raw.value,
+    allowedValues: raw.allowed_values,
+    changeType: raw.change_type,
+    dataType: raw.data_type,
+    source: raw.source,
+    isModifiable: raw.is_modifiable,
+    minimumEngineVersion: raw.minimum_engine_version,
+    description: raw.description,
   };
 }
 

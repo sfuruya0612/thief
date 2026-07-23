@@ -6,6 +6,7 @@ import { GcpIcons } from '../icons/GcpIcons';
 import { Icons } from '../icons/Icons';
 import { GCP_SERVICES, SERVICES } from '../../lib/serviceMeta';
 import { StatusBadge } from '../primitives';
+import { DrawerCacheParameters } from './DrawerCacheParameters';
 import { DrawerCFNEvents } from './DrawerCFNEvents';
 import { DrawerCFNOverviewExtra } from './DrawerCFNOverviewExtra';
 import { DrawerCFNResources } from './DrawerCFNResources';
@@ -17,6 +18,7 @@ import { DrawerECSTasks } from './DrawerECSTasks';
 import { DrawerELBListeners } from './DrawerELBListeners';
 import { DrawerELBTargets } from './DrawerELBTargets';
 import { DrawerGCSObjects } from './DrawerGCSObjects';
+import { DrawerRDSParameters } from './DrawerRDSParameters';
 import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerSecretEdit } from './DrawerSecretEdit';
 import { DrawerSSMEdit } from './DrawerSSMEdit';
@@ -27,8 +29,8 @@ import type { OverviewEntry } from './overviewRows';
 const DRAWER_TABS: Record<string, string[]> = {
   ec2: ['Overview', 'Terminal', 'Tags'],
   ecr: ['Overview', 'Images'],
-  rds: ['Overview', 'Tags'],
-  cache: ['Overview', 'Tags'],
+  rds: ['Overview', 'Parameters', 'Tags'],
+  cache: ['Overview', 'Parameters', 'Tags'],
   lambda: ['Overview', 'Tags'],
   ecs: ['Overview', 'Services', 'Tasks', 'Terminal', 'Tags'],
   s3: ['Overview', 'Objects', 'Tags'],
@@ -316,6 +318,12 @@ export function Drawer({
               )}
               {tab === 'Targets' && service === 'elb' && (
                 <DrawerELBTargets profile={profile} region={region} lbArn={resource.id} />
+              )}
+              {tab === 'Parameters' && service === 'rds' && (
+                <DrawerRDSParameters profile={profile} region={region} instance={resource.name} />
+              )}
+              {tab === 'Parameters' && service === 'cache' && (
+                <DrawerCacheParameters profile={profile} region={region} cluster={resource.name} />
               )}
               {tab === 'Items' && service === 'dynamo' && (
                 <DrawerDynamoItems profile={profile} region={region} table={resource.name} />

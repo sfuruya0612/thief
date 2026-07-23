@@ -1,4 +1,5 @@
 import type {
+  CacheParameterRaw,
   CFNStackDetailRaw,
   CFNStackEventRaw,
   CFNStackResourceRaw,
@@ -17,6 +18,7 @@ import type {
   ELBTargetHealthRaw,
   ForecastRaw,
   PriceTableRaw,
+  RDSParameterRaw,
   RegionRaw,
   S3ObjectRaw,
 } from '../types/aws';
@@ -381,6 +383,31 @@ export function getELBTargetHealth(
   return apiGetList<ELBTargetHealthRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/elb/target-health`,
     { region, tg_arn: tgArn },
+  );
+}
+
+// ============================================================
+// RDS / ElastiCache パラメータグループ (Drawer の Parameters タブでグループごとに取得する)
+// ============================================================
+export function getRDSParameters(
+  profile: string,
+  region: string,
+  group: string,
+): Promise<RDSParameterRaw[]> {
+  return apiGetList<RDSParameterRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/rds/parameters`,
+    { region, group },
+  );
+}
+
+export function getCacheParameters(
+  profile: string,
+  region: string,
+  group: string,
+): Promise<CacheParameterRaw[]> {
+  return apiGetList<CacheParameterRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/elasticache/parameters`,
+    { region, group },
   );
 }
 

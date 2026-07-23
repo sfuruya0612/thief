@@ -12,19 +12,32 @@ import (
 
 // RDSResource represents a single RDS DB instance.
 type RDSResource struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	State         string            `json:"state"`
-	Engine        string            `json:"engine"`
-	EngineVersion string            `json:"engine_version"`
-	Class         string            `json:"class"`
-	MultiAZ       bool              `json:"multi_az"`
-	Endpoint      string            `json:"endpoint"`
-	Port          int32             `json:"port"`
-	VpcID         string            `json:"vpc_id"`
-	Tags          map[string]string `json:"tags"`
-	CostMonthly   float64           `json:"cost_monthly"`
-	LaunchTime    time.Time         `json:"launch_time"`
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	State           string            `json:"state"`
+	Engine          string            `json:"engine"`
+	EngineVersion   string            `json:"engine_version"`
+	Class           string            `json:"class"`
+	MultiAZ         bool              `json:"multi_az"`
+	Endpoint        string            `json:"endpoint"`
+	Port            int32             `json:"port"`
+	VpcID           string            `json:"vpc_id"`
+	ParameterGroups []string          `json:"parameter_groups"`
+	Tags            map[string]string `json:"tags"`
+	CostMonthly     float64           `json:"cost_monthly"`
+	LaunchTime      time.Time         `json:"launch_time"`
+}
+
+// RDSParameter represents a single parameter in a DB parameter group.
+type RDSParameter struct {
+	Name          string `json:"name"`
+	Value         string `json:"value"`
+	AllowedValues string `json:"allowed_values"`
+	ApplyType     string `json:"apply_type"`
+	DataType      string `json:"data_type"`
+	Source        string `json:"source"`
+	IsModifiable  bool   `json:"is_modifiable"`
+	Description   string `json:"description"`
 }
 
 func (r RDSResource) ResourceID() string    { return r.ID }
@@ -65,20 +78,64 @@ func rdsFromInstance(db rdstypes.DBInstance) RDSResource {
 	if db.InstanceCreateTime != nil {
 		launch = *db.InstanceCreateTime
 	}
-	return RDSResource{
-		ID:            ptrStr(db.DBInstanceIdentifier),
-		Name:          ptrStr(db.DBInstanceIdentifier),
-		State:         DisplayState(ptrStr(db.DBInstanceStatus)),
-		Engine:        ptrStr(db.Engine),
-		EngineVersion: ptrStr(db.EngineVersion),
-		Class:         ptrStr(db.DBInstanceClass),
-		MultiAZ:       ptrBool(db.MultiAZ),
-		Endpoint:      endpoint,
-		Port:          port,
-		VpcID:         ptrStr(db.DBSubnetGroup.VpcId),
-		Tags:          tags,
-		LaunchTime:    launch,
+	groups := make([]string, 0, len(db.DBParameterGroups))
+	for _, g := range db.DBParameterGroups {
+		if name := ptrStr(g.DBParameterGroupName); name != "" {
+			groups = append(groups, name)
+		}
 	}
+	return RDSResource{
+		ID:              ptrStr(db.DBInstanceIdentifier),
+		Name:            ptrStr(db.DBInstanceIdentifier),
+		State:           DisplayState(ptrStr(db.DBInstanceStatus)),
+		Engine:          ptrStr(db.Engine),
+		EngineVersion:   ptrStr(db.EngineVersion),
+		Class:           ptrStr(db.DBInstanceClass),
+		MultiAZ:         ptrBool(db.MultiAZ),
+		Endpoint:        endpoint,
+		Port:            port,
+		VpcID:           ptrStr(db.DBSubnetGroup.VpcId),
+		ParameterGroups: groups,
+		Tags:            tags,
+		LaunchTime:      launch,
+	}
+}
+
+// rdsParameterFromSDK は DescribeDBParameters の 1 パラメータを RDSParameter に変換する。
+func rdsParameterFromSDK(p rdstypes.Parameter) RDSParameter {
+	return RDSParameter{
+		Name:          ptrStr(p.ParameterName),
+		Value:         ptrStr(p.ParameterValue),
+		AllowedValues: ptrStr(p.AllowedValues),
+		ApplyType:     ptrStr(p.ApplyType),
+		DataType:      ptrStr(p.DataType),
+		Source:        ptrStr(p.Source),
+		IsModifiable:  ptrBool(p.IsModifiable),
+		Description:   ptrStr(p.Description),
+	}
+}
+
+// ListRDSParameters は指定した DB パラメータグループの全パラメータを返す。
+func ListRDSParameters(ctx context.Context, profile, region, group string) ([]RDSParameter, error) {
+	client, err := newRDSClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+
+	var params []RDSParameter
+	paginator := rds.NewDescribeDBParametersPaginator(client, &rds.DescribeDBParametersInput{
+		DBParameterGroupName: aws.String(group),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe rds parameters for %s: %w", group, err)
+		}
+		for _, p := range page.Parameters {
+			params = append(params, rdsParameterFromSDK(p))
+		}
+	}
+	return params, nil
 }
 
 func rdsTagsToMap(tags []rdstypes.Tag) map[string]string {
@@ -172,6 +229,41 @@ func ListRDSClusterInfos(ctx context.Context, profile, region string) ([]RDSClus
 		}
 	}
 	return clusters, nil
+}
+
+// RDSParameterInfo はレガシー CLI 互換の RDS パラメータ表示用フィールドを保持する。
+type RDSParameterInfo struct {
+	Name         string
+	Value        string
+	ApplyType    string
+	DataType     string
+	IsModifiable string
+	Source       string
+}
+
+// ToRow converts RDSParameterInfo to a string slice suitable for table formatting.
+func (p RDSParameterInfo) ToRow() []string {
+	return []string{p.Name, p.Value, p.ApplyType, p.DataType, p.IsModifiable, p.Source}
+}
+
+// ListRDSParameterInfos は指定した DB パラメータグループのパラメータをレガシー CLI 互換フィールドで返す。
+func ListRDSParameterInfos(ctx context.Context, profile, region, group string) ([]RDSParameterInfo, error) {
+	params, err := ListRDSParameters(ctx, profile, region, group)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]RDSParameterInfo, 0, len(params))
+	for _, p := range params {
+		infos = append(infos, RDSParameterInfo{
+			Name:         p.Name,
+			Value:        p.Value,
+			ApplyType:    p.ApplyType,
+			DataType:     p.DataType,
+			IsModifiable: fmt.Sprintf("%v", p.IsModifiable),
+			Source:       p.Source,
+		})
+	}
+	return infos, nil
 }
 
 // newRDSClient は RDS API クライアントを生成する。
