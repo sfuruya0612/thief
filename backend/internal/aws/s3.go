@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // S3Resource represents a single S3 bucket.
@@ -29,6 +30,11 @@ func (r S3Resource) ResourceName() string  { return r.Name }
 func (r S3Resource) ResourceState() string { return "active" }
 func (r S3Resource) ServiceName() string   { return "s3" }
 
+// s3BucketConcurrency はバケットごとの属性解決 (GetBucketLocation / GetBucketEncryption /
+// GetPublicAccessBlock) を同時実行する上限数。無制限にすると S3 のリクエストレート上限に
+// 抵触しうるため上限を設ける (issue 0043 の Cloud Run ListJobs 並列化と同型)。
+const s3BucketConcurrency = 30
+
 // ListS3Resources returns all S3 buckets accessible via the given profile.
 // ListBuckets is called against us-east-1; per-bucket region is resolved with GetBucketLocation.
 func ListS3Resources(ctx context.Context, profile, _ string) ([]S3Resource, error) {
@@ -43,10 +49,21 @@ func ListS3Resources(ctx context.Context, profile, _ string) ([]S3Resource, erro
 		return nil, fmt.Errorf("list s3 buckets: %w", err)
 	}
 
-	var resources []S3Resource
-	for _, b := range out.Buckets {
-		r := s3FromBucket(ctx, client, b)
-		resources = append(resources, r)
+	// バケットごとの属性解決 (region / encryption / public) は 1 バケットあたり 3 本の
+	// 直列 API 呼び出しを伴い、バケット間では互いに独立している。バケット間で並列実行し、
+	// 各 goroutine は自分の index にのみ書き込むため結果スライスへの書き込みはロック不要で
+	// 競合しない (データオーナーシップを goroutine ごとに分離)。
+	resources := make([]S3Resource, len(out.Buckets))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(s3BucketConcurrency)
+	for i, b := range out.Buckets {
+		g.Go(func() error {
+			resources[i] = s3FromBucket(gctx, client, b)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return resources, nil
 }
