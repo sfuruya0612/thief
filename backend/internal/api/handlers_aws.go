@@ -96,6 +96,18 @@ func (s *Server) handleRDSParameters(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleRDSClusterParameters(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	cluster := r.URL.Query().Get("cluster")
+	if cluster == "" {
+		writeBadRequest(w, "cluster query parameter is required")
+		return
+	}
+	s.serveCached(w, r, cacheKey("rds-cluster-parameters", profile, region, cluster), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListRDSClusterParameters(r.Context(), profile, region, cluster)
+	})
+}
+
 func (s *Server) handleElastiCache(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	s.serveCached(w, r, cacheKey("elasticache", profile, region), cacheTTL, writeAWSError, func() (any, error) {

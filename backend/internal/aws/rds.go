@@ -140,6 +140,50 @@ func ListRDSParameters(ctx context.Context, profile, region, group string) ([]RD
 	return params, nil
 }
 
+// rdsClusterParameterClient は ListRDSClusterParameters が要求する API 呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *rds.Client がこれを満たす。
+type rdsClusterParameterClient interface {
+	DescribeDBClusters(ctx context.Context, params *rds.DescribeDBClustersInput, optFns ...func(*rds.Options)) (*rds.DescribeDBClustersOutput, error)
+	DescribeDBClusterParameters(ctx context.Context, params *rds.DescribeDBClusterParametersInput, optFns ...func(*rds.Options)) (*rds.DescribeDBClusterParametersOutput, error)
+}
+
+// ListRDSClusterParameters は指定した DB クラスターが属する DB クラスターパラメータグループの全パラメータを返す。
+func ListRDSClusterParameters(ctx context.Context, profile, region, clusterID string) ([]RDSParameter, error) {
+	client, err := newRDSClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return listRDSClusterParameters(ctx, client, clusterID)
+}
+
+func listRDSClusterParameters(ctx context.Context, client rdsClusterParameterClient, clusterID string) ([]RDSParameter, error) {
+	out, err := client.DescribeDBClusters(ctx, &rds.DescribeDBClustersInput{
+		DBClusterIdentifier: aws.String(clusterID),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("describe rds cluster %s: %w", clusterID, err)
+	}
+	if len(out.DBClusters) == 0 {
+		return nil, fmt.Errorf("rds cluster %s not found", clusterID)
+	}
+	groupName := ptrStr(out.DBClusters[0].DBClusterParameterGroup)
+
+	var params []RDSParameter
+	paginator := rds.NewDescribeDBClusterParametersPaginator(client, &rds.DescribeDBClusterParametersInput{
+		DBClusterParameterGroupName: aws.String(groupName),
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe rds cluster parameters for %s: %w", groupName, err)
+		}
+		for _, p := range page.Parameters {
+			params = append(params, rdsParameterFromSDK(p))
+		}
+	}
+	return params, nil
+}
+
 func rdsTagsToMap(tags []rdstypes.Tag) map[string]string {
 	return tagsToMapFunc(tags, func(t rdstypes.Tag) (*string, *string) { return t.Key, t.Value })
 }
@@ -251,6 +295,26 @@ func (p RDSParameterInfo) ToRow() []string {
 // ListRDSParameterInfos は指定した DB パラメータグループのパラメータをレガシー CLI 互換フィールドで返す。
 func ListRDSParameterInfos(ctx context.Context, profile, region, group string) ([]RDSParameterInfo, error) {
 	params, err := ListRDSParameters(ctx, profile, region, group)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]RDSParameterInfo, 0, len(params))
+	for _, p := range params {
+		infos = append(infos, RDSParameterInfo{
+			Name:         p.Name,
+			Value:        p.Value,
+			ApplyType:    p.ApplyType,
+			DataType:     p.DataType,
+			IsModifiable: fmt.Sprintf("%v", p.IsModifiable),
+			Source:       p.Source,
+		})
+	}
+	return infos, nil
+}
+
+// ListRDSClusterParameterInfos は指定した DB クラスターが属する DB クラスターパラメータグループのパラメータをレガシー CLI 互換フィールドで返す。
+func ListRDSClusterParameterInfos(ctx context.Context, profile, region, clusterID string) ([]RDSParameterInfo, error) {
+	params, err := ListRDSClusterParameters(ctx, profile, region, clusterID)
 	if err != nil {
 		return nil, err
 	}

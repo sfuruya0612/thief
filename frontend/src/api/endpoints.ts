@@ -421,6 +421,17 @@ export function getRDSParameters(
   );
 }
 
+export function getRDSClusterParameters(
+  profile: string,
+  region: string,
+  clusterId: string,
+): Promise<RDSParameterRaw[]> {
+  return apiGetList<RDSParameterRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/rds/cluster-parameters`,
+    { region, cluster: clusterId },
+  );
+}
+
 export function getCacheParameters(
   profile: string,
   region: string,
