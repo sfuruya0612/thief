@@ -11,17 +11,18 @@ import (
 
 // ElastiCacheResource represents a single ElastiCache cluster.
 type ElastiCacheResource struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	State          string  `json:"state"`
-	Engine         string  `json:"engine"`
-	EngineVersion  string  `json:"engine_version"`
-	NodeType       string  `json:"node_type"`
-	NumNodes       int32   `json:"num_nodes"`
-	Endpoint       string  `json:"endpoint"`
-	Port           int32   `json:"port"`
-	ParameterGroup string  `json:"parameter_group"`
-	CostMonthly    float64 `json:"cost_monthly"`
+	ID                 string  `json:"id"`
+	Name               string  `json:"name"`
+	State              string  `json:"state"`
+	Engine             string  `json:"engine"`
+	EngineVersion      string  `json:"engine_version"`
+	NodeType           string  `json:"node_type"`
+	NumNodes           int32   `json:"num_nodes"`
+	Endpoint           string  `json:"endpoint"`
+	Port               int32   `json:"port"`
+	ParameterGroup     string  `json:"parameter_group"`
+	ReplicationGroupID string  `json:"replication_group_id"`
+	CostMonthly        float64 `json:"cost_monthly"`
 }
 
 // ElastiCacheParameter represents a single parameter in a cache parameter group.
@@ -75,16 +76,17 @@ func elastiCacheFromCluster(c ectypes.CacheCluster) ElastiCacheResource {
 		paramGroup = ptrStr(c.CacheParameterGroup.CacheParameterGroupName)
 	}
 	return ElastiCacheResource{
-		ID:             ptrStr(c.CacheClusterId),
-		Name:           ptrStr(c.CacheClusterId),
-		State:          DisplayState(ptrStr(c.CacheClusterStatus)),
-		Engine:         ptrStr(c.Engine),
-		EngineVersion:  ptrStr(c.EngineVersion),
-		NodeType:       ptrStr(c.CacheNodeType),
-		NumNodes:       ptrInt32(c.NumCacheNodes),
-		Endpoint:       endpoint,
-		Port:           port,
-		ParameterGroup: paramGroup,
+		ID:                 ptrStr(c.CacheClusterId),
+		Name:               ptrStr(c.CacheClusterId),
+		State:              DisplayState(ptrStr(c.CacheClusterStatus)),
+		Engine:             ptrStr(c.Engine),
+		EngineVersion:      ptrStr(c.EngineVersion),
+		NodeType:           ptrStr(c.CacheNodeType),
+		NumNodes:           ptrInt32(c.NumCacheNodes),
+		Endpoint:           endpoint,
+		Port:               port,
+		ParameterGroup:     paramGroup,
+		ReplicationGroupID: ptrStr(c.ReplicationGroupId),
 	}
 }
 

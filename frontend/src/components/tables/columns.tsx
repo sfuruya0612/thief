@@ -297,39 +297,46 @@ export const cacheColumns: ColumnDef<CacheRow>[] = [
   {
     key: 'name',
     header: 'Cluster',
-    width: '18%',
+    width: '15%',
     cell: (r) => <span className="primary truncate">{r.name}</span>,
   },
-  { key: 'state', header: 'State', width: '10%', cell: (r) => <StatusBadge state={r.state} /> },
+  { key: 'state', header: 'State', width: '9%', cell: (r) => <StatusBadge state={r.state} /> },
   {
     key: 'engine',
     header: 'Engine',
-    width: '13%',
+    width: '11%',
     cell: (r) => <span style={mutedMono}>{r.engine}</span>,
+  },
+  {
+    key: 'replicationGroupId',
+    header: 'Replication Group',
+    width: '12%',
+    cell: (r) =>
+      r.replicationGroupId ? <span style={mutedMono}>{r.replicationGroupId}</span> : <Dash />,
   },
   {
     key: 'nodeType',
     header: 'Node type',
-    width: '14%',
+    width: '12%',
     cell: (r) => <span style={monoStyle}>{r.nodeType}</span>,
   },
   {
     key: 'region',
     header: 'Region',
-    width: '13%',
+    width: '11%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
   },
   {
     key: 'numNodes',
     header: 'Nodes',
-    width: '8%',
+    width: '7%',
     align: 'right',
     cell: (r) => <span style={monoStyle}>{r.numNodes}</span>,
   },
   {
     key: 'endpoint',
     header: 'Endpoint',
-    width: '24%',
+    width: '23%',
     cell: (r) => (
       <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
         {r.endpoint}
