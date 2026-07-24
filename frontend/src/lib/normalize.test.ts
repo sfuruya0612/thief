@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cacheFromRaw,
   cacheParameterFromRaw,
   callerIdentityFromRaw,
   cfnFromRaw,
@@ -288,6 +289,50 @@ describe('rdsParameterFromRaw', () => {
       isModifiable: true,
       description: 'maximum number of connections',
     });
+  });
+});
+
+describe('cacheFromRaw', () => {
+  it('replication_group_id を replicationGroupId に変換する', () => {
+    const row = cacheFromRaw(
+      {
+        id: 'cc-1',
+        name: 'cc-1',
+        state: 'available',
+        engine: 'redis',
+        engine_version: '7.1',
+        node_type: 'cache.r6g.large',
+        num_nodes: 1,
+        endpoint: 'cc-1.abc.apne1.cache.amazonaws.com',
+        port: 6379,
+        parameter_group: 'default.redis7',
+        replication_group_id: 'my-redis-rg',
+        cost_monthly: 0,
+      },
+      'ap-northeast-1',
+    );
+    expect(row.replicationGroupId).toBe('my-redis-rg');
+  });
+
+  it('replication_group_id が空文字のとき replicationGroupId も空文字になる', () => {
+    const row = cacheFromRaw(
+      {
+        id: 'cc-2',
+        name: 'cc-2',
+        state: 'available',
+        engine: 'memcached',
+        engine_version: '1.6.22',
+        node_type: 'cache.t4g.micro',
+        num_nodes: 3,
+        endpoint: 'cc-2.abc.apne1.cache.amazonaws.com',
+        port: 11211,
+        parameter_group: 'default.memcached1.6',
+        replication_group_id: '',
+        cost_monthly: 0,
+      },
+      'ap-northeast-1',
+    );
+    expect(row.replicationGroupId).toBe('');
   });
 });
 

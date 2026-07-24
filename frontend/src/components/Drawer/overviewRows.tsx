@@ -80,6 +80,7 @@ export function cacheOverviewRows(r: CacheRow): OverviewEntry[] {
     ['Resource ID', r.id],
     ['Engine', r.engine],
     ['Engine version', r.engineVersion],
+    ['Replication group', r.replicationGroupId || dash],
     ['Node type', r.nodeType],
     ['Nodes', r.numNodes],
     ['Endpoint', r.endpoint],

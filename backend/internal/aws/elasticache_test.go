@@ -44,6 +44,42 @@ func TestElastiCacheFromClusterParameterGroup(t *testing.T) {
 	}
 }
 
+func TestElastiCacheFromClusterReplicationGroupID(t *testing.T) {
+	tests := []struct {
+		name string
+		in   *string
+		want string
+	}{
+		{
+			name: "レプリケーショングループに属する Redis / Valkey ノード",
+			in:   aws.String("my-redis-rg"),
+			want: "my-redis-rg",
+		},
+		{
+			name: "ReplicationGroupId が空の単一ノード Redis / Valkey",
+			in:   aws.String(""),
+			want: "",
+		},
+		{
+			name: "レプリケーショングループを持たない Memcached クラスター",
+			in:   nil,
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := ectypes.CacheCluster{
+				CacheClusterId:     aws.String("cc-1"),
+				ReplicationGroupId: tt.in,
+			}
+			got := elastiCacheFromCluster(in).ReplicationGroupID
+			if got != tt.want {
+				t.Errorf("got %q want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCacheParameterFromSDK(t *testing.T) {
 	tests := []struct {
 		name string

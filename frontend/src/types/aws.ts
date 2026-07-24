@@ -178,6 +178,7 @@ export interface CacheRaw {
   endpoint: string;
   port: number;
   parameter_group: string;
+  replication_group_id: string;
   cost_monthly: number;
 }
 
@@ -193,6 +194,7 @@ export interface CacheRow {
   endpoint: string;
   port: number;
   parameterGroup: string;
+  replicationGroupId: string;
 }
 
 // ElastiCache パラメータ一覧 (Drawer の Parameters タブでパラメータグループごとに取得するサブリソース)

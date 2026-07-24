@@ -234,6 +234,7 @@ export function cacheFromRaw(raw: CacheRaw, region: string): CacheRow {
     endpoint: raw.endpoint,
     port: raw.port,
     parameterGroup: raw.parameter_group,
+    replicationGroupId: raw.replication_group_id ?? '',
   };
 }
 
