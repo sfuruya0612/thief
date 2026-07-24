@@ -52,6 +52,7 @@ export function rdsOverviewRows(r: RDSRow): OverviewEntry[] {
     ['Resource ID', r.id],
     ['Engine', r.engine],
     ['Engine version', r.engineVersion],
+    ['Cluster', r.clusterId || dash],
     ['Class', r.class],
     ['Multi-AZ', r.multiAz ? 'yes' : 'no'],
     ['Endpoint', r.endpoint],

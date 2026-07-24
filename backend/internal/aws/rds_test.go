@@ -57,6 +57,38 @@ func TestRdsFromInstanceParameterGroups(t *testing.T) {
 	}
 }
 
+func TestRdsFromInstanceClusterID(t *testing.T) {
+	tests := []struct {
+		name string
+		in   *string
+		want string
+	}{
+		{
+			name: "belongs to cluster",
+			in:   aws.String("aurora-cluster-1"),
+			want: "aurora-cluster-1",
+		},
+		{
+			name: "not part of a cluster",
+			in:   nil,
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := rdstypes.DBInstance{
+				DBInstanceIdentifier: aws.String("db-1"),
+				DBSubnetGroup:        &rdstypes.DBSubnetGroup{VpcId: aws.String("vpc-1")},
+				DBClusterIdentifier:  tt.in,
+			}
+			got := rdsFromInstance(in).ClusterID
+			if got != tt.want {
+				t.Errorf("got %q want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRdsParameterFromSDK(t *testing.T) {
 	tests := []struct {
 		name string

@@ -128,6 +128,8 @@
   - @sfuruya0612
 - [ADD] RDS インスタンスと ElastiCache クラスタに紐づくパラメータグループのパラメータ一覧を Web UI (Drawer の Parameters タブ) と CLI (`rds parameters` / `elasticache parameters`) から参照できるようにする。パラメータグループ名は一覧取得時に取得し、パラメータ本体はグループ選択時にオンデマンドで取得する。RDS は複数のパラメータグループをセグメント切り替えで、ElastiCache は単一グループを直接表示する
   - @sfuruya0612
+- [ADD] RDS の Web 一覧に所属 DB クラスター (`cluster_id`) の列を追加する。`DescribeDBInstances` が既に返す `DBClusterIdentifier` を使い、追加の API 呼び出しなしで Aurora や Multi-AZ DB クラスターの各インスタンスがどのクラスターに属するかを判別できるようにする。クラスターに属さないインスタンスは列を空 (Dash 表示) とする
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)

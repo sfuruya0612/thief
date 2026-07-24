@@ -136,25 +136,31 @@ export const rdsColumns: ColumnDef<RDSRow>[] = [
   {
     key: 'engine',
     header: 'Engine',
-    width: '10%',
+    width: '9%',
     cell: (r) => <span style={mutedMono}>{r.engine}</span>,
   },
   {
     key: 'engineVersion',
     header: 'Engine Version',
-    width: '11%',
+    width: '10%',
     cell: (r) => <span style={mutedMono}>{r.engineVersion}</span>,
+  },
+  {
+    key: 'clusterId',
+    header: 'Cluster',
+    width: '9%',
+    cell: (r) => (r.clusterId ? <span style={mutedMono}>{r.clusterId}</span> : <Dash />),
   },
   {
     key: 'class',
     header: 'Class',
-    width: '10%',
+    width: '9%',
     cell: (r) => <span style={monoStyle}>{r.class}</span>,
   },
   {
     key: 'region',
     header: 'Region',
-    width: '10%',
+    width: '9%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
   },
   {
@@ -166,7 +172,7 @@ export const rdsColumns: ColumnDef<RDSRow>[] = [
   {
     key: 'endpoint',
     header: 'Endpoint',
-    width: '18%',
+    width: '16%',
     cell: (r) => (
       <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
         {r.endpoint}
@@ -176,7 +182,7 @@ export const rdsColumns: ColumnDef<RDSRow>[] = [
   {
     key: 'uptime',
     header: 'Uptime',
-    width: '13%',
+    width: '10%',
     cell: (r) => (r.uptime ? <span style={mutedMono}>{r.uptime}</span> : <Dash />),
   },
 ];

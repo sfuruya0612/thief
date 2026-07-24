@@ -13,6 +13,7 @@ import {
   ecsTaskFromRaw,
   objectPreviewFromRaw,
   profileFromRaw,
+  rdsFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
 } from './normalize';
@@ -211,6 +212,56 @@ describe('s3ObjectFromRaw', () => {
     expect(row.key).toBe('');
     expect(row.size).toBe(0);
     expect(row.storageClass).toBe('');
+  });
+});
+
+describe('rdsFromRaw', () => {
+  it('cluster_id を clusterId に変換する', () => {
+    const row = rdsFromRaw(
+      {
+        id: 'db-1',
+        name: 'db-1',
+        state: 'available',
+        engine: 'aurora-mysql',
+        engine_version: '8.0.mysql_aurora.3.04.0',
+        class: 'db.r6g.large',
+        multi_az: false,
+        endpoint: 'db-1.abc.ap-northeast-1.rds.amazonaws.com',
+        port: 3306,
+        vpc_id: 'vpc-1',
+        parameter_groups: ['default.aurora-mysql8.0'],
+        cluster_id: 'aurora-cluster-1',
+        tags: {},
+        cost_monthly: 0,
+        launch_time: '2026-01-01T00:00:00Z',
+      },
+      'ap-northeast-1',
+    );
+    expect(row.clusterId).toBe('aurora-cluster-1');
+  });
+
+  it('cluster_id が空文字のとき clusterId も空文字になる', () => {
+    const row = rdsFromRaw(
+      {
+        id: 'db-2',
+        name: 'db-2',
+        state: 'available',
+        engine: 'mysql',
+        engine_version: '8.0.35',
+        class: 'db.t3.micro',
+        multi_az: false,
+        endpoint: 'db-2.abc.ap-northeast-1.rds.amazonaws.com',
+        port: 3306,
+        vpc_id: 'vpc-1',
+        parameter_groups: ['default.mysql8.0'],
+        cluster_id: '',
+        tags: {},
+        cost_monthly: 0,
+        launch_time: '2026-01-01T00:00:00Z',
+      },
+      'ap-northeast-1',
+    );
+    expect(row.clusterId).toBe('');
   });
 });
 

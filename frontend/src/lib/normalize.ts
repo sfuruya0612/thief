@@ -170,6 +170,7 @@ export function rdsFromRaw(raw: RDSRaw, region: string): RDSRow {
     port: raw.port,
     vpcId: raw.vpc_id,
     parameterGroups: raw.parameter_groups ?? [],
+    clusterId: raw.cluster_id ?? '',
     tags: raw.tags ?? {},
     uptime: uptimeOrUndef(raw.launch_time),
     launched: launchedDate(raw.launch_time),

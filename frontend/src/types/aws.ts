@@ -49,6 +49,7 @@ export interface RDSRaw {
   port: number;
   vpc_id: string;
   parameter_groups: string[];
+  cluster_id: string;
   tags: Record<string, string>;
   cost_monthly: number;
   launch_time: string;
@@ -67,6 +68,7 @@ export interface RDSRow {
   port: number;
   vpcId: string;
   parameterGroups: string[];
+  clusterId: string;
   tags: Record<string, string>;
   uptime?: string;
   launched?: string;
