@@ -23,6 +23,7 @@ type RDSResource struct {
 	Port            int32             `json:"port"`
 	VpcID           string            `json:"vpc_id"`
 	ParameterGroups []string          `json:"parameter_groups"`
+	ClusterID       string            `json:"cluster_id"`
 	Tags            map[string]string `json:"tags"`
 	CostMonthly     float64           `json:"cost_monthly"`
 	LaunchTime      time.Time         `json:"launch_time"`
@@ -96,6 +97,7 @@ func rdsFromInstance(db rdstypes.DBInstance) RDSResource {
 		Port:            port,
 		VpcID:           ptrStr(db.DBSubnetGroup.VpcId),
 		ParameterGroups: groups,
+		ClusterID:       ptrStr(db.DBClusterIdentifier),
 		Tags:            tags,
 		LaunchTime:      launch,
 	}
