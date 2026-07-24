@@ -13,6 +13,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2", s.handleEC2)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds", s.handleRDS)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds/parameters", s.handleRDSParameters)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds/cluster-parameters", s.handleRDSClusterParameters)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elasticache", s.handleElastiCache)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elasticache/parameters", s.handleElastiCacheParameters)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/lambda", s.handleLambda)

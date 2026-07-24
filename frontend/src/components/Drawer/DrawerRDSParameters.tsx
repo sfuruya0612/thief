@@ -1,7 +1,8 @@
-// RDS インスタンスに紐づく DB パラメータグループを選び、そのパラメータ一覧を表示する Drawer タブ。
-// パラメータグループ名は一覧クエリ (useResources) のキャッシュから該当インスタンスを引いて得る。
+// RDS インスタンスに紐づく DB パラメータグループ (instance) と、所属 DB クラスターの
+// DB クラスターパラメータグループ (cluster) を種別付きセグメントで切り替えて表示する Drawer タブ。
+// パラメータグループ名と clusterId は一覧クエリ (useResources) のキャッシュから該当インスタンスを引いて得る。
 import { useMemo, useState } from 'react';
-import { useRDSParameters, useResources } from '../../api/queries';
+import { useRDSClusterParameters, useRDSParameters, useResources } from '../../api/queries';
 import { rdsFromRaw } from '../../lib/normalize';
 import { rdsParameterColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
@@ -14,16 +15,36 @@ export interface DrawerRDSParametersProps {
   instance: string;
 }
 
+type ParameterSegment = { kind: 'instance'; name: string } | { kind: 'cluster'; name: string };
+
+function segmentKey(s: ParameterSegment): string {
+  return `${s.kind}:${s.name}`;
+}
+
+function segmentLabel(s: ParameterSegment): string {
+  return s.kind === 'cluster' ? `Cluster: ${s.name}` : s.name;
+}
+
 function RDSParameterTable({
   profile,
   region,
-  group,
+  segment,
 }: {
   profile: string;
   region: string;
-  group: string;
+  segment: ParameterSegment;
 }) {
-  const { data, isLoading } = useRDSParameters(profile, region, group);
+  const instanceQuery = useRDSParameters(
+    profile,
+    region,
+    segment.kind === 'instance' ? segment.name : '',
+  );
+  const clusterQuery = useRDSClusterParameters(
+    profile,
+    region,
+    segment.kind === 'cluster' ? segment.name : '',
+  );
+  const { data, isLoading } = segment.kind === 'instance' ? instanceQuery : clusterQuery;
   const rows = useMemo(() => data ?? [], [data]);
 
   return (
@@ -32,7 +53,7 @@ function RDSParameterTable({
       style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}
     >
       <h3>
-        {group} ({rows.length})
+        {segmentLabel(segment)} ({rows.length})
       </h3>
       {isLoading ? (
         <DrawerLoading />
@@ -50,35 +71,45 @@ function RDSParameterTable({
 
 export function DrawerRDSParameters({ profile, region, instance }: DrawerRDSParametersProps) {
   const { data } = useResources<RDSRaw, RDSRow>('rds', profile, region, rdsFromRaw);
-  const groups = useMemo(
-    () => data?.find((r) => r.name === instance)?.parameterGroups ?? [],
-    [data, instance],
-  );
-  const [selected, setSelected] = useState<string | null>(null);
-  // 選択が未確定なら先頭グループを既定にする (大半のインスタンスはグループが 1 つ)。
-  const active = selected ?? groups[0] ?? null;
+  const row = useMemo(() => data?.find((r) => r.name === instance), [data, instance]);
+  const groups = row?.parameterGroups ?? [];
+  const clusterId = row?.clusterId ?? '';
+
+  const segments = useMemo<ParameterSegment[]>(() => {
+    const instanceSegments: ParameterSegment[] = groups.map((g) => ({
+      kind: 'instance' as const,
+      name: g,
+    }));
+    return clusterId
+      ? [...instanceSegments, { kind: 'cluster' as const, name: clusterId }]
+      : instanceSegments;
+  }, [groups, clusterId]);
+
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // 選択が未確定なら先頭セグメントを既定にする (大半のインスタンスはセグメントが 1 つ)。
+  const active = segments.find((s) => segmentKey(s) === selectedKey) ?? segments[0] ?? null;
 
   return (
     <div className="section">
-      <h3>Parameter groups ({groups.length})</h3>
-      {groups.length === 0 ? (
+      <h3>Parameter groups ({segments.length})</h3>
+      {segments.length === 0 ? (
         <p className="muted">No parameter groups.</p>
       ) : (
         <>
-          {groups.length > 1 && (
+          {segments.length > 1 && (
             <div className="seg" style={{ marginBottom: 12 }}>
-              {groups.map((g) => (
+              {segments.map((s) => (
                 <button
-                  key={g}
-                  className={active === g ? 'active' : ''}
-                  onClick={() => setSelected(g)}
+                  key={segmentKey(s)}
+                  className={active && segmentKey(active) === segmentKey(s) ? 'active' : ''}
+                  onClick={() => setSelectedKey(segmentKey(s))}
                 >
-                  {g}
+                  {segmentLabel(s)}
                 </button>
               ))}
             </div>
           )}
-          {active && <RDSParameterTable profile={profile} region={region} group={active} />}
+          {active && <RDSParameterTable profile={profile} region={region} segment={active} />}
         </>
       )}
     </div>

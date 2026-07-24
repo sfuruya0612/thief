@@ -94,6 +94,7 @@ import {
   getPricing,
   getProfileIdentity,
   getProfiles,
+  getRDSClusterParameters,
   getRDSParameters,
   getRegions,
   getResources,
@@ -506,6 +507,16 @@ export function useRDSParameters(profile: string, region: string, group: string)
     queryFn: async () => (await getRDSParameters(profile, region, group)).map(rdsParameterFromRaw),
     staleTime: 60_000,
     enabled: !!profile && !!group,
+  });
+}
+
+export function useRDSClusterParameters(profile: string, region: string, clusterId: string) {
+  return useQuery({
+    queryKey: ['aws', 'rds-cluster-parameters', profile, region, clusterId],
+    queryFn: async () =>
+      (await getRDSClusterParameters(profile, region, clusterId)).map(rdsParameterFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!clusterId,
   });
 }
 
