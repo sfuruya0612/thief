@@ -1,8 +1,8 @@
 // components/tables/columns.tsx の列定義のテスト。
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { wafColumns } from './columns';
-import type { WAFRow } from '../../types/aws';
+import { cloudfrontColumns, wafColumns } from './columns';
+import type { CloudFrontRow, WAFRow } from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -81,5 +81,57 @@ describe('wafColumns', () => {
     const associatedCount = wafColumns.find((c) => c.key === 'associatedCount');
     expect(ruleCount?.align).toBe('right');
     expect(associatedCount?.align).toBe('right');
+  });
+});
+
+const cloudfrontBaseRow: CloudFrontRow = {
+  region: 'global',
+  id: 'E123',
+  name: 'test',
+  state: 'deployed',
+  domainName: 'd123.cloudfront.net',
+  aliases: [],
+  origins: ['origin.example.com'],
+  enabled: true,
+  priceClass: 'PriceClass_All',
+};
+
+describe('cloudfrontColumns', () => {
+  it('列の並びが Distribution, State, Domain, Alternate domains, Origins の順になる', () => {
+    expect(cloudfrontColumns.map((c) => c.key)).toEqual([
+      'id',
+      'state',
+      'domainName',
+      'aliases',
+      'origins',
+    ]);
+    expect(cloudfrontColumns.map((c) => c.header)).toEqual([
+      'Distribution',
+      'State',
+      'Domain',
+      'Alternate domains',
+      'Origins',
+    ]);
+  });
+
+  it('列幅の合計が 100% になる', () => {
+    const total = cloudfrontColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
+    expect(total).toBe(100);
+  });
+
+  it('aliases が複数件のとき、カンマ + 半角スペースで結合して表示する', () => {
+    const col = cloudfrontColumns.find((c) => c.key === 'aliases');
+    if (!col) throw new Error('aliases column not found');
+    const { container } = render(
+      <>{col.cell({ ...cloudfrontBaseRow, aliases: ['example.com', 'www.example.com'] })}</>,
+    );
+    expect(container).toHaveTextContent('example.com, www.example.com');
+  });
+
+  it('aliases が空配列のときダッシュ表示になる', () => {
+    const col = cloudfrontColumns.find((c) => c.key === 'aliases');
+    if (!col) throw new Error('aliases column not found');
+    const { container } = render(<>{col.cell(cloudfrontBaseRow)}</>);
+    expect(container).toHaveTextContent('—');
   });
 });

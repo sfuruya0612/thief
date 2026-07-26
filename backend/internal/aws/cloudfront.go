@@ -15,6 +15,7 @@ type CloudFrontResource struct {
 	Name        string   `json:"name"`
 	State       string   `json:"state"`
 	DomainName  string   `json:"domain_name"`
+	Aliases     []string `json:"aliases"`
 	Origins     []string `json:"origins"`
 	Enabled     bool     `json:"enabled"`
 	PriceClass  string   `json:"price_class"`
@@ -85,11 +86,16 @@ func cloudfrontFromSummary(d cftypes.DistributionSummary) CloudFrontResource {
 	if name == "" {
 		name = ptrStr(d.Id)
 	}
+	var aliases []string
+	if d.Aliases != nil {
+		aliases = append(aliases, d.Aliases.Items...)
+	}
 	return CloudFrontResource{
 		ID:         ptrStr(d.Id),
 		Name:       name,
 		State:      DisplayState(ptrStr(d.Status)),
 		DomainName: ptrStr(d.DomainName),
+		Aliases:    aliases,
 		Origins:    origins,
 		Enabled:    ptrBool(d.Enabled),
 		PriceClass: string(d.PriceClass),

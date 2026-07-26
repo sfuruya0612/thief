@@ -566,6 +566,7 @@ export function cloudfrontFromRaw(raw: CloudFrontRaw, _region: string): CloudFro
     name: raw.name,
     state: raw.state,
     domainName: raw.domain_name,
+    aliases: raw.aliases ?? [],
     origins: raw.origins ?? [],
     enabled: raw.enabled,
     priceClass: raw.price_class,
