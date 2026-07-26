@@ -1,5 +1,4 @@
-// wafColumns の列構成の検証 (issue 0074)。
-// Description 列の存在、列幅合計 100%、空の description のダッシュ表示を確認する。
+// components/tables/columns.tsx の列定義のテスト。
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { wafColumns } from './columns';
@@ -41,5 +40,46 @@ describe('wafColumns', () => {
       <>{col.cell({ ...baseRow, description: 'Protects the public API' })}</>,
     );
     expect(container).toHaveTextContent('Protects the public API');
+  });
+
+  it('列の並びが Web ACL, Description, State, Scope, Region, Rules, Associated の順になる', () => {
+    expect(wafColumns.map((c) => c.key)).toEqual([
+      'name',
+      'description',
+      'state',
+      'scope',
+      'region',
+      'ruleCount',
+      'associatedCount',
+    ]);
+    expect(wafColumns.map((c) => c.header)).toEqual([
+      'Web ACL',
+      'Description',
+      'State',
+      'Scope',
+      'Region',
+      'Rules',
+      'Associated',
+    ]);
+  });
+
+  it('各列の幅が並べ替え前と同じ対応を保つ', () => {
+    const widthByKey = Object.fromEntries(wafColumns.map((c) => [c.key, c.width]));
+    expect(widthByKey).toEqual({
+      name: '20%',
+      description: '17%',
+      state: '8%',
+      scope: '13%',
+      region: '20%',
+      ruleCount: '10%',
+      associatedCount: '12%',
+    });
+  });
+
+  it('ruleCount と associatedCount は右寄せのまま保たれる', () => {
+    const ruleCount = wafColumns.find((c) => c.key === 'ruleCount');
+    const associatedCount = wafColumns.find((c) => c.key === 'associatedCount');
+    expect(ruleCount?.align).toBe('right');
+    expect(associatedCount?.align).toBe('right');
   });
 });

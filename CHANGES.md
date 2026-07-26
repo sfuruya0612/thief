@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] WAF の一覧の列順を Web ACL, Description, State, Scope, Region, Rules, Associated に変更する (列の集合と各列の幅は変えない)
+  - @sfuruya0612
 - [UPDATE] Kinesis / DynamoDB / SQS / WAF / IAM の一覧取得で、リソースごとの詳細取得 API 呼び出しを逐次実行から errgroup による並列実行に変更し、リソース数が多い場合のロード時間を短縮する (同時実行数は Kinesis / DynamoDB / SQS が 30、WAF / IAM がマネジメント系 API のレート制限を考慮して 10。WAF は REGIONAL / CLOUDFRONT の 2 スコープの取得も並列化する。失敗を無視する詳細呼び出しは slog.Warn で観測可能にし、キャンセル起因の失敗のみ全体エラーとして伝播させて欠損データのキャッシュ書き込みを防ぐ。0 件時のレスポンスが JSON の null から [] に変わる)
   - @sfuruya0612
 - [UPDATE] RDS の Drawer の Parameters タブを Instance Parameters と Cluster Parameters の 2 タブに分割し、どちらの種別のパラメータグループを見ているかを常に判別できるようにする (未取得と 0 件を区別するローディング表示と、空表示と区別できる取得エラー表示も追加する)
