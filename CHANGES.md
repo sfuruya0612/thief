@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] CloudFront の一覧の列を Distribution, State, Domain, Alternate domains, Origins の 5 列に絞り込む (Enabled と Price class は Drawer の Overview に残したまま一覧の列と絞り込み・並び替え対象からは外す)
+  - @sfuruya0612
 - [UPDATE] WAF の一覧の列順を Web ACL, Description, State, Scope, Region, Rules, Associated に変更する (列の集合と各列の幅は変えない)
   - @sfuruya0612
 - [UPDATE] Kinesis / DynamoDB / SQS / WAF / IAM の一覧取得で、リソースごとの詳細取得 API 呼び出しを逐次実行から errgroup による並列実行に変更し、リソース数が多い場合のロード時間を短縮する (同時実行数は Kinesis / DynamoDB / SQS が 30、WAF / IAM がマネジメント系 API のレート制限を考慮して 10。WAF は REGIONAL / CLOUDFRONT の 2 スコープの取得も並列化する。失敗を無視する詳細呼び出しは slog.Warn で観測可能にし、キャンセル起因の失敗のみ全体エラーとして伝播させて欠損データのキャッシュ書き込みを防ぐ。0 件時のレスポンスが JSON の null から [] に変わる)
@@ -195,6 +197,8 @@
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
 - [FIX] WAF の一覧の Associated 列が常に 0 と表示される不具合を修正する。REGIONAL スコープは `ListResourcesForWebACL` の `ResourceType` 省略時に ALB のみが対象になっていたため、SDK が列挙する全リソースタイプ (ALB / API Gateway / AppSync / Cognito User Pool / App Runner / Verified Access / Amplify / AgentCore Gateway) を個別に呼び出して合算するように変更する。CLOUDFRONT スコープはそもそも関連付け取得の実装が無かったため、CloudFront の `ListDistributions` の `DistributionSummary.WebACLId` と Web ACL の ARN を突き合わせて件数を算出するようにする (WAF ビューに `cloudfront:ListDistributions` 権限が新たに必要になる。権限不足時は slog.Warn に記録した上で該当スコープの Associated を 0 のまま表示し、一覧取得自体は継続する)
+  - @sfuruya0612
+- [FIX] CloudFront の Drawer の Overview および (廃止前の) 一覧で Alternate domains 列がディストリビューション名 (`name`) を表示していたのを、実際の代替ドメイン一覧 (`Aliases`) を表示するように修正する
   - @sfuruya0612
 - [FIX] ElastiCache の Drawer の Parameters タブで、一覧キャッシュ未取得の間に「No parameter group.」と誤表示され、パラメータグループを持たないクラスタと見分けが付かなかったのをローディング表示に修正する
   - @sfuruya0612

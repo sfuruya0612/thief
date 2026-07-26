@@ -7,6 +7,7 @@ import {
   cfnStackDetailFromRaw,
   cfnStackEventFromRaw,
   cfnStackResourceFromRaw,
+  cloudfrontFromRaw,
   cwLogEventFromRaw,
   cwLogGroupFromRaw,
   dynamoTableSchemaFromRaw,
@@ -21,7 +22,7 @@ import {
   wafFromRaw,
   wafRuleFromRaw,
 } from './normalize';
-import type { WAFRaw } from '../types/aws';
+import type { CloudFrontRaw, WAFRaw } from '../types/aws';
 
 describe('profileFromRaw', () => {
   it('sso_account_id / sso_role_name を camelCase に変換する', () => {
@@ -682,5 +683,32 @@ describe('wafRuleFromRaw', () => {
       rule_json: undefined as unknown as string,
     });
     expect(row.ruleJson).toBe('');
+  });
+});
+
+describe('cloudfrontFromRaw', () => {
+  const base: CloudFrontRaw = {
+    id: 'E123',
+    name: 'test',
+    state: 'deployed',
+    domain_name: 'd123.cloudfront.net',
+    aliases: null,
+    origins: null,
+    enabled: true,
+    price_class: 'PriceClass_All',
+    cost_monthly: 0,
+  };
+
+  it('aliases が null のとき空配列になる', () => {
+    const row = cloudfrontFromRaw(base, 'global');
+    expect(row.aliases).toEqual([]);
+  });
+
+  it('aliases に値があれば写る', () => {
+    const row = cloudfrontFromRaw(
+      { ...base, aliases: ['example.com', 'www.example.com'] },
+      'global',
+    );
+    expect(row.aliases).toEqual(['example.com', 'www.example.com']);
   });
 });

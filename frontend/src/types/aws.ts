@@ -614,6 +614,7 @@ export interface CloudFrontRaw {
   name: string;
   state: string;
   domain_name: string;
+  aliases: string[] | null;
   origins: string[] | null;
   enabled: boolean;
   price_class: string;
@@ -626,6 +627,7 @@ export interface CloudFrontRow {
   name: string;
   state: string;
   domainName: string;
+  aliases: string[];
   origins: string[];
   enabled: boolean;
   priceClass: string;

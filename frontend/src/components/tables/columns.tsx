@@ -969,18 +969,18 @@ export const cloudfrontColumns: ColumnDef<CloudFrontRow>[] = [
   {
     key: 'id',
     header: 'Distribution',
-    width: '14%',
+    width: '16%',
     cell: (r) => (
       <span className="primary truncate" style={monoStyle}>
         {r.id}
       </span>
     ),
   },
-  { key: 'state', header: 'State', width: '11%', cell: (r) => <StatusBadge state={r.state} /> },
+  { key: 'state', header: 'State', width: '10%', cell: (r) => <StatusBadge state={r.state} /> },
   {
     key: 'domainName',
     header: 'Domain',
-    width: '22%',
+    width: '25%',
     cell: (r) => (
       <span
         className="truncate"
@@ -991,32 +991,27 @@ export const cloudfrontColumns: ColumnDef<CloudFrontRow>[] = [
     ),
   },
   {
-    key: 'name',
+    key: 'aliases',
     header: 'Alternate domains',
-    width: '20%',
-    cell: (r) => <span className="truncate">{r.name}</span>,
+    width: '25%',
+    cell: (r) => (
+      <span
+        className="truncate"
+        style={{ ...mutedMono, display: 'inline-block', maxWidth: '100%' }}
+      >
+        {r.aliases.join(', ') || <Dash />}
+      </span>
+    ),
   },
   {
     key: 'origins',
     header: 'Origins',
-    width: '19%',
+    width: '24%',
     cell: (r) => (
       <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
         {r.origins.join(', ') || '—'}
       </span>
     ),
-  },
-  {
-    key: 'enabled',
-    header: 'Enabled',
-    width: '7%',
-    cell: (r) => (r.enabled ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />),
-  },
-  {
-    key: 'priceClass',
-    header: 'Price class',
-    width: '7%',
-    cell: (r) => <span style={dimMono}>{r.priceClass}</span>,
   },
 ];
 

@@ -192,7 +192,7 @@ export function cloudfrontOverviewRows(r: CloudFrontRow): OverviewEntry[] {
   return [
     ['Resource ID', r.id],
     ['Domain', r.domainName],
-    ['Alternate domains', r.name || dash],
+    ['Alternate domains', r.aliases.join(', ') || dash],
     ['Origins', r.origins.join(', ') || dash],
     ['Enabled', r.enabled ? 'yes' : 'no'],
     ['Price class', r.priceClass],
