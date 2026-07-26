@@ -194,6 +194,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] WAF の一覧の Associated 列が常に 0 と表示される不具合を修正する。REGIONAL スコープは `ListResourcesForWebACL` の `ResourceType` 省略時に ALB のみが対象になっていたため、SDK が列挙する全リソースタイプ (ALB / API Gateway / AppSync / Cognito User Pool / App Runner / Verified Access / Amplify / AgentCore Gateway) を個別に呼び出して合算するように変更する。CLOUDFRONT スコープはそもそも関連付け取得の実装が無かったため、CloudFront の `ListDistributions` の `DistributionSummary.WebACLId` と Web ACL の ARN を突き合わせて件数を算出するようにする (WAF ビューに `cloudfront:ListDistributions` 権限が新たに必要になる。権限不足時は slog.Warn に記録した上で該当スコープの Associated を 0 のまま表示し、一覧取得自体は継続する)
+  - @sfuruya0612
 - [FIX] ElastiCache の Drawer の Parameters タブで、一覧キャッシュ未取得の間に「No parameter group.」と誤表示され、パラメータグループを持たないクラスタと見分けが付かなかったのをローディング表示に修正する
   - @sfuruya0612
 - [FIX] CORS の `Access-Control-Allow-Methods` に DELETE が含まれず、クロスオリジンの削除系 API (Athena クエリの停止、BigQuery ジョブのキャンセル、スニペットの削除) が preflight で拒否されていたのを修正する
