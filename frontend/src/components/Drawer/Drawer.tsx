@@ -18,7 +18,8 @@ import { DrawerECSTasks } from './DrawerECSTasks';
 import { DrawerELBListeners } from './DrawerELBListeners';
 import { DrawerELBTargets } from './DrawerELBTargets';
 import { DrawerGCSObjects } from './DrawerGCSObjects';
-import { DrawerRDSParameters } from './DrawerRDSParameters';
+import { DrawerRDSClusterParameters } from './DrawerRDSClusterParameters';
+import { DrawerRDSInstanceParameters } from './DrawerRDSInstanceParameters';
 import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerSecretEdit } from './DrawerSecretEdit';
 import { DrawerSSMEdit } from './DrawerSSMEdit';
@@ -30,7 +31,7 @@ import type { OverviewEntry } from './overviewRows';
 const DRAWER_TABS: Record<string, string[]> = {
   ec2: ['Overview', 'Terminal', 'Tags'],
   ecr: ['Overview', 'Images'],
-  rds: ['Overview', 'Parameters', 'Tags'],
+  rds: ['Overview', 'Instance Parameters', 'Cluster Parameters', 'Tags'],
   cache: ['Overview', 'Parameters', 'Tags'],
   lambda: ['Overview', 'Tags'],
   ecs: ['Overview', 'Services', 'Tasks', 'Terminal', 'Tags'],
@@ -320,8 +321,19 @@ export function Drawer({
               {tab === 'Targets' && service === 'elb' && (
                 <DrawerELBTargets profile={profile} region={region} lbArn={resource.id} />
               )}
-              {tab === 'Parameters' && service === 'rds' && (
-                <DrawerRDSParameters profile={profile} region={region} instance={resource.name} />
+              {tab === 'Instance Parameters' && service === 'rds' && (
+                <DrawerRDSInstanceParameters
+                  profile={profile}
+                  region={region}
+                  instance={resource.name}
+                />
+              )}
+              {tab === 'Cluster Parameters' && service === 'rds' && (
+                <DrawerRDSClusterParameters
+                  profile={profile}
+                  region={region}
+                  instance={resource.name}
+                />
               )}
               {tab === 'Parameters' && service === 'cache' && (
                 <DrawerCacheParameters profile={profile} region={region} cluster={resource.name} />
