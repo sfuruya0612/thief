@@ -17,7 +17,12 @@ export interface DrawerCacheParametersProps {
 }
 
 export function DrawerCacheParameters({ profile, region, cluster }: DrawerCacheParametersProps) {
-  const { data } = useResources<CacheRaw, CacheRow>('cache', profile, region, cacheFromRaw);
+  const { data, isLoading: listLoading } = useResources<CacheRaw, CacheRow>(
+    'cache',
+    profile,
+    region,
+    cacheFromRaw,
+  );
   const group = useMemo(
     () => data?.find((r) => r.name === cluster)?.parameterGroup ?? '',
     [data, cluster],
@@ -34,7 +39,11 @@ export function DrawerCacheParameters({ profile, region, cluster }: DrawerCacheP
         {group || 'Parameters'}
         {params !== undefined ? ` (${rows.length})` : ''}
       </h3>
-      {!group ? (
+      {/* グループ名は一覧 query のキャッシュから解決するため、一覧未取得の間は
+          「グループ無し」と断定せずローディングを表示する (issues/0085)。 */}
+      {!group && listLoading ? (
+        <DrawerLoading />
+      ) : !group ? (
         <p className="muted">No parameter group.</p>
       ) : isLoading ? (
         <DrawerLoading />
