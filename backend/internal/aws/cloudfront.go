@@ -11,15 +11,26 @@ import (
 
 // CloudFrontResource represents a CloudFront distribution.
 type CloudFrontResource struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	State       string   `json:"state"`
-	DomainName  string   `json:"domain_name"`
-	Aliases     []string `json:"aliases"`
-	Origins     []string `json:"origins"`
-	Enabled     bool     `json:"enabled"`
-	PriceClass  string   `json:"price_class"`
-	CostMonthly float64  `json:"cost_monthly"`
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	State       string               `json:"state"`
+	DomainName  string               `json:"domain_name"`
+	Aliases     []string             `json:"aliases"`
+	Origins     []string             `json:"origins"`
+	Behaviors   []CloudFrontBehavior `json:"behaviors"`
+	Enabled     bool                 `json:"enabled"`
+	PriceClass  string               `json:"price_class"`
+	CostMonthly float64              `json:"cost_monthly"`
+}
+
+// CloudFrontBehavior represents a single cache behavior (additional or default) of a distribution.
+type CloudFrontBehavior struct {
+	PathPattern          string   `json:"path_pattern"`
+	TargetOriginID       string   `json:"target_origin_id"`
+	ViewerProtocolPolicy string   `json:"viewer_protocol_policy"`
+	AllowedMethods       []string `json:"allowed_methods"`
+	Compress             bool     `json:"compress"`
+	IsDefault            bool     `json:"is_default"`
 }
 
 func (r CloudFrontResource) ResourceID() string    { return r.ID }
@@ -97,9 +108,51 @@ func cloudfrontFromSummary(d cftypes.DistributionSummary) CloudFrontResource {
 		DomainName: ptrStr(d.DomainName),
 		Aliases:    aliases,
 		Origins:    origins,
+		Behaviors:  cloudfrontBehaviorsFromSummary(d),
 		Enabled:    ptrBool(d.Enabled),
 		PriceClass: string(d.PriceClass),
 	}
+}
+
+// cloudfrontBehaviorsFromSummary はディストリビューションの追加ビヘイビアと既定ビヘイビアを
+// 評価順 (追加が Items 順で先、既定が末尾) に並べたスライスに変換する。
+// DefaultCacheBehavior と CacheBehaviors がどちらも欠けている場合は nil を返す。
+func cloudfrontBehaviorsFromSummary(d cftypes.DistributionSummary) []CloudFrontBehavior {
+	var behaviors []CloudFrontBehavior
+	if d.CacheBehaviors != nil {
+		for _, b := range d.CacheBehaviors.Items {
+			behaviors = append(behaviors, CloudFrontBehavior{
+				PathPattern:          ptrStr(b.PathPattern),
+				TargetOriginID:       ptrStr(b.TargetOriginId),
+				ViewerProtocolPolicy: string(b.ViewerProtocolPolicy),
+				AllowedMethods:       allowedMethodItems(b.AllowedMethods),
+				Compress:             ptrBool(b.Compress),
+			})
+		}
+	}
+	if d.DefaultCacheBehavior != nil {
+		behaviors = append(behaviors, CloudFrontBehavior{
+			TargetOriginID:       ptrStr(d.DefaultCacheBehavior.TargetOriginId),
+			ViewerProtocolPolicy: string(d.DefaultCacheBehavior.ViewerProtocolPolicy),
+			AllowedMethods:       allowedMethodItems(d.DefaultCacheBehavior.AllowedMethods),
+			Compress:             ptrBool(d.DefaultCacheBehavior.Compress),
+			IsDefault:            true,
+		})
+	}
+	return behaviors
+}
+
+// allowedMethodItems は AllowedMethods から Method のスライスを string スライスに変換する。
+// AllowedMethods が nil または Items が nil の場合は空スライスを返す。
+func allowedMethodItems(m *cftypes.AllowedMethods) []string {
+	if m == nil {
+		return make([]string, 0)
+	}
+	methods := make([]string, 0, len(m.Items))
+	for _, item := range m.Items {
+		methods = append(methods, string(item))
+	}
+	return methods
 }
 
 // newCloudFrontClient は CloudFront API クライアントを生成する。CloudFront はグローバルサービスのため us-east-1 を使う。

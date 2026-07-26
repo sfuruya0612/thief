@@ -126,6 +126,82 @@ describe('Drawer のタブ構成', () => {
 
     expect(tabLabels(container)).toEqual(['Overview', 'Parameters', 'Tags']);
   });
+
+  it('cloudfront は Overview, Behaviors, Tags の 3 タブになる', () => {
+    const { container } = renderDrawer({ service: 'cloudfront' });
+
+    expect(tabLabels(container)).toEqual(['Overview', 'Behaviors', 'Tags']);
+  });
+});
+
+describe('Drawer の CloudFront Behaviors タブ', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('Behaviors タブでビヘイビアの pathPattern が表示される', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => [
+          {
+            id: 'i-0123456789abcdef0',
+            name: 'test-instance',
+            state: 'deployed',
+            domain_name: 'd123.cloudfront.net',
+            aliases: null,
+            origins: null,
+            behaviors: [
+              {
+                path_pattern: '/images/*',
+                target_origin_id: 'origin-1',
+                viewer_protocol_policy: 'https-only',
+                allowed_methods: ['GET', 'HEAD'],
+                compress: true,
+                is_default: false,
+              },
+            ],
+            enabled: true,
+            price_class: 'PriceClass_All',
+            cost_monthly: 0,
+          },
+        ],
+      } as Response),
+    ) as typeof fetch;
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <Drawer
+          resource={RESOURCE}
+          service="cloudfront"
+          profile="test-profile"
+          region="ap-northeast-1"
+          overviewRows={[]}
+          onClose={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    const tab = Array.from(container.querySelectorAll('.dtab')).find(
+      (el) => el.textContent === 'Behaviors',
+    );
+    expect(tab).not.toBeUndefined();
+    fireEvent.click(tab!);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('/images/*');
+    });
+  });
 });
 
 describe('Drawer の RDS パラメータタブのエラー分離', () => {

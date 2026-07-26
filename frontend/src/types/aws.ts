@@ -609,6 +609,15 @@ export interface ELBTargetHealthRow {
 // ============================================================
 // CloudFront (グローバル: region は 'global' 固定)
 // ============================================================
+export interface CloudFrontBehaviorRaw {
+  path_pattern: string;
+  target_origin_id: string;
+  viewer_protocol_policy: string;
+  allowed_methods: string[];
+  compress: boolean;
+  is_default: boolean;
+}
+
 export interface CloudFrontRaw {
   id: string;
   name: string;
@@ -616,9 +625,21 @@ export interface CloudFrontRaw {
   domain_name: string;
   aliases: string[] | null;
   origins: string[] | null;
+  behaviors: CloudFrontBehaviorRaw[] | null;
   enabled: boolean;
   price_class: string;
   cost_monthly: number;
+}
+
+export interface CloudFrontBehaviorRow {
+  id: string;
+  order: number;
+  pathPattern: string;
+  targetOriginId: string;
+  viewerProtocolPolicy: string;
+  allowedMethods: string[];
+  compress: boolean;
+  isDefault: boolean;
 }
 
 export interface CloudFrontRow {
@@ -629,6 +650,7 @@ export interface CloudFrontRow {
   domainName: string;
   aliases: string[];
   origins: string[];
+  behaviors: CloudFrontBehaviorRow[];
   enabled: boolean;
   priceClass: string;
 }

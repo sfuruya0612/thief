@@ -568,6 +568,16 @@ export function cloudfrontFromRaw(raw: CloudFrontRaw, _region: string): CloudFro
     domainName: raw.domain_name,
     aliases: raw.aliases ?? [],
     origins: raw.origins ?? [],
+    behaviors: (raw.behaviors ?? []).map((b, i) => ({
+      id: String(i + 1),
+      order: i + 1,
+      pathPattern: b.path_pattern,
+      targetOriginId: b.target_origin_id,
+      viewerProtocolPolicy: b.viewer_protocol_policy,
+      allowedMethods: b.allowed_methods,
+      compress: b.compress,
+      isDefault: b.is_default,
+    })),
     enabled: raw.enabled,
     priceClass: raw.price_class,
   };
