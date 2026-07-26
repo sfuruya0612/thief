@@ -4,6 +4,7 @@ import { useELBTargetGroups, useELBTargetHealth } from '../../api/queries';
 import { elbTargetGroupColumns, elbTargetHealthColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
 import { DrawerLoading } from './DrawerLoading';
+import { DrawerError } from './drawerError';
 import type { ELBTargetGroupRow, ELBTargetHealthRow } from '../../types/aws';
 
 export interface DrawerELBTargetsProps {
@@ -25,55 +26,69 @@ function TargetGroupHealth({
   region: string;
   tgArn: string;
 }) {
-  const { data, isLoading } = useELBTargetHealth(profile, region, tgArn);
+  const { data, isLoading, error } = useELBTargetHealth(profile, region, tgArn);
   const rows = useMemo<ELBTargetHealthTableRow[]>(
     () => (data ?? []).map((r) => ({ ...r, id: `${r.targetId}:${r.port}` })),
     [data],
   );
 
+  // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
+  // (issues/0075 で確定した表示規則)。
   return (
     <div
       className="section"
       style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}
     >
-      <h3>Targets ({rows.length})</h3>
+      <h3>Targets{data !== undefined ? ` (${rows.length})` : ''}</h3>
       {isLoading ? (
         <DrawerLoading />
       ) : (
-        <DataTable
-          rows={rows}
-          columns={elbTargetHealthColumns}
-          onSelect={() => {}}
-          selectedId={null}
-        />
+        <>
+          {error != null && <DrawerError error={error} />}
+          {data !== undefined && (
+            <DataTable
+              rows={rows}
+              columns={elbTargetHealthColumns}
+              onSelect={() => {}}
+              selectedId={null}
+            />
+          )}
+        </>
       )}
     </div>
   );
 }
 
 export function DrawerELBTargets({ profile, region, lbArn }: DrawerELBTargetsProps) {
-  const { data, isLoading } = useELBTargetGroups(profile, region, lbArn);
+  const { data, isLoading, error } = useELBTargetGroups(profile, region, lbArn);
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const rows = useMemo<ELBTargetGroupTableRow[]>(
     () => (data ?? []).map((r) => ({ ...r, id: r.arn })),
     [data],
   );
 
+  // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
+  // (issues/0075 で確定した表示規則)。
   return (
     <div className="section">
-      <h3>Target groups ({rows.length})</h3>
+      <h3>Target groups{data !== undefined ? ` (${rows.length})` : ''}</h3>
       {isLoading ? (
         <DrawerLoading />
       ) : (
         <>
-          <DataTable
-            rows={rows}
-            columns={elbTargetGroupColumns}
-            onSelect={(r) => setSelectedArn(r.arn)}
-            selectedId={selectedArn}
-          />
-          {selectedArn && (
-            <TargetGroupHealth profile={profile} region={region} tgArn={selectedArn} />
+          {error != null && <DrawerError error={error} />}
+          {data !== undefined && (
+            <>
+              <DataTable
+                rows={rows}
+                columns={elbTargetGroupColumns}
+                onSelect={(r) => setSelectedArn(r.arn)}
+                selectedId={selectedArn}
+              />
+              {selectedArn && (
+                <TargetGroupHealth profile={profile} region={region} tgArn={selectedArn} />
+              )}
+            </>
           )}
         </>
       )}

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useDynamoItems, useDynamoSchema } from '../../api/queries';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import { DrawerLoading } from './DrawerLoading';
+import { DrawerError } from './drawerError';
 
 const inputStyle = {
   height: 26,
@@ -30,7 +31,11 @@ export interface DrawerDynamoItemsProps {
 
 export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsProps) {
   const { t } = useTranslation('drawerAws');
-  const { data: schema, isLoading: schemaLoading } = useDynamoSchema(profile, region, table);
+  const {
+    data: schema,
+    isLoading: schemaLoading,
+    error: schemaError,
+  } = useDynamoSchema(profile, region, table);
   const [pkInput, setPkInput] = useState('');
   const [skInput, setSkInput] = useState('');
   const [attrNameInput, setAttrNameInput] = useState('');
@@ -42,7 +47,11 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
   const [submittedAttrName, setSubmittedAttrName] = useState('');
   const [submittedAttrValue, setSubmittedAttrValue] = useState('');
 
-  const { data: items, isLoading: itemsLoading } = useDynamoItems(profile, region, table, {
+  const {
+    data: items,
+    isLoading: itemsLoading,
+    error: itemsError,
+  } = useDynamoItems(profile, region, table, {
     pkValue: submittedPk || undefined,
     skValue: submittedSk || undefined,
     attrName: submittedAttrName || undefined,
@@ -100,10 +109,16 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
   return (
     <div className="section">
       <h3>Items</h3>
+      {/* query ごとにエラーを表示する: data が無いときはエラー表示のみ、data があるときは
+          既存表示の上部にエラーを出す (issues/0075 で確定した表示規則)。items のエラーは
+          検索フォームを保ったままテーブル部分に表示する。 */}
       {schemaLoading ? (
         <DrawerLoading />
+      ) : schema === undefined ? (
+        <>{schemaError != null && <DrawerError error={schemaError} />}</>
       ) : (
         <>
+          {schemaError != null && <DrawerError error={schemaError} />}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <input
               style={inputStyle}
@@ -170,65 +185,70 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
           {itemsLoading ? (
             <DrawerLoading />
           ) : (
-            <div className="table-wrap">
-              <table className="dt">
-                <colgroup>
-                  {columns.map((c) => (
-                    <col key={c} style={{ width: colWidths[c] }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr ref={theadRowRef}>
-                    {columns.map((c) => (
-                      <th key={c} data-col-key={c} style={{ position: 'relative' }}>
-                        {c}
-                        <span
-                          className="col-resize-handle"
-                          onPointerDown={startColResize(c)}
-                          title="Drag to resize column"
-                        />
-                      </th>
-                    ))}
-                  </tr>
-                  <tr className="dt-filter-row">
-                    {columns.map((c) => (
-                      <th key={c}>
-                        <input
-                          className="dt-col-filter"
-                          value={colFilters[c] ?? ''}
-                          placeholder={t('dynamoItems.filterPlaceholder')}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) =>
-                            setColFilters((prev) => ({ ...prev, [c]: e.target.value }))
-                          }
-                        />
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((row, i) => (
-                    <tr key={i}>
+            <>
+              {itemsError != null && <DrawerError error={itemsError} />}
+              {items !== undefined && (
+                <div className="table-wrap">
+                  <table className="dt">
+                    <colgroup>
                       {columns.map((c) => (
-                        <td key={c} style={{ fontFamily: 'var(--font-mono)' }}>
-                          {formatItemValue(row[c])}
-                        </td>
+                        <col key={c} style={{ width: colWidths[c] }} />
                       ))}
-                    </tr>
-                  ))}
-                  {filteredRows.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={Math.max(columns.length, 1)}
-                        style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}
-                      >
-                        No items found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </colgroup>
+                    <thead>
+                      <tr ref={theadRowRef}>
+                        {columns.map((c) => (
+                          <th key={c} data-col-key={c} style={{ position: 'relative' }}>
+                            {c}
+                            <span
+                              className="col-resize-handle"
+                              onPointerDown={startColResize(c)}
+                              title="Drag to resize column"
+                            />
+                          </th>
+                        ))}
+                      </tr>
+                      <tr className="dt-filter-row">
+                        {columns.map((c) => (
+                          <th key={c}>
+                            <input
+                              className="dt-col-filter"
+                              value={colFilters[c] ?? ''}
+                              placeholder={t('dynamoItems.filterPlaceholder')}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                setColFilters((prev) => ({ ...prev, [c]: e.target.value }))
+                              }
+                            />
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRows.map((row, i) => (
+                        <tr key={i}>
+                          {columns.map((c) => (
+                            <td key={c} style={{ fontFamily: 'var(--font-mono)' }}>
+                              {formatItemValue(row[c])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                      {filteredRows.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={Math.max(columns.length, 1)}
+                            style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}
+                          >
+                            No items found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
