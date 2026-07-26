@@ -46,8 +46,17 @@ func writeInternalFromError(w http.ResponseWriter, err error) {
 }
 
 // writeAWSError writes the appropriate HTTP error based on whether err is an
-// SSO token expiry (401 SSO_TOKEN_EXPIRED) or a generic AWS error (500).
+// IAM permission error (403 ACCESS_DENIED), an SSO token expiry
+// (401 SSO_TOKEN_EXPIRED), or a generic AWS error (500). Order matters:
+// IsAccessDenied (a precise smithy error-code check) must run before
+// IsSSOTokenExpired (a loose substring check that matches "not authorized")
+// so the precise classification wins and the user is not sent to re-login
+// for a missing IAM permission.
 func writeAWSError(w http.ResponseWriter, err error) {
+	if awsinternal.IsAccessDenied(err) {
+		writeError(w, http.StatusForbidden, "ACCESS_DENIED", err.Error())
+		return
+	}
 	if awsinternal.IsSSOTokenExpired(err) {
 		writeUnauthorized(w, err.Error())
 		return
