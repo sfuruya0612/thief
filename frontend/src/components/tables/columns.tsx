@@ -1265,6 +1265,12 @@ export const wafColumns: ColumnDef<WAFRow>[] = [
     width: '20%',
     cell: (r) => <span className="primary truncate">{r.name}</span>,
   },
+  {
+    key: 'description',
+    header: 'Description',
+    width: '17%',
+    cell: (r) => (r.description ? <span className="truncate">{r.description}</span> : <Dash />),
+  },
   { key: 'state', header: 'State', width: '8%', cell: (r) => <StatusBadge state={r.state} /> },
   {
     key: 'scope',
@@ -1281,6 +1287,12 @@ export const wafColumns: ColumnDef<WAFRow>[] = [
     ),
   },
   {
+    key: 'region',
+    header: 'Region',
+    width: '20%',
+    cell: (r) => <span style={mutedMono}>{r.region}</span>,
+  },
+  {
     key: 'ruleCount',
     header: 'Rules',
     width: '10%',
@@ -1293,18 +1305,6 @@ export const wafColumns: ColumnDef<WAFRow>[] = [
     width: '12%',
     align: 'right',
     cell: (r) => <span style={mutedMono}>{r.associatedCount}</span>,
-  },
-  {
-    key: 'description',
-    header: 'Description',
-    width: '17%',
-    cell: (r) => (r.description ? <span className="truncate">{r.description}</span> : <Dash />),
-  },
-  {
-    key: 'region',
-    header: 'Region',
-    width: '20%',
-    cell: (r) => <span style={mutedMono}>{r.region}</span>,
   },
 ];
 
