@@ -64,9 +64,8 @@ func (s *Server) handleSSMPut(w http.ResponseWriter, r *http.Request) {
 // name はクエリで受ける (階層名を含みうるため)。値はキャッシュしない。
 func (s *Server) handleSecretValue(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	name := r.URL.Query().Get("name")
-	if name == "" {
-		writeBadRequest(w, "name query parameter is required")
+	name, ok := requireQueryParam(w, r, "name")
+	if !ok {
 		return
 	}
 	value, err := awsinternal.GetSecretValue(r.Context(), profile, region, name)
@@ -81,9 +80,8 @@ func (s *Server) handleSecretValue(w http.ResponseWriter, r *http.Request) {
 // name はクエリで受ける (階層名を含みうるため)。値はキャッシュしない。
 func (s *Server) handleSSMValue(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	name := r.URL.Query().Get("name")
-	if name == "" {
-		writeBadRequest(w, "name query parameter is required")
+	name, ok := requireQueryParam(w, r, "name")
+	if !ok {
 		return
 	}
 	value, err := awsinternal.GetSSMParameter(r.Context(), profile, region, name, true)

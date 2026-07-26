@@ -35,9 +35,8 @@ func (s *Server) handleAthenaWorkgroups(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAthenaTables(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	catalog := r.URL.Query().Get("catalog")
-	database := r.URL.Query().Get("database")
-	if database == "" {
-		writeBadRequest(w, "database query parameter is required")
+	database, ok := requireQueryParam(w, r, "database")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("athena-tables", profile, region, catalog, database), cacheTTL, writeAWSError, func() (any, error) {

@@ -21,7 +21,7 @@ import {
   type PricingService,
 } from '../lib/pricingSelection';
 import { loadPersisted, savePersisted } from '../lib/storage';
-import { ApiError } from '../types/common';
+import { isSSOExpiredError } from '../lib/ssoError';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 
 export interface PricingPanelProps {
@@ -151,11 +151,7 @@ export function PricingPanel({ profile, region, onRegionChange }: PricingPanelPr
   ]);
 
   const ssoExpired = useMemo(
-    () =>
-      PRICING_SERVICES.some((s) => {
-        const err = queries[s].error;
-        return err instanceof ApiError && err.code === 'SSO_TOKEN_EXPIRED';
-      }),
+    () => PRICING_SERVICES.some((s) => isSSOExpiredError(queries[s].error)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       ec2Query.error,

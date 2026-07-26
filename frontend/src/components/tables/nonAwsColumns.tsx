@@ -4,14 +4,7 @@
 import type { TiDBClusterRow, TiDBProjectRow } from '../../types/nonaws';
 import type { ColumnDef } from './columns';
 import { StatusBadge } from '../primitives';
-
-const monoStyle = { fontFamily: 'var(--font-mono)' } as const;
-const mutedMono = { fontFamily: 'var(--font-mono)', color: 'var(--text-2)' } as const;
-const dashStyle = { color: 'var(--text-4)' } as const;
-
-function Dash() {
-  return <span style={dashStyle}>—</span>;
-}
+import { Dash, monoStyle, mutedMono } from './cells';
 
 // ============================================================
 // TiDB

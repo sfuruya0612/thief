@@ -7,7 +7,7 @@ import { CostChart } from '../components/charts/CostChart';
 import { CostCrossTable } from '../components/tables/CostCrossTable';
 import { Icons } from '../components/icons/Icons';
 import { Loading } from '../components/Loading';
-import { ApiError } from '../types/common';
+import { isSSOExpiredError } from '../lib/ssoError';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { aggregateCost, type CostMetricType } from '../lib/costAggregate';
@@ -77,7 +77,7 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
     endDate,
   });
 
-  const ssoExpired = error instanceof ApiError && error.code === 'SSO_TOKEN_EXPIRED';
+  const ssoExpired = isSSOExpiredError(error);
   const allRows = useMemo(() => data ?? [], [data]);
 
   const rows = useMemo(() => {

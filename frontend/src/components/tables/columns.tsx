@@ -38,6 +38,7 @@ import type {
   WAFRuleRow,
 } from '../../types/aws';
 import { StatusBadge } from '../primitives';
+import { Dash, dashStyle, dimMono, monoStyle, mutedMono } from './cells';
 
 export interface ColumnDef<T> {
   key: string;
@@ -63,15 +64,6 @@ export function formatBytes(bytes: number): string {
     i++;
   }
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-const monoStyle = { fontFamily: 'var(--font-mono)' } as const;
-const mutedMono = { fontFamily: 'var(--font-mono)', color: 'var(--text-2)' } as const;
-const dimMono = { fontFamily: 'var(--font-mono)', color: 'var(--text-3)' } as const;
-const dashStyle = { color: 'var(--text-4)' } as const;
-
-function Dash() {
-  return <span style={dashStyle}>—</span>;
 }
 
 // ============================================================

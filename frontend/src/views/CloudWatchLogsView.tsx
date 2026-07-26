@@ -21,7 +21,7 @@ import { buildHistogram, rangeFromItems } from '../lib/logHistogram';
 import { type PresetOption, presetToRange } from '../lib/logTimeRange';
 import { cwSeverityFromMessage } from '../lib/logSeverity';
 import { cwLogEventFromRaw } from '../lib/normalize';
-import { ApiError } from '../types/common';
+import { isSSOExpiredError } from '../lib/ssoError';
 import type { CWLogEventRaw, CWLogEventRow } from '../types/aws';
 
 export interface CloudWatchLogsViewProps {
@@ -33,10 +33,6 @@ const FILTER_SNIPPETS = [
   { label: 'ERROR', snippet: 'ERROR' },
   { label: 'JSON level', snippet: '{ $.level = "error" }' },
 ];
-
-function isSSOExpired(...errors: unknown[]): boolean {
-  return errors.some((e) => e instanceof ApiError && e.code === 'SSO_TOKEN_EXPIRED');
-}
 
 const copyRaw = (text: string) => void navigator.clipboard?.writeText(text);
 
@@ -183,7 +179,7 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [rows, live, autoScroll]);
 
-  const ssoExpired = isSSOExpired(groupsQuery.error, eventsQuery.error);
+  const ssoExpired = [groupsQuery.error, eventsQuery.error].some(isSSOExpiredError);
   const listError = live ? undefined : eventsQuery.error;
 
   const exportCsv = useCallback(() => {

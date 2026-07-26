@@ -37,7 +37,7 @@ import {
   saveAthenaContext,
 } from '../lib/queryEditorStorage';
 import { formatDurationClock, s3Dir, shortId, toCsv } from '../lib/queryFormat';
-import { ApiError } from '../types/common';
+import { isSSOExpiredError } from '../lib/ssoError';
 import type { AthenaTableRow, NamedQuery, QueryHistoryRow } from '../types/query';
 
 const DEFAULT_CATALOG = 'AwsDataCatalog';
@@ -58,10 +58,6 @@ function pickOption(options: string[], persisted?: string, fallback?: string): s
   if (persisted && options.includes(persisted)) return persisted;
   if (fallback && options.includes(fallback)) return fallback;
   return options[0] ?? '';
-}
-
-function isSSOExpired(...errors: unknown[]): boolean {
-  return errors.some((e) => e instanceof ApiError && e.code === 'SSO_TOKEN_EXPIRED');
 }
 
 function AthenaEditor({ profile, region }: AthenaViewProps) {
@@ -217,7 +213,7 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
   const lastFinished = !running && status && status.state !== 'queued' ? status : undefined;
   const actionError = start.error as Error | null;
 
-  const ssoExpired = isSSOExpired(
+  const ssoExpired = [
     catalogs.error,
     workgroups.error,
     databases.error,
@@ -225,7 +221,7 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
     history.error,
     execStatus.error,
     start.error,
-  );
+  ].some(isSSOExpiredError);
   const listError = catalogs.error ?? workgroups.error ?? databases.error ?? tables.error;
 
   const resultsStatus = status ? (

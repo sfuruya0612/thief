@@ -59,9 +59,9 @@ describe('DrawerValueEditor', () => {
   it('取得エラーが ApiError のときはステータスとコードとメッセージを表示する', () => {
     const { container } = renderEditor({
       value: undefined,
-      error: new ApiError(401, 'SSO_TOKEN_EXPIRED', 'sso token expired'),
+      error: new ApiError(403, 'ACCESS_DENIED', 'access denied'),
     });
-    expect(container.textContent).toContain('Error 401 (SSO_TOKEN_EXPIRED): sso token expired');
+    expect(container.textContent).toContain('Error 403 (ACCESS_DENIED): access denied');
   });
 
   it('Close ボタンで onClose を呼ぶ', () => {
