@@ -190,6 +190,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] ElastiCache の Drawer の Parameters タブで、一覧キャッシュ未取得の間に「No parameter group.」と誤表示され、パラメータグループを持たないクラスタと見分けが付かなかったのをローディング表示に修正する
+  - @sfuruya0612
 - [FIX] CORS の `Access-Control-Allow-Methods` に DELETE が含まれず、クロスオリジンの削除系 API (Athena クエリの停止、BigQuery ジョブのキャンセル、スニペットの削除) が preflight で拒否されていたのを修正する
   - @sfuruya0612
 - [FIX] Drawer のサブタブ (CloudFormation の Events / Resources / Tags、ECR の Images、ECS の Services / Tasks、ELB の Listeners / Rules / Target groups / Targets、DynamoDB の Items、ElastiCache の Parameters) が取得エラーを空表示にしてしまい 0 件と区別できなかった不具合を、query ごとの取得エラーを DrawerError で表示するように修正する (data が無いときはエラー表示のみ、キャッシュ済み data があるときは既存表示の上部にエラーを出す。issues/0075 で確定した表示規則に統一する)
