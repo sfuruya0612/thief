@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] RDS の Drawer の Parameters タブを Instance Parameters と Cluster Parameters の 2 タブに分割し、どちらの種別のパラメータグループを見ているかを常に判別できるようにする (未取得と 0 件を区別するローディング表示と、空表示と区別できる取得エラー表示も追加する)
+  - @sfuruya0612
 - [UPDATE] WAF の一覧に Description 列を追加し、Drawer の Overview にも Description 行を表示する (ListWebACLs のレスポンスに含まれる値を写すだけで追加の API 呼び出し・権限は不要)
   - @sfuruya0612
 - [UPDATE] AWS Pricing の単価表 (`RateGroupSection`) に手書きの行仮想化 (windowing) を導入し、60 行以上のグループでは可視範囲の行のみを DOM に描画するようにする (EC2 On-Demand など数百行規模のグループの初回描画コストを削減する。仮想化ライブラリの追加はせず、スクロール領域単位の共有 ResizeObserver で sibling のレイアウト変化にも追従する)
