@@ -286,7 +286,7 @@ frontend/
 ### サーバ状態 (TanStack Query)
 
 - `queryKey` はドメインを先頭に置く配列(`['aws', service, profile, region]`、`['bigquery', 'tables', dataset, projectId]` 等)で構成する。
-- `staleTime` はバックエンドのキャッシュ TTL に合わせて `60_000`(60秒)を基本とする。プロファイル一覧のように変化が少ないものは `5 * 60 * 1000` 等に緩める。
+- `staleTime` はバックエンドのキャッシュ TTL に合わせた `60_000`(60秒)を `main.tsx` の QueryClient グローバル既定としている。各 `useQuery` では 60 秒以外にしたい場合のみ個別指定する(プロファイル一覧のように変化が少ないものは `5 * 60 * 1000` 等に緩め、Secrets/SSM の値取得やオブジェクトプレビューのように開くたびに取得したいものは `staleTime: 0` を明示する)。
 - 依存データの遅延取得は `enabled: !!dependency` で制御する(例: `useBQTables` は `dataset` が確定するまで無効)。
 - 更新系は `useMutation` + `queryClient.invalidateQueries({ queryKey: [...] })` で書く。トップバーの Refresh ボタンは、まず `POST /api/cache/invalidate?view=<AppView>` で backend のリソースキャッシュを view 単位で破棄し、その完了後に現在表示中の `AppView` に対応する `queryKey` を invalidate する(処理列は `lib/refreshView.ts`)。
 

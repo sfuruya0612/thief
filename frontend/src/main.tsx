@@ -15,6 +15,9 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      // backend のリソースキャッシュ TTL に合わせた既定値 (AGENTS.md の frontend 節を参照)。
+      // 60 秒以外にしたいクエリだけが各 useQuery で staleTime を個別指定する。
+      staleTime: 60_000,
     },
   },
 });

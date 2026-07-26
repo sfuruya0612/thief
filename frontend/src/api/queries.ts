@@ -185,7 +185,6 @@ export function useResources<TRaw, TRow>(
       const raws = await getResources<TRaw>(service, profile, region);
       return raws.map((r) => normalizer(r, region));
     },
-    staleTime: 60_000,
     enabled: !!profile && !!service,
   });
 }
@@ -214,7 +213,6 @@ export function useCost(profile: string, region: string, opts?: CostQueryOptions
         unit: r.unit,
       }));
     },
-    staleTime: 60_000,
     enabled: !!profile,
   });
 }
@@ -230,7 +228,6 @@ export function useCostForecast(profile: string, region: string) {
         unit: r.unit,
       }));
     },
-    staleTime: 60_000,
     enabled: !!profile,
   });
 }
@@ -295,12 +292,13 @@ export function useRegions(profile: string) {
 // Secrets Manager / SSM Parameter Store (Drawer の Value タブ)
 // ============================================================
 // 値は一覧に含めないため、Value タブを開いたときにオンデマンドで取得する。機密値をキャッシュに
-// 常時載せない方針のため staleTime を設けず、開くたびに取得する (S3 オブジェクトプレビューと
-// 同じ考え方)。
+// 常時載せない方針のため staleTime: 0 を明示し、開くたびに取得する (S3 オブジェクトプレビューと
+// 同じ考え方。グローバル既定の 60 秒に引きずられないようにする)。
 export function useSecretValue(profile: string, region: string, name: string) {
   return useQuery({
     queryKey: ['aws', 'secret-value', profile, region, name],
     queryFn: async () => (await getSecretValue(profile, region, name)).value,
+    staleTime: 0,
     enabled: !!profile && !!name,
   });
 }
@@ -309,6 +307,7 @@ export function useSSMValue(profile: string, region: string, name: string) {
   return useQuery({
     queryKey: ['aws', 'ssm-value', profile, region, name],
     queryFn: async () => (await getSSMParameterValue(profile, region, name)).value,
+    staleTime: 0,
     enabled: !!profile && !!name,
   });
 }
@@ -355,7 +354,6 @@ export function useS3Objects(profile: string, region: string, bucket: string, pr
       const { objects, truncated } = await getS3Objects(profile, region, bucket, prefix);
       return { objects: (objects ?? []).map(s3ObjectFromRaw), truncated };
     },
-    staleTime: 60_000,
     enabled: !!profile && !!bucket,
   });
 }
@@ -377,7 +375,7 @@ export function useS3Upload(profile: string, region: string, bucket: string, pre
 }
 
 // enabled: !!key でプレビュー対象確定時 (行の Preview アクションをクリックした後) のみ取得する。
-// プレビューは開くたびに最新の中身を読みたい取得系のため staleTime は設けない。
+// プレビューは開くたびに最新の中身を読みたい取得系のため staleTime: 0 を明示する。
 export function useS3ObjectPreview(
   profile: string,
   region: string,
@@ -388,6 +386,7 @@ export function useS3ObjectPreview(
     queryKey: ['aws', 's3-object-preview', profile, region, bucket, key],
     queryFn: async () =>
       objectPreviewFromRaw(await getS3ObjectPreview(profile, region, bucket, key!)),
+    staleTime: 0,
     enabled: !!profile && !!bucket && !!key,
   });
 }
@@ -399,7 +398,6 @@ export function useECSServices(profile: string, region: string, cluster: string)
   return useQuery({
     queryKey: ['aws', 'ecs-services', profile, region, cluster],
     queryFn: async () => (await getECSServices(profile, region, cluster)).map(ecsServiceFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!cluster,
   });
 }
@@ -408,7 +406,6 @@ export function useECSTasks(profile: string, region: string, cluster: string, se
   return useQuery({
     queryKey: ['aws', 'ecs-tasks', profile, region, cluster, service],
     queryFn: async () => (await getECSTasks(profile, region, cluster, service)).map(ecsTaskFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!cluster,
   });
 }
@@ -418,7 +415,6 @@ export function useECSContainers(profile: string, region: string, cluster: strin
     queryKey: ['aws', 'ecs-containers', profile, region, cluster, task],
     queryFn: async () =>
       (await getECSContainers(profile, region, cluster, task)).map(ecsContainerFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!cluster && !!task,
   });
 }
@@ -430,7 +426,6 @@ export function useECRImages(profile: string, region: string, repo: string) {
   return useQuery({
     queryKey: ['aws', 'ecr-images', profile, region, repo],
     queryFn: async () => (await getECRImages(profile, region, repo)).map(ecrImageFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!repo,
   });
 }
@@ -442,7 +437,6 @@ export function useCFNStackDetail(profile: string, region: string, stack: string
   return useQuery({
     queryKey: ['aws', 'cfn-detail', profile, region, stack],
     queryFn: async () => cfnStackDetailFromRaw(await getCFNStackDetail(profile, region, stack)),
-    staleTime: 60_000,
     enabled: !!profile && !!stack,
   });
 }
@@ -463,7 +457,6 @@ export function useCFNStackResources(profile: string, region: string, stack: str
     queryKey: ['aws', 'cfn-resources', profile, region, stack],
     queryFn: async () =>
       (await getCFNStackResources(profile, region, stack)).map(cfnStackResourceFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!stack,
   });
 }
@@ -475,7 +468,6 @@ export function useELBListeners(profile: string, region: string, lbArn: string) 
   return useQuery({
     queryKey: ['aws', 'elb-listeners', profile, region, lbArn],
     queryFn: async () => (await getELBListeners(profile, region, lbArn)).map(elbListenerFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!lbArn,
   });
 }
@@ -484,7 +476,6 @@ export function useELBRules(profile: string, region: string, listenerArn: string
   return useQuery({
     queryKey: ['aws', 'elb-rules', profile, region, listenerArn],
     queryFn: async () => (await getELBRules(profile, region, listenerArn)).map(elbRuleFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!listenerArn,
   });
 }
@@ -494,7 +485,6 @@ export function useELBTargetGroups(profile: string, region: string, lbArn: strin
     queryKey: ['aws', 'elb-target-groups', profile, region, lbArn],
     queryFn: async () =>
       (await getELBTargetGroups(profile, region, lbArn)).map(elbTargetGroupFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!lbArn,
   });
 }
@@ -504,7 +494,6 @@ export function useELBTargetHealth(profile: string, region: string, tgArn: strin
     queryKey: ['aws', 'elb-target-health', profile, region, tgArn],
     queryFn: async () =>
       (await getELBTargetHealth(profile, region, tgArn)).map(elbTargetHealthFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!tgArn,
   });
 }
@@ -517,7 +506,6 @@ export function useRDSParameters(profile: string, region: string, group: string)
   return useQuery({
     queryKey: ['aws', 'rds-parameters', profile, region, group],
     queryFn: async () => (await getRDSParameters(profile, region, group)).map(rdsParameterFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!group,
   });
 }
@@ -527,7 +515,6 @@ export function useRDSClusterParameters(profile: string, region: string, cluster
     queryKey: ['aws', 'rds-cluster-parameters', profile, region, clusterId],
     queryFn: async () =>
       rdsClusterParameterGroupFromRaw(await getRDSClusterParameters(profile, region, clusterId)),
-    staleTime: 60_000,
     enabled: !!profile && !!clusterId,
   });
 }
@@ -537,7 +524,6 @@ export function useCacheParameters(profile: string, region: string, group: strin
     queryKey: ['aws', 'elasticache-parameters', profile, region, group],
     queryFn: async () =>
       (await getCacheParameters(profile, region, group)).map(cacheParameterFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!group,
   });
 }
@@ -556,7 +542,6 @@ export function useWAFRules(
   return useQuery({
     queryKey: ['aws', 'waf-rules', profile, region, scope, id],
     queryFn: async () => (await getWAFRules(profile, region, scope, name, id)).map(wafRuleFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!scope && !!id,
   });
 }
@@ -568,7 +553,6 @@ export function useDynamoSchema(profile: string, region: string, table: string) 
   return useQuery({
     queryKey: ['aws', 'dynamo-schema', profile, region, table],
     queryFn: async () => dynamoTableSchemaFromRaw(await getDynamoSchema(profile, region, table)),
-    staleTime: 60_000,
     enabled: !!profile && !!table,
   });
 }
@@ -597,7 +581,6 @@ export function useDynamoItems(
       limit,
     ],
     queryFn: () => getDynamoItems(profile, region, table, opts),
-    staleTime: 60_000,
     enabled: !!profile && !!table,
   });
 }
@@ -620,7 +603,6 @@ export function useBQDatasets(projectId?: string) {
   return useQuery({
     queryKey: ['bigquery', 'datasets', projectId],
     queryFn: async () => (await getBQDatasets(projectId)).map(bqDatasetFromRaw),
-    staleTime: 60_000,
   });
 }
 
@@ -628,7 +610,6 @@ export function useBQTables(dataset: string, projectId?: string) {
   return useQuery({
     queryKey: ['bigquery', 'tables', dataset, projectId],
     queryFn: async () => (await getBQTables(dataset, projectId)).map(bqTableFromRaw),
-    staleTime: 60_000,
     enabled: !!dataset,
   });
 }
@@ -637,7 +618,6 @@ export function useBQSchema(dataset: string, table: string, projectId?: string) 
   return useQuery({
     queryKey: ['bigquery', 'schema', dataset, table, projectId],
     queryFn: async () => (await getBQSchema(dataset, table, projectId)).map(bqFieldFromRaw),
-    staleTime: 60_000,
     enabled: !!dataset && !!table,
   });
 }
@@ -729,7 +709,6 @@ export function useAthenaCatalogs(profile: string, region: string) {
   return useQuery({
     queryKey: ['aws', 'athena-catalogs', profile, region],
     queryFn: () => getAthenaCatalogs(profile, region),
-    staleTime: 60_000,
     enabled: !!profile,
   });
 }
@@ -738,7 +717,6 @@ export function useAthenaDatabases(profile: string, region: string, catalog?: st
   return useQuery({
     queryKey: ['aws', 'athena-databases', profile, region, catalog],
     queryFn: () => getAthenaDatabases(profile, region, catalog),
-    staleTime: 60_000,
     enabled: !!profile,
   });
 }
@@ -747,7 +725,6 @@ export function useAthenaWorkgroups(profile: string, region: string) {
   return useQuery({
     queryKey: ['aws', 'athena-workgroups', profile, region],
     queryFn: () => getAthenaWorkgroups(profile, region),
-    staleTime: 60_000,
     enabled: !!profile,
   });
 }
@@ -762,7 +739,6 @@ export function useAthenaTables(
     queryKey: ['aws', 'athena-tables', profile, region, catalog, database],
     queryFn: async () =>
       (await getAthenaTables(profile, region, database!, catalog)).map(athenaTableFromRaw),
-    staleTime: 60_000,
     enabled: !!profile && !!database,
   });
 }
@@ -855,7 +831,6 @@ export function useDatadogHistorical(startMonth?: string, endMonth?: string, vie
     queryKey: ['datadog', 'historical', startMonth, endMonth, view],
     queryFn: async () =>
       (await getDatadogHistorical(startMonth, endMonth, view)).map(datadogCostFromRaw),
-    staleTime: 60_000,
   });
 }
 
@@ -864,7 +839,6 @@ export function useDatadogEstimated(startMonth?: string, endMonth?: string, view
     queryKey: ['datadog', 'estimated', startMonth, endMonth, view],
     queryFn: async () =>
       (await getDatadogEstimated(startMonth, endMonth, view)).map(datadogCostFromRaw),
-    staleTime: 60_000,
   });
 }
 
@@ -875,7 +849,6 @@ export function useTiDBProjects() {
   return useQuery({
     queryKey: ['tidb', 'projects'],
     queryFn: async () => (await getTiDBProjects()).map(tidbProjectFromRaw),
-    staleTime: 60_000,
   });
 }
 
@@ -883,7 +856,6 @@ export function useTiDBClusters(projectId: string) {
   return useQuery({
     queryKey: ['tidb', 'clusters', projectId],
     queryFn: async () => (await getTiDBClusters(projectId)).map(tidbClusterFromRaw),
-    staleTime: 60_000,
     enabled: !!projectId,
   });
 }
@@ -892,7 +864,6 @@ export function useTiDBCost(opts?: TiDBCostQueryOptions) {
   return useQuery({
     queryKey: ['tidb', 'cost', opts?.start, opts?.end],
     queryFn: async () => (await getTiDBCost(opts)).map(tidbCostFromRaw),
-    staleTime: 60_000,
   });
 }
 
@@ -933,7 +904,6 @@ export function useGcpResources<TRaw, TRow extends BaseRow>(
       const raws = await getGcpResources<TRaw>(service, projectId);
       return raws.map(normalizer);
     },
-    staleTime: 60_000,
     enabled: !!projectId,
   });
 }
@@ -947,7 +917,6 @@ export function useGcsObjects(projectId: string, bucket: string, prefix?: string
       const { objects, truncated } = await getGcsObjects(projectId, bucket, prefix);
       return { objects: (objects ?? []).map((raw, idx) => gcsObjectFromRaw(raw, idx)), truncated };
     },
-    staleTime: 60_000,
     enabled: !!projectId && !!bucket,
   });
 }
@@ -968,11 +937,12 @@ export function useGcsUpload(projectId: string, bucket: string, prefix?: string)
   });
 }
 
-// enabled: !!key でプレビュー対象確定時のみ取得する。useS3ObjectPreview と対称。
+// enabled: !!key でプレビュー対象確定時のみ取得する。useS3ObjectPreview と対称 (staleTime: 0 も同じ)。
 export function useGcsObjectPreview(projectId: string, bucket: string, key: string | undefined) {
   return useQuery({
     queryKey: ['gcp', 'gcs-object-preview', projectId, bucket, key],
     queryFn: async () => objectPreviewFromRaw(await getGcsObjectPreview(projectId, bucket, key!)),
+    staleTime: 0,
     enabled: !!projectId && !!bucket && !!key,
   });
 }
