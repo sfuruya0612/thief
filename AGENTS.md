@@ -245,7 +245,7 @@ backend/
 
 - **対象スタック**: Vite + React 18 + TypeScript (strict)。ビルド対象は **Web ブラウザのみ**(Flutter 時代の macOS Desktop 対応は廃止済み)。
 - **状態管理**: サーバ状態は **TanStack Query (`@tanstack/react-query`)**、UI 状態は `useState`/`useReducer` + カスタムフック。Redux/Zustand/Riverpod 相当のライブラリは導入しない(YAGNI)。
-- **ルーティング**: react-router 等は導入しない。profile タブ・サービス選択・トップレベルビュー (`AppView`: `aws`/`bigquery`/`datadog`/`tidb`) は React state + `localStorage`(`cloudlens:v1` キー、`lib/storage.ts`)で管理する。
+- **ルーティング**: react-router 等は導入しない。profile タブ・サービス選択・トップレベルビュー (`AppView`: `aws`/`gcp`/`datadog`/`tidb`) は React state + `localStorage`(`cloudlens:v1` キー、`lib/storage.ts`)で管理する。
 - **多言語対応**: react-i18next 導入済み。翻訳リソースは `src/i18n/locales/ja/` に 14 ネームスペース (account / app / cost / drawerAws / drawerStorage / errors / gcp / logviewer / pricing / query / session / sidebar / topbar / tweaks)。Drawer のタブ名や AWS 由来の英語メッセージを表示する部品 (`DrawerError` 等) は英語ハードコードとし i18n に載せない (issues/closed/0066 の方針)。
 
 ### ディレクトリ構造
@@ -288,7 +288,7 @@ frontend/
 - `queryKey` はドメインを先頭に置く配列(`['aws', service, profile, region]`、`['bigquery', 'tables', dataset, projectId]` 等)で構成する。
 - `staleTime` はバックエンドのキャッシュ TTL に合わせて `60_000`(60秒)を基本とする。プロファイル一覧のように変化が少ないものは `5 * 60 * 1000` 等に緩める。
 - 依存データの遅延取得は `enabled: !!dependency` で制御する(例: `useBQTables` は `dataset` が確定するまで無効)。
-- 更新系は `useMutation` + `queryClient.invalidateQueries({ queryKey: [...] })` で書く。トップバーの Refresh ボタンは現在表示中の `AppView` に対応する `queryKey` のみを invalidate する。
+- 更新系は `useMutation` + `queryClient.invalidateQueries({ queryKey: [...] })` で書く。トップバーの Refresh ボタンは、まず `POST /api/cache/invalidate?view=<AppView>` で backend のリソースキャッシュを view 単位で破棄し、その完了後に現在表示中の `AppView` に対応する `queryKey` を invalidate する(処理列は `lib/refreshView.ts`)。
 
 ### UI 状態と永続化
 

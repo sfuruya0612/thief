@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CostRow } from '../types/aws';
-import type { BaseRow } from '../types/common';
+import type { AppView, BaseRow } from '../types/common';
 import type { QueryStatusRow } from '../types/query';
 import { gcpProjectFromRaw, gcsObjectFromRaw } from '../lib/normalizeGcp';
 import { priceTableFromRaw } from '../lib/normalizePricing';
@@ -113,6 +113,7 @@ import {
   postBQDryRun,
   postBQQueryStart,
   postSnippet,
+  postCacheInvalidate,
   postSSOLogin,
   type TiDBCostQueryOptions,
   updateSecretValue,
@@ -149,6 +150,14 @@ export function useHealthCheck() {
     staleTime: Infinity,
     refetchInterval: (query) =>
       query.state.status === 'error' ? HEALTH_CHECK_RETRY_INTERVAL : false,
+  });
+}
+
+// backend のリソースキャッシュを view 単位で一括破棄する (TopBar の Refresh 用)。
+// invalidateQueries との実行順序の制御は lib/refreshView.ts 側で行う。
+export function useCacheInvalidate() {
+  return useMutation({
+    mutationFn: (view: AppView) => postCacheInvalidate(view),
   });
 }
 
