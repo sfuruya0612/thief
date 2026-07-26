@@ -2,6 +2,7 @@
 // スタック詳細 API (DescribeStacks) から取得したタグを表示する。
 import { useCFNStackDetail } from '../../api/queries';
 import { DrawerLoading } from './DrawerLoading';
+import { DrawerError } from './drawerError';
 import { DrawerTags } from './DrawerTags';
 
 export interface DrawerCFNTagsProps {
@@ -11,8 +12,15 @@ export interface DrawerCFNTagsProps {
 }
 
 export function DrawerCFNTags({ profile, region, stack }: DrawerCFNTagsProps) {
-  const { data, isLoading } = useCFNStackDetail(profile, region, stack);
+  const { data, isLoading, error } = useCFNStackDetail(profile, region, stack);
 
   if (isLoading) return <DrawerLoading />;
-  return <DrawerTags tags={data?.tags} />;
+  // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
+  // (issues/0075 で確定した表示規則)。
+  return (
+    <>
+      {error != null && <DrawerError error={error} />}
+      {data !== undefined && <DrawerTags tags={data.tags} />}
+    </>
+  );
 }

@@ -4,6 +4,7 @@ import { useECSServices } from '../../api/queries';
 import { ecsServiceColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
 import { DrawerLoading } from './DrawerLoading';
+import { DrawerError } from './drawerError';
 import { FacetBar } from '../FacetBar';
 import type { Filters } from '../FacetBar';
 import type { ECSServiceRow } from '../../types/aws';
@@ -18,7 +19,7 @@ export interface DrawerECSServicesProps {
 type ECSServiceTableRow = ECSServiceRow & { id: string; state: string };
 
 export function DrawerECSServices({ profile, region, cluster }: DrawerECSServicesProps) {
-  const { data, isLoading } = useECSServices(profile, region, cluster);
+  const { data, isLoading, error } = useECSServices(profile, region, cluster);
   const [filters, setFilters] = useState<Filters>({});
   const rows = useMemo<ECSServiceTableRow[]>(
     () => (data ?? []).map((r) => ({ ...r, id: r.arn, state: r.status })),
@@ -32,20 +33,27 @@ export function DrawerECSServices({ profile, region, cluster }: DrawerECSService
     });
   }, [rows, filters]);
 
+  // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
+  // (issues/0075 で確定した表示規則)。
   return (
     <div className="section">
-      <h3>Services ({filtered.length})</h3>
+      <h3>Services{data !== undefined ? ` (${filtered.length})` : ''}</h3>
       {isLoading ? (
         <DrawerLoading />
       ) : (
         <>
-          <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
-          <DataTable
-            rows={filtered}
-            columns={ecsServiceColumns}
-            onSelect={() => {}}
-            selectedId={null}
-          />
+          {error != null && <DrawerError error={error} />}
+          {data !== undefined && (
+            <>
+              <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
+              <DataTable
+                rows={filtered}
+                columns={ecsServiceColumns}
+                onSelect={() => {}}
+                selectedId={null}
+              />
+            </>
+          )}
         </>
       )}
     </div>

@@ -71,4 +71,24 @@ describe('DrawerCFNEvents', () => {
       'var(--err)',
     );
   });
+
+  it('取得エラー時に DrawerError を表示し、テーブルと件数を出さない', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: async () => ({ error: 'describe stack events failed', code: 'INTERNAL' }),
+    } as Response);
+
+    const { container } = renderWithQC(
+      <DrawerCFNEvents profile="test" region="ap-northeast-1" stack="my-stack" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Error 500 (INTERNAL): describe stack events failed');
+    });
+    // 0 件表示 (テーブルあり + 件数 (0)) と区別できること
+    expect(container.querySelector('table')).toBeNull();
+    expect(container.querySelector('h3')?.textContent).toBe('Events');
+  });
 });

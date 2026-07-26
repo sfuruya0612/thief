@@ -7,6 +7,7 @@ import { cacheFromRaw } from '../../lib/normalize';
 import { cacheParameterColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
 import { DrawerLoading } from './DrawerLoading';
+import { DrawerError } from './drawerError';
 import type { CacheRaw, CacheRow } from '../../types/aws';
 
 export interface DrawerCacheParametersProps {
@@ -21,25 +22,34 @@ export function DrawerCacheParameters({ profile, region, cluster }: DrawerCacheP
     () => data?.find((r) => r.name === cluster)?.parameterGroup ?? '',
     [data, cluster],
   );
-  const { data: params, isLoading } = useCacheParameters(profile, region, group);
+  const { data: params, isLoading, error } = useCacheParameters(profile, region, group);
   const rows = useMemo(() => params ?? [], [params]);
 
+  // パラメータ取得の query の data が無いときはエラー表示のみ、data があるときは
+  // 既存表示の上部にエラーを出す (issues/0075 で確定した表示規則)。一覧キャッシュ参照
+  // (useResources) のエラーは一覧ビュー側が表示するためここでは扱わない。
   return (
     <div className="section">
       <h3>
-        {group || 'Parameters'} ({rows.length})
+        {group || 'Parameters'}
+        {params !== undefined ? ` (${rows.length})` : ''}
       </h3>
       {!group ? (
         <p className="muted">No parameter group.</p>
       ) : isLoading ? (
         <DrawerLoading />
       ) : (
-        <DataTable
-          rows={rows}
-          columns={cacheParameterColumns}
-          onSelect={() => {}}
-          selectedId={null}
-        />
+        <>
+          {error != null && <DrawerError error={error} />}
+          {params !== undefined && (
+            <DataTable
+              rows={rows}
+              columns={cacheParameterColumns}
+              onSelect={() => {}}
+              selectedId={null}
+            />
+          )}
+        </>
       )}
     </div>
   );

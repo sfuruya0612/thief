@@ -6,6 +6,7 @@ import { useECSTasks } from '../../api/queries';
 import { ecsTaskColumns } from '../tables/columns';
 import { DataTable } from '../DataTable';
 import { DrawerLoading } from './DrawerLoading';
+import { DrawerError } from './drawerError';
 import { FacetBar } from '../FacetBar';
 import type { Filters } from '../FacetBar';
 import { StatusBadge } from '../primitives';
@@ -139,7 +140,7 @@ function ECSTaskDetail({
 }
 
 export function DrawerECSTasks({ profile, region, cluster, onExec }: DrawerECSTasksProps) {
-  const { data, isLoading } = useECSTasks(profile, region, cluster);
+  const { data, isLoading, error } = useECSTasks(profile, region, cluster);
   const [filters, setFilters] = useState<Filters>({});
   const [selectedArn, setSelectedArn] = useState<string | null>(null);
   const rows = useMemo<ECSTaskTableRow[]>(
@@ -159,26 +160,33 @@ export function DrawerECSTasks({ profile, region, cluster, onExec }: DrawerECSTa
     [rows, selectedArn],
   );
 
+  // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
+  // (issues/0075 で確定した表示規則)。
   return (
     <div className="section">
-      <h3>Tasks ({filtered.length})</h3>
+      <h3>Tasks{data !== undefined ? ` (${filtered.length})` : ''}</h3>
       {isLoading ? (
         <DrawerLoading />
       ) : (
         <>
-          <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
-          <DataTable
-            rows={filtered}
-            columns={ecsTaskColumns}
-            onSelect={(r) => setSelectedArn(r.arn)}
-            selectedId={selectedArn}
-          />
-          {selectedTask && (
-            <ECSTaskDetail
-              task={selectedTask}
-              onClose={() => setSelectedArn(null)}
-              onExec={onExec}
-            />
+          {error != null && <DrawerError error={error} />}
+          {data !== undefined && (
+            <>
+              <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
+              <DataTable
+                rows={filtered}
+                columns={ecsTaskColumns}
+                onSelect={(r) => setSelectedArn(r.arn)}
+                selectedId={selectedArn}
+              />
+              {selectedTask && (
+                <ECSTaskDetail
+                  task={selectedTask}
+                  onClose={() => setSelectedArn(null)}
+                  onExec={onExec}
+                />
+              )}
+            </>
           )}
         </>
       )}
