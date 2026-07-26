@@ -1,7 +1,9 @@
 package aws
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -189,6 +191,10 @@ type WAFRule struct {
 	Priority  int32  `json:"priority"`
 	Action    string `json:"action"`
 	Statement string `json:"statement"`
+	// RuleJSON はルール定義全体 (Statement, Action, OverrideAction,
+	// VisibilityConfig, RuleLabels, CaptchaConfig, ChallengeConfig 等) を
+	// null 値を除去した JSON 文字列にしたもの。wafRuleJSON が生成する。
+	RuleJSON string `json:"rule_json"`
 }
 
 // ListWAFRules returns the rules of the Web ACL identified by name + id + scope,
@@ -234,6 +240,57 @@ func newWAFRule(r waftypes.Rule) WAFRule {
 		Priority:  r.Priority,
 		Action:    wafRuleAction(r),
 		Statement: wafRuleStatement(r.Statement),
+		RuleJSON:  wafRuleJSON(r),
+	}
+}
+
+// wafRuleJSON は Rule 全体を JSON 文字列にする。SDK 構造体をそのまま Marshal すると
+// 未設定の nil フィールドが null として大量に出力されるため、一度 map[string]any に
+// 落として null 値のみを再帰的に除去してから再度 Marshal する。null 除去の結果空に
+// なったオブジェクト (例: Action.Allow の {}) は WAFv2 API の JSON 仕様上の判別子
+// (NoneAction, UriPath 等) であるため保持し、配列の要素も取り除かない。
+// 数値は json.Decoder の UseNumber() で元の表記のまま保つ。Marshal に失敗した場合は
+// 空文字を返す (1 ルールの変換失敗で一覧全体を落とさない)。
+func wafRuleJSON(r waftypes.Rule) string {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return ""
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return ""
+	}
+	out, err := json.Marshal(removeJSONNulls(decoded))
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
+// removeJSONNulls は decode 済みの JSON 値からオブジェクトのキーのうち値が null の
+// ものを再帰的に取り除く。null 除去の結果空になったオブジェクトや、元から空の
+// オブジェクト・配列はそのまま保持する (WAFv2 API では空オブジェクトであること
+// 自体が設定の判別子になっているため)。
+func removeJSONNulls(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		for k, vv := range val {
+			if vv == nil {
+				delete(val, k)
+				continue
+			}
+			val[k] = removeJSONNulls(vv)
+		}
+		return val
+	case []any:
+		for i, vv := range val {
+			val[i] = removeJSONNulls(vv)
+		}
+		return val
+	default:
+		return val
 	}
 }
 

@@ -319,8 +319,14 @@ func TestNewWAFRule(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := newWAFRule(tt.rule)
-			if !reflect.DeepEqual(got, tt.want) {
+			// RuleJSON はフィールド追加時に既存ケースの期待値を巨大化させないため、
+			// 個別に wafRuleJSON の出力と一致するかだけを検証する (配線の検証)。
+			if got.Name != tt.want.Name || got.Priority != tt.want.Priority ||
+				got.Action != tt.want.Action || got.Statement != tt.want.Statement {
 				t.Errorf("got %#v want %#v", got, tt.want)
+			}
+			if want := wafRuleJSON(tt.rule); got.RuleJSON != want {
+				t.Errorf("RuleJSON = %q want %q", got.RuleJSON, want)
 			}
 		})
 	}
@@ -354,5 +360,150 @@ func TestWAFResourceJSONHasDescription(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"description":"Protects the public API"`) {
 		t.Errorf("json = %s, want description key with value", b)
+	}
+}
+
+func TestWAFRuleJSONHasRuleJSONKey(t *testing.T) {
+	b, err := json.Marshal(WAFRule{Name: "rate-limit", RuleJSON: `{"Name":"rate-limit"}`})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"rule_json":"{\"Name\":\"rate-limit\"}"`) {
+		t.Errorf("json = %s, want rule_json key with value", b)
+	}
+}
+
+func TestWAFRuleJSON(t *testing.T) {
+	tests := []struct {
+		name           string
+		rule           waftypes.Rule
+		wantContains   []string
+		wantNotContain []string
+	}{
+		{
+			name: "Statement と Action を持つルールで null フィールドが出力に現れない",
+			rule: waftypes.Rule{
+				Name:     aws.String("allow-rule"),
+				Priority: 1,
+				Action:   &waftypes.RuleAction{Allow: &waftypes.AllowAction{}},
+				Statement: &waftypes.Statement{
+					ByteMatchStatement: &waftypes.ByteMatchStatement{
+						FieldToMatch: &waftypes.FieldToMatch{UriPath: &waftypes.UriPath{}},
+					},
+				},
+				VisibilityConfig: &waftypes.VisibilityConfig{
+					CloudWatchMetricsEnabled: true,
+					MetricName:               aws.String("allow-rule-metric"),
+					SampledRequestsEnabled:   true,
+				},
+			},
+			wantNotContain: []string{"null"},
+		},
+		{
+			name: "Action: {Allow: {}} の Allow キーが空オブジェクトとして残る",
+			rule: waftypes.Rule{
+				Name:   aws.String("allow-rule"),
+				Action: &waftypes.RuleAction{Allow: &waftypes.AllowAction{}},
+			},
+			wantContains: []string{`"Allow":{}`},
+		},
+		{
+			name: "OverrideAction: {None: {}} が残る",
+			rule: waftypes.Rule{
+				Name:           aws.String("group-rule"),
+				OverrideAction: &waftypes.OverrideAction{None: &waftypes.NoneAction{}},
+			},
+			wantContains: []string{`"None":{}`},
+		},
+		{
+			name: "FieldToMatch: {UriPath: {}} が残る",
+			rule: waftypes.Rule{
+				Name: aws.String("uri-rule"),
+				Statement: &waftypes.Statement{
+					ByteMatchStatement: &waftypes.ByteMatchStatement{
+						FieldToMatch: &waftypes.FieldToMatch{UriPath: &waftypes.UriPath{}},
+					},
+				},
+			},
+			wantContains: []string{`"UriPath":{}`},
+		},
+		{
+			name: "null 除去で空オブジェクトになった配列要素が残る",
+			rule: waftypes.Rule{
+				Name:       aws.String("label-rule"),
+				RuleLabels: []waftypes.Label{{Name: nil}},
+			},
+			wantContains: []string{`"RuleLabels":[{}]`},
+		},
+		{
+			name: "空配列が保持される",
+			rule: waftypes.Rule{
+				Name:       aws.String("empty-labels-rule"),
+				RuleLabels: []waftypes.Label{},
+			},
+			wantContains: []string{`"RuleLabels":[]`},
+		},
+		{
+			name: "ByteMatchStatement.SearchString が base64 文字列として出力される",
+			rule: waftypes.Rule{
+				Name: aws.String("byte-match-rule"),
+				Statement: &waftypes.Statement{
+					ByteMatchStatement: &waftypes.ByteMatchStatement{
+						SearchString: []byte("test"),
+					},
+				},
+			},
+			wantContains: []string{`"SearchString":"dGVzdA=="`},
+		},
+		{
+			name: "VisibilityConfig の SampledRequestsEnabled と MetricName のキーが出力に含まれる",
+			rule: waftypes.Rule{
+				Name: aws.String("visibility-rule"),
+				VisibilityConfig: &waftypes.VisibilityConfig{
+					CloudWatchMetricsEnabled: true,
+					MetricName:               aws.String("visibility-metric"),
+					SampledRequestsEnabled:   false,
+				},
+			},
+			wantContains: []string{`"MetricName":"visibility-metric"`, `"SampledRequestsEnabled":false`},
+		},
+		{
+			name: "非ポインタ型のゼロ値が null 除去で消えずに残る (Priority の 0 と SampledRequestsEnabled の false)",
+			rule: waftypes.Rule{
+				Name:     aws.String("zero-value-rule"),
+				Priority: 0,
+				VisibilityConfig: &waftypes.VisibilityConfig{
+					SampledRequestsEnabled: false,
+				},
+			},
+			wantContains: []string{`"Priority":0`, `"SampledRequestsEnabled":false`},
+		},
+		{
+			name: "RateBasedStatement.Limit に float64 で正確に表現できない値を与えたとき数値がその表記のまま出力される",
+			rule: waftypes.Rule{
+				Name: aws.String("rate-based-rule"),
+				Statement: &waftypes.Statement{
+					RateBasedStatement: &waftypes.RateBasedStatement{
+						Limit: aws.Int64(9007199254740993),
+					},
+				},
+			},
+			wantContains: []string{`"Limit":9007199254740993`},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := wafRuleJSON(tt.rule)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("wafRuleJSON() = %s, want it to contain %q", got, want)
+				}
+			}
+			for _, notWant := range tt.wantNotContain {
+				if strings.Contains(got, notWant) {
+					t.Errorf("wafRuleJSON() = %s, want it not to contain %q", got, notWant)
+				}
+			}
+		})
 	}
 }

@@ -655,12 +655,13 @@ describe('wafFromRaw', () => {
 });
 
 describe('wafRuleFromRaw', () => {
-  it('4 フィールドを写し、ルール名を DataTable の行キー (id) に使う', () => {
+  it('フィールドを写し、ルール名を DataTable の行キー (id) に使う', () => {
     const row = wafRuleFromRaw({
       name: 'rate-limit',
       priority: 1,
       action: 'Block',
       statement: 'RateBased',
+      rule_json: '{"Name":"rate-limit"}',
     });
     expect(row).toEqual({
       id: 'rate-limit',
@@ -668,6 +669,18 @@ describe('wafRuleFromRaw', () => {
       priority: 1,
       action: 'Block',
       statement: 'RateBased',
+      ruleJson: '{"Name":"rate-limit"}',
     });
+  });
+
+  it('rule_json 欠落時は空文字に既定する', () => {
+    const row = wafRuleFromRaw({
+      name: 'rate-limit',
+      priority: 1,
+      action: 'Block',
+      statement: 'RateBased',
+      rule_json: undefined as unknown as string,
+    });
+    expect(row.ruleJson).toBe('');
   });
 });
