@@ -1,7 +1,9 @@
 package aws
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	smithy "github.com/aws/smithy-go"
@@ -62,6 +64,32 @@ func IsAccessDenied(err error) bool {
 	default:
 		return false
 	}
+}
+
+// shouldWarnIgnoredErr は「失敗を無視する」詳細呼び出しのエラーに slog.Warn を出すべきかを返す。
+// context.Canceled / context.DeadlineExceeded は errgroup のキャンセル連鎖で 1 リクエストに
+// 大量の Warn が出るため対象外とする (キャンセル起因の欠損は handleIgnoredErr が全体エラーとして
+// 伝播させる)。
+func shouldWarnIgnoredErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+// handleIgnoredErr は「失敗を無視する」詳細呼び出しのエラーを処理する。
+// キャンセル起因のエラーはそのまま返して全体エラーとして伝播させる (詳細が欠けた結果を
+// serveCached のキャッシュに書き込ませない)。それ以外の失敗は slog.Warn を出して nil を
+// 返し、欠損データ (タグ空など) として続行する。スロットリング等の失敗を観測可能にする。
+func handleIgnoredErr(err error, msg string, attrs ...any) error {
+	if err == nil {
+		return nil
+	}
+	if !shouldWarnIgnoredErr(err) {
+		return err
+	}
+	slog.Warn(msg, append(attrs, "err", err)...)
+	return nil
 }
 
 // IsThrottled returns true when err indicates the AWS API throttled the request.

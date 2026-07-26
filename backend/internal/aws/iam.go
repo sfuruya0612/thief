@@ -3,12 +3,14 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // IAMResource represents an IAM user.
@@ -29,73 +31,127 @@ func (r IAMResource) ResourceName() string  { return r.Name }
 func (r IAMResource) ResourceState() string { return "active" }
 func (r IAMResource) ServiceName() string   { return "iam" }
 
+// iamDetailConcurrency はユーザー/ロールごとの詳細取得 (MFA / グループ / ポリシー) を同時実行
+// する上限数。IAM のマネジメント系 API は他サービスよりレート制限が厳しいため控えめに始める
+// (issue 0081 の設計判断)。
+const iamDetailConcurrency = 10
+
 // ListIAMResources returns all IAM users and roles for the given profile.
 // IAM is a global service; region is ignored.
 func ListIAMResources(ctx context.Context, profile, _ string) ([]IAMResource, error) {
+	// 各フェーズの所要時間を計測してログに残す (issue 0081: クライアント生成の区間は
+	// issue 0083 の GetSession キャッシュ化調査の入力を兼ねる)。
+	overallStart := time.Now()
+
+	clientStart := time.Now()
 	client, err := newIAMClient(ctx, profile)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("iam client created",
+		"profile", profile, "duration_ms", time.Since(clientStart).Milliseconds())
 
-	var resources []IAMResource
+	// 詳細取得を並列化するため、先にユーザーとロールの全件をページングで収集する
+	// (ページングはトークンが前ページに依存するため直列のまま)。
+	listStart := time.Now()
+	var users []iamtypes.User
 	userPaginator := iam.NewListUsersPaginator(client, &iam.ListUsersInput{})
 	for userPaginator.HasMorePages() {
 		page, err := userPaginator.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("list iam users: %w", err)
 		}
-		for _, u := range page.Users {
-			r, err := iamFromUser(ctx, client, u)
-			if err != nil {
-				return nil, err
-			}
-			resources = append(resources, r)
-		}
+		users = append(users, page.Users...)
 	}
 
+	var roles []iamtypes.Role
 	rolePaginator := iam.NewListRolesPaginator(client, &iam.ListRolesInput{})
 	for rolePaginator.HasMorePages() {
 		page, err := rolePaginator.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("list iam roles: %w", err)
 		}
-		for _, role := range page.Roles {
-			r, err := iamFromRole(ctx, client, role)
-			if err != nil {
-				return nil, err
-			}
-			resources = append(resources, r)
-		}
+		roles = append(roles, page.Roles...)
 	}
+	slog.Info("iam list users and roles done",
+		"profile", profile, "duration_ms", time.Since(listStart).Milliseconds(),
+		"users", len(users), "roles", len(roles))
+
+	// ユーザー/ロールごとの詳細取得は互いに独立しているため並列実行する。各 goroutine は
+	// 自分の index にのみ書き込むため結果スライスへの書き込みはロック不要で競合しない
+	// (データオーナーシップを goroutine ごとに分離、ListS3Resources と同型)。
+	// 返却順は並列化前と同じユーザー (一覧順) → ロール (一覧順) に保つ。
+	detailStart := time.Now()
+	resources := make([]IAMResource, len(users)+len(roles))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(iamDetailConcurrency)
+	for i, u := range users {
+		g.Go(func() error {
+			r, err := iamFromUser(gctx, client, u)
+			if err != nil {
+				return err
+			}
+			resources[i] = r
+			return nil
+		})
+	}
+	for i, role := range roles {
+		g.Go(func() error {
+			r, err := iamFromRole(gctx, client, role)
+			if err != nil {
+				return err
+			}
+			resources[len(users)+i] = r
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	slog.Info("iam get details done",
+		"profile", profile, "duration_ms", time.Since(detailStart).Milliseconds(),
+		"concurrency", iamDetailConcurrency, "count", len(resources))
+
+	slog.Info("iam list all done",
+		"profile", profile, "duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
 }
 
+// iamFromUser はユーザーの詳細 (MFA / グループ / ポリシー) を取得して IAMResource に変換する。
+// 詳細呼び出しの失敗は欠損データとして無視するため、error はキャンセル起因の失敗
+// (handleIgnoredErr が伝播させるもの) に限られる。
 func iamFromUser(ctx context.Context, client *iam.Client, u iamtypes.User) (IAMResource, error) {
 	name := ptrStr(u.UserName)
 
-	// MFA devices
+	// MFA devices (失敗は無視、キャンセル起因は全体エラーとして伝播)
 	mfaOut, err := client.ListMFADevices(ctx, &iam.ListMFADevicesInput{UserName: aws.String(name)})
 	mfaEnabled := false
 	if err == nil {
 		mfaEnabled = len(mfaOut.MFADevices) > 0
+	} else if err := handleIgnoredErr(err, "list iam mfa devices failed (ignored)", "user", name); err != nil {
+		return IAMResource{}, err
 	}
 
-	// Groups
+	// Groups (失敗は無視、キャンセル起因は全体エラーとして伝播)
 	groupsOut, err := client.ListGroupsForUser(ctx, &iam.ListGroupsForUserInput{UserName: aws.String(name)})
 	var groups []string
 	if err == nil {
 		for _, g := range groupsOut.Groups {
 			groups = append(groups, ptrStr(g.GroupName))
 		}
+	} else if err := handleIgnoredErr(err, "list iam groups for user failed (ignored)", "user", name); err != nil {
+		return IAMResource{}, err
 	}
 
-	// Attached policies
+	// Attached policies (失敗は無視、キャンセル起因は全体エラーとして伝播)
 	policiesOut, err := client.ListAttachedUserPolicies(ctx, &iam.ListAttachedUserPoliciesInput{UserName: aws.String(name)})
 	var policies []string
 	if err == nil {
 		for _, p := range policiesOut.AttachedPolicies {
 			policies = append(policies, ptrStr(p.PolicyName))
 		}
+	} else if err := handleIgnoredErr(err, "list iam attached user policies failed (ignored)", "user", name); err != nil {
+		return IAMResource{}, err
 	}
 
 	var passwordLastUsed *time.Time
@@ -123,15 +179,21 @@ func newIAMUserResource(id, name, arn string, mfaEnabled bool, passwordLastUsed 
 	}
 }
 
+// iamFromRole はロールの詳細 (アタッチ済みポリシー) を取得して IAMResource に変換する。
+// 詳細呼び出しの失敗は欠損データとして無視するため、error はキャンセル起因の失敗
+// (handleIgnoredErr が伝播させるもの) に限られる。
 func iamFromRole(ctx context.Context, client *iam.Client, role iamtypes.Role) (IAMResource, error) {
 	name := ptrStr(role.RoleName)
 
+	// Attached policies (失敗は無視、キャンセル起因は全体エラーとして伝播)
 	policiesOut, err := client.ListAttachedRolePolicies(ctx, &iam.ListAttachedRolePoliciesInput{RoleName: aws.String(name)})
 	var policies []string
 	if err == nil {
 		for _, p := range policiesOut.AttachedPolicies {
 			policies = append(policies, ptrStr(p.PolicyName))
 		}
+	} else if err := handleIgnoredErr(err, "list iam attached role policies failed (ignored)", "role", name); err != nil {
+		return IAMResource{}, err
 	}
 
 	var lastUsed *time.Time

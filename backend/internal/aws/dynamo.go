@@ -3,12 +3,15 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // dynamoItemQueryLimit は Item 検索 (Query/Scan) の取得件数の既定値。
@@ -37,13 +40,26 @@ func (r DynamoResource) ResourceName() string  { return r.Name }
 func (r DynamoResource) ResourceState() string { return NormalizeState(r.State) }
 func (r DynamoResource) ServiceName() string   { return "dynamo" }
 
+// dynamoTableConcurrency はテーブルごとの詳細取得 (DescribeTable / ListTagsOfResource) を
+// 同時実行する上限数。無制限にすると DynamoDB のコントロールプレーン API のレート上限に
+// 抵触しうるため上限を設ける (s3BucketConcurrency と同型)。
+const dynamoTableConcurrency = 30
+
 // ListDynamoResources returns all DynamoDB tables for the given profile/region.
 func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoResource, error) {
+	// 各フェーズの所要時間を計測してログに残す (issue 0081: クライアント生成の区間は
+	// issue 0083 の GetSession キャッシュ化調査の入力を兼ねる)。
+	overallStart := time.Now()
+
+	clientStart := time.Now()
 	client, err := newDynamoClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("dynamodb client created",
+		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
+	listStart := time.Now()
 	var names []string
 	paginator := dynamodb.NewListTablesPaginator(client, &dynamodb.ListTablesInput{})
 	for paginator.HasMorePages() {
@@ -53,29 +69,54 @@ func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoR
 		}
 		names = append(names, page.TableNames...)
 	}
+	slog.Info("dynamodb list tables done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(listStart).Milliseconds(), "count", len(names))
 
-	var resources []DynamoResource
-	for _, name := range names {
-		desc, err := client.DescribeTable(ctx, &dynamodb.DescribeTableInput{
-			TableName: aws.String(name),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("describe dynamodb table %s: %w", name, err)
-		}
-		// タグ取得は失敗してもテーブル情報は返す
-		tags := map[string]string{}
-		if desc.Table != nil && desc.Table.TableArn != nil {
-			tagsOut, tagErr := client.ListTagsOfResource(ctx, &dynamodb.ListTagsOfResourceInput{
-				ResourceArn: desc.Table.TableArn,
+	// テーブルごとの詳細取得は互いに独立しているため並列実行する。各 goroutine は
+	// 自分の index にのみ書き込むため結果スライスへの書き込みはロック不要で競合しない
+	// (データオーナーシップを goroutine ごとに分離、ListS3Resources と同型)。
+	detailStart := time.Now()
+	resources := make([]DynamoResource, len(names))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(dynamoTableConcurrency)
+	for i, name := range names {
+		g.Go(func() error {
+			desc, err := client.DescribeTable(gctx, &dynamodb.DescribeTableInput{
+				TableName: aws.String(name),
 			})
-			if tagErr == nil {
-				tags = dynamoTagsToMap(tagsOut.Tags)
+			if err != nil {
+				return fmt.Errorf("describe dynamodb table %s: %w", name, err)
 			}
-		}
-		r := dynamoFromDescription(desc.Table)
-		r.Tags = tags
-		resources = append(resources, r)
+			// タグ取得は失敗してもテーブル情報は返す (キャンセル起因は全体エラーとして伝播)
+			tags := map[string]string{}
+			if desc.Table != nil && desc.Table.TableArn != nil {
+				tagsOut, tagErr := client.ListTagsOfResource(gctx, &dynamodb.ListTagsOfResourceInput{
+					ResourceArn: desc.Table.TableArn,
+				})
+				if tagErr == nil {
+					tags = dynamoTagsToMap(tagsOut.Tags)
+				} else if err := handleIgnoredErr(tagErr, "list tags of dynamodb table failed (ignored)", "table", name); err != nil {
+					return err
+				}
+			}
+			r := dynamoFromDescription(desc.Table)
+			r.Tags = tags
+			resources[i] = r
+			return nil
+		})
 	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	slog.Info("dynamodb describe tables done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(detailStart).Milliseconds(),
+		"concurrency", dynamoTableConcurrency, "count", len(resources))
+
+	slog.Info("dynamodb list all done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
 }
 
