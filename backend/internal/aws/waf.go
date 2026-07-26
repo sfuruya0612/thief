@@ -3,12 +3,15 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/wafv2"
 	waftypes "github.com/aws/aws-sdk-go-v2/service/wafv2/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // WAFResource represents a WAFv2 Web ACL.
@@ -29,9 +32,19 @@ func (r WAFResource) ResourceName() string  { return r.Name }
 func (r WAFResource) ResourceState() string { return NormalizeState(r.State) }
 func (r WAFResource) ServiceName() string   { return "waf" }
 
+// wafACLConcurrency は Web ACL ごとの詳細取得 (GetWebACL / ListResourcesForWebACL /
+// ListTagsForResource) を同時実行する上限数。wafv2 のマネジメント系 API は他サービスより
+// レート制限が厳しいため控えめに始める (issue 0081 の設計判断)。
+const wafACLConcurrency = 10
+
 // ListWAFResources returns all WAFv2 Web ACLs (REGIONAL for the given region and
 // CLOUDFRONT scope from us-east-1) for the given profile.
 func ListWAFResources(ctx context.Context, profile, region string) ([]WAFResource, error) {
+	// 各フェーズの所要時間を計測してログに残す (issue 0081: クライアント生成の区間は
+	// issue 0083 の GetSession キャッシュ化調査の入力を兼ねる)。
+	overallStart := time.Now()
+
+	clientStart := time.Now()
 	regionalClient, err := newWAFClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
@@ -41,25 +54,46 @@ func ListWAFResources(ctx context.Context, profile, region string) ([]WAFResourc
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("waf clients created",
+		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
-	var resources []WAFResource
-
-	regionalACLs, err := listWAFACLs(ctx, regionalClient, waftypes.ScopeRegional)
-	if err != nil {
+	// REGIONAL と CLOUDFRONT の 2 スコープは互いに独立しているため並列に取得する。
+	// 各 goroutine は自分のスコープの変数にのみ書き込むため競合しない。
+	var regionalACLs, cfACLs []WAFResource
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		acls, err := listWAFACLs(gctx, regionalClient, waftypes.ScopeRegional)
+		if err != nil {
+			return err
+		}
+		regionalACLs = acls
+		return nil
+	})
+	g.Go(func() error {
+		acls, err := listWAFACLs(gctx, globalClient, waftypes.ScopeCloudfront)
+		if err != nil {
+			return err
+		}
+		cfACLs = acls
+		return nil
+	})
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
+
+	// 返却順は並列化前と同じ REGIONAL → CLOUDFRONT に保つ
+	resources := make([]WAFResource, 0, len(regionalACLs)+len(cfACLs))
 	resources = append(resources, regionalACLs...)
-
-	cfACLs, err := listWAFACLs(ctx, globalClient, waftypes.ScopeCloudfront)
-	if err != nil {
-		return nil, err
-	}
 	resources = append(resources, cfACLs...)
 
+	slog.Info("waf list all done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
 }
 
 func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope) ([]WAFResource, error) {
+	listStart := time.Now()
 	var summaries []waftypes.WebACLSummary
 	var nextMarker *string
 	for {
@@ -76,40 +110,63 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 		}
 		nextMarker = out.NextMarker
 	}
+	slog.Info("waf list web acls done",
+		"scope", string(scope), "duration_ms", time.Since(listStart).Milliseconds(), "count", len(summaries))
 
-	var resources []WAFResource
-	for _, s := range summaries {
-		acl, err := client.GetWebACL(ctx, &wafv2.GetWebACLInput{
-			Id:    s.Id,
-			Name:  s.Name,
-			Scope: scope,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("get web acl %s: %w", ptrStr(s.Id), err)
-		}
-		ruleCount := 0
-		if acl.WebACL != nil {
-			ruleCount = len(acl.WebACL.Rules)
-		}
-		// ListResourcesForWebACL は REGIONAL でのみ有効
-		associatedCount := 0
-		if scope == waftypes.ScopeRegional {
-			resOut, err := client.ListResourcesForWebACL(ctx, &wafv2.ListResourcesForWebACLInput{
-				WebACLArn: s.ARN,
+	// Web ACL ごとの詳細取得は互いに独立しているため並列実行する。各 goroutine は
+	// 自分の index にのみ書き込むため結果スライスへの書き込みはロック不要で競合しない
+	// (データオーナーシップを goroutine ごとに分離、ListS3Resources と同型)。
+	detailStart := time.Now()
+	resources := make([]WAFResource, len(summaries))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(wafACLConcurrency)
+	for i, s := range summaries {
+		g.Go(func() error {
+			acl, err := client.GetWebACL(gctx, &wafv2.GetWebACLInput{
+				Id:    s.Id,
+				Name:  s.Name,
+				Scope: scope,
 			})
-			if err == nil && resOut != nil {
-				associatedCount = len(resOut.ResourceArns)
+			if err != nil {
+				return fmt.Errorf("get web acl %s: %w", ptrStr(s.Id), err)
 			}
-		}
-		tags := map[string]string{}
-		tagsOut, tagErr := client.ListTagsForResource(ctx, &wafv2.ListTagsForResourceInput{
-			ResourceARN: s.ARN,
+			ruleCount := 0
+			if acl.WebACL != nil {
+				ruleCount = len(acl.WebACL.Rules)
+			}
+			// ListResourcesForWebACL は REGIONAL でのみ有効。失敗しても ACL 情報は返す
+			// (キャンセル起因は全体エラーとして伝播)
+			associatedCount := 0
+			if scope == waftypes.ScopeRegional {
+				resOut, resErr := client.ListResourcesForWebACL(gctx, &wafv2.ListResourcesForWebACLInput{
+					WebACLArn: s.ARN,
+				})
+				if resErr == nil && resOut != nil {
+					associatedCount = len(resOut.ResourceArns)
+				} else if err := handleIgnoredErr(resErr, "list resources for web acl failed (ignored)", "web_acl", ptrStr(s.Name)); err != nil {
+					return err
+				}
+			}
+			// タグ取得も失敗を無視する (キャンセル起因は全体エラーとして伝播)
+			tags := map[string]string{}
+			tagsOut, tagErr := client.ListTagsForResource(gctx, &wafv2.ListTagsForResourceInput{
+				ResourceARN: s.ARN,
+			})
+			if tagErr == nil && tagsOut != nil && tagsOut.TagInfoForResource != nil {
+				tags = tagsToMapFunc(tagsOut.TagInfoForResource.TagList, func(t waftypes.Tag) (*string, *string) { return t.Key, t.Value })
+			} else if err := handleIgnoredErr(tagErr, "list tags for web acl failed (ignored)", "web_acl", ptrStr(s.Name)); err != nil {
+				return err
+			}
+			resources[i] = newWAFResource(ptrStr(s.Id), ptrStr(s.Name), scope, ruleCount, associatedCount, tags, s.Description)
+			return nil
 		})
-		if tagErr == nil && tagsOut != nil && tagsOut.TagInfoForResource != nil {
-			tags = tagsToMapFunc(tagsOut.TagInfoForResource.TagList, func(t waftypes.Tag) (*string, *string) { return t.Key, t.Value })
-		}
-		resources = append(resources, newWAFResource(ptrStr(s.Id), ptrStr(s.Name), scope, ruleCount, associatedCount, tags, s.Description))
 	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	slog.Info("waf get web acl details done",
+		"scope", string(scope), "duration_ms", time.Since(detailStart).Milliseconds(),
+		"concurrency", wafACLConcurrency, "count", len(resources))
 	return resources, nil
 }
 

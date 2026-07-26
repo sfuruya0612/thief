@@ -3,12 +3,15 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // SQSResource represents an SQS queue.
@@ -29,13 +32,26 @@ func (r SQSResource) ResourceName() string  { return r.Name }
 func (r SQSResource) ResourceState() string { return NormalizeState(r.State) }
 func (r SQSResource) ServiceName() string   { return "sqs" }
 
+// sqsQueueConcurrency はキューごとの詳細取得 (GetQueueAttributes / ListQueueTags) を同時実行
+// する上限数。無制限にすると SQS のリクエストレート上限に抵触しうるため上限を設ける
+// (s3BucketConcurrency と同型)。
+const sqsQueueConcurrency = 30
+
 // ListSQSResources returns all SQS queues for the given profile/region.
 func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResource, error) {
+	// 各フェーズの所要時間を計測してログに残す (issue 0081: クライアント生成の区間は
+	// issue 0083 の GetSession キャッシュ化調査の入力を兼ねる)。
+	overallStart := time.Now()
+
+	clientStart := time.Now()
 	client, err := newSQSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("sqs client created",
+		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
+	listStart := time.Now()
 	var urls []string
 	paginator := sqs.NewListQueuesPaginator(client, &sqs.ListQueuesInput{})
 	for paginator.HasMorePages() {
@@ -45,23 +61,49 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 		}
 		urls = append(urls, page.QueueUrls...)
 	}
+	slog.Info("sqs list queues done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(listStart).Milliseconds(), "count", len(urls))
 
-	var resources []SQSResource
-	for _, url := range urls {
-		attrs, err := client.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
-			QueueUrl:       aws.String(url),
-			AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameAll},
+	// キューごとの詳細取得は互いに独立しているため並列実行する。各 goroutine は
+	// 自分の index にのみ書き込むため結果スライスへの書き込みはロック不要で競合しない
+	// (データオーナーシップを goroutine ごとに分離、ListS3Resources と同型)。
+	detailStart := time.Now()
+	resources := make([]SQSResource, len(urls))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(sqsQueueConcurrency)
+	for i, url := range urls {
+		g.Go(func() error {
+			attrs, err := client.GetQueueAttributes(gctx, &sqs.GetQueueAttributesInput{
+				QueueUrl:       aws.String(url),
+				AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameAll},
+			})
+			if err != nil {
+				return fmt.Errorf("get queue attributes %s: %w", url, err)
+			}
+			// タグ取得は失敗してもキュー情報は返す (キャンセル起因は全体エラーとして伝播)
+			tags := map[string]string{}
+			tagsOut, tagErr := client.ListQueueTags(gctx, &sqs.ListQueueTagsInput{QueueUrl: aws.String(url)})
+			if tagErr == nil && tagsOut != nil {
+				tags = tagsOut.Tags
+			} else if err := handleIgnoredErr(tagErr, "list sqs queue tags failed (ignored)", "queue_url", url); err != nil {
+				return err
+			}
+			resources[i] = sqsFromAttributes(url, attrs.Attributes, tags)
+			return nil
 		})
-		if err != nil {
-			return nil, fmt.Errorf("get queue attributes %s: %w", url, err)
-		}
-		tags := map[string]string{}
-		tagsOut, tagErr := client.ListQueueTags(ctx, &sqs.ListQueueTagsInput{QueueUrl: aws.String(url)})
-		if tagErr == nil && tagsOut != nil {
-			tags = tagsOut.Tags
-		}
-		resources = append(resources, sqsFromAttributes(url, attrs.Attributes, tags))
 	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	slog.Info("sqs get queue attributes done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(detailStart).Milliseconds(),
+		"concurrency", sqsQueueConcurrency, "count", len(resources))
+
+	slog.Info("sqs list all done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
 }
 

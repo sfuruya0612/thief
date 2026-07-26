@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -119,6 +120,29 @@ func TestIsThrottled(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := IsThrottled(tt.err); got != tt.want {
 				t.Errorf("IsThrottled(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldWarnIgnoredErr(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "canceled", err: context.Canceled, want: false},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
+		{name: "wrapped canceled", err: fmt.Errorf("list tags: %w", context.Canceled), want: false},
+		{name: "wrapped deadline exceeded", err: fmt.Errorf("list tags: %w", context.DeadlineExceeded), want: false},
+		{name: "plain error", err: errors.New("throttled"), want: true},
+		{name: "api error", err: &smithy.GenericAPIError{Code: "ThrottlingException"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldWarnIgnoredErr(tt.err); got != tt.want {
+				t.Errorf("shouldWarnIgnoredErr(%v) = %v, want %v", tt.err, got, tt.want)
 			}
 		})
 	}
