@@ -238,6 +238,8 @@
   - @sfuruya0612
 - [FIX] EC2 Spot 単価表で ProductDescription `Ubuntu Pro Linux` が正規化されず On-Demand の os チップ (`Ubuntu Pro`) と異なる値 `Ubuntu Pro Linux` で表示される不具合を修正する (実 AWS 確認で判明した OS 語彙を `spotOSFromProductDescription` の分岐に追加する)
   - @sfuruya0612
+- [FIX] TopBar の Refresh が backend のリソースキャッシュ (TTL 1 時間) を貫通せず、押しても最大 1 時間前の表示のままになる不具合を修正する (`POST /api/cache/invalidate?view=<view>` を新設し、表示中 view のキャッシュを破棄してから再取得する。Cost Explorer 系・リージョン一覧・GCP プロジェクト一覧・DynamoDB の Query/Scan 結果は課金と設計上の理由で破棄対象から除外する)
+  - @sfuruya0612
 
 ### misc
 

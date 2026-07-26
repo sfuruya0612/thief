@@ -81,6 +81,19 @@ func (c *Cache[V]) InvalidatePrefix(prefix string) {
 	c.mu.Unlock()
 }
 
+// InvalidateFunc removes every entry whose key satisfies pred.
+// pred は write lock を保持したまま評価されるため、ロックを取らない純関数に限る
+// (この Cache のメソッドを pred から呼ぶとデッドロックする)。
+func (c *Cache[V]) InvalidateFunc(pred func(key string) bool) {
+	c.mu.Lock()
+	for k := range c.items {
+		if pred(k) {
+			delete(c.items, k)
+		}
+	}
+	c.mu.Unlock()
+}
+
 // Load is the primary entry point for all cached resource fetches.
 // If refresh=true, the existing entry is invalidated before loading.
 // Uses singleflight to prevent concurrent duplicate requests to loader.

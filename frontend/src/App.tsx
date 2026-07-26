@@ -1,14 +1,15 @@
 // app.jsx App root の移植: TopBar + AccountView (+ TweaksPanel) を配置する
 // AWS 以外 (GCP/Datadog/TiDB) はトップレベルビュー切替で表示する
 // profile/region の select はサイドバー (Sidebar.tsx の profile-card) に集約している
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AppView } from './types/common';
-import { useHealthCheck } from './api/queries';
+import { useCacheInvalidate, useHealthCheck } from './api/queries';
 import { useProfiles } from './hooks/useProfiles';
 import { useActiveGcpProject } from './hooks/useGcpProjects';
 import { useTweaks } from './hooks/useTweaks';
+import { createViewRefresher } from './lib/refreshView';
 import { loadPersisted, savePersisted } from './lib/storage';
 import { ConnectionWaiting } from './components/ConnectionWaiting';
 import { TopBar } from './components/TopBar';
@@ -92,13 +93,24 @@ export function App() {
     }
   }, [error]);
 
+  // Refresh は backend のキャッシュを破棄してから query を無効化する (lib/refreshView.ts)。
+  // refreshing はボタン無効化用の表示状態で、再入の抑止自体は refresher 側でも保証される。
+  const [refreshing, setRefreshing] = useState(false);
+  const { mutateAsync: invalidateBackendCache } = useCacheInvalidate();
+  const refreshView = useMemo(
+    () =>
+      createViewRefresher({
+        postCacheInvalidate: invalidateBackendCache,
+        invalidateQueries: async (queryKey) => {
+          await queryClient.invalidateQueries({ queryKey });
+        },
+      }),
+    [invalidateBackendCache, queryClient],
+  );
   const handleRefresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: [view] });
-    // BigQuery のクエリキーは歴史的経緯で 'gcp' ではなく 'bigquery' 始まりのため合わせて更新する
-    if (view === 'gcp') {
-      void queryClient.invalidateQueries({ queryKey: ['bigquery'] });
-    }
-  }, [queryClient, view]);
+    setRefreshing(true);
+    void refreshView(view).finally(() => setRefreshing(false));
+  }, [refreshView, view]);
 
   if (!health.isSuccess) {
     return <ConnectionWaiting />;
@@ -109,6 +121,7 @@ export function App() {
       <TopBar
         onToggleTweaks={() => setTweaksOpen((v) => !v)}
         onRefresh={handleRefresh}
+        refreshing={refreshing}
         view={view}
         onViewChange={setView}
       />

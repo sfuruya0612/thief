@@ -14,11 +14,13 @@ const VIEWS: Array<[AppView, string]> = [
 export interface TopBarProps {
   onToggleTweaks: () => void;
   onRefresh: () => void;
+  // Refresh 実行中 (backend キャッシュ破棄 + query 無効化) はボタンを無効化する
+  refreshing: boolean;
   view: AppView;
   onViewChange: (view: AppView) => void;
 }
 
-export function TopBar({ onToggleTweaks, onRefresh, view, onViewChange }: TopBarProps) {
+export function TopBar({ onToggleTweaks, onRefresh, refreshing, view, onViewChange }: TopBarProps) {
   return (
     <div className="topbar">
       <div className="brand">
@@ -38,7 +40,7 @@ export function TopBar({ onToggleTweaks, onRefresh, view, onViewChange }: TopBar
         ))}
       </div>
       <div className="spacer" />
-      <button className="iconbtn" title="Refresh" onClick={onRefresh}>
+      <button className="iconbtn" title="Refresh" onClick={onRefresh} disabled={refreshing}>
         <Icons.refresh />
       </button>
       <button className="iconbtn" title="Tweaks" onClick={onToggleTweaks}>

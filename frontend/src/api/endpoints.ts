@@ -26,6 +26,7 @@ import type {
   WAFRuleRaw,
 } from '../types/aws';
 import type {
+  AppView,
   CallerIdentityRaw,
   ObjectListEnvelopeRaw,
   ObjectPreviewRaw,
@@ -72,6 +73,12 @@ export function getProfiles(): Promise<ProfileRaw[]> {
 // backend 起動待ちの疎通確認用。認証やクラウド呼び出しを伴わない。
 export function getHealth(): Promise<{ status: string }> {
   return apiGet('/api/health');
+}
+
+// backend のリソースキャッシュを view 単位で一括破棄する (TopBar の Refresh 用)。
+// 成功時は 204 でボディなし。AWS API を呼ばないため SSO の状態には依存しない。
+export function postCacheInvalidate(view: AppView): Promise<void> {
+  return apiPost<void>('/api/cache/invalidate', undefined, { view });
 }
 
 // 選択されたプロファイル 1 件だけ STS GetCallerIdentity で Account ID を確定する。

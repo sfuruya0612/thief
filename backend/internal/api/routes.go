@@ -4,6 +4,9 @@ func (s *Server) registerRoutes() {
 	// 接続確認
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 
+	// リソースキャッシュの view 単位の一括破棄 (TopBar の Refresh から呼ばれる)
+	s.mux.HandleFunc("POST /api/cache/invalidate", s.handleCacheInvalidate)
+
 	// AWS profiles
 	s.mux.HandleFunc("GET /api/aws/profiles", s.handleListProfiles)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/identity", s.handleProfileIdentity)
