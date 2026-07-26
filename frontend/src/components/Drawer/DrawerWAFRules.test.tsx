@@ -1,11 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DrawerWAFRules } from './DrawerWAFRules';
 
 function renderWithQC(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return { qc, ...render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>) };
+}
+
+// ルール名のセルを含む行 (tr) を探してクリックする。
+function clickRow(container: HTMLElement, ruleName: string) {
+  const cell = Array.from(container.querySelectorAll('td')).find(
+    (td) => td.textContent === ruleName,
+  );
+  if (!cell) throw new Error(`row not found: ${ruleName}`);
+  fireEvent.click(cell.closest('tr')!);
 }
 
 function wafListItem(overrides: { id: string; name: string; scope: string }) {
@@ -139,5 +148,222 @@ describe('DrawerWAFRules', () => {
       return url.includes('/waf/rules');
     });
     expect(calledRules).toBe(false);
+  });
+
+  it('行クリックで選択したルール名の見出しと整形済み JSON が現れ、選択行に selected クラスが付く', async () => {
+    mockFetch([wafListItem({ id: 'acl-1', name: 'edge-acl', scope: 'REGIONAL' })], () =>
+      okJson([
+        {
+          name: 'rate-limit',
+          priority: 1,
+          action: 'Block',
+          statement: 'RateBased',
+          rule_json: '{"Name":"rate-limit","Priority":1}',
+        },
+      ]),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerWAFRules profile="test" region="ap-northeast-1" id="acl-1" name="edge-acl" />,
+    );
+    await waitFor(() => expect(container.textContent).toContain('Rules (1)'));
+
+    clickRow(container, 'rate-limit');
+
+    await waitFor(() => {
+      const pre = container.querySelector('pre.logbox');
+      expect(pre).not.toBeNull();
+      expect(pre!.textContent).toBe(JSON.stringify({ Name: 'rate-limit', Priority: 1 }, null, 2));
+    });
+    const row = container
+      .querySelector('td')!
+      .closest('tr')!
+      .parentElement!.querySelector('tr.selected');
+    expect(row?.textContent).toContain('rate-limit');
+  });
+
+  it('別の行をクリックすると詳細表示が切り替わり selected クラスも移動する', async () => {
+    mockFetch([wafListItem({ id: 'acl-1', name: 'edge-acl', scope: 'REGIONAL' })], () =>
+      okJson([
+        {
+          name: 'rate-limit',
+          priority: 1,
+          action: 'Block',
+          statement: 'RateBased',
+          rule_json: '{"Name":"rate-limit"}',
+        },
+        {
+          name: 'common-rules',
+          priority: 2,
+          action: 'Override: None',
+          statement: 'AWS/AWSManagedRulesCommonRuleSet',
+          rule_json: '{"Name":"common-rules"}',
+        },
+      ]),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerWAFRules profile="test" region="ap-northeast-1" id="acl-1" name="edge-acl" />,
+    );
+    await waitFor(() => expect(container.textContent).toContain('Rules (2)'));
+
+    clickRow(container, 'rate-limit');
+    await waitFor(() => {
+      expect(container.querySelector('pre.logbox')!.textContent).toBe(
+        JSON.stringify({ Name: 'rate-limit' }, null, 2),
+      );
+    });
+
+    clickRow(container, 'common-rules');
+    await waitFor(() => {
+      expect(container.querySelector('pre.logbox')!.textContent).toBe(
+        JSON.stringify({ Name: 'common-rules' }, null, 2),
+      );
+    });
+
+    const selected = container.querySelectorAll('tr.selected');
+    expect(selected).toHaveLength(1);
+    expect(selected[0].textContent).toContain('common-rules');
+  });
+
+  it('ruleJson が空文字の行を選択したとき pre は描画されずダッシュが表示される', async () => {
+    mockFetch([wafListItem({ id: 'acl-1', name: 'edge-acl', scope: 'REGIONAL' })], () =>
+      okJson([
+        { name: 'rate-limit', priority: 1, action: 'Block', statement: 'RateBased', rule_json: '' },
+      ]),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerWAFRules profile="test" region="ap-northeast-1" id="acl-1" name="edge-acl" />,
+    );
+    await waitFor(() => expect(container.textContent).toContain('Rules (1)'));
+
+    clickRow(container, 'rate-limit');
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('rate-limit');
+    });
+    expect(container.querySelector('pre.logbox')).toBeNull();
+    const headings = Array.from(container.querySelectorAll('h3')).map((h) => h.textContent);
+    expect(headings).toContain('rate-limit');
+  });
+
+  it('ruleJson が JSON として不正な行を選択したとき文字列がそのまま表示される', async () => {
+    mockFetch([wafListItem({ id: 'acl-1', name: 'edge-acl', scope: 'REGIONAL' })], () =>
+      okJson([
+        {
+          name: 'rate-limit',
+          priority: 1,
+          action: 'Block',
+          statement: 'RateBased',
+          rule_json: 'not-json{',
+        },
+      ]),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerWAFRules profile="test" region="ap-northeast-1" id="acl-1" name="edge-acl" />,
+    );
+    await waitFor(() => expect(container.textContent).toContain('Rules (1)'));
+
+    clickRow(container, 'rate-limit');
+
+    await waitFor(() => {
+      expect(container.querySelector('pre.logbox')?.textContent).toBe('not-json{');
+    });
+  });
+
+  it('列フィルタで選択行が表示から外れても見出しと pre は表示されたまま残る', async () => {
+    mockFetch([wafListItem({ id: 'acl-1', name: 'edge-acl', scope: 'REGIONAL' })], () =>
+      okJson([
+        {
+          name: 'rate-limit',
+          priority: 1,
+          action: 'Block',
+          statement: 'RateBased',
+          rule_json: '{"Name":"rate-limit"}',
+        },
+        {
+          name: 'common-rules',
+          priority: 2,
+          action: 'Override: None',
+          statement: 'AWS/AWSManagedRulesCommonRuleSet',
+          rule_json: '{"Name":"common-rules"}',
+        },
+      ]),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerWAFRules profile="test" region="ap-northeast-1" id="acl-1" name="edge-acl" />,
+    );
+    await waitFor(() => expect(container.textContent).toContain('Rules (2)'));
+
+    clickRow(container, 'rate-limit');
+    await waitFor(() => {
+      expect(container.querySelector('pre.logbox')).not.toBeNull();
+    });
+
+    const filterInput = container.querySelector('input.dt-col-filter') as HTMLInputElement | null;
+    // Name 列は先頭のフィルタ入力
+    expect(filterInput).not.toBeNull();
+    fireEvent.change(filterInput!, { target: { value: 'common' } });
+
+    await waitFor(() => {
+      const tbody = container.querySelector('table.dt tbody')!;
+      expect(tbody.textContent).not.toContain('rate-limit'); // 表に絞り込みが効いている
+    });
+    expect(container.querySelector('pre.logbox')).not.toBeNull();
+    const headings = Array.from(container.querySelectorAll('h3')).map((h) => h.textContent);
+    expect(headings).toContain('rate-limit');
+  });
+
+  it('選択中のルール名が再取得後の一覧から消えたとき pre が消えどの行にも selected クラスが付かない', async () => {
+    let call = 0;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/waf/rules')) {
+        call += 1;
+        if (call === 1) {
+          return okJson([
+            {
+              name: 'rate-limit',
+              priority: 1,
+              action: 'Block',
+              statement: 'RateBased',
+              rule_json: '{"Name":"rate-limit"}',
+            },
+          ]);
+        }
+        return okJson([
+          {
+            name: 'common-rules',
+            priority: 2,
+            action: 'Override: None',
+            statement: 'AWS/AWSManagedRulesCommonRuleSet',
+            rule_json: '{"Name":"common-rules"}',
+          },
+        ]);
+      }
+      return okJson([wafListItem({ id: 'acl-1', name: 'edge-acl', scope: 'REGIONAL' })]);
+    }) as typeof fetch;
+
+    const { container, qc } = renderWithQC(
+      <DrawerWAFRules profile="test" region="ap-northeast-1" id="acl-1" name="edge-acl" />,
+    );
+    await waitFor(() => expect(container.textContent).toContain('Rules (1)'));
+
+    clickRow(container, 'rate-limit');
+    await waitFor(() => {
+      expect(container.querySelector('pre.logbox')).not.toBeNull();
+    });
+
+    await qc.invalidateQueries({ queryKey: ['aws', 'waf-rules'] });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('common-rules');
+      expect(container.textContent).not.toContain('rate-limit');
+    });
+    expect(container.querySelector('pre.logbox')).toBeNull();
+    expect(container.querySelectorAll('tr.selected')).toHaveLength(0);
   });
 });

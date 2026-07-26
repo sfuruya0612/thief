@@ -649,6 +649,7 @@ export function wafRuleFromRaw(raw: WAFRuleRaw): WAFRuleRow {
     priority: raw.priority,
     action: raw.action,
     statement: raw.statement,
+    ruleJson: raw.rule_json ?? '',
   };
 }
 

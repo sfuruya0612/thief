@@ -769,6 +769,9 @@ export interface WAFRuleRaw {
   priority: number;
   action: string;
   statement: string;
+  // ルール定義全体 (Statement, Action, OverrideAction, VisibilityConfig,
+  // RuleLabels, CaptchaConfig, ChallengeConfig 等) を null 除去した JSON 文字列。
+  rule_json: string;
 }
 
 export interface WAFRuleRow {
@@ -778,6 +781,7 @@ export interface WAFRuleRow {
   priority: number;
   action: string;
   statement: string;
+  ruleJson: string;
 }
 
 // ============================================================
