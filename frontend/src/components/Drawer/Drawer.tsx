@@ -11,6 +11,7 @@ import { DrawerCFNEvents } from './DrawerCFNEvents';
 import { DrawerCFNOverviewExtra } from './DrawerCFNOverviewExtra';
 import { DrawerCFNResources } from './DrawerCFNResources';
 import { DrawerCFNTags } from './DrawerCFNTags';
+import { DrawerCloudFrontBehaviors } from './DrawerCloudFrontBehaviors';
 import { DrawerDynamoItems } from './DrawerDynamoItems';
 import { DrawerECRImages } from './DrawerECRImages';
 import { DrawerECSServices } from './DrawerECSServices';
@@ -38,7 +39,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   s3: ['Overview', 'Objects', 'Tags'],
   iam: ['Overview', 'Tags'],
   elb: ['Overview', 'Listeners', 'Targets', 'Tags'],
-  cloudfront: ['Overview', 'Tags'],
+  cloudfront: ['Overview', 'Behaviors', 'Tags'],
   apigw: ['Overview', 'Tags'],
   natgw: ['Overview', 'Tags'],
   sqs: ['Overview', 'Tags'],
@@ -337,6 +338,9 @@ export function Drawer({
               )}
               {tab === 'Parameters' && service === 'cache' && (
                 <DrawerCacheParameters profile={profile} region={region} cluster={resource.name} />
+              )}
+              {tab === 'Behaviors' && service === 'cloudfront' && (
+                <DrawerCloudFrontBehaviors profile={profile} region={region} id={resource.id} />
               )}
               {tab === 'Rules' && service === 'waf' && (
                 <DrawerWAFRules

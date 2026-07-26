@@ -694,6 +694,7 @@ describe('cloudfrontFromRaw', () => {
     domain_name: 'd123.cloudfront.net',
     aliases: null,
     origins: null,
+    behaviors: null,
     enabled: true,
     price_class: 'PriceClass_All',
     cost_monthly: 0,
@@ -710,5 +711,68 @@ describe('cloudfrontFromRaw', () => {
       'global',
     );
     expect(row.aliases).toEqual(['example.com', 'www.example.com']);
+  });
+
+  it('behaviors が null のとき空配列になる', () => {
+    const row = cloudfrontFromRaw(base, 'global');
+    expect(row.behaviors).toEqual([]);
+  });
+
+  it('behaviors の snake_case が camelCase に変換される', () => {
+    const row = cloudfrontFromRaw(
+      {
+        ...base,
+        behaviors: [
+          {
+            path_pattern: '/api/*',
+            target_origin_id: 'origin-1',
+            viewer_protocol_policy: 'https-only',
+            allowed_methods: ['GET', 'HEAD'],
+            compress: true,
+            is_default: false,
+          },
+        ],
+      },
+      'global',
+    );
+    expect(row.behaviors[0]).toMatchObject({
+      pathPattern: '/api/*',
+      targetOriginId: 'origin-1',
+      viewerProtocolPolicy: 'https-only',
+      allowedMethods: ['GET', 'HEAD'],
+      compress: true,
+      isDefault: false,
+    });
+  });
+
+  it('behaviors の order は 1 始まりの配列インデックスから導出され、id はその文字列になる', () => {
+    const row = cloudfrontFromRaw(
+      {
+        ...base,
+        behaviors: [
+          {
+            path_pattern: '/api/*',
+            target_origin_id: 'origin-1',
+            viewer_protocol_policy: 'https-only',
+            allowed_methods: [],
+            compress: false,
+            is_default: false,
+          },
+          {
+            path_pattern: '',
+            target_origin_id: 'origin-default',
+            viewer_protocol_policy: 'allow-all',
+            allowed_methods: [],
+            compress: false,
+            is_default: true,
+          },
+        ],
+      },
+      'global',
+    );
+    expect(row.behaviors[0].order).toBe(1);
+    expect(row.behaviors[0].id).toBe('1');
+    expect(row.behaviors[1].order).toBe(2);
+    expect(row.behaviors[1].id).toBe('2');
   });
 });

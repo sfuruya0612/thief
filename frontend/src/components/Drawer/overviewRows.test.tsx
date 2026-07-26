@@ -38,6 +38,7 @@ const cloudfrontBaseRow: CloudFrontRow = {
   domainName: 'd123.cloudfront.net',
   aliases: [],
   origins: ['origin.example.com'],
+  behaviors: [],
   enabled: true,
   priceClass: 'PriceClass_All',
 };

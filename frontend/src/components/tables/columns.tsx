@@ -10,6 +10,7 @@ import type {
   CFNStackEventRow,
   CFNStackResourceRow,
   CFNStackRow,
+  CloudFrontBehaviorRow,
   CloudFrontRow,
   DynamoRow,
   EC2Row,
@@ -1012,6 +1013,53 @@ export const cloudfrontColumns: ColumnDef<CloudFrontRow>[] = [
         {r.origins.join(', ') || '—'}
       </span>
     ),
+  },
+];
+
+function cloudfrontBehaviorPathPattern(r: CloudFrontBehaviorRow): string {
+  return r.isDefault ? 'Default (*)' : r.pathPattern;
+}
+
+export const cloudfrontBehaviorColumns: ColumnDef<CloudFrontBehaviorRow>[] = [
+  { key: 'order', header: 'Precedence', width: '10%', align: 'right', cell: (r) => r.order },
+  {
+    key: 'pathPattern',
+    header: 'Path pattern',
+    width: '24%',
+    cell: (r) => <span style={monoStyle}>{cloudfrontBehaviorPathPattern(r)}</span>,
+    filterValue: cloudfrontBehaviorPathPattern,
+  },
+  {
+    key: 'targetOriginId',
+    header: 'Target origin',
+    width: '20%',
+    cell: (r) => (
+      <span className="truncate" style={mutedMono}>
+        {r.targetOriginId}
+      </span>
+    ),
+  },
+  {
+    key: 'viewerProtocolPolicy',
+    header: 'Viewer protocol',
+    width: '16%',
+    cell: (r) => <span style={mutedMono}>{r.viewerProtocolPolicy}</span>,
+  },
+  {
+    key: 'allowedMethods',
+    header: 'Allowed methods',
+    width: '20%',
+    cell: (r) => (
+      <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
+        {r.allowedMethods.join(', ') || <Dash />}
+      </span>
+    ),
+  },
+  {
+    key: 'compress',
+    header: 'Compress',
+    width: '10%',
+    cell: (r) => (r.compress ? <span style={{ color: 'var(--ok)' }}>✓</span> : <Dash />),
   },
 ];
 

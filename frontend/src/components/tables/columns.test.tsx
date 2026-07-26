@@ -1,8 +1,8 @@
 // components/tables/columns.tsx の列定義のテスト。
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { cloudfrontColumns, wafColumns } from './columns';
-import type { CloudFrontRow, WAFRow } from '../../types/aws';
+import { cloudfrontBehaviorColumns, cloudfrontColumns, wafColumns } from './columns';
+import type { CloudFrontBehaviorRow, CloudFrontRow, WAFRow } from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -92,6 +92,7 @@ const cloudfrontBaseRow: CloudFrontRow = {
   domainName: 'd123.cloudfront.net',
   aliases: [],
   origins: ['origin.example.com'],
+  behaviors: [],
   enabled: true,
   priceClass: 'PriceClass_All',
 };
@@ -133,5 +134,67 @@ describe('cloudfrontColumns', () => {
     if (!col) throw new Error('aliases column not found');
     const { container } = render(<>{col.cell(cloudfrontBaseRow)}</>);
     expect(container).toHaveTextContent('—');
+  });
+});
+
+const cloudfrontBehaviorBaseRow: CloudFrontBehaviorRow = {
+  id: '1',
+  order: 1,
+  pathPattern: '/api/*',
+  targetOriginId: 'origin-1',
+  viewerProtocolPolicy: 'https-only',
+  allowedMethods: ['GET', 'HEAD'],
+  compress: true,
+  isDefault: false,
+};
+
+describe('cloudfrontBehaviorColumns', () => {
+  it('列幅の合計が 100% になる', () => {
+    const total = cloudfrontBehaviorColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
+    expect(total).toBe(100);
+  });
+
+  it('allowedMethods が複数件のとき、カンマ + 半角スペースで結合して表示する', () => {
+    const col = cloudfrontBehaviorColumns.find((c) => c.key === 'allowedMethods');
+    if (!col) throw new Error('allowedMethods column not found');
+    const { container } = render(<>{col.cell(cloudfrontBehaviorBaseRow)}</>);
+    expect(container).toHaveTextContent('GET, HEAD');
+  });
+
+  it('allowedMethods が空配列のときダッシュ表示になる', () => {
+    const col = cloudfrontBehaviorColumns.find((c) => c.key === 'allowedMethods');
+    if (!col) throw new Error('allowedMethods column not found');
+    const { container } = render(
+      <>{col.cell({ ...cloudfrontBehaviorBaseRow, allowedMethods: [] })}</>,
+    );
+    expect(container).toHaveTextContent('—');
+  });
+
+  it('compress が true のときチェックマークを表示する', () => {
+    const col = cloudfrontBehaviorColumns.find((c) => c.key === 'compress');
+    if (!col) throw new Error('compress column not found');
+    const { container } = render(<>{col.cell(cloudfrontBehaviorBaseRow)}</>);
+    expect(container).toHaveTextContent('✓');
+  });
+
+  it('compress が false のときダッシュ表示になる', () => {
+    const col = cloudfrontBehaviorColumns.find((c) => c.key === 'compress');
+    if (!col) throw new Error('compress column not found');
+    const { container } = render(
+      <>{col.cell({ ...cloudfrontBehaviorBaseRow, compress: false })}</>,
+    );
+    expect(container).toHaveTextContent('—');
+  });
+
+  it('pathPattern の filterValue は既定ビヘイビアで Default (*) を返す', () => {
+    const col = cloudfrontBehaviorColumns.find((c) => c.key === 'pathPattern');
+    if (!col || !col.filterValue) throw new Error('pathPattern column or filterValue not found');
+    expect(col.filterValue({ ...cloudfrontBehaviorBaseRow, isDefault: true })).toBe('Default (*)');
+  });
+
+  it('pathPattern の filterValue は追加ビヘイビアで生の pathPattern を返す', () => {
+    const col = cloudfrontBehaviorColumns.find((c) => c.key === 'pathPattern');
+    if (!col || !col.filterValue) throw new Error('pathPattern column or filterValue not found');
+    expect(col.filterValue(cloudfrontBehaviorBaseRow)).toBe('/api/*');
   });
 });
