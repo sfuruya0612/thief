@@ -3,10 +3,12 @@ package aws
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	waftypes "github.com/aws/aws-sdk-go-v2/service/wafv2/types"
 )
 
@@ -15,6 +17,7 @@ func TestNewWAFResource(t *testing.T) {
 		name            string
 		id              string
 		aclName         string
+		arn             string
 		scope           waftypes.Scope
 		ruleCount       int
 		associatedCount int
@@ -26,6 +29,7 @@ func TestNewWAFResource(t *testing.T) {
 			name:            "regional で description が nil なら空文字",
 			id:              "acl-1",
 			aclName:         "edge-acl",
+			arn:             "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/edge-acl/acl-1",
 			scope:           waftypes.ScopeRegional,
 			ruleCount:       3,
 			associatedCount: 1,
@@ -34,6 +38,7 @@ func TestNewWAFResource(t *testing.T) {
 			want: WAFResource{
 				ID:              "acl-1",
 				Name:            "edge-acl",
+				ARN:             "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/edge-acl/acl-1",
 				State:           "active",
 				Scope:           "REGIONAL",
 				Description:     "",
@@ -46,6 +51,7 @@ func TestNewWAFResource(t *testing.T) {
 			name:            "cloudfront で description が空文字",
 			id:              "acl-2",
 			aclName:         "cf-acl",
+			arn:             "arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-2",
 			scope:           waftypes.ScopeCloudfront,
 			ruleCount:       0,
 			associatedCount: 0,
@@ -54,6 +60,7 @@ func TestNewWAFResource(t *testing.T) {
 			want: WAFResource{
 				ID:              "acl-2",
 				Name:            "cf-acl",
+				ARN:             "arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-2",
 				State:           "active",
 				Scope:           "CLOUDFRONT",
 				Description:     "",
@@ -63,10 +70,11 @@ func TestNewWAFResource(t *testing.T) {
 			},
 		},
 		{
-			// id / name / description に互いに異なる値を与え、引数順の取り違えを検出する
+			// id / name / arn / description に互いに異なる値を与え、引数順の取り違えを検出する
 			name:            "description 設定あり",
 			id:              "acl-3",
 			aclName:         "api-acl",
+			arn:             "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/api-acl/acl-3",
 			scope:           waftypes.ScopeRegional,
 			ruleCount:       5,
 			associatedCount: 2,
@@ -75,6 +83,7 @@ func TestNewWAFResource(t *testing.T) {
 			want: WAFResource{
 				ID:              "acl-3",
 				Name:            "api-acl",
+				ARN:             "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/api-acl/acl-3",
 				State:           "active",
 				Scope:           "REGIONAL",
 				Description:     "Protects the public API",
@@ -86,7 +95,7 @@ func TestNewWAFResource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := newWAFResource(tt.id, tt.aclName, tt.scope, tt.ruleCount, tt.associatedCount, tt.tags, tt.description)
+			got := newWAFResource(tt.id, tt.aclName, tt.arn, tt.scope, tt.ruleCount, tt.associatedCount, tt.tags, tt.description)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %#v want %#v", got, tt.want)
 			}
@@ -360,6 +369,159 @@ func TestWAFResourceJSONHasDescription(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"description":"Protects the public API"`) {
 		t.Errorf("json = %s, want description key with value", b)
+	}
+}
+
+func TestWAFResourceJSONHasNoARNKey(t *testing.T) {
+	b, err := json.Marshal(WAFResource{
+		ID:   "acl-1",
+		Name: "edge-acl",
+		ARN:  "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/edge-acl/acl-1",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), `"arn":`) || strings.Contains(string(b), `"ARN":`) {
+		t.Errorf("json = %s, want no arn/ARN key", b)
+	}
+}
+
+func TestWAFRegionalResourceTypes(t *testing.T) {
+	want := map[waftypes.ResourceType]bool{
+		waftypes.ResourceTypeApplicationLoadBalancer: true,
+		waftypes.ResourceTypeApiGateway:              true,
+		waftypes.ResourceTypeAppsync:                 true,
+		waftypes.ResourceTypeCognitioUserPool:        true,
+		waftypes.ResourceTypeAppRunnerService:        true,
+		waftypes.ResourceTypeVerifiedAccessInstance:  true,
+		waftypes.ResourceTypeAmplify:                 true,
+		waftypes.ResourceTypeAgentcoreGateway:        true,
+	}
+	got := wafRegionalResourceTypes()
+	if len(got) != len(want) {
+		t.Fatalf("wafRegionalResourceTypes() = %v, want set %v (length mismatch)", got, want)
+	}
+	for _, rt := range got {
+		if !want[rt] {
+			t.Errorf("wafRegionalResourceTypes() contains unexpected %q", rt)
+		}
+	}
+}
+
+func TestSumResourceARNs(t *testing.T) {
+	tests := []struct {
+		name     string
+		arnLists [][]string
+		want     int
+	}{
+		{
+			name:     "全種別の件数が合算される",
+			arnLists: [][]string{{"arn:1"}, {"arn:2", "arn:3"}, {"arn:4"}},
+			want:     4,
+		},
+		{
+			name:     "一部の種別が 0 件でも残りが合算される",
+			arnLists: [][]string{{"arn:1"}, {}, {"arn:2"}},
+			want:     2,
+		},
+		{
+			name:     "一部の種別が nil (取得失敗) でも残りが合算される",
+			arnLists: [][]string{{"arn:1"}, nil, {"arn:2", "arn:3"}},
+			want:     3,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sumResourceARNs(tt.arnLists); got != tt.want {
+				t.Errorf("sumResourceARNs(%v) = %d, want %d", tt.arnLists, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCloudFrontACLCounts(t *testing.T) {
+	tests := []struct {
+		name      string
+		summaries []cftypes.DistributionSummary
+		want      map[string]int
+	}{
+		{
+			name: "複数ディストリビューションが同じ ACL ARN を指す場合の合算",
+			summaries: []cftypes.DistributionSummary{
+				{WebACLId: aws.String("arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-1")},
+				{WebACLId: aws.String("arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-1")},
+			},
+			want: map[string]int{"arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-1": 2},
+		},
+		{
+			name: "WebACLId が nil と空文字のディストリビューションの除外",
+			summaries: []cftypes.DistributionSummary{
+				{WebACLId: nil},
+				{WebACLId: aws.String("")},
+				{WebACLId: aws.String("arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-2")},
+			},
+			want: map[string]int{"arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-2": 1},
+		},
+		{
+			name:      "ディストリビューションが 0 件の場合の空マップ",
+			summaries: nil,
+			want:      map[string]int{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cloudFrontACLCounts(tt.summaries)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("cloudFrontACLCounts() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyCloudFrontCounts(t *testing.T) {
+	tests := []struct {
+		name   string
+		acls   []WAFResource
+		counts map[string]int
+		want   []int
+	}{
+		{
+			name: "ARN が一致する ACL に件数が入る",
+			acls: []WAFResource{
+				{ID: "acl-1", ARN: "arn:1"},
+				{ID: "acl-2", ARN: "arn:2"},
+			},
+			counts: map[string]int{"arn:1": 3, "arn:2": 1},
+			want:   []int{3, 1},
+		},
+		{
+			name: "マップに無い ARN の ACL は 0 のまま",
+			acls: []WAFResource{
+				{ID: "acl-1", ARN: "arn:1"},
+			},
+			counts: map[string]int{"arn:2": 5},
+			want:   []int{0},
+		},
+		{
+			name: "マップのキーが WAF Classic の GUID のみの場合にどの ACL も 0 のまま",
+			acls: []WAFResource{
+				{ID: "acl-1", ARN: "arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-1"},
+			},
+			counts: map[string]int{"3a1b2c3d-4e5f-6789-abcd-ef0123456789": 2},
+			want:   []int{0},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			applyCloudFrontCounts(tt.acls, tt.counts)
+			got := make([]int, len(tt.acls))
+			for i, acl := range tt.acls {
+				got[i] = acl.AssociatedCount
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("applyCloudFrontCounts() associated counts = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
