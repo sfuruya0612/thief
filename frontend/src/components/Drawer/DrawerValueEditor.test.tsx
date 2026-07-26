@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { DrawerValueEditor } from './DrawerValueEditor';
+import { ApiError } from '../../types/common';
 
 const noopSave = () => Promise.resolve();
 const noop = () => {};
@@ -55,6 +56,14 @@ describe('DrawerValueEditor', () => {
     expect(container.textContent).toContain('sso token expired');
   });
 
+  it('取得エラーが ApiError のときはステータスとコードとメッセージを表示する', () => {
+    const { container } = renderEditor({
+      value: undefined,
+      error: new ApiError(401, 'SSO_TOKEN_EXPIRED', 'sso token expired'),
+    });
+    expect(container.textContent).toContain('Error 401 (SSO_TOKEN_EXPIRED): sso token expired');
+  });
+
   it('Close ボタンで onClose を呼ぶ', () => {
     const onClose = vi.fn();
     const view = within(renderEditor({ onClose }).container);
@@ -98,6 +107,20 @@ describe('DrawerValueEditor', () => {
     fireEvent.change(textarea, { target: { value: 'new-value' } });
     fireEvent.click(view.getByRole('button', { name: '保存' }));
     expect(await view.findByText(/permission denied/)).not.toBeNull();
+    confirmSpy.mockRestore();
+  });
+
+  it('保存エラーが ApiError のときはステータスとコードとメッセージを表示する', async () => {
+    const onSave = vi.fn().mockRejectedValue(new ApiError(403, 'ACCESS_DENIED', 'access denied'));
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { container } = renderEditor({ onSave });
+    const view = within(container);
+    const textarea = enterEdit(container);
+    fireEvent.change(textarea, { target: { value: 'new-value' } });
+    fireEvent.click(view.getByRole('button', { name: '保存' }));
+    await waitFor(() => {
+      expect(container.textContent).toContain('Error 403 (ACCESS_DENIED): access denied');
+    });
     confirmSpy.mockRestore();
   });
 });

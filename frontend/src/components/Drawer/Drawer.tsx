@@ -23,6 +23,7 @@ import { DrawerS3Objects } from './DrawerS3Objects';
 import { DrawerSecretEdit } from './DrawerSecretEdit';
 import { DrawerSSMEdit } from './DrawerSSMEdit';
 import { DrawerTags } from './DrawerTags';
+import { DrawerWAFRules } from './DrawerWAFRules';
 import { DrawerTerminal, type ECSExecTarget } from './DrawerTerminal';
 import type { OverviewEntry } from './overviewRows';
 
@@ -41,7 +42,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   natgw: ['Overview', 'Tags'],
   sqs: ['Overview', 'Tags'],
   kinesis: ['Overview', 'Tags'],
-  waf: ['Overview', 'Tags'],
+  waf: ['Overview', 'Rules', 'Tags'],
   dynamo: ['Overview', 'Items', 'Tags'],
   ssm: ['Overview', 'Value', 'Tags'],
   secrets: ['Overview', 'Value', 'Tags'],
@@ -324,6 +325,14 @@ export function Drawer({
               )}
               {tab === 'Parameters' && service === 'cache' && (
                 <DrawerCacheParameters profile={profile} region={region} cluster={resource.name} />
+              )}
+              {tab === 'Rules' && service === 'waf' && (
+                <DrawerWAFRules
+                  profile={profile}
+                  region={region}
+                  id={resource.id}
+                  name={resource.name}
+                />
               )}
               {tab === 'Items' && service === 'dynamo' && (
                 <DrawerDynamoItems profile={profile} region={region} table={resource.name} />

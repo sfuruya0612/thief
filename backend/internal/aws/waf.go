@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/wafv2"
@@ -122,6 +124,155 @@ func newWAFResource(id, name string, scope waftypes.Scope, ruleCount, associated
 		AssociatedCount: associatedCount,
 		Tags:            tags,
 	}
+}
+
+// WAFRule represents a rule in a WAFv2 Web ACL.
+type WAFRule struct {
+	Name      string `json:"name"`
+	Priority  int32  `json:"priority"`
+	Action    string `json:"action"`
+	Statement string `json:"statement"`
+}
+
+// ListWAFRules returns the rules of the Web ACL identified by name + id + scope,
+// sorted by priority ascending. scope must be REGIONAL or CLOUDFRONT (validated
+// by the caller).
+func ListWAFRules(ctx context.Context, profile, region, scope, name, id string) ([]WAFRule, error) {
+	sc := waftypes.Scope(scope)
+	client, err := newWAFClient(ctx, profile, wafClientRegion(sc, region))
+	if err != nil {
+		return nil, err
+	}
+	out, err := client.GetWebACL(ctx, &wafv2.GetWebACLInput{
+		Id:    aws.String(id),
+		Name:  aws.String(name),
+		Scope: sc,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get web acl %s: %w", id, err)
+	}
+	rules := []WAFRule{}
+	if out.WebACL != nil {
+		for _, r := range out.WebACL.Rules {
+			rules = append(rules, newWAFRule(r))
+		}
+	}
+	sortWAFRules(rules)
+	return rules, nil
+}
+
+// wafClientRegion は wafv2 クライアントに使うリージョンを返す。
+// CLOUDFRONT スコープは us-east-1 必須 (ListWAFResources と同じ扱い)。
+func wafClientRegion(scope waftypes.Scope, region string) string {
+	if scope == waftypes.ScopeCloudfront {
+		return "us-east-1"
+	}
+	return region
+}
+
+// newWAFRule は SDK の Rule を WAFRule へ変換する。
+func newWAFRule(r waftypes.Rule) WAFRule {
+	return WAFRule{
+		Name:      ptrStr(r.Name),
+		Priority:  r.Priority,
+		Action:    wafRuleAction(r),
+		Statement: wafRuleStatement(r.Statement),
+	}
+}
+
+// wafRuleAction は Rule のアクションを表示用文字列へ要約する。
+// Action は非 nil フィールド名、ルールグループ参照の OverrideAction は
+// "Override: None" / "Override: Count" とする。SDK 更新で増えたフィールドや
+// どちらも nil の場合は空文字に落ちる。
+func wafRuleAction(r waftypes.Rule) string {
+	if a := r.Action; a != nil {
+		switch {
+		case a.Allow != nil:
+			return "Allow"
+		case a.Block != nil:
+			return "Block"
+		case a.Count != nil:
+			return "Count"
+		case a.Captcha != nil:
+			return "Captcha"
+		case a.Challenge != nil:
+			return "Challenge"
+		case a.Monetize != nil:
+			return "Monetize"
+		}
+		return ""
+	}
+	if o := r.OverrideAction; o != nil {
+		switch {
+		case o.None != nil:
+			return "Override: None"
+		case o.Count != nil:
+			return "Override: Count"
+		}
+	}
+	return ""
+}
+
+// wafRuleStatement は Statement の非 nil フィールドから種別名を導出する。
+// ManagedRuleGroupStatement は VendorName/Name、RuleGroupReferenceStatement は
+// ARN の末尾セグメント、And/Or/Not は入れ子を展開せず AND/OR/NOT とする。
+// どのフィールドも非 nil でない場合は Unknown を返す (SDK 更新で種別が増えた場合の既定値)。
+func wafRuleStatement(st *waftypes.Statement) string {
+	if st == nil {
+		return "Unknown"
+	}
+	switch {
+	case st.ManagedRuleGroupStatement != nil:
+		return ptrStr(st.ManagedRuleGroupStatement.VendorName) + "/" + ptrStr(st.ManagedRuleGroupStatement.Name)
+	case st.RuleGroupReferenceStatement != nil:
+		return arnLastSegment(ptrStr(st.RuleGroupReferenceStatement.ARN))
+	case st.AndStatement != nil:
+		return "AND"
+	case st.OrStatement != nil:
+		return "OR"
+	case st.NotStatement != nil:
+		return "NOT"
+	case st.AsnMatchStatement != nil:
+		return "AsnMatch"
+	case st.ByteMatchStatement != nil:
+		return "ByteMatch"
+	case st.GeoMatchStatement != nil:
+		return "GeoMatch"
+	case st.IPSetReferenceStatement != nil:
+		return "IPSetReference"
+	case st.LabelMatchStatement != nil:
+		return "LabelMatch"
+	case st.RateBasedStatement != nil:
+		return "RateBased"
+	case st.RegexMatchStatement != nil:
+		return "RegexMatch"
+	case st.RegexPatternSetReferenceStatement != nil:
+		return "RegexPatternSetReference"
+	case st.SizeConstraintStatement != nil:
+		return "SizeConstraint"
+	case st.SqliMatchStatement != nil:
+		return "SqliMatch"
+	case st.XssMatchStatement != nil:
+		return "XssMatch"
+	}
+	return "Unknown"
+}
+
+// arnLastSegment は ARN の末尾セグメント (最後の "/" 以降) を返す。
+// "/" を含まない場合は入力をそのまま返す。
+func arnLastSegment(arn string) string {
+	if i := strings.LastIndex(arn, "/"); i >= 0 {
+		return arn[i+1:]
+	}
+	return arn
+}
+
+// sortWAFRules は priority 昇順に整列する。GetWebACL のレスポンス配列の順序は
+// SDK に文書化されていないため明示的に整列する (Priority は Web ACL 内で一意)。
+func sortWAFRules(rules []WAFRule) {
+	slices.SortFunc(rules, func(a, b WAFRule) int {
+		return int(a.Priority) - int(b.Priority)
+	})
 }
 
 // newWAFClient は WAFv2 API クライアントを生成する。

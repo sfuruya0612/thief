@@ -85,6 +85,8 @@ import type {
   SSMParamRow,
   WAFRaw,
   WAFRow,
+  WAFRuleRaw,
+  WAFRuleRow,
 } from '../types/aws';
 
 // launch_time が有効な ISO 日時であれば YYYY-MM-DD を返す
@@ -625,6 +627,16 @@ export function wafFromRaw(raw: WAFRaw, region: string): WAFRow {
     ruleCount: raw.rule_count,
     associatedCount: raw.associated_count,
     tags: raw.tags ?? {},
+  };
+}
+
+export function wafRuleFromRaw(raw: WAFRuleRaw): WAFRuleRow {
+  return {
+    id: raw.name,
+    name: raw.name,
+    priority: raw.priority,
+    action: raw.action,
+    statement: raw.statement,
   };
 }
 

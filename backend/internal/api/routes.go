@@ -59,6 +59,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/natgw", s.handleNATGW)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/sqs", s.handleSQS)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/waf", s.handleWAF)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/waf/rules", s.handleWAFRules)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost", s.handleCost)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost/forecast", s.handleCostForecast)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/pricing", s.handlePricing)

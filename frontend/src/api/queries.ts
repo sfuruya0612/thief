@@ -42,6 +42,7 @@ import {
   profileFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
+  wafRuleFromRaw,
 } from '../lib/normalize';
 import {
   type AthenaQueryStartBody,
@@ -106,6 +107,7 @@ import {
   getTiDBClusters,
   getTiDBCost,
   getTiDBProjects,
+  getWAFRules,
   postAthenaQueryStart,
   postBQDryRun,
   postBQQueryStart,
@@ -527,6 +529,25 @@ export function useCacheParameters(profile: string, region: string, group: strin
       (await getCacheParameters(profile, region, group)).map(cacheParameterFromRaw),
     staleTime: 60_000,
     enabled: !!profile && !!group,
+  });
+}
+
+// ============================================================
+// WAF ルール (Drawer の Rules タブ)
+// ============================================================
+// scope は一覧キャッシュから引き直して得るため、確定するまで (空文字の間) は無効化する。
+export function useWAFRules(
+  profile: string,
+  region: string,
+  scope: string,
+  name: string,
+  id: string,
+) {
+  return useQuery({
+    queryKey: ['aws', 'waf-rules', profile, region, scope, id],
+    queryFn: async () => (await getWAFRules(profile, region, scope, name, id)).map(wafRuleFromRaw),
+    staleTime: 60_000,
+    enabled: !!profile && !!scope && !!id,
   });
 }
 

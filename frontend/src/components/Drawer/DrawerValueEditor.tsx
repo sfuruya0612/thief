@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loading } from '../Loading';
-import { ApiError } from '../../types/common';
+import { DrawerError } from './drawerError';
 
 export interface DrawerValueEditorProps {
   // 参考表示する属性 (Name / Type / Description など)。編集対象ではない。
@@ -20,10 +20,6 @@ export interface DrawerValueEditorProps {
   onSave: (value: string) => Promise<void>;
   // Drawer を閉じる。
   onClose: () => void;
-}
-
-function errorText(e: unknown): string {
-  return e instanceof ApiError ? e.message : String(e);
 }
 
 export function DrawerValueEditor({
@@ -118,14 +114,12 @@ export function DrawerValueEditor({
             disabled={isSaving}
             spellCheck={false}
           />
-          {saveError !== null && (
-            <div style={{ padding: '8px 0', color: 'var(--err)' }}>{errorText(saveError)}</div>
-          )}
+          {saveError !== null && <DrawerError error={saveError} />}
         </>
       ) : isLoading ? (
         <Loading />
       ) : error ? (
-        <div style={{ padding: '8px 0', color: 'var(--err)' }}>{errorText(error)}</div>
+        <DrawerError error={error} />
       ) : value !== undefined ? (
         <pre className="logbox" style={{ maxHeight: 'none' }}>
           {value}

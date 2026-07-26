@@ -751,6 +751,23 @@ export interface WAFRow {
   tags: Record<string, string>;
 }
 
+// Web ACL のルール (Drawer の Rules タブでオンデマンド取得)
+export interface WAFRuleRaw {
+  name: string;
+  priority: number;
+  action: string;
+  statement: string;
+}
+
+export interface WAFRuleRow {
+  // DataTable の行キー。ルール名は Web ACL 内で一意のためそのまま使う。
+  id: string;
+  name: string;
+  priority: number;
+  action: string;
+  statement: string;
+}
+
 // ============================================================
 // SSM Parameter Store (キー: ssm)
 // 値は一覧に含めない。値は Drawer の Value タブでオンデマンド取得する。
