@@ -732,6 +732,7 @@ export interface WAFRaw {
   name: string;
   state: string;
   scope: string;
+  description: string;
   rule_count: number;
   associated_count: number;
   tags: Record<string, string>;
@@ -744,6 +745,7 @@ export interface WAFRow {
   name: string;
   state: string;
   scope: string;
+  description: string;
   ruleCount: number;
   associatedCount: number;
   tags: Record<string, string>;

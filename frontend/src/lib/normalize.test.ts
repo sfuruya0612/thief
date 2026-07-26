@@ -17,7 +17,9 @@ import {
   rdsFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
+  wafFromRaw,
 } from './normalize';
+import type { WAFRaw } from '../types/aws';
 
 describe('profileFromRaw', () => {
   it('sso_account_id / sso_role_name を camelCase に変換する', () => {
@@ -584,5 +586,40 @@ describe('cwLogEventFromRaw', () => {
       0,
     );
     expect(row.id).toBe('2026-07-18T03:04:05Z#0');
+  });
+});
+
+describe('wafFromRaw', () => {
+  const base: WAFRaw = {
+    id: 'acl-1',
+    name: 'edge-acl',
+    state: 'active',
+    scope: 'REGIONAL',
+    description: 'Protects the public API',
+    rule_count: 3,
+    associated_count: 1,
+    tags: { Env: 'prod' },
+    cost_monthly: 0,
+  };
+
+  it('snake_case を camelCase に変換し description を写す', () => {
+    const row = wafFromRaw(base, 'ap-northeast-1');
+    expect(row).toEqual({
+      region: 'ap-northeast-1',
+      id: 'acl-1',
+      name: 'edge-acl',
+      state: 'active',
+      scope: 'REGIONAL',
+      description: 'Protects the public API',
+      ruleCount: 3,
+      associatedCount: 1,
+      tags: { Env: 'prod' },
+    });
+  });
+
+  it('description が欠落したレスポンスでは空文字に既定する', () => {
+    const raw = { ...base, description: undefined as unknown as string };
+    const row = wafFromRaw(raw, 'ap-northeast-1');
+    expect(row.description).toBe('');
   });
 });

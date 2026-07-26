@@ -15,6 +15,7 @@ type WAFResource struct {
 	Name            string            `json:"name"`
 	State           string            `json:"state"`
 	Scope           string            `json:"scope"`
+	Description     string            `json:"description"`
 	RuleCount       int               `json:"rule_count"`
 	AssociatedCount int               `json:"associated_count"`
 	Tags            map[string]string `json:"tags"`
@@ -105,17 +106,18 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 		if tagErr == nil && tagsOut != nil && tagsOut.TagInfoForResource != nil {
 			tags = tagsToMapFunc(tagsOut.TagInfoForResource.TagList, func(t waftypes.Tag) (*string, *string) { return t.Key, t.Value })
 		}
-		resources = append(resources, newWAFResource(ptrStr(s.Id), ptrStr(s.Name), scope, ruleCount, associatedCount, tags))
+		resources = append(resources, newWAFResource(ptrStr(s.Id), ptrStr(s.Name), scope, ruleCount, associatedCount, tags, s.Description))
 	}
 	return resources, nil
 }
 
-func newWAFResource(id, name string, scope waftypes.Scope, ruleCount, associatedCount int, tags map[string]string) WAFResource {
+func newWAFResource(id, name string, scope waftypes.Scope, ruleCount, associatedCount int, tags map[string]string, description *string) WAFResource {
 	return WAFResource{
 		ID:              id,
 		Name:            name,
 		State:           "active",
 		Scope:           string(scope),
+		Description:     ptrStr(description),
 		RuleCount:       ruleCount,
 		AssociatedCount: associatedCount,
 		Tags:            tags,

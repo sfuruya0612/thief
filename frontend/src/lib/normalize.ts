@@ -621,6 +621,7 @@ export function wafFromRaw(raw: WAFRaw, region: string): WAFRow {
     name: raw.name,
     state: raw.state,
     scope: raw.scope,
+    description: raw.description ?? '',
     ruleCount: raw.rule_count,
     associatedCount: raw.associated_count,
     tags: raw.tags ?? {},

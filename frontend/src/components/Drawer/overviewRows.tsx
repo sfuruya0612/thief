@@ -246,6 +246,7 @@ export function wafOverviewRows(r: WAFRow): OverviewEntry[] {
   return [
     ['Resource ID', r.id],
     ['Scope', r.scope],
+    ['Description', r.description || dash],
     ['Rules', r.ruleCount],
     ['Associated resources', r.associatedCount],
     ['Region', r.region],
