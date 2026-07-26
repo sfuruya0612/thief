@@ -9,12 +9,87 @@ import (
 	"strings"
 	"testing"
 
+	smithy "github.com/aws/smithy-go"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/protoadapt"
 )
+
+func TestWriteAWSError(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "AccessDeniedException は 403 ACCESS_DENIED",
+			err:        &smithy.GenericAPIError{Code: "AccessDeniedException", Message: "User: arn:aws:sts::123456789012:assumed-role/x is not authorized to perform: wafv2:ListWebACLs"},
+			wantStatus: http.StatusForbidden,
+			wantCode:   "ACCESS_DENIED",
+		},
+		{
+			name:       "AccessDenied は 403 ACCESS_DENIED",
+			err:        &smithy.GenericAPIError{Code: "AccessDenied", Message: "Access Denied"},
+			wantStatus: http.StatusForbidden,
+			wantCode:   "ACCESS_DENIED",
+		},
+		{
+			name:       "UnauthorizedOperation は 403 ACCESS_DENIED",
+			err:        &smithy.GenericAPIError{Code: "UnauthorizedOperation", Message: "You are not authorized to perform this operation."},
+			wantStatus: http.StatusForbidden,
+			wantCode:   "ACCESS_DENIED",
+		},
+		{
+			name:       "%w でラップされた AccessDenied も 403 ACCESS_DENIED",
+			err:        fmt.Errorf("list waf acls: %w", &smithy.GenericAPIError{Code: "AccessDeniedException", Message: "not authorized"}),
+			wantStatus: http.StatusForbidden,
+			wantCode:   "ACCESS_DENIED",
+		},
+		{
+			name:       "SSO 期限切れは引き続き 401 SSO_TOKEN_EXPIRED",
+			err:        errors.New("the SSO session has expired or is invalid"),
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "SSO_TOKEN_EXPIRED",
+		},
+		{
+			name:       "ExpiredTokenException は 401 SSO_TOKEN_EXPIRED",
+			err:        &smithy.GenericAPIError{Code: "ExpiredTokenException", Message: "ExpiredTokenException: token has expired"},
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "SSO_TOKEN_EXPIRED",
+		},
+		{
+			name:       "その他のエラーは 500 INTERNAL_ERROR",
+			err:        errors.New("boom"),
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "INTERNAL_ERROR",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			writeAWSError(rec, tt.err)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			var body ErrorResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body.Code != tt.wantCode {
+				t.Errorf("code = %q, want %q", body.Code, tt.wantCode)
+			}
+			if body.Error == "" {
+				t.Errorf("error message is empty; want non-empty")
+			}
+		})
+	}
+}
 
 func TestWriteGCPError(t *testing.T) {
 	const disabledMsg = "Cloud Resource Manager API has not been used in project gumi-green-1222 before or it is disabled."
