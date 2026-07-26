@@ -243,6 +243,8 @@
 
 ### misc
 
+- frontend の staleTime 既定 (60 秒) を QueryClient のグローバル設定 (`main.tsx`) に集約し、各 useQuery に重複していた 34 箇所の `staleTime: 60_000` 指定を削除する (挙動は変えない。暗黙の既定値 0 に依存していた Secrets/SSM の値取得とオブジェクトプレビューの 4 フックには `staleTime: 0` を明示する)
+  - @sfuruya0612
 - frontend の SSO トークン期限切れ判定 (5 ビュー) を `lib/ssoError.ts` の純関数 `isSSOExpiredError` に、backend の必須クエリパラメータ検証 (14 ハンドラ) を `requireQueryParam` ヘルパーに、テーブル列のセル部品 (`Dash` とスタイル定数) を `components/tables/cells.tsx` にそれぞれ共通化する (挙動は変えない)
   - @sfuruya0612
 - govulncheck が検出した golang.org/x/text の脆弱性 (GO-2026-5970) を解消するため golang.org/x/text を v0.38.0 から v0.39.0 に更新する (indirect 依存。go get に伴い x/mod / x/telemetry / x/tools も追随して更新される)
