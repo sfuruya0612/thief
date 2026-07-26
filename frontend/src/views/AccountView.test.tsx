@@ -1,11 +1,12 @@
 // ServicePanel (AccountView) のエラーバナー出し分けの検証 (issue 0073)。
-// SSO_TOKEN_EXPIRED のときだけ SSOExpiredBanner を出し、それ以外の ApiError
+// SSO トークン期限切れのときだけ SSOExpiredBanner を出し、それ以外の ApiError
 // (403 ACCESS_DENIED 等) は ErrorBanner に落ちることを確認する。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AccountView } from './AccountView';
 import { ApiError } from '../types/common';
+import { SSO_TOKEN_EXPIRED_CODE } from '../lib/ssoError';
 
 // ServicePanel が使う useResources / useCost だけを差し替え、他のフック
 // (Sidebar の useRegions など) は実装のまま使う。fetch は解決しない Promise に
@@ -68,8 +69,8 @@ describe('AccountView のエラーバナー出し分け', () => {
     expect(banner).toHaveTextContent('User is not authorized to perform: ec2:DescribeInstances');
   });
 
-  it('401 SSO_TOKEN_EXPIRED の ApiError では SSOExpiredBanner を表示する', () => {
-    const err = new ApiError(401, 'SSO_TOKEN_EXPIRED', 'SSO token expired');
+  it('401 SSO トークン期限切れの ApiError では SSOExpiredBanner を表示する', () => {
+    const err = new ApiError(401, SSO_TOKEN_EXPIRED_CODE, 'SSO token expired');
     mocks.useResources.mockReturnValue({ data: undefined, isLoading: false, error: err });
 
     const { container } = renderView();

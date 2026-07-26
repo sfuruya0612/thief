@@ -43,9 +43,8 @@ func (s *Server) handleECSExec(w http.ResponseWriter, r *http.Request) {
 	cluster := r.PathValue("cluster")
 	task := r.PathValue("task")
 
-	container := r.URL.Query().Get("container")
-	if container == "" {
-		writeBadRequest(w, "container query parameter is required")
+	container, ok := requireQueryParam(w, r, "container")
+	if !ok {
 		return
 	}
 	command := r.URL.Query().Get("command")

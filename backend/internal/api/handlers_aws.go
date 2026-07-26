@@ -86,9 +86,8 @@ func (s *Server) handleRDS(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRDSParameters(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	group := r.URL.Query().Get("group")
-	if group == "" {
-		writeBadRequest(w, "group query parameter is required")
+	group, ok := requireQueryParam(w, r, "group")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("rds-parameters", profile, region, group), cacheTTL, writeAWSError, func() (any, error) {
@@ -98,9 +97,8 @@ func (s *Server) handleRDSParameters(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRDSClusterParameters(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	cluster := r.URL.Query().Get("cluster")
-	if cluster == "" {
-		writeBadRequest(w, "cluster query parameter is required")
+	cluster, ok := requireQueryParam(w, r, "cluster")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("rds-cluster-parameters", profile, region, cluster), cacheTTL, writeAWSError, func() (any, error) {
@@ -117,9 +115,8 @@ func (s *Server) handleElastiCache(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleElastiCacheParameters(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	group := r.URL.Query().Get("group")
-	if group == "" {
-		writeBadRequest(w, "group query parameter is required")
+	group, ok := requireQueryParam(w, r, "group")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("elasticache-parameters", profile, region, group), cacheTTL, writeAWSError, func() (any, error) {
@@ -305,9 +302,8 @@ func (s *Server) handleELB(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleELBListeners(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	lbArn := r.URL.Query().Get("lb_arn")
-	if lbArn == "" {
-		writeBadRequest(w, "lb_arn query parameter is required")
+	lbArn, ok := requireQueryParam(w, r, "lb_arn")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("elb-listeners", profile, region, lbArn), cacheTTL, writeAWSError, func() (any, error) {
@@ -317,9 +313,8 @@ func (s *Server) handleELBListeners(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleELBRules(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	listenerArn := r.URL.Query().Get("listener_arn")
-	if listenerArn == "" {
-		writeBadRequest(w, "listener_arn query parameter is required")
+	listenerArn, ok := requireQueryParam(w, r, "listener_arn")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("elb-rules", profile, region, listenerArn), cacheTTL, writeAWSError, func() (any, error) {
@@ -329,9 +324,8 @@ func (s *Server) handleELBRules(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleELBTargetGroups(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	lbArn := r.URL.Query().Get("lb_arn")
-	if lbArn == "" {
-		writeBadRequest(w, "lb_arn query parameter is required")
+	lbArn, ok := requireQueryParam(w, r, "lb_arn")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("elb-target-groups", profile, region, lbArn), cacheTTL, writeAWSError, func() (any, error) {
@@ -341,9 +335,8 @@ func (s *Server) handleELBTargetGroups(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleELBTargetHealth(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	tgArn := r.URL.Query().Get("tg_arn")
-	if tgArn == "" {
-		writeBadRequest(w, "tg_arn query parameter is required")
+	tgArn, ok := requireQueryParam(w, r, "tg_arn")
+	if !ok {
 		return
 	}
 	s.serveCached(w, r, cacheKey("elb-target-health", profile, region, tgArn), cacheTTL, writeAWSError, func() (any, error) {
@@ -388,19 +381,16 @@ func (s *Server) handleWAF(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWAFRules(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	scope := r.URL.Query().Get("scope")
-	if scope == "" {
-		writeBadRequest(w, "scope query parameter is required")
+	scope, ok := requireQueryParam(w, r, "scope")
+	if !ok {
 		return
 	}
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		writeBadRequest(w, "id query parameter is required")
+	id, ok := requireQueryParam(w, r, "id")
+	if !ok {
 		return
 	}
-	name := r.URL.Query().Get("name")
-	if name == "" {
-		writeBadRequest(w, "name query parameter is required")
+	name, ok := requireQueryParam(w, r, "name")
+	if !ok {
 		return
 	}
 	if scope != "REGIONAL" && scope != "CLOUDFRONT" {

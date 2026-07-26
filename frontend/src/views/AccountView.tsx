@@ -72,7 +72,7 @@ import { Drawer } from '../components/Drawer/Drawer';
 import { useCost, useResources } from '../api/queries';
 import { SERVICES } from '../lib/serviceMeta';
 import type { BaseRow, DrawerPos, Profile } from '../types/common';
-import { ApiError } from '../types/common';
+import { isSSOExpiredError } from '../lib/ssoError';
 import { Sidebar } from '../components/Sidebar';
 import { StatsRow } from '../components/StatsRow';
 import { FacetBar, type Filters } from '../components/FacetBar';
@@ -113,7 +113,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   const [filters, setFilters] = useState<Filters>({});
   const queryClient = useQueryClient();
 
-  const ssoExpired = error instanceof ApiError && error.code === 'SSO_TOKEN_EXPIRED';
+  const ssoExpired = isSSOExpiredError(error);
 
   // SSO 期限切れを検知したらプロファイル一覧も再取得し、セッションタブの
   // ピッカーやアクティブセッションカードのバッジを「期限切れ」へ追随させる

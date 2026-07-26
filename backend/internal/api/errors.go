@@ -25,6 +25,18 @@ func writeBadRequest(w http.ResponseWriter, msg string) {
 	writeError(w, http.StatusBadRequest, "BAD_REQUEST", msg)
 }
 
+// requireQueryParam はクエリパラメータ name の値を返す。値が空の場合は
+// 400 BAD_REQUEST ("<name> query parameter is required") を書き込み ok=false を返す。
+// 存在確認のみを共通化し、値域の検証 (例: WAF の scope) は呼び出し側に残す。
+func requireQueryParam(w http.ResponseWriter, r *http.Request, name string) (string, bool) {
+	v := r.URL.Query().Get(name)
+	if v == "" {
+		writeBadRequest(w, name+" query parameter is required")
+		return "", false
+	}
+	return v, true
+}
+
 func writeInternalError(w http.ResponseWriter, msg string) {
 	writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", msg)
 }

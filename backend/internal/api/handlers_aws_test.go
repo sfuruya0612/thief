@@ -170,3 +170,49 @@ func TestHandleWAFRulesValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestRequireQueryParamHandlers は requireQueryParam へ共通化した必須クエリ検証が
+// 400 BAD_REQUEST と "<name> query parameter is required" を返すことを、
+// 代表として RDS parameters と ELB listeners のハンドラで検証する。
+func TestRequireQueryParamHandlers(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantMsg string
+	}{
+		{
+			name:    "rds parameters は group が無いと 400",
+			path:    "/api/aws/profiles/test-profile/rds/parameters?region=ap-northeast-1",
+			wantMsg: "group query parameter is required",
+		},
+		{
+			name:    "elb listeners は lb_arn が無いと 400",
+			path:    "/api/aws/profiles/test-profile/elb/listeners?region=ap-northeast-1",
+			wantMsg: "lb_arn query parameter is required",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestServer(t)
+			s.mux = http.NewServeMux()
+			s.registerRoutes()
+			r := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			w := httptest.NewRecorder()
+			s.mux.ServeHTTP(w, r)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+			var body ErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatalf("unmarshal body: %v", err)
+			}
+			if body.Code != "BAD_REQUEST" {
+				t.Errorf("code = %q, want BAD_REQUEST", body.Code)
+			}
+			if body.Error != tt.wantMsg {
+				t.Errorf("error = %q, want %q", body.Error, tt.wantMsg)
+			}
+		})
+	}
+}

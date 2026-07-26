@@ -241,6 +241,8 @@
 
 ### misc
 
+- frontend の SSO トークン期限切れ判定 (5 ビュー) を `lib/ssoError.ts` の純関数 `isSSOExpiredError` に、backend の必須クエリパラメータ検証 (14 ハンドラ) を `requireQueryParam` ヘルパーに、テーブル列のセル部品 (`Dash` とスタイル定数) を `components/tables/cells.tsx` にそれぞれ共通化する (挙動は変えない)
+  - @sfuruya0612
 - govulncheck が検出した golang.org/x/text の脆弱性 (GO-2026-5970) を解消するため golang.org/x/text を v0.38.0 から v0.39.0 に更新する (indirect 依存。go get に伴い x/mod / x/telemetry / x/tools も追随して更新される)
   - @sfuruya0612
 - モノレポ移行以前の旧 CLI 単体モジュール (ルート `cmd/` / `internal/` / `main.go` / `go.mod`) とそのドキュメント生成ツール (`docs/`) を削除する
