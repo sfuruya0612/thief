@@ -140,6 +140,8 @@
   - @sfuruya0612
 - [ADD] ElastiCache の Web 一覧に所属レプリケーショングループ (`replication_group_id`) の列を追加する。`DescribeCacheClusters` が既に返す `ReplicationGroupId` を使い、追加の API 呼び出しなしで Redis / Valkey の各ノードがどのレプリケーショングループに属するかを判別できるようにする。単一ノードの Redis / Valkey や Memcached など所属しないクラスターは列を空 (Dash 表示) とする
   - @sfuruya0612
+- [CHANGE] RDS クラスターパラメータ API (`GET .../rds/cluster-parameters`) のレスポンスをパラメータ配列からクラスターパラメータグループのオブジェクト (`{"group_name", "parameters"}`) に変更し、Drawer の Cluster Parameters タブの見出しを clusterId からクラスターパラメータグループ名に変更する (Instance Parameters タブと見出しの意味を揃え、どのグループを見ているかを判別できるようにする。CLI の出力列は変更しない)
+  - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
   - @sfuruya0612
 - [CHANGE] 通常起動のポートを backend 8080 → 8089、frontend (Vite dev server) 8082 → 8088 に変更する (他のローカル開発ツールとの衝突を避けるため。WebSocket 許可オリジンのデフォルトと frontend の API フォールバック先も追随する)

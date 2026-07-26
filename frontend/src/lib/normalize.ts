@@ -69,6 +69,8 @@ import type {
   LambdaRow,
   NATGWRaw,
   NATGWRow,
+  RDSClusterParameterGroupRaw,
+  RDSClusterParameterGroupRow,
   RDSParameterRaw,
   RDSParameterRow,
   RDSRaw,
@@ -190,6 +192,16 @@ export function rdsParameterFromRaw(raw: RDSParameterRaw): RDSParameterRow {
     source: raw.source,
     isModifiable: raw.is_modifiable,
     description: raw.description,
+  };
+}
+
+export function rdsClusterParameterGroupFromRaw(
+  raw: RDSClusterParameterGroupRaw,
+): RDSClusterParameterGroupRow {
+  return {
+    groupName: raw.group_name,
+    // パラメータが 1 件も無い場合 backend は parameters を null で返すため空配列に正規化する。
+    parameters: (raw.parameters ?? []).map(rdsParameterFromRaw),
   };
 }
 

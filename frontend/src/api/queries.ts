@@ -40,6 +40,7 @@ import {
   elbTargetHealthFromRaw,
   objectPreviewFromRaw,
   profileFromRaw,
+  rdsClusterParameterGroupFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
   wafRuleFromRaw,
@@ -516,7 +517,7 @@ export function useRDSClusterParameters(profile: string, region: string, cluster
   return useQuery({
     queryKey: ['aws', 'rds-cluster-parameters', profile, region, clusterId],
     queryFn: async () =>
-      (await getRDSClusterParameters(profile, region, clusterId)).map(rdsParameterFromRaw),
+      rdsClusterParameterGroupFromRaw(await getRDSClusterParameters(profile, region, clusterId)),
     staleTime: 60_000,
     enabled: !!profile && !!clusterId,
   });

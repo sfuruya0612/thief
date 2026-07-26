@@ -1,7 +1,8 @@
 // 所属 DB クラスターの DB クラスターパラメータグループのパラメータを表示する
 // Drawer の Cluster Parameters タブ。clusterId は一覧クエリ (useResources) のキャッシュから
 // 該当インスタンスを引いて得る。クラスターに属さないインスタンスは空表示を出す。
-// 見出しはタブ名で種別が分かるため clusterId をそのまま表示する (Cluster: プレフィックスなし)。
+// 見出しは Instance Parameters タブと揃えてクラスターパラメータグループ名を表示する。
+// グループ名が取得できるまで (ローディング中や group_name 空) は clusterId にフォールバックする。
 import { useMemo } from 'react';
 import { useRDSClusterParameters, useResources } from '../../api/queries';
 import { rdsFromRaw } from '../../lib/normalize';
@@ -27,7 +28,8 @@ export function DrawerRDSClusterParameters({
   const clusterId = row?.clusterId ?? '';
   // clusterId が空の間は enabled 制御により取得が発火しない。
   const query = useRDSClusterParameters(profile, region, clusterId);
-  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const rows = useMemo(() => query.data?.parameters ?? [], [query.data]);
+  const heading = query.data?.groupName || clusterId;
 
   if (row === undefined) {
     return (
@@ -56,7 +58,7 @@ export function DrawerRDSClusterParameters({
   return (
     <div className="section">
       <h3>
-        {clusterId}
+        {heading}
         {query.data !== undefined ? ` (${rows.length})` : ''}
       </h3>
       {query.error != null && <DrawerError error={query.error} />}

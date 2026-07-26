@@ -58,7 +58,7 @@ describe('DrawerRDSClusterParameters', () => {
     vi.restoreAllMocks();
   });
 
-  it('クラスターパラメータを Cluster: プレフィックスなしの clusterId 見出しで表示する', async () => {
+  it('クラスターパラメータをクラスターパラメータグループ名の見出しで表示する', async () => {
     mockFetch(
       [
         rdsListItem({
@@ -68,18 +68,21 @@ describe('DrawerRDSClusterParameters', () => {
         }),
       ],
       () =>
-        okJson([
-          {
-            name: 'binlog_format',
-            value: 'ROW',
-            allowed_values: '',
-            apply_type: '',
-            data_type: '',
-            source: '',
-            is_modifiable: true,
-            description: '',
-          },
-        ]),
+        okJson({
+          group_name: 'default.aurora-mysql8.0',
+          parameters: [
+            {
+              name: 'binlog_format',
+              value: 'ROW',
+              allowed_values: '',
+              apply_type: '',
+              data_type: '',
+              source: '',
+              is_modifiable: true,
+              description: '',
+            },
+          ],
+        }),
     );
 
     const { container } = renderWithQC(
@@ -89,14 +92,35 @@ describe('DrawerRDSClusterParameters', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('binlog_format');
     });
-    expect(container.textContent).toContain('aurora-cluster-1 (1)');
+    expect(container.textContent).toContain('default.aurora-mysql8.0 (1)');
     expect(container.textContent).not.toContain('Cluster:');
+  });
+
+  it('group_name が空のときは clusterId の見出しにフォールバックする', async () => {
+    mockFetch(
+      [
+        rdsListItem({
+          name: 'db-1',
+          parameter_groups: ['default.aurora-mysql8.0'],
+          cluster_id: 'aurora-cluster-1',
+        }),
+      ],
+      () => okJson({ group_name: '', parameters: null }),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerRDSClusterParameters profile="test" region="ap-northeast-1" instance="db-1" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('aurora-cluster-1 (0)');
+    });
   });
 
   it('クラスターに属さないインスタンスは Not part of a DB cluster. を表示し取得を発火させない', async () => {
     mockFetch(
       [rdsListItem({ name: 'db-1', parameter_groups: ['default.mysql8.0'], cluster_id: '' })],
-      () => okJson([]),
+      () => okJson({ group_name: '', parameters: [] }),
     );
 
     const { container } = renderWithQC(
@@ -118,7 +142,7 @@ describe('DrawerRDSClusterParameters', () => {
   it('一覧キャッシュに該当行が無い間はローディング表示を出し空表示と区別する', async () => {
     mockFetch(
       [rdsListItem({ name: 'db-other', parameter_groups: [], cluster_id: 'aurora-cluster-1' })],
-      () => okJson([]),
+      () => okJson({ group_name: '', parameters: [] }),
     );
 
     const { container } = renderWithQC(

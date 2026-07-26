@@ -15,6 +15,7 @@ import {
   objectPreviewFromRaw,
   profileFromRaw,
   rdsFromRaw,
+  rdsClusterParameterGroupFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
   wafFromRaw,
@@ -292,6 +293,34 @@ describe('rdsParameterFromRaw', () => {
       isModifiable: true,
       description: 'maximum number of connections',
     });
+  });
+});
+
+describe('rdsClusterParameterGroupFromRaw', () => {
+  it('group_name を groupName に変換し parameters を Row に正規化する', () => {
+    const group = rdsClusterParameterGroupFromRaw({
+      group_name: 'default.aurora-mysql8.0',
+      parameters: [
+        {
+          name: 'binlog_format',
+          value: 'ROW',
+          allowed_values: '',
+          apply_type: 'static',
+          data_type: 'string',
+          source: 'user',
+          is_modifiable: true,
+          description: '',
+        },
+      ],
+    });
+    expect(group.groupName).toBe('default.aurora-mysql8.0');
+    expect(group.parameters).toHaveLength(1);
+    expect(group.parameters[0]).toMatchObject({ id: 'binlog_format', applyType: 'static' });
+  });
+
+  it('parameters が null のときは空配列に正規化する', () => {
+    const group = rdsClusterParameterGroupFromRaw({ group_name: 'pg', parameters: null });
+    expect(group.parameters).toEqual([]);
   });
 });
 

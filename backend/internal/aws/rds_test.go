@@ -135,12 +135,38 @@ func TestListRDSClusterParameters(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []RDSParameter{{Name: "binlog_format", Value: "ROW"}}
+		want := RDSClusterParameterGroup{
+			GroupName:  "default.aurora-mysql8.0",
+			Parameters: []RDSParameter{{Name: "binlog_format", Value: "ROW"}},
+		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %#v want %#v", got, want)
 		}
 		if !reflect.DeepEqual(client.describeDBClusterParamsCalls, []string{"default.aurora-mysql8.0"}) {
 			t.Errorf("DescribeDBClusterParameters group name calls = %v", client.describeDBClusterParamsCalls)
+		}
+	})
+
+	t.Run("グループ名が解決できない場合は group_name が空で返る (防御的分岐)", func(t *testing.T) {
+		client := &mockRDSClusterParameterClient{
+			describeDBClusters: func(_ context.Context, _ *rds.DescribeDBClustersInput, _ ...func(*rds.Options)) (*rds.DescribeDBClustersOutput, error) {
+				return &rds.DescribeDBClustersOutput{
+					DBClusters: []rdstypes.DBCluster{{DBClusterParameterGroup: nil}},
+				}, nil
+			},
+			describeDBClusterParameters: func(_ context.Context, _ *rds.DescribeDBClusterParametersInput, _ ...func(*rds.Options)) (*rds.DescribeDBClusterParametersOutput, error) {
+				return &rds.DescribeDBClusterParametersOutput{}, nil
+			},
+		}
+
+		got, err := listRDSClusterParameters(context.Background(), client, "aurora-cluster-1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// パラメータが 1 件も無いときは Parameters は nil のまま返る。
+		want := RDSClusterParameterGroup{GroupName: "", Parameters: nil}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got %#v want %#v", got, want)
 		}
 	})
 
@@ -172,7 +198,10 @@ func TestListRDSClusterParameters(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []RDSParameter{{Name: "p1"}, {Name: "p2"}}
+		want := RDSClusterParameterGroup{
+			GroupName:  "pg-cluster",
+			Parameters: []RDSParameter{{Name: "p1"}, {Name: "p2"}},
+		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %#v want %#v", got, want)
 		}
@@ -223,6 +252,22 @@ func TestListRDSClusterParameters(t *testing.T) {
 			t.Fatalf("err = %v, want wrapping %v", err, wantErr)
 		}
 	})
+}
+
+func TestRDSParameterInfoToRow(t *testing.T) {
+	// CLI のテーブル列順 (Name, Value, ApplyType, DataType, IsModifiable, Source) を固定する。
+	info := RDSParameterInfo{
+		Name:         "max_connections",
+		Value:        "100",
+		ApplyType:    "dynamic",
+		DataType:     "integer",
+		IsModifiable: "true",
+		Source:       "user",
+	}
+	want := []string{"max_connections", "100", "dynamic", "integer", "true", "user"}
+	if got := info.ToRow(); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v want %#v", got, want)
+	}
 }
 
 func TestRdsParameterFromSDK(t *testing.T) {
