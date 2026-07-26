@@ -18,6 +18,7 @@ import type {
   ELBTargetHealthRaw,
   ForecastRaw,
   PriceTableRaw,
+  RDSClusterParameterGroupRaw,
   RDSParameterRaw,
   RegionRaw,
   S3ObjectRaw,
@@ -426,8 +427,8 @@ export function getRDSClusterParameters(
   profile: string,
   region: string,
   clusterId: string,
-): Promise<RDSParameterRaw[]> {
-  return apiGetList<RDSParameterRaw>(
+): Promise<RDSClusterParameterGroupRaw> {
+  return apiGet<RDSClusterParameterGroupRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/rds/cluster-parameters`,
     { region, cluster: clusterId },
   );

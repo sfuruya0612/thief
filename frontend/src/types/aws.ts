@@ -86,6 +86,18 @@ export interface RDSParameterRaw {
   description: string;
 }
 
+// RDS クラスターパラメータグループ (グループ名と全パラメータ)。
+// parameters はパラメータが 1 件も無い場合に backend から null で返る。
+export interface RDSClusterParameterGroupRaw {
+  group_name: string;
+  parameters: RDSParameterRaw[] | null;
+}
+
+export interface RDSClusterParameterGroupRow {
+  groupName: string;
+  parameters: RDSParameterRow[];
+}
+
 export interface RDSParameterRow {
   id: string;
   name: string;
