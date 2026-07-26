@@ -35,6 +35,7 @@ import type {
   SQSRow,
   SSMParamRow,
   WAFRow,
+  WAFRuleRow,
 } from '../../types/aws';
 import { StatusBadge } from '../primitives';
 
@@ -1312,6 +1313,35 @@ export const wafColumns: ColumnDef<WAFRow>[] = [
     header: 'Region',
     width: '20%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
+  },
+];
+
+// Drawer の Rules タブ (Web ACL のルール一覧)
+export const wafRuleColumns: ColumnDef<WAFRuleRow>[] = [
+  {
+    key: 'name',
+    header: 'Name',
+    width: '35%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  {
+    key: 'priority',
+    header: 'Priority',
+    width: '13%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.priority}</span>,
+  },
+  {
+    key: 'action',
+    header: 'Action',
+    width: '18%',
+    cell: (r) => (r.action ? <span style={mutedMono}>{r.action}</span> : <Dash />),
+  },
+  {
+    key: 'statement',
+    header: 'Statement',
+    width: '34%',
+    cell: (r) => <span style={mutedMono}>{r.statement}</span>,
   },
 ];
 

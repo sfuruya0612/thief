@@ -22,6 +22,7 @@ import type {
   RegionRaw,
   S3ObjectRaw,
   ValueRaw,
+  WAFRuleRaw,
 } from '../types/aws';
 import type {
   CallerIdentityRaw,
@@ -441,6 +442,24 @@ export function getCacheParameters(
     `/api/aws/profiles/${encodeURIComponent(profile)}/elasticache/parameters`,
     { region, group },
   );
+}
+
+// ============================================================
+// WAF ルール (Drawer の Rules タブで Web ACL ごとに取得する)
+// ============================================================
+export function getWAFRules(
+  profile: string,
+  region: string,
+  scope: string,
+  name: string,
+  id: string,
+): Promise<WAFRuleRaw[]> {
+  return apiGetList<WAFRuleRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/waf/rules`, {
+    region,
+    scope,
+    name,
+    id,
+  });
 }
 
 // ============================================================

@@ -18,6 +18,7 @@ import {
   rdsParameterFromRaw,
   s3ObjectFromRaw,
   wafFromRaw,
+  wafRuleFromRaw,
 } from './normalize';
 import type { WAFRaw } from '../types/aws';
 
@@ -621,5 +622,23 @@ describe('wafFromRaw', () => {
     const raw = { ...base, description: undefined as unknown as string };
     const row = wafFromRaw(raw, 'ap-northeast-1');
     expect(row.description).toBe('');
+  });
+});
+
+describe('wafRuleFromRaw', () => {
+  it('4 フィールドを写し、ルール名を DataTable の行キー (id) に使う', () => {
+    const row = wafRuleFromRaw({
+      name: 'rate-limit',
+      priority: 1,
+      action: 'Block',
+      statement: 'RateBased',
+    });
+    expect(row).toEqual({
+      id: 'rate-limit',
+      name: 'rate-limit',
+      priority: 1,
+      action: 'Block',
+      statement: 'RateBased',
+    });
   });
 });

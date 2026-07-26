@@ -386,6 +386,33 @@ func (s *Server) handleWAF(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleWAFRules(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	scope := r.URL.Query().Get("scope")
+	if scope == "" {
+		writeBadRequest(w, "scope query parameter is required")
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeBadRequest(w, "id query parameter is required")
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		writeBadRequest(w, "name query parameter is required")
+		return
+	}
+	if scope != "REGIONAL" && scope != "CLOUDFRONT" {
+		writeBadRequest(w, "scope must be REGIONAL or CLOUDFRONT")
+		return
+	}
+	// name は id が scope 内で一意なためキャッシュキーに含めない
+	s.serveCached(w, r, cacheKey("waf-rules", profile, region, scope, id), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListWAFRules(r.Context(), profile, region, scope, name, id)
+	})
+}
+
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)

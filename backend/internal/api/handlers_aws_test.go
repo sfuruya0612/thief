@@ -112,3 +112,61 @@ sso_start_url = https://org.awsapps.com/start
 		}
 	})
 }
+
+// TestHandleWAFRulesValidation は /api/aws/profiles/{profile}/waf/rules の
+// 必須クエリパラメータ検証をルータ (http.ServeMux) 経由で検証する。
+// 400 はハンドラの検証で返り、AWS への呼び出しは発生しない。
+func TestHandleWAFRulesValidation(t *testing.T) {
+	s := newTestServer(t)
+	s.mux = http.NewServeMux()
+	s.registerRoutes()
+
+	tests := []struct {
+		name    string
+		query   string
+		wantMsg string
+	}{
+		{
+			name:    "scope 欠落は 400",
+			query:   "id=acl-1&name=edge-acl",
+			wantMsg: "scope query parameter is required",
+		},
+		{
+			name:    "id 欠落は 400",
+			query:   "scope=REGIONAL&name=edge-acl",
+			wantMsg: "id query parameter is required",
+		},
+		{
+			name:    "name 欠落は 400",
+			query:   "scope=REGIONAL&id=acl-1",
+			wantMsg: "name query parameter is required",
+		},
+		{
+			name:    "scope が REGIONAL / CLOUDFRONT 以外は 400",
+			query:   "scope=GLOBAL&id=acl-1&name=edge-acl",
+			wantMsg: "scope must be REGIONAL or CLOUDFRONT",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet,
+				"/api/aws/profiles/test-profile/waf/rules?region=ap-northeast-1&"+tt.query, nil)
+			w := httptest.NewRecorder()
+			s.mux.ServeHTTP(w, r)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+			var body ErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatalf("unmarshal body: %v", err)
+			}
+			if body.Code != "BAD_REQUEST" {
+				t.Errorf("code = %q, want BAD_REQUEST", body.Code)
+			}
+			if body.Error != tt.wantMsg {
+				t.Errorf("error = %q, want %q", body.Error, tt.wantMsg)
+			}
+		})
+	}
+}
