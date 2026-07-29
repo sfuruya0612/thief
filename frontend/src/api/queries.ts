@@ -198,6 +198,8 @@ export function useCost(profile: string, region: string, opts?: CostQueryOptions
       region,
       opts?.granularity,
       opts?.groupBy,
+      opts?.service,
+      opts?.account,
       opts?.startDate,
       opts?.endDate,
       opts?.months,

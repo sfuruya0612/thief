@@ -44,6 +44,8 @@
   - @sfuruya0612
 - [UPDATE] S3 バケット一覧取得で、バケットごとの属性 (リージョン / 暗号化 / 公開設定) の解決を逐次実行から errgroup による並列実行 (同時実行数 30) に変更し、バケット数が多い場合のロード時間を短縮する
   - @sfuruya0612
+- [ADD] Cost Explorer の画面に AWS サービス名と AWS アカウント ID による絞り込みを追加する。`GetCostAndUsage` の `Filter` として Cost Explorer 側で絞り込むため、従来のブラウザ側でのサービス名部分一致フィルタは廃止し完全一致 (`EQUALS`) になる。両方指定した場合は `And` による AND 条件になる。`GetCostAndUsage` はリクエストごとに課金される API のため、入力の 1 文字ごとには呼び出さず Enter の押下または入力欄からのフォーカス離脱で確定させたときのみ呼び出す。絞り込み条件は backend のキャッシュキーにも含める
+  - @sfuruya0612
 - [ADD] ElastiCache の Web 一覧と CLI に、クラスターに属する各ノードの AZ を並べた列を追加する。`DescribeCacheClusters` に `ShowCacheNodeInfo` を指定して各ノードの `CustomerAvailabilityZone` を集約するため追加の API 呼び出しは不要。同一 AZ に複数ノードがある場合は重複を除去せずノード数分並べ、AZ が空のノードは除外する
   - @sfuruya0612
 - [ADD] Kinesis の Web 一覧と CLI にキャパシティモード (`mode`) の列を追加する。`DescribeStreamSummary` が既に返す `StreamModeDetails` を使い、追加の API 呼び出しなしで各ストリームがオンデマンド (on-demand) かプロビジョンド (provisioned) かを判別できるようにする。`StreamModeDetails` が未設定の場合と `StreamMode` が未知の値の場合は provisioned として表示する

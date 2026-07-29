@@ -46,16 +46,29 @@ const (
 //   - Granularity: 空文字は DAILY
 //   - GroupByDimension: 空文字は SERVICE
 //   - ServiceFilter: 空文字は絞り込みなし (Dimension SERVICE の EQUALS フィルタ)
+//   - AccountFilter: 空文字は絞り込みなし (Dimension LINKED_ACCOUNT の EQUALS フィルタ)。
+//     値は AWS Cost Explorer が返す生のアカウント ID を前提とする (名前解決や整形は行わない)。
 //   - StartDate/EndDate: 両方指定時のみ有効な期間として使う (YYYY-MM-DD)。指定時は Months を無視する。
 //   - Months: StartDate/EndDate 未指定時のみ使う。0 以下は 1 (取得期間を遡る月数)
+//
+// ServiceFilter / AccountFilter はそれぞれ単一値のみを受け付ける (OR や複数値指定には対応しない)。
+// GroupByDimension (結果のグルーピング次元) と各フィルタ (絞り込み条件) は独立した概念であり、
+// GroupByDimension=LINKED_ACCOUNT と AccountFilter を同時に指定してもよい。
 type CostQueryOptions struct {
 	IncludeToday     bool
 	Granularity      string
 	GroupByDimension string
 	ServiceFilter    string
+	AccountFilter    string
 	StartDate        string
 	EndDate          string
 	Months           int
+}
+
+// costExplorerAPI は Cost Explorer SDK クライアントのうち本パッケージが利用する操作の集合。
+// テストでは手書きフェイクを差し込む。
+type costExplorerAPI interface {
+	GetCostAndUsage(ctx context.Context, params *costexplorer.GetCostAndUsageInput, optFns ...func(*costexplorer.Options)) (*costexplorer.GetCostAndUsageOutput, error)
 }
 
 func costGranularity(g string) cetypes.Granularity {
@@ -108,6 +121,42 @@ func costDateRange(opts CostQueryOptions) (start, end string) {
 	return start, end
 }
 
+// costDimensionFilter は単一次元の完全一致 (EQUALS) フィルタ式を組み立てる。
+func costDimensionFilter(key cetypes.Dimension, value string) cetypes.Expression {
+	return cetypes.Expression{
+		Dimensions: &cetypes.DimensionValues{
+			Key:          key,
+			Values:       []string{value},
+			MatchOptions: []cetypes.MatchOption{cetypes.MatchOptionEquals},
+		},
+	}
+}
+
+// costFilter は ServiceFilter / AccountFilter から GetCostAndUsage に渡す Filter を組み立てる。
+// 両方が空文字なら nil (絞り込みなし) を返す。片方のみ指定されている場合は Dimensions を直接
+// 持つ単一の Expression を返し、両方指定されている場合は And に 2 要素を格納した Expression を
+// 返す。cetypes.Expression は 1 つのフィルタ機構のみを持つ想定であるため、トップレベルの
+// Expression に Dimensions と And を同時に設定しない。
+func costFilter(opts CostQueryOptions) *cetypes.Expression {
+	var exprs []cetypes.Expression
+	if opts.ServiceFilter != "" {
+		exprs = append(exprs, costDimensionFilter(cetypes.DimensionService, opts.ServiceFilter))
+	}
+	if opts.AccountFilter != "" {
+		exprs = append(exprs, costDimensionFilter(cetypes.DimensionLinkedAccount, opts.AccountFilter))
+	}
+	switch len(exprs) {
+	case 0:
+		return nil
+	case 1:
+		// スライスの要素そのものへのポインタを返さず、値をコピーしてから参照を返す。
+		single := exprs[0]
+		return &single
+	default:
+		return &cetypes.Expression{And: exprs}
+	}
+}
+
 // GetCost returns cost grouped by the given dimension for the given date range.
 // If includeToday is false, the end date is yesterday.
 func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions) ([]CostResource, error) {
@@ -116,7 +165,12 @@ func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions)
 	if err != nil {
 		return nil, err
 	}
+	return getCost(ctx, client, opts)
+}
 
+// getCost は Cost Explorer クライアントを受け取り、期間とフィルタを組み立てて結果を変換する。
+// テストでは costExplorerAPI の手書きフェイクを差し込む。
+func getCost(ctx context.Context, client costExplorerAPI, opts CostQueryOptions) ([]CostResource, error) {
 	start, end := costDateRange(opts)
 
 	input := &costexplorer.GetCostAndUsageInput{
@@ -129,15 +183,7 @@ func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions)
 		GroupBy: []cetypes.GroupDefinition{
 			{Type: cetypes.GroupDefinitionTypeDimension, Key: aws.String(costGroupByDimension(opts.GroupByDimension))},
 		},
-	}
-	if opts.ServiceFilter != "" {
-		input.Filter = &cetypes.Expression{
-			Dimensions: &cetypes.DimensionValues{
-				Key:          cetypes.DimensionService,
-				Values:       []string{opts.ServiceFilter},
-				MatchOptions: []cetypes.MatchOption{cetypes.MatchOptionEquals},
-			},
-		}
+		Filter: costFilter(opts),
 	}
 
 	out, err := client.GetCostAndUsage(ctx, input)

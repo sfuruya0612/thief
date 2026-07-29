@@ -58,6 +58,45 @@ function defaultDateRange(): { start: string; end: string } {
 // 残りは Other にまとめる
 const MAX_SERIES = 8;
 
+interface CostFilterInputProps {
+  value: string;
+  onChange: (v: string) => void;
+  onCommit: (v: string) => void;
+  placeholder: string;
+  title: string;
+}
+
+// CostFilterInput は Cost Explorer のフィルタ入力欄。GetCostAndUsage は有償 API のため
+// 入力の 1 文字ごとには確定させず、Enter の押下または入力欄からのフォーカス離脱で確定させる。
+function CostFilterInput({ value, onChange, onCommit, placeholder, title }: CostFilterInputProps) {
+  // 確定時は前後の空白を除いた値を確定値とし、入力欄の表示値も同じ値に揃える。表示値だけ
+  // 空白付きで残すと、実際に絞り込みへ使われる値と画面の表示が食い違って見える。
+  const commit = () => {
+    const trimmed = value.trim();
+    if (trimmed !== value) onChange(trimmed);
+    onCommit(trimmed);
+  };
+
+  return (
+    <span className="chip-search">
+      <Icons.search size={12} />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        onBlur={commit}
+        placeholder={placeholder}
+        title={title}
+      />
+    </span>
+  );
+}
+
 export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
   const { t } = useTranslation('cost');
   const initialRange = useMemo(defaultDateRange, []);
@@ -65,26 +104,28 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
   const [groupBy, setGroupBy] = useState('SERVICE');
   const [startDate, setStartDate] = useState(initialRange.start);
   const [endDate, setEndDate] = useState(initialRange.end);
-  const [serviceFilter, setServiceFilter] = useState('');
   const [metric, setMetric] = useState<CostMetricType>('unblended');
 
-  // API 呼び出しは期間/Granularity/GroupBy のみに依存させる。サービス名フィルタは
-  // 取得済みデータに対してブラウザ側で絞り込むだけにし、都度 API を呼び出さない。
+  // サービス名と AWS アカウント ID の絞り込みは Cost Explorer 側 (GetCostAndUsage の Filter)
+  // で行う。GetCostAndUsage はリクエストごとに課金される API のため、入力中の値 (serviceInput /
+  // accountInput) と API に渡す確定値 (serviceApplied / accountApplied) を分離し、Enter の押下か
+  // フォーカス離脱で確定させたときにのみ API を呼び出す。
+  const [serviceInput, setServiceInput] = useState('');
+  const [serviceApplied, setServiceApplied] = useState('');
+  const [accountInput, setAccountInput] = useState('');
+  const [accountApplied, setAccountApplied] = useState('');
+
   const { data, isLoading, error } = useCost(profile, region, {
     granularity,
     groupBy,
+    service: serviceApplied,
+    account: accountApplied,
     startDate,
     endDate,
   });
 
   const ssoExpired = isSSOExpiredError(error);
-  const allRows = useMemo(() => data ?? [], [data]);
-
-  const rows = useMemo(() => {
-    if (!serviceFilter.trim()) return allRows;
-    const needle = serviceFilter.trim().toLowerCase();
-    return allRows.filter((r) => r.service.toLowerCase().includes(needle));
-  }, [allRows, serviceFilter]);
+  const rows = useMemo(() => data ?? [], [data]);
 
   const { categories, series, crossTableRows, total } = useMemo(
     () => aggregateCost(rows, metric, MAX_SERIES),
@@ -124,14 +165,21 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
       </div>
 
       <div className="facets">
-        <span className="chip-search">
-          <Icons.search size={12} />
-          <input
-            value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
-            placeholder="filter by service name (client-side)…"
-          />
-        </span>
+        <CostFilterInput
+          value={serviceInput}
+          onChange={setServiceInput}
+          onCommit={setServiceApplied}
+          placeholder="filter by service name…"
+          title="Filter by service name (press Enter to apply)"
+        />
+
+        <CostFilterInput
+          value={accountInput}
+          onChange={setAccountInput}
+          onCommit={setAccountApplied}
+          placeholder="filter by account ID…"
+          title="Filter by AWS account ID (press Enter to apply)"
+        />
 
         <input
           type="date"
