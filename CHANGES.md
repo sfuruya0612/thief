@@ -202,6 +202,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] backend のリソースキャッシュのキーが要素をエスケープせず `:` で連結していたため、異なる条件のリクエストが同一のキーへ衝突し別の条件の結果が返る不具合を修正する。キーの要素には Cost Explorer の絞り込み条件、DynamoDB のスキャン条件の属性値、S3/GCS のオブジェクトプレフィックスなどの自由入力が入るため、各要素を `url.QueryEscape` でエスケープしてから連結するようにする (キャッシュはインメモリのためキー形式の変更による永続的な影響はない)
+  - @sfuruya0612
 - [FIX] WAF の一覧の Associated 列が常に 0 と表示される不具合を修正する。REGIONAL スコープは `ListResourcesForWebACL` の `ResourceType` 省略時に ALB のみが対象になっていたため、SDK が列挙する全リソースタイプ (ALB / API Gateway / AppSync / Cognito User Pool / App Runner / Verified Access / Amplify / AgentCore Gateway) を個別に呼び出して合算するように変更する。CLOUDFRONT スコープはそもそも関連付け取得の実装が無かったため、CloudFront の `ListDistributions` の `DistributionSummary.WebACLId` と Web ACL の ARN を突き合わせて件数を算出するようにする (WAF ビューに `cloudfront:ListDistributions` 権限が新たに必要になる。権限不足時は slog.Warn に記録した上で該当スコープの Associated を 0 のまま表示し、一覧取得自体は継続する)
   - @sfuruya0612
 - [FIX] CloudFront の Drawer の Overview および (廃止前の) 一覧で Alternate domains 列がディストリビューション名 (`name`) を表示していたのを、実際の代替ドメイン一覧 (`Aliases`) を表示するように修正する

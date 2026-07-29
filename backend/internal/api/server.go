@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	bqclient "github.com/sfuruya0612/thief/backend/internal/bigquery"
@@ -103,15 +105,21 @@ func (s *Server) HTTPServer(ctx context.Context) *http.Server {
 }
 
 // cacheKey builds a namespaced cache key to avoid collisions between services/profiles.
+// 各要素は url.QueryEscape でエスケープしてから ":" で連結する。エスケープしないと要素の値に
+// 含まれる ":" が区切りと区別できず、異なる引数の組み合わせが同一のキーへ衝突する
+// (例: ("a:b", "c") と ("a", "b:c") はどちらも "a:b:c" になり、一方の結果が他方に返る)。
+// 要素にはクエリパラメータやリクエストボディ由来の自由入力 (Cost Explorer の絞り込み条件、
+// DynamoDB の属性値、S3/GCS のオブジェクトプレフィックス等) が入るため、エスケープは必須。
+//
+// QueryEscape は ":" を "%3A" に、"%" を "%25" に変換するため要素ごとに単射になり、
+// 連結結果も引数列に対して単射になる。空文字はエスケープしても空文字のままなので、
+// InvalidatePrefix 向けに末尾要素を空文字にして前方一致プレフィックスを組む用法は維持される。
 func cacheKey(parts ...string) string {
-	key := ""
+	escaped := make([]string, len(parts))
 	for i, p := range parts {
-		if i > 0 {
-			key += ":"
-		}
-		key += p
+		escaped[i] = url.QueryEscape(p)
 	}
-	return key
+	return strings.Join(escaped, ":")
 }
 
 // serveCached は resourceCache.Load の結果をキャッシュヘッダ付き JSON で書き出す。
