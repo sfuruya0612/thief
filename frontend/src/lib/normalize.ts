@@ -631,6 +631,7 @@ export function kinesisFromRaw(raw: KinesisRaw, region: string): KinesisRow {
     id: raw.id,
     name: raw.name,
     state: raw.state,
+    mode: raw.mode,
     shardCount: raw.shard_count,
     retentionHours: raw.retention_hours,
     encryptionType: raw.encryption_type,

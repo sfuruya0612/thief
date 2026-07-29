@@ -1,7 +1,12 @@
 // components/tables/columns.tsx の列定義のテスト。
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { cloudfrontBehaviorColumns, cloudfrontColumns, wafColumns } from './columns';
+import {
+  cloudfrontBehaviorColumns,
+  cloudfrontColumns,
+  kinesisColumns,
+  wafColumns,
+} from './columns';
 import type { CloudFrontBehaviorRow, CloudFrontRow, WAFRow } from '../../types/aws';
 
 const baseRow: WAFRow = {
@@ -196,5 +201,46 @@ describe('cloudfrontBehaviorColumns', () => {
     const col = cloudfrontBehaviorColumns.find((c) => c.key === 'pathPattern');
     if (!col || !col.filterValue) throw new Error('pathPattern column or filterValue not found');
     expect(col.filterValue(cloudfrontBehaviorBaseRow)).toBe('/api/*');
+  });
+});
+
+describe('kinesisColumns', () => {
+  it('列の並びが Stream, State, Mode, Shards, Retention, Encryption, Region の順になる', () => {
+    expect(kinesisColumns.map((c) => c.key)).toEqual([
+      'name',
+      'state',
+      'mode',
+      'shardCount',
+      'retentionHours',
+      'encryptionType',
+      'region',
+    ]);
+    expect(kinesisColumns.map((c) => c.header)).toEqual([
+      'Stream',
+      'State',
+      'Mode',
+      'Shards',
+      'Retention',
+      'Encryption',
+      'Region',
+    ]);
+  });
+
+  it('列幅の合計が 100% になる', () => {
+    const total = kinesisColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
+    expect(total).toBe(100);
+  });
+
+  it('各列の幅が Mode 列追加後の再配分と同じ対応を保つ', () => {
+    const widthByKey = Object.fromEntries(kinesisColumns.map((c) => [c.key, c.width]));
+    expect(widthByKey).toEqual({
+      name: '20%',
+      state: '10%',
+      mode: '15%',
+      shardCount: '9%',
+      retentionHours: '12%',
+      encryptionType: '13%',
+      region: '21%',
+    });
   });
 });

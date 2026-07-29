@@ -17,6 +17,7 @@ type KinesisResource struct {
 	ID             string            `json:"id"`
 	Name           string            `json:"name"`
 	State          string            `json:"state"`
+	Mode           string            `json:"mode"`
 	ShardCount     int32             `json:"shard_count"`
 	RetentionHours int32             `json:"retention_hours"`
 	EncryptionType string            `json:"encryption_type"`
@@ -99,10 +100,19 @@ func kinesisFromSummary(s *kinesistypes.StreamDescriptionSummary) KinesisResourc
 	if s == nil {
 		return KinesisResource{}
 	}
+	mode := "provisioned"
+	if s.StreamModeDetails != nil {
+		// ON_DEMAND だけを判別し、PROVISIONED と将来追加されうる未知の値はプロビジョンドのままにする。
+		switch s.StreamModeDetails.StreamMode {
+		case kinesistypes.StreamModeOnDemand:
+			mode = "on-demand"
+		}
+	}
 	return KinesisResource{
 		ID:             ptrStr(s.StreamARN),
 		Name:           ptrStr(s.StreamName),
 		State:          DisplayState(string(s.StreamStatus)),
+		Mode:           mode,
 		ShardCount:     ptrInt32(s.OpenShardCount),
 		RetentionHours: ptrInt32(s.RetentionPeriodHours),
 		EncryptionType: string(s.EncryptionType),

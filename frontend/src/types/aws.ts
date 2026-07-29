@@ -742,6 +742,7 @@ export interface KinesisRaw {
   id: string;
   name: string;
   state: string;
+  mode: string;
   shard_count: number;
   retention_hours: number;
   encryption_type: string;
@@ -754,6 +755,7 @@ export interface KinesisRow {
   id: string;
   name: string;
   state: string;
+  mode: string;
   shardCount: number;
   retentionHours: number;
   encryptionType: string;

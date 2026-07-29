@@ -15,7 +15,7 @@ func newKinesisCmd() *cobra.Command {
 		Short: "List Kinesis Data Streams",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, ListConfig[awsinternal.KinesisResource]{
-				Columns:  []util.Column{{Header: "Name"}, {Header: "State"}, {Header: "Shards"}, {Header: "Retention(h)"}, {Header: "Encryption"}},
+				Columns:  []util.Column{{Header: "Name"}, {Header: "State"}, {Header: "Mode"}, {Header: "Shards"}, {Header: "Retention(h)"}, {Header: "Encryption"}},
 				EmptyMsg: "No Kinesis streams found",
 				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.KinesisResource, error) {
 					return awsinternal.ListKinesisResources(ctx, cfg.Profile, cfg.Region)
