@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,107 @@ func newTestServer(t *testing.T) *Server {
 		cfg:           cfg,
 		snippets:      snippet.NewStore(t.TempDir()),
 		resourceCache: c,
+	}
+}
+
+func TestCacheKey(t *testing.T) {
+	tests := []struct {
+		name  string
+		parts []string
+		want  string
+	}{
+		{name: "no parts", parts: nil, want: ""},
+		{name: "single part", parts: []string{"cost"}, want: "cost"},
+		{
+			name:  "plain parts are joined with colon",
+			parts: []string{"cost", "prod", "ap-northeast-1"},
+			want:  "cost:prod:ap-northeast-1",
+		},
+		{
+			name:  "empty parts are kept as empty segments",
+			parts: []string{"cost", "prod", "", ""},
+			want:  "cost:prod::",
+		},
+		{
+			// 要素に含まれる ":" は "%3A" になるため区切りと区別できる。
+			name:  "colon in a part is escaped",
+			parts: []string{"cost", "a:b", "c"},
+			want:  "cost:a%3Ab:c",
+		},
+		{
+			// エスケープ文字そのものも変換されるため、エスケープ後の文字列から元の値が一意に復元できる。
+			name:  "percent in a part is escaped",
+			parts: []string{"cost", "a%3Ab", "c"},
+			want:  "cost:a%253Ab:c",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cacheKey(tt.parts...); got != tt.want {
+				t.Errorf("cacheKey(%q) = %q, want %q", tt.parts, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCacheKeyDistinctForDifferentParts は、区切り文字を含む値を渡しても引数の組み合わせが
+// 異なれば必ず異なるキーになることを確認する。Cost Explorer の絞り込み (service / account) や
+// DynamoDB の属性値のように自由入力が隣接する箇所では、衝突するとキャッシュ経由で
+// 別の絞り込み結果が返ってしまう。
+func TestCacheKeyDistinctForDifferentParts(t *testing.T) {
+	groups := [][]string{
+		{"cost", "a:b", "c"},
+		{"cost", "a", "b:c"},
+		{"cost", "a:b:c"},
+		{"cost", "a", "b", "c"},
+		{"cost", "a:b", ""},
+		{"cost", "a", "b", ""},
+		{"cost", "", "a:b"},
+		{"cost", "", "a", "b"},
+	}
+	seen := make(map[string][]string, len(groups))
+	for _, parts := range groups {
+		key := cacheKey(parts...)
+		if prev, ok := seen[key]; ok {
+			t.Errorf("cacheKey collision: %q and %q both produce %q", prev, parts, key)
+			continue
+		}
+		seen[key] = parts
+	}
+}
+
+// TestCacheKeyPrefixForInvalidate は、末尾要素を空文字にしたキーが
+// resourceCache.InvalidatePrefix (strings.HasPrefix による前方一致削除) のプレフィックスとして
+// 機能し続けることを確認する。handlers_s3_object.go / handlers_gcp.go がこの用法に依存している。
+func TestCacheKeyPrefixForInvalidate(t *testing.T) {
+	const (
+		profile = "prod"
+		region  = "ap-northeast-1"
+		bucket  = "my-bucket"
+	)
+	prefixKey := cacheKey("s3-objects", profile, region, bucket, "")
+
+	matches := []string{
+		cacheKey("s3-objects", profile, region, bucket, ""),
+		cacheKey("s3-objects", profile, region, bucket, "logs/"),
+		cacheKey("s3-objects", profile, region, bucket, "logs/2026:07/"),
+	}
+	for _, key := range matches {
+		if !strings.HasPrefix(key, prefixKey) {
+			t.Errorf("key %q does not have prefix %q", key, prefixKey)
+		}
+	}
+
+	// バケット名が前方一致してしまう別バケットのキーは削除対象に含まれてはならない。
+	nonMatches := []string{
+		cacheKey("s3-objects", profile, region, bucket+"-2", "logs/"),
+		cacheKey("s3-objects", profile, region, bucket+":x", "logs/"),
+		cacheKey("s3-objects", profile, "us-east-1", bucket, "logs/"),
+	}
+	for _, key := range nonMatches {
+		if strings.HasPrefix(key, prefixKey) {
+			t.Errorf("key %q unexpectedly has prefix %q", key, prefixKey)
+		}
 	}
 }
 
