@@ -249,6 +249,7 @@ export function cacheFromRaw(raw: CacheRaw, region: string): CacheRow {
     port: raw.port,
     parameterGroup: raw.parameter_group,
     replicationGroupId: raw.replication_group_id ?? '',
+    nodeAvailabilityZones: raw.node_availability_zones ?? [],
   };
 }
 

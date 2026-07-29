@@ -44,6 +44,8 @@
   - @sfuruya0612
 - [UPDATE] S3 バケット一覧取得で、バケットごとの属性 (リージョン / 暗号化 / 公開設定) の解決を逐次実行から errgroup による並列実行 (同時実行数 30) に変更し、バケット数が多い場合のロード時間を短縮する
   - @sfuruya0612
+- [ADD] ElastiCache の Web 一覧と CLI に、クラスターに属する各ノードの AZ を並べた列を追加する。`DescribeCacheClusters` に `ShowCacheNodeInfo` を指定して各ノードの `CustomerAvailabilityZone` を集約するため追加の API 呼び出しは不要。同一 AZ に複数ノードがある場合は重複を除去せずノード数分並べ、AZ が空のノードは除外する
+  - @sfuruya0612
 - [ADD] Kinesis の Web 一覧と CLI にキャパシティモード (`mode`) の列を追加する。`DescribeStreamSummary` が既に返す `StreamModeDetails` を使い、追加の API 呼び出しなしで各ストリームがオンデマンド (on-demand) かプロビジョンド (provisioned) かを判別できるようにする。`StreamModeDetails` が未設定の場合と `StreamMode` が未知の値の場合は provisioned として表示する
   - @sfuruya0612
 - [ADD] CloudFront ディストリビューションの Drawer に Behaviors タブを追加し、キャッシュビヘイビア (パスパターン、ターゲットオリジン、ビューアプロトコルポリシー、許可メソッド、圧縮設定) を優先度順に一覧できるようにする (既存の一覧取得レスポンスに含まれる値を整形するのみで追加の API 呼び出し・権限は不要)

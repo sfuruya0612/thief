@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
@@ -11,18 +12,19 @@ import (
 
 // ElastiCacheResource represents a single ElastiCache cluster.
 type ElastiCacheResource struct {
-	ID                 string  `json:"id"`
-	Name               string  `json:"name"`
-	State              string  `json:"state"`
-	Engine             string  `json:"engine"`
-	EngineVersion      string  `json:"engine_version"`
-	NodeType           string  `json:"node_type"`
-	NumNodes           int32   `json:"num_nodes"`
-	Endpoint           string  `json:"endpoint"`
-	Port               int32   `json:"port"`
-	ParameterGroup     string  `json:"parameter_group"`
-	ReplicationGroupID string  `json:"replication_group_id"`
-	CostMonthly        float64 `json:"cost_monthly"`
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	State                 string   `json:"state"`
+	Engine                string   `json:"engine"`
+	EngineVersion         string   `json:"engine_version"`
+	NodeType              string   `json:"node_type"`
+	NumNodes              int32    `json:"num_nodes"`
+	Endpoint              string   `json:"endpoint"`
+	Port                  int32    `json:"port"`
+	ParameterGroup        string   `json:"parameter_group"`
+	ReplicationGroupID    string   `json:"replication_group_id"`
+	NodeAvailabilityZones []string `json:"node_availability_zones"`
+	CostMonthly           float64  `json:"cost_monthly"`
 }
 
 // ElastiCacheParameter represents a single parameter in a cache parameter group.
@@ -51,7 +53,10 @@ func ListElastiCacheResources(ctx context.Context, profile, region string) ([]El
 	}
 
 	var resources []ElastiCacheResource
-	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{})
+	// ShowCacheNodeInfo を有効にしないと CacheNodes が返らず、ノード単位の AZ が取得できない。
+	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{
+		ShowCacheNodeInfo: aws.Bool(true),
+	})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -62,6 +67,23 @@ func ListElastiCacheResources(ctx context.Context, profile, region string) ([]El
 		}
 	}
 	return resources, nil
+}
+
+// nodeAvailabilityZonesFromCluster はクラスタの各ノードの AZ を出現順に集約する。
+// CustomerAvailabilityZone が nil または空文字列のノードは除外する。
+// XML の空要素は SDK のデシリアライザで nil ではなく空文字列のポインタになるため、
+// nil チェックだけでは空文字列が要素として混入し、表示時に余分な区切り文字が残る。
+// 同一 AZ の重複は除去しない (同じ AZ に何ノード配置されているかの情報が失われるため)。
+func nodeAvailabilityZonesFromCluster(c ectypes.CacheCluster) []string {
+	var zones []string
+	for _, n := range c.CacheNodes {
+		az := ptrStr(n.CustomerAvailabilityZone)
+		if az == "" {
+			continue
+		}
+		zones = append(zones, az)
+	}
+	return zones
 }
 
 func elastiCacheFromCluster(c ectypes.CacheCluster) ElastiCacheResource {
@@ -76,17 +98,18 @@ func elastiCacheFromCluster(c ectypes.CacheCluster) ElastiCacheResource {
 		paramGroup = ptrStr(c.CacheParameterGroup.CacheParameterGroupName)
 	}
 	return ElastiCacheResource{
-		ID:                 ptrStr(c.CacheClusterId),
-		Name:               ptrStr(c.CacheClusterId),
-		State:              DisplayState(ptrStr(c.CacheClusterStatus)),
-		Engine:             ptrStr(c.Engine),
-		EngineVersion:      ptrStr(c.EngineVersion),
-		NodeType:           ptrStr(c.CacheNodeType),
-		NumNodes:           ptrInt32(c.NumCacheNodes),
-		Endpoint:           endpoint,
-		Port:               port,
-		ParameterGroup:     paramGroup,
-		ReplicationGroupID: ptrStr(c.ReplicationGroupId),
+		ID:                    ptrStr(c.CacheClusterId),
+		Name:                  ptrStr(c.CacheClusterId),
+		State:                 DisplayState(ptrStr(c.CacheClusterStatus)),
+		Engine:                ptrStr(c.Engine),
+		EngineVersion:         ptrStr(c.EngineVersion),
+		NodeType:              ptrStr(c.CacheNodeType),
+		NumNodes:              ptrInt32(c.NumCacheNodes),
+		Endpoint:              endpoint,
+		Port:                  port,
+		ParameterGroup:        paramGroup,
+		ReplicationGroupID:    ptrStr(c.ReplicationGroupId),
+		NodeAvailabilityZones: nodeAvailabilityZonesFromCluster(c),
 	}
 }
 
@@ -130,12 +153,13 @@ func ListElastiCacheParameters(ctx context.Context, profile, region, group strin
 
 // ElastiCacheClusterInfo はレガシー CLI 互換の ElastiCache 表示用フィールドを保持する。
 type ElastiCacheClusterInfo struct {
-	ReplicationGroupID string
-	CacheClusterID     string
-	CacheNodeType      string
-	Engine             string
-	EngineVersion      string
-	Status             string
+	ReplicationGroupID    string
+	CacheClusterID        string
+	CacheNodeType         string
+	Engine                string
+	EngineVersion         string
+	Status                string
+	NodeAvailabilityZones []string
 }
 
 // ToRow converts ElastiCacheClusterInfo to a string slice suitable for table formatting.
@@ -143,6 +167,7 @@ func (c ElastiCacheClusterInfo) ToRow() []string {
 	return []string{
 		c.ReplicationGroupID, c.CacheClusterID, c.CacheNodeType,
 		c.Engine, c.EngineVersion, c.Status,
+		strings.Join(c.NodeAvailabilityZones, ","),
 	}
 }
 
@@ -154,7 +179,10 @@ func ListElastiCacheClusterInfos(ctx context.Context, profile, region string) ([
 	}
 
 	var clusters []ElastiCacheClusterInfo
-	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{})
+	// ShowCacheNodeInfo を有効にしないと CacheNodes が返らず、ノード単位の AZ が取得できない。
+	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{
+		ShowCacheNodeInfo: aws.Bool(true),
+	})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -162,12 +190,13 @@ func ListElastiCacheClusterInfos(ctx context.Context, profile, region string) ([
 		}
 		for _, c := range page.CacheClusters {
 			clusters = append(clusters, ElastiCacheClusterInfo{
-				ReplicationGroupID: ptrStr(c.ReplicationGroupId),
-				CacheClusterID:     ptrStr(c.CacheClusterId),
-				CacheNodeType:      ptrStr(c.CacheNodeType),
-				Engine:             ptrStr(c.Engine),
-				EngineVersion:      ptrStr(c.EngineVersion),
-				Status:             ptrStr(c.CacheClusterStatus),
+				ReplicationGroupID:    ptrStr(c.ReplicationGroupId),
+				CacheClusterID:        ptrStr(c.CacheClusterId),
+				CacheNodeType:         ptrStr(c.CacheNodeType),
+				Engine:                ptrStr(c.Engine),
+				EngineVersion:         ptrStr(c.EngineVersion),
+				Status:                ptrStr(c.CacheClusterStatus),
+				NodeAvailabilityZones: nodeAvailabilityZonesFromCluster(c),
 			})
 		}
 	}

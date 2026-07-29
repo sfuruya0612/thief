@@ -2,12 +2,13 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import {
+  cacheColumns,
   cloudfrontBehaviorColumns,
   cloudfrontColumns,
   kinesisColumns,
   wafColumns,
 } from './columns';
-import type { CloudFrontBehaviorRow, CloudFrontRow, WAFRow } from '../../types/aws';
+import type { CacheRow, CloudFrontBehaviorRow, CloudFrontRow, WAFRow } from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -242,5 +243,49 @@ describe('kinesisColumns', () => {
       encryptionType: '13%',
       region: '21%',
     });
+  });
+});
+
+const cacheBaseRow: CacheRow = {
+  region: 'ap-northeast-1',
+  id: 'cc-1',
+  name: 'cc-1',
+  state: 'available',
+  engine: 'redis',
+  engineVersion: '7.1.0',
+  nodeType: 'cache.t4g.micro',
+  numNodes: 2,
+  endpoint: 'cc-1.example.cache.amazonaws.com',
+  port: 6379,
+  parameterGroup: 'default.redis7',
+  replicationGroupId: 'rg-1',
+  nodeAvailabilityZones: [],
+};
+
+describe('cacheColumns', () => {
+  it('列幅の合計が 100% になる', () => {
+    const total = cacheColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
+    expect(total).toBe(100);
+  });
+
+  it('nodeAvailabilityZones が複数件のとき、カンマ + 半角スペースで結合して表示する', () => {
+    const col = cacheColumns.find((c) => c.key === 'nodeAvailabilityZones');
+    if (!col) throw new Error('nodeAvailabilityZones column not found');
+    const { container } = render(
+      <>
+        {col.cell({
+          ...cacheBaseRow,
+          nodeAvailabilityZones: ['ap-northeast-1a', 'ap-northeast-1c'],
+        })}
+      </>,
+    );
+    expect(container).toHaveTextContent('ap-northeast-1a, ap-northeast-1c');
+  });
+
+  it('nodeAvailabilityZones が空配列のときダッシュ表示になる', () => {
+    const col = cacheColumns.find((c) => c.key === 'nodeAvailabilityZones');
+    if (!col) throw new Error('nodeAvailabilityZones column not found');
+    const { container } = render(<>{col.cell(cacheBaseRow)}</>);
+    expect(container).toHaveTextContent('—');
   });
 });
