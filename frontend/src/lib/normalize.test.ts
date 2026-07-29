@@ -13,6 +13,7 @@ import {
   dynamoTableSchemaFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
+  kinesisFromRaw,
   objectPreviewFromRaw,
   profileFromRaw,
   rdsFromRaw,
@@ -774,5 +775,35 @@ describe('cloudfrontFromRaw', () => {
     expect(row.behaviors[0].id).toBe('1');
     expect(row.behaviors[1].order).toBe(2);
     expect(row.behaviors[1].id).toBe('2');
+  });
+});
+
+describe('kinesisFromRaw', () => {
+  it('mode を含む全フィールドを Row に変換する', () => {
+    const row = kinesisFromRaw(
+      {
+        id: 'arn:aws:kinesis:ap-northeast-1:123:stream/foo',
+        name: 'foo',
+        state: 'active',
+        mode: 'on-demand',
+        shard_count: 4,
+        retention_hours: 24,
+        encryption_type: 'KMS',
+        tags: {},
+        cost_monthly: 0,
+      },
+      'ap-northeast-1',
+    );
+    expect(row).toEqual({
+      region: 'ap-northeast-1',
+      id: 'arn:aws:kinesis:ap-northeast-1:123:stream/foo',
+      name: 'foo',
+      state: 'active',
+      mode: 'on-demand',
+      shardCount: 4,
+      retentionHours: 24,
+      encryptionType: 'KMS',
+      tags: {},
+    });
   });
 });

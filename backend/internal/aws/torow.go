@@ -60,7 +60,7 @@ func (r CFNStackResource) ToRow() []string {
 }
 
 func (r KinesisResource) ToRow() []string {
-	return []string{r.Name, r.State, fmt.Sprintf("%d", r.ShardCount), fmt.Sprintf("%d", r.RetentionHours), r.EncryptionType}
+	return []string{r.Name, r.State, r.Mode, fmt.Sprintf("%d", r.ShardCount), fmt.Sprintf("%d", r.RetentionHours), r.EncryptionType}
 }
 
 func (r CloudFrontResource) ToRow() []string {
