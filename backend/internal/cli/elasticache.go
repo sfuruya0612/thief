@@ -16,6 +16,7 @@ var elasticacheColumns = []util.Column{
 	{Header: "Engine"},
 	{Header: "EngineVersion"},
 	{Header: "CacheClusterStatus"},
+	{Header: "NodeAvailabilityZones"},
 }
 
 var elasticacheParameterColumns = []util.Column{

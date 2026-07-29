@@ -341,6 +341,7 @@ describe('cacheFromRaw', () => {
         port: 6379,
         parameter_group: 'default.redis7',
         replication_group_id: 'my-redis-rg',
+        node_availability_zones: ['ap-northeast-1a'],
         cost_monthly: 0,
       },
       'ap-northeast-1',
@@ -362,11 +363,60 @@ describe('cacheFromRaw', () => {
         port: 11211,
         parameter_group: 'default.memcached1.6',
         replication_group_id: '',
+        node_availability_zones: null,
         cost_monthly: 0,
       },
       'ap-northeast-1',
     );
     expect(row.replicationGroupId).toBe('');
+  });
+
+  it('node_availability_zones を nodeAvailabilityZones にそのまま変換する', () => {
+    const row = cacheFromRaw(
+      {
+        id: 'cc-3',
+        name: 'cc-3',
+        state: 'available',
+        engine: 'valkey',
+        engine_version: '8.0',
+        node_type: 'cache.t4g.micro',
+        num_nodes: 3,
+        endpoint: 'cc-3.abc.apne1.cache.amazonaws.com',
+        port: 6379,
+        parameter_group: 'default.valkey8',
+        replication_group_id: 'my-valkey-rg',
+        node_availability_zones: ['ap-northeast-1a', 'ap-northeast-1c', 'ap-northeast-1a'],
+        cost_monthly: 0,
+      },
+      'ap-northeast-1',
+    );
+    expect(row.nodeAvailabilityZones).toEqual([
+      'ap-northeast-1a',
+      'ap-northeast-1c',
+      'ap-northeast-1a',
+    ]);
+  });
+
+  it('node_availability_zones が null のとき nodeAvailabilityZones は空配列になる', () => {
+    const row = cacheFromRaw(
+      {
+        id: 'cc-4',
+        name: 'cc-4',
+        state: 'creating',
+        engine: 'redis',
+        engine_version: '7.1',
+        node_type: 'cache.t4g.micro',
+        num_nodes: 1,
+        endpoint: '',
+        port: 0,
+        parameter_group: 'default.redis7',
+        replication_group_id: '',
+        node_availability_zones: null,
+        cost_monthly: 0,
+      },
+      'ap-northeast-1',
+    );
+    expect(row.nodeAvailabilityZones).toEqual([]);
   });
 });
 

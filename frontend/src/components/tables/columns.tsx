@@ -291,46 +291,52 @@ export const cacheColumns: ColumnDef<CacheRow>[] = [
   {
     key: 'name',
     header: 'Cluster',
-    width: '15%',
+    width: '13%',
     cell: (r) => <span className="primary truncate">{r.name}</span>,
   },
-  { key: 'state', header: 'State', width: '9%', cell: (r) => <StatusBadge state={r.state} /> },
+  { key: 'state', header: 'State', width: '8%', cell: (r) => <StatusBadge state={r.state} /> },
   {
     key: 'engine',
     header: 'Engine',
-    width: '11%',
+    width: '9%',
     cell: (r) => <span style={mutedMono}>{r.engine}</span>,
   },
   {
     key: 'replicationGroupId',
     header: 'Replication Group',
-    width: '12%',
+    width: '10%',
     cell: (r) =>
       r.replicationGroupId ? <span style={mutedMono}>{r.replicationGroupId}</span> : <Dash />,
   },
   {
     key: 'nodeType',
     header: 'Node type',
-    width: '12%',
+    width: '10%',
     cell: (r) => <span style={monoStyle}>{r.nodeType}</span>,
   },
   {
     key: 'region',
     header: 'Region',
-    width: '11%',
+    width: '9%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
+  },
+  {
+    key: 'nodeAvailabilityZones',
+    header: 'AZs',
+    width: '14%',
+    cell: (r) => <span style={mutedMono}>{r.nodeAvailabilityZones.join(', ') || '—'}</span>,
   },
   {
     key: 'numNodes',
     header: 'Nodes',
-    width: '7%',
+    width: '6%',
     align: 'right',
     cell: (r) => <span style={monoStyle}>{r.numNodes}</span>,
   },
   {
     key: 'endpoint',
     header: 'Endpoint',
-    width: '23%',
+    width: '21%',
     cell: (r) => (
       <span className="truncate" style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}>
         {r.endpoint}

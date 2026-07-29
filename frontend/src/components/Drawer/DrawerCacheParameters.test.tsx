@@ -30,6 +30,7 @@ function cacheRaw(parameterGroup: string) {
     port: 6379,
     parameter_group: parameterGroup,
     replication_group_id: '',
+    node_availability_zones: ['ap-northeast-1a'],
     cost_monthly: 0,
   };
 }

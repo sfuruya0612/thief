@@ -191,6 +191,7 @@ export interface CacheRaw {
   port: number;
   parameter_group: string;
   replication_group_id: string;
+  node_availability_zones: string[] | null;
   cost_monthly: number;
 }
 
@@ -207,6 +208,7 @@ export interface CacheRow {
   port: number;
   parameterGroup: string;
   replicationGroupId: string;
+  nodeAvailabilityZones: string[];
 }
 
 // ElastiCache パラメータ一覧 (Drawer の Parameters タブでパラメータグループごとに取得するサブリソース)
