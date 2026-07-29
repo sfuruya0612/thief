@@ -108,11 +108,15 @@ export function getResources<TRaw>(
 // Cost Explorer の検索条件。省略時のバックエンド側デフォルトは Granularity: DAILY /
 // GroupByDimension: SERVICE / Months: 1 (直近 1 ヶ月)。
 // startDate/endDate (YYYY-MM-DD) を両方指定すると任意期間の取得になり、months は無視される。
-// サービス名でのフィルタはブラウザ側 (取得済みデータへのフィルタ) で行うため API には持たない。
+// service / account は Cost Explorer 側で絞り込むフィルタ条件であり、それぞれ単一値のみ受け付ける。
+// account は Cost Explorer が LINKED_ACCOUNT の次元値として返す生のアカウント ID 文字列を
+// そのまま指定する (形式の検証や整形は行わない)。空文字は絞り込みなしとして扱われる。
 export interface CostQueryOptions {
   includeToday?: boolean;
   granularity?: string;
   groupBy?: string;
+  service?: string;
+  account?: string;
   startDate?: string;
   endDate?: string;
   months?: number;
@@ -128,6 +132,8 @@ export function getCost(
     include_today: opts?.includeToday ? true : undefined,
     granularity: opts?.granularity,
     group_by: opts?.groupBy,
+    service: opts?.service,
+    account: opts?.account,
     start: opts?.startDate,
     end: opts?.endDate,
     months: opts?.months !== undefined ? String(opts.months) : undefined,

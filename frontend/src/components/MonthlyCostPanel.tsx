@@ -51,7 +51,10 @@ export function MonthlyCostPanel<R, G extends string>({
 }: MonthlyCostPanelProps<R, G>) {
   const { t } = useTranslation('cost');
   // グループ名フィルタは取得済みデータに対してブラウザ側で絞り込むだけにし、都度 API を
-  // 呼び出さない (AWS Cost Explorer と同じ方式)。
+  // 呼び出さない。このパネルが扱う Datadog / TiDB のコスト API は期間しか受け取らず
+  // 絞り込み条件を渡す口がないため、絞り込みはブラウザ側で行うほかない
+  // (AWS Cost Explorer は GetCostAndUsage の Filter で絞り込めるため CostExplorerPanel 側は
+  // API に条件を渡す方式を採る)。
   const filteredRows = useMemo(() => {
     if (!groupFilter.trim()) return rows;
     const needle = groupFilter.trim().toLowerCase();
