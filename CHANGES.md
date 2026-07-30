@@ -277,6 +277,8 @@
   - @sfuruya0612
 - govulncheck が検出した golang.org/x/text の脆弱性 (GO-2026-5970) を解消するため golang.org/x/text を v0.38.0 から v0.39.0 に更新する (indirect 依存。go get に伴い x/mod / x/telemetry / x/tools も追随して更新される)
   - @sfuruya0612
+- govulncheck が検出した google.golang.org/grpc の脆弱性 (GO-2026-6061、xDS RBAC authorization engine と HTTP/2 transport server の脆弱性) を解消するため google.golang.org/grpc を v1.82.0 から v1.82.1 に更新する (go.mod 上は direct 依存のため直接更新する。脆弱なコードパスには Cloud Logging の Live Tail が Google Cloud クライアント経由で到達する。他の依存の追随更新は発生しない)
+  - @sfuruya0612
 - モノレポ移行以前の旧 CLI 単体モジュール (ルート `cmd/` / `internal/` / `main.go` / `go.mod`) とそのドキュメント生成ツール (`docs/`) を削除する
   - @sfuruya0612
 - API サーバのキャッシュ応答ハンドラ約 40 箇所のボイラープレート (Load → エラー → キャッシュヘッダ → JSON) を serveCached ヘルパに共通化する
