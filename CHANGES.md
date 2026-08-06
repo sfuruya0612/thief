@@ -277,6 +277,8 @@
 
 ### misc
 
+- internal/aws/elasticache.go の DescribeCacheClusters の 2 つの呼び出し経路を狭いインターフェースを受け取る関数に抽出し、ShowCacheNodeInfo が全ページの呼び出しで送られることを検証するモックテストを追加する (挙動は変えない)
+  - @sfuruya0612
 - internal/aws/torow.go の呼び出し元の無い 11 の ToRow() メソッドと、それだけが使っていたヘルパー関数 tagMapStr を削除する (挙動は変えない)
   - @sfuruya0612
 - internal/cli の列定義 ([]util.Column) と ToRow() の要素数・順序の対応を検証するテストを追加し、関数内リテラルのまま残っていた 5 ファイル (cloudfront / cost / elb / kinesis / lambda) の列定義をパッケージレベル変数に抽出する (挙動は変えない)

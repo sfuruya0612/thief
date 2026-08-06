@@ -45,13 +45,23 @@ func (r ElastiCacheResource) ResourceName() string  { return r.Name }
 func (r ElastiCacheResource) ResourceState() string { return NormalizeState(r.State) }
 func (r ElastiCacheResource) ServiceName() string   { return "elasticache" }
 
+// elastiCacheDescribeClustersClient は DescribeCacheClusters の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *elasticache.Client がこれを満たす。
+// ページネータが要求する elasticache.DescribeCacheClustersAPIClient と同じメソッドセットである。
+type elastiCacheDescribeClustersClient interface {
+	DescribeCacheClusters(ctx context.Context, params *elasticache.DescribeCacheClustersInput, optFns ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error)
+}
+
 // ListElastiCacheResources returns all ElastiCache clusters for the given profile/region.
 func ListElastiCacheResources(ctx context.Context, profile, region string) ([]ElastiCacheResource, error) {
 	client, err := newElastiCacheClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
+	return listElastiCacheResources(ctx, client)
+}
 
+func listElastiCacheResources(ctx context.Context, client elastiCacheDescribeClustersClient) ([]ElastiCacheResource, error) {
 	var resources []ElastiCacheResource
 	// ShowCacheNodeInfo を有効にしないと CacheNodes が返らず、ノード単位の AZ が取得できない。
 	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{
@@ -177,7 +187,10 @@ func ListElastiCacheClusterInfos(ctx context.Context, profile, region string) ([
 	if err != nil {
 		return nil, err
 	}
+	return listElastiCacheClusterInfos(ctx, client)
+}
 
+func listElastiCacheClusterInfos(ctx context.Context, client elastiCacheDescribeClustersClient) ([]ElastiCacheClusterInfo, error) {
 	var clusters []ElastiCacheClusterInfo
 	// ShowCacheNodeInfo を有効にしないと CacheNodes が返らず、ノード単位の AZ が取得できない。
 	paginator := elasticache.NewDescribeCacheClustersPaginator(client, &elasticache.DescribeCacheClustersInput{
