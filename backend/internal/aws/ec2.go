@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -198,14 +197,6 @@ func ec2InstanceInfoFromSDK(inst ec2types.Instance) EC2InstanceInfo {
 
 func tagsToMap(tags []ec2types.Tag) map[string]string {
 	return tagsToMapFunc(tags, func(t ec2types.Tag) (*string, *string) { return t.Key, t.Value })
-}
-
-func tagMapStr(tags map[string]string) string {
-	var parts []string
-	for k, v := range tags {
-		parts = append(parts, k+"="+v)
-	}
-	return strings.Join(parts, ",")
 }
 
 func ptrStr(s *string) string {
