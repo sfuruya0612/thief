@@ -84,6 +84,7 @@ export function cacheOverviewRows(r: CacheRow): OverviewEntry[] {
     ['Replication group', r.replicationGroupId || dash],
     ['Node type', r.nodeType],
     ['Nodes', r.numNodes],
+    ['AZs', r.nodeAvailabilityZones.join(', ') || dash],
     ['Endpoint', r.endpoint],
     ['Port', r.port],
     ['Region', r.region],

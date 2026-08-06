@@ -2,12 +2,13 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import {
+  cacheOverviewRows,
   cloudfrontOverviewRows,
   iamOverviewRows,
   kinesisOverviewRows,
   wafOverviewRows,
 } from './overviewRows';
-import type { CloudFrontRow, IAMRow, KinesisRow, WAFRow } from '../../types/aws';
+import type { CacheRow, CloudFrontRow, IAMRow, KinesisRow, WAFRow } from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -175,5 +176,52 @@ describe('kinesisOverviewRows', () => {
     const rows = kinesisOverviewRows({ ...kinesisBaseRow, mode: '' });
     const mode = rows.find(([label]) => label === 'Capacity mode');
     expect(mode?.[1]).toBe('');
+  });
+});
+
+// cacheOverviewRows の AZs 行の検証 (issue 0103)。
+const cacheBaseRow: CacheRow = {
+  region: 'ap-northeast-1',
+  id: 'my-redis-001',
+  name: 'my-redis-001',
+  state: 'available',
+  engine: 'redis',
+  engineVersion: '7.1.0',
+  nodeType: 'cache.t4g.micro',
+  numNodes: 2,
+  endpoint: 'my-redis.abc123.apne1.cache.amazonaws.com',
+  port: 6379,
+  parameterGroup: 'default.redis7',
+  replicationGroupId: 'my-redis',
+  nodeAvailabilityZones: ['ap-northeast-1a', 'ap-northeast-1c'],
+};
+
+describe('cacheOverviewRows', () => {
+  it('Nodes の直後に AZs 行があり、既存行の順序は変わらない', () => {
+    const rows = cacheOverviewRows(cacheBaseRow);
+    expect(rows.map(([label]) => label)).toEqual([
+      'Resource ID',
+      'Engine',
+      'Engine version',
+      'Replication group',
+      'Node type',
+      'Nodes',
+      'AZs',
+      'Endpoint',
+      'Port',
+      'Region',
+    ]);
+  });
+
+  it('複数の AZ をカンマ区切りで連結して表示する', () => {
+    const rows = cacheOverviewRows(cacheBaseRow);
+    const azs = rows.find(([label]) => label === 'AZs');
+    expect(azs?.[1]).toBe('ap-northeast-1a, ap-northeast-1c');
+  });
+
+  it('nodeAvailabilityZones が空配列のときはダッシュを表示する', () => {
+    const rows = cacheOverviewRows({ ...cacheBaseRow, nodeAvailabilityZones: [] });
+    const azs = rows.find(([label]) => label === 'AZs');
+    expect(azs?.[1]).toBe('—');
   });
 });

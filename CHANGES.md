@@ -46,6 +46,8 @@
   - @sfuruya0612
 - [UPDATE] S3 バケット一覧取得で、バケットごとの属性 (リージョン / 暗号化 / 公開設定) の解決を逐次実行から errgroup による並列実行 (同時実行数 30) に変更し、バケット数が多い場合のロード時間を短縮する
   - @sfuruya0612
+- [ADD] ElastiCache の Drawer の Overview にノードの AZ の行 (AZs) を追加し、一覧の AZs 列と同じノードごとの AZ を Drawer でも確認できるようにする
+  - @sfuruya0612
 - [ADD] Kinesis の Drawer の Overview に Capacity mode の行を追加し、一覧の Mode 列と同じキャパシティモードを Drawer でも確認できるようにする
   - @sfuruya0612
 - [ADD] WAF / IAM / SQS / DynamoDB の一覧取得で、権限不足等により詳細値の取得に失敗し 0 件または空へ縮退した場合に、API レスポンスへ `*_fetch_failed` フラグ (`associated_count_fetch_failed` / `tags_fetch_failed` / `mfa_enabled_fetch_failed` / `groups_fetch_failed` / `policies_fetch_failed`) を追加し、一覧列と Drawer に警告アイコンを表示する (真の 0 件と取得失敗を判別できるようにする。IAM の MFA はフラグが立った行で赤のバツ表示を警告アイコンに置き換え、Drawer の Tags タブはフラグが立った場合に「Tags (0)」の件数表示を取得失敗を示す文言に置き換える。フラグは `omitempty` のため失敗が無いレスポンスにフラグのキーは現れない)。併せて SQS の `tags` を成功時も非 nil の map に正規化し、SDK が nil を返した場合に JSON で null になっていた表現を `{}` に揃える
