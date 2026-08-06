@@ -1,12 +1,122 @@
 package aws
 
 import (
+	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 	ectypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 )
+
+// mockElastiCacheDescribeClustersClient は listElastiCacheResources と
+// listElastiCacheClusterInfos が要求する elastiCacheDescribeClustersClient を
+// テスト用に実装する手書きモック。受け取った Input を呼び出し順に記録し、
+// pages に用意したレスポンスを 1 呼び出しにつき 1 ページ返す。
+type mockElastiCacheDescribeClustersClient struct {
+	pages  []*elasticache.DescribeCacheClustersOutput
+	inputs []*elasticache.DescribeCacheClustersInput
+}
+
+func (m *mockElastiCacheDescribeClustersClient) DescribeCacheClusters(_ context.Context, params *elasticache.DescribeCacheClustersInput, _ ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error) {
+	m.inputs = append(m.inputs, params)
+	idx := len(m.inputs) - 1
+	if idx >= len(m.pages) {
+		return nil, fmt.Errorf("unexpected DescribeCacheClusters call %d: only %d pages prepared", idx+1, len(m.pages))
+	}
+	return m.pages[idx], nil
+}
+
+// elastiCacheDescribeClustersPages は Marker で連結された 2 ページ構成のレスポンスを返す。
+// ページネータが 2 ページ目の呼び出しでも元のパラメータを維持することを検証するために使う。
+func elastiCacheDescribeClustersPages() []*elasticache.DescribeCacheClustersOutput {
+	return []*elasticache.DescribeCacheClustersOutput{
+		{
+			CacheClusters: []ectypes.CacheCluster{{CacheClusterId: aws.String("cc-1")}},
+			Marker:        aws.String("page-2"),
+		},
+		{
+			CacheClusters: []ectypes.CacheCluster{{CacheClusterId: aws.String("cc-2")}},
+		},
+	}
+}
+
+// assertShowCacheNodeInfoOnAllCalls は全 2 回の呼び出しの Input で
+// ShowCacheNodeInfo が true であることと、1 回目の呼び出しに Marker が無く、
+// 2 回目の呼び出しに 1 ページ目の Marker が引き継がれている
+// (実際にページ送りが起きた) ことを検証する。
+func assertShowCacheNodeInfoOnAllCalls(t *testing.T, inputs []*elasticache.DescribeCacheClustersInput) {
+	t.Helper()
+	if len(inputs) != 2 {
+		t.Fatalf("DescribeCacheClusters called %d times, want 2", len(inputs))
+	}
+	for i, in := range inputs {
+		if in.ShowCacheNodeInfo == nil || !*in.ShowCacheNodeInfo {
+			t.Errorf("call %d: ShowCacheNodeInfo = %v, want true", i+1, in.ShowCacheNodeInfo)
+		}
+	}
+	if inputs[0].Marker != nil {
+		t.Errorf("call 1: Marker = %q, want nil", aws.ToString(inputs[0].Marker))
+	}
+	if got := aws.ToString(inputs[1].Marker); got != "page-2" {
+		t.Errorf("call 2: Marker = %q, want %q", got, "page-2")
+	}
+}
+
+func TestListElastiCacheSetsShowCacheNodeInfo(t *testing.T) {
+	tests := []struct {
+		name string
+		// list は検証対象の関数を呼び、返ったクラスタの ID 列を返す。
+		list func(ctx context.Context, client elastiCacheDescribeClustersClient) ([]string, error)
+	}{
+		{
+			name: "listElastiCacheResources",
+			list: func(ctx context.Context, client elastiCacheDescribeClustersClient) ([]string, error) {
+				resources, err := listElastiCacheResources(ctx, client)
+				if err != nil {
+					return nil, err
+				}
+				ids := make([]string, 0, len(resources))
+				for _, r := range resources {
+					ids = append(ids, r.ID)
+				}
+				return ids, nil
+			},
+		},
+		{
+			name: "listElastiCacheClusterInfos",
+			list: func(ctx context.Context, client elastiCacheDescribeClustersClient) ([]string, error) {
+				infos, err := listElastiCacheClusterInfos(ctx, client)
+				if err != nil {
+					return nil, err
+				}
+				ids := make([]string, 0, len(infos))
+				for _, c := range infos {
+					ids = append(ids, c.CacheClusterID)
+				}
+				return ids, nil
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockElastiCacheDescribeClustersClient{pages: elastiCacheDescribeClustersPages()}
+			gotIDs, err := tt.list(context.Background(), mock)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertShowCacheNodeInfoOnAllCalls(t, mock.inputs)
+
+			// 両ページのクラスタが集約されることも確認する。
+			wantIDs := []string{"cc-1", "cc-2"}
+			if !reflect.DeepEqual(gotIDs, wantIDs) {
+				t.Errorf("cluster ids = %#v, want %#v", gotIDs, wantIDs)
+			}
+		})
+	}
+}
 
 func TestElastiCacheFromClusterParameterGroup(t *testing.T) {
 	tests := []struct {
