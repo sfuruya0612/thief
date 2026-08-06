@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AccountView } from './AccountView';
 import { CostExplorerPanel } from './CostExplorerPanel';
 import * as endpoints from '../api/endpoints';
 import { SSO_TOKEN_EXPIRED_CODE } from '../lib/ssoError';
@@ -47,6 +48,10 @@ function renderPanel() {
 }
 
 describe('CostExplorerPanel', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('フィルタへの入力だけでは getCost を再呼び出ししない', async () => {
     const getCostSpy = vi.spyOn(endpoints, 'getCost').mockResolvedValue(SAMPLE);
     renderPanel();
@@ -188,6 +193,88 @@ describe('CostExplorerPanel', () => {
     await waitFor(() => {
       const lastCall = getCostSpy.mock.calls.at(-1);
       expect(lastCall?.[2]?.startDate).toBe('2026-06-01');
+    });
+  });
+
+  it('AccountView 経由でリージョンを切り替えると絞り込み state が全て初期値に戻る', async () => {
+    const getCostSpy = vi.spyOn(endpoints, 'getCost').mockResolvedValue(SAMPLE);
+    // Sidebar の useRegions などコスト以外の副作用リクエストは、AccountView.test.tsx と
+    // 同じ方式で解決しない Promise に差し替えて止める。
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    );
+
+    // 実装箇所である AccountView をそのままレンダリングし、key={region} による再マウントの
+    // 経路を通す。key を持たない props の差し替えだけでは useState は初期化されないため、
+    // AccountView 側の key={region} が外れるとこのテストは落ちる。
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = (region: string) => (
+      <QueryClientProvider client={queryClient}>
+        <AccountView
+          profile="test-profile"
+          region={region}
+          profiles={[]}
+          onRegionChange={() => {}}
+          activeService="costexplorer"
+          onServiceChange={() => {}}
+          drawerPos="right"
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view('ap-northeast-1'));
+
+    await waitFor(() => expect(getCostSpy).toHaveBeenCalled());
+
+    // 初期値を控えておく (日付レンジは現在日時から計算されるため固定値を書かない)
+    const initialStart = (screen.getByTitle('Start date') as HTMLInputElement).value;
+    const initialEnd = (screen.getByTitle('End date') as HTMLInputElement).value;
+
+    // 9 つの state を全て初期値以外へ変更する
+    const serviceInput = screen.getByPlaceholderText('filter by service name…');
+    fireEvent.change(serviceInput, { target: { value: 'AmazonEC2' } });
+    fireEvent.keyDown(serviceInput, { key: 'Enter' });
+    const accountInput = screen.getByPlaceholderText('filter by account ID…');
+    fireEvent.change(accountInput, { target: { value: '123456789012' } });
+    fireEvent.blur(accountInput);
+    fireEvent.change(screen.getByTitle('Start date'), { target: { value: '2026-06-01' } });
+    fireEvent.change(screen.getByTitle('End date'), { target: { value: '2026-07-15' } });
+    fireEvent.change(screen.getByTitle('Granularity'), { target: { value: 'MONTHLY' } });
+    fireEvent.change(screen.getByTitle('Group by'), { target: { value: 'USAGE_TYPE' } });
+    fireEvent.change(screen.getByTitle('Cost metric'), { target: { value: 'netAmortized' } });
+
+    // 変更が state に反映されたことを確認してからリージョンを切り替える
+    await waitFor(() => {
+      const lastCall = getCostSpy.mock.calls.at(-1);
+      expect(lastCall?.[2]?.service).toBe('AmazonEC2');
+      expect(lastCall?.[2]?.account).toBe('123456789012');
+      expect(lastCall?.[2]?.granularity).toBe('MONTHLY');
+    });
+    expect(screen.getByTitle('Cost metric')).toHaveValue('netAmortized');
+
+    rerender(view('us-east-1'));
+
+    // 再マウントにより入力値と確定値の両方が初期値へ戻る
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('filter by service name…')).toHaveValue('');
+    });
+    expect(screen.getByPlaceholderText('filter by account ID…')).toHaveValue('');
+    expect(screen.getByTitle('Start date')).toHaveValue(initialStart);
+    expect(screen.getByTitle('End date')).toHaveValue(initialEnd);
+    expect(screen.getByTitle('Granularity')).toHaveValue('DAILY');
+    expect(screen.getByTitle('Group by')).toHaveValue('SERVICE');
+    expect(screen.getByTitle('Cost metric')).toHaveValue('unblended');
+
+    // UI に表示されない確定値 (serviceApplied / accountApplied) のリセットは、
+    // 新しいリージョンでの getCost の呼び出し引数で検証する (それ以外の state は
+    // フォーム要素の値に直接束縛されているため上の検証で足りる)
+    await waitFor(() => {
+      const lastCall = getCostSpy.mock.calls.at(-1);
+      expect(lastCall?.[1]).toBe('us-east-1');
+      expect(lastCall?.[2]?.service).toBe('');
+      expect(lastCall?.[2]?.account).toBe('');
     });
   });
 

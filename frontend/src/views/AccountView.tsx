@@ -468,7 +468,12 @@ export function AccountView({
       {activeService === 'cloudwatchlogs' && (
         <CloudWatchLogsView profile={profile} region={region} />
       )}
-      {activeService === 'costexplorer' && <CostExplorerPanel profile={profile} region={region} />}
+      {/* key= でリージョン切り替え時に再マウントし、絞り込み state (フィルタ / 日付レンジ /
+          granularity 等) を初期値へ戻す。プロファイル切り替えは App.tsx の key={activeProfile}
+          による AccountView ごとの再マウントで既に初期化される。 */}
+      {activeService === 'costexplorer' && (
+        <CostExplorerPanel key={region} profile={profile} region={region} />
+      )}
       {activeService === 'pricing' && (
         <PricingPanel profile={profile} region={region} onRegionChange={onRegionChange} />
       )}

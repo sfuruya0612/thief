@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] Cost Explorer の絞り込み state (granularity / groupBy / 日付レンジ / metric / サービスとアカウントのフィルタ) をリージョン切り替え時に初期値へ戻すようにする
+  - @sfuruya0612
 - [UPDATE] DynamoDB の一覧取得で、BillingMode が既知の 2 値 (PAY_PER_REQUEST / PROVISIONED) 以外の未知の値だった場合のキャパシティモードを、空欄のまま残す挙動から Kinesis と同じ provisioned への縮退に統一する (現行 SDK の enum は既知の 2 値のみでこのパスに到達しないため、現実の入力に対する表示は変わらない)
   - @sfuruya0612
 - [UPDATE] CloudFront の一覧の列を Distribution, State, Domain, Alternate domains, Origins の 5 列に絞り込む (Enabled と Price class は Drawer の Overview に残したまま一覧の列と絞り込み・並び替え対象からは外す)
