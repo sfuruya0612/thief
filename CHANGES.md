@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] DynamoDB の一覧取得で、BillingMode が既知の 2 値 (PAY_PER_REQUEST / PROVISIONED) 以外の未知の値だった場合のキャパシティモードを、空欄のまま残す挙動から Kinesis と同じ provisioned への縮退に統一する (現行 SDK の enum は既知の 2 値のみでこのパスに到達しないため、現実の入力に対する表示は変わらない)
+  - @sfuruya0612
 - [UPDATE] CloudFront の一覧の列を Distribution, State, Domain, Alternate domains, Origins の 5 列に絞り込む (Enabled と Price class は Drawer の Overview に残したまま一覧の列と絞り込み・並び替え対象からは外す)
   - @sfuruya0612
 - [UPDATE] WAF の一覧の列順を Web ACL, Description, State, Scope, Region, Rules, Associated に変更する (列の集合と各列の幅は変えない)
@@ -275,6 +277,8 @@
 
 ### misc
 
+- DynamoDB と Kinesis のキャパシティモード文字列 ("on-demand" / "provisioned") の重複リテラルを internal/aws/resource.go の共通定数に集約する (挙動は変えない)
+  - @sfuruya0612
 - frontend の staleTime 既定 (60 秒) を QueryClient のグローバル設定 (`main.tsx`) に集約し、各 useQuery に重複していた 34 箇所の `staleTime: 60_000` 指定を削除する (挙動は変えない。暗黙の既定値 0 に依存していた Secrets/SSM の値取得とオブジェクトプレビューの 4 フックには `staleTime: 0` を明示する)
   - @sfuruya0612
 - frontend の SSO トークン期限切れ判定 (5 ビュー) を `lib/ssoError.ts` の純関数 `isSSOExpiredError` に、backend の必須クエリパラメータ検証 (14 ハンドラ) を `requireQueryParam` ヘルパーに、テーブル列のセル部品 (`Dash` とスタイル定数) を `components/tables/cells.tsx` にそれぞれ共通化する (挙動は変えない)

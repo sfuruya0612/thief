@@ -100,12 +100,12 @@ func kinesisFromSummary(s *kinesistypes.StreamDescriptionSummary) KinesisResourc
 	if s == nil {
 		return KinesisResource{}
 	}
-	mode := "provisioned"
+	mode := capacityModeProvisioned
 	if s.StreamModeDetails != nil {
 		// ON_DEMAND だけを判別し、PROVISIONED と将来追加されうる未知の値はプロビジョンドのままにする。
 		switch s.StreamModeDetails.StreamMode {
 		case kinesistypes.StreamModeOnDemand:
-			mode = "on-demand"
+			mode = capacityModeOnDemand
 		}
 	}
 	return KinesisResource{
