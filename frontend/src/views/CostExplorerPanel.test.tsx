@@ -3,7 +3,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CostExplorerPanel } from './CostExplorerPanel';
 import * as endpoints from '../api/endpoints';
+import { SSO_TOKEN_EXPIRED_CODE } from '../lib/ssoError';
 import type { CostRaw } from '../types/aws';
+import { ApiError } from '../types/common';
 
 // echarts-for-react は jsdom (canvas 未実装) では描画に失敗するため、
 // このテストではグラフ描画自体は対象外としダミーコンポーネントに置き換える。
@@ -187,6 +189,24 @@ describe('CostExplorerPanel', () => {
       const lastCall = getCostSpy.mock.calls.at(-1);
       expect(lastCall?.[2]?.startDate).toBe('2026-06-01');
     });
+  });
+
+  it('getCost が 401 SSO_TOKEN_EXPIRED で失敗すると SSOExpiredBanner を表示する', async () => {
+    // メッセージは実機で観測した /api/aws/profiles/{profile}/cost の 401 応答と同形にする。
+    vi.spyOn(endpoints, 'getCost').mockRejectedValue(
+      new ApiError(
+        401,
+        SSO_TOKEN_EXPIRED_CODE,
+        'get cost and usage: operation error Cost Explorer: GetCostAndUsage,' +
+          ' get identity: get credentials: failed to refresh cached credentials,' +
+          ' the SSO session has expired or is invalid',
+      ),
+    );
+    const { container } = renderPanel();
+
+    await waitFor(() => expect(container.querySelector('.sso-banner')).toBeInTheDocument());
+    // SSO 期限切れは汎用の ErrorBanner ではなく再ログイン導線付きのバナーで表示する
+    expect(container.querySelector('.error-banner')).not.toBeInTheDocument();
   });
 
   it('クロス表は cost-cross-table クラスで横スクロール可能なテーブルとして描画される', async () => {

@@ -22,7 +22,7 @@ func (s *Server) handleCost(w http.ResponseWriter, r *http.Request) {
 	if months, err := strconv.Atoi(q.Get("months")); err == nil {
 		opts.Months = months
 	}
-	s.serveCached(w, r, costCacheKey(profile, region, opts), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, costCacheKey(profile, region, opts), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.GetCost(r.Context(), profile, region, opts)
 	})
 }
@@ -48,7 +48,7 @@ func costCacheKey(profile, region string, opts awsinternal.CostQueryOptions) str
 
 func (s *Server) handleCostForecast(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
-	s.serveCached(w, r, cacheKey("cost-forecast", profile, region), cacheTTL, writeInternalFromError, func() (any, error) {
+	s.serveCached(w, r, cacheKey("cost-forecast", profile, region), cacheTTL, writeAWSError, func() (any, error) {
 		return awsinternal.GetForecast(r.Context(), profile, region)
 	})
 }
