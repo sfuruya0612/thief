@@ -254,6 +254,7 @@ export function sqsOverviewRows(r: SQSRow): OverviewEntry[] {
 export function kinesisOverviewRows(r: KinesisRow): OverviewEntry[] {
   return [
     ['Resource ID', r.id],
+    ['Capacity mode', r.mode],
     ['Shards', r.shardCount],
     ['Retention', `${r.retentionHours}h`],
     ['Encryption', r.encryptionType],

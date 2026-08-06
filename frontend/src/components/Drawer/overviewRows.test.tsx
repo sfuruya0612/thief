@@ -1,8 +1,13 @@
 // wafOverviewRows の Description 行の検証 (issue 0074)。
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { cloudfrontOverviewRows, iamOverviewRows, wafOverviewRows } from './overviewRows';
-import type { CloudFrontRow, IAMRow, WAFRow } from '../../types/aws';
+import {
+  cloudfrontOverviewRows,
+  iamOverviewRows,
+  kinesisOverviewRows,
+  wafOverviewRows,
+} from './overviewRows';
+import type { CloudFrontRow, IAMRow, KinesisRow, WAFRow } from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -131,5 +136,44 @@ describe('cloudfrontOverviewRows', () => {
     const rows = cloudfrontOverviewRows(cloudfrontBaseRow);
     expect(rows.some(([label]) => label === 'Enabled')).toBe(true);
     expect(rows.some(([label]) => label === 'Price class')).toBe(true);
+  });
+});
+
+// kinesisOverviewRows の Capacity mode 行の検証 (issue 0097)。
+const kinesisBaseRow: KinesisRow = {
+  region: 'ap-northeast-1',
+  id: 'events-stream',
+  name: 'events-stream',
+  state: 'ACTIVE',
+  mode: 'on-demand',
+  shardCount: 2,
+  retentionHours: 24,
+  encryptionType: 'KMS',
+  tags: {},
+};
+
+describe('kinesisOverviewRows', () => {
+  it('Resource ID の直後に Capacity mode 行があり、既存行 (Shards 以降) の順序は変わらない', () => {
+    const rows = kinesisOverviewRows(kinesisBaseRow);
+    expect(rows.map(([label]) => label)).toEqual([
+      'Resource ID',
+      'Capacity mode',
+      'Shards',
+      'Retention',
+      'Encryption',
+      'Region',
+    ]);
+  });
+
+  it('Capacity mode 行の値は KinesisRow.mode をそのまま表示する', () => {
+    const rows = kinesisOverviewRows({ ...kinesisBaseRow, mode: 'provisioned' });
+    const mode = rows.find(([label]) => label === 'Capacity mode');
+    expect(mode?.[1]).toBe('provisioned');
+  });
+
+  it('mode が空文字列でもそのまま表示し、ダッシュへ変換しない', () => {
+    const rows = kinesisOverviewRows({ ...kinesisBaseRow, mode: '' });
+    const mode = rows.find(([label]) => label === 'Capacity mode');
+    expect(mode?.[1]).toBe('');
   });
 });
