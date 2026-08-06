@@ -124,8 +124,8 @@ func cacheKey(parts ...string) string {
 
 // serveCached は resourceCache.Load の結果をキャッシュヘッダ付き JSON で書き出す。
 // キャッシュ応答を返すハンドラ共通のボイラープレート (Load → エラー → ヘッダ → JSON) を集約する。
-// エラー応答は onErr に委ねる。AWS リソース系は writeAWSError (SSO 期限切れで 401)、
-// それ以外 (cost / gcp / datadog / tidb / bq) は writeInternalError を渡し、
+// エラー応答は onErr に委ねる。AWS リソース系と cost は writeAWSError (SSO 期限切れで 401)、
+// gcp は writeGCPError、それ以外 (datadog / tidb / bq) は writeInternalFromError を渡し、
 // 既存のエラーレスポンス形状を変えないこと。
 func (s *Server) serveCached(
 	w http.ResponseWriter,
