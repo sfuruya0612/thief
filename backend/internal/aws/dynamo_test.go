@@ -1,12 +1,26 @@
 package aws
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
+
+// mockDynamoTableTagsClient は dynamoTableTagsClient の手書きモック。
+type mockDynamoTableTagsClient struct {
+	listTagsOfResource func(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error)
+}
+
+func (m *mockDynamoTableTagsClient) ListTagsOfResource(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error) {
+	return m.listTagsOfResource(ctx, params, optFns...)
+}
 
 func TestDynamoFromDescription(t *testing.T) {
 	arn := "arn:aws:dynamodb:ap-northeast-1:123:table/foo"
@@ -81,6 +95,85 @@ func TestDynamoTagsToMap(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v want %v", got, want)
 	}
+}
+
+func TestFetchDynamoTableTags(t *testing.T) {
+	arn := "arn:aws:dynamodb:ap-northeast-1:123:table/foo"
+
+	t.Run("tableArn が nil の場合は API を呼ばない", func(t *testing.T) {
+		client := &mockDynamoTableTagsClient{
+			listTagsOfResource: func(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error) {
+				t.Fatal("ListTagsOfResource should not be called when tableArn is nil")
+				return nil, nil
+			},
+		}
+
+		tags, tagsFetchFailed, err := fetchDynamoTableTags(context.Background(), client, nil)
+		if err != nil {
+			t.Fatalf("fetchDynamoTableTags() error = %v", err)
+		}
+		if tagsFetchFailed {
+			t.Errorf("tagsFetchFailed = true, want false")
+		}
+		if !reflect.DeepEqual(tags, map[string]string{}) {
+			t.Errorf("tags = %v, want empty map", tags)
+		}
+	})
+
+	t.Run("成功時はタグを返す", func(t *testing.T) {
+		client := &mockDynamoTableTagsClient{
+			listTagsOfResource: func(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error) {
+				return &dynamodb.ListTagsOfResourceOutput{
+					Tags: []dynamodbtypes.Tag{
+						{Key: aws.String("env"), Value: aws.String("prod")},
+					},
+				}, nil
+			},
+		}
+
+		tags, tagsFetchFailed, err := fetchDynamoTableTags(context.Background(), client, aws.String(arn))
+		if err != nil {
+			t.Fatalf("fetchDynamoTableTags() error = %v", err)
+		}
+		if tagsFetchFailed {
+			t.Errorf("tagsFetchFailed = true, want false")
+		}
+		if !reflect.DeepEqual(tags, map[string]string{"env": "prod"}) {
+			t.Errorf("tags = %v, want {env: prod}", tags)
+		}
+	})
+
+	t.Run("取得失敗で tagsFetchFailed が立つ", func(t *testing.T) {
+		client := &mockDynamoTableTagsClient{
+			listTagsOfResource: func(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+
+		tags, tagsFetchFailed, err := fetchDynamoTableTags(context.Background(), client, aws.String(arn))
+		if err != nil {
+			t.Fatalf("fetchDynamoTableTags() error = %v", err)
+		}
+		if !tagsFetchFailed {
+			t.Errorf("tagsFetchFailed = false, want true")
+		}
+		if !reflect.DeepEqual(tags, map[string]string{}) {
+			t.Errorf("tags = %v, want empty map", tags)
+		}
+	})
+
+	t.Run("キャンセルはエラーとして伝播する", func(t *testing.T) {
+		client := &mockDynamoTableTagsClient{
+			listTagsOfResource: func(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error) {
+				return nil, context.Canceled
+			},
+		}
+
+		_, _, err := fetchDynamoTableTags(context.Background(), client, aws.String(arn))
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("fetchDynamoTableTags() error = %v, want context.Canceled", err)
+		}
+	})
 }
 
 func TestDynamoAttributeTypes(t *testing.T) {
@@ -302,5 +395,32 @@ func TestDynamoUnmarshalItems(t *testing.T) {
 	}
 	if got[0]["pk"] != "user#1" || got[0]["name"] != "alice" {
 		t.Errorf("got %#v", got[0])
+	}
+}
+
+func TestDynamoResourceJSONFetchFailedOmitempty(t *testing.T) {
+	tests := []struct {
+		name            string
+		tagsFetchFailed bool
+		wantKey         bool
+	}{
+		{name: "false ならキーが省略される", tagsFetchFailed: false, wantKey: false},
+		{name: "true ならキーが true で出力される", tagsFetchFailed: true, wantKey: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := json.Marshal(DynamoResource{
+				ID:              "table-1",
+				Name:            "my-table",
+				TagsFetchFailed: tt.tagsFetchFailed,
+			})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			gotKey := strings.Contains(string(b), `"tags_fetch_failed":true`)
+			if gotKey != tt.wantKey {
+				t.Errorf("json = %s, tags_fetch_failed key present = %v, want %v", b, gotKey, tt.wantKey)
+			}
+		})
 	}
 }

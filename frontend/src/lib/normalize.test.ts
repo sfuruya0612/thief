@@ -10,9 +10,11 @@ import {
   cloudfrontFromRaw,
   cwLogEventFromRaw,
   cwLogGroupFromRaw,
+  dynamoFromRaw,
   dynamoTableSchemaFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
+  iamFromRaw,
   kinesisFromRaw,
   objectPreviewFromRaw,
   profileFromRaw,
@@ -20,10 +22,11 @@ import {
   rdsClusterParameterGroupFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
+  sqsFromRaw,
   wafFromRaw,
   wafRuleFromRaw,
 } from './normalize';
-import type { CloudFrontRaw, WAFRaw } from '../types/aws';
+import type { CloudFrontRaw, DynamoRaw, IAMRaw, SQSRaw, WAFRaw } from '../types/aws';
 
 describe('profileFromRaw', () => {
   it('sso_account_id / sso_role_name を camelCase に変換する', () => {
@@ -695,7 +698,9 @@ describe('wafFromRaw', () => {
       description: 'Protects the public API',
       ruleCount: 3,
       associatedCount: 1,
+      associatedCountFetchFailed: false,
       tags: { Env: 'prod' },
+      tagsFetchFailed: false,
     });
   });
 
@@ -703,6 +708,107 @@ describe('wafFromRaw', () => {
     const raw = { ...base, description: undefined as unknown as string };
     const row = wafFromRaw(raw, 'ap-northeast-1');
     expect(row.description).toBe('');
+  });
+
+  it('fetch_failed フラグが省略された場合は false に既定する', () => {
+    const row = wafFromRaw(base, 'ap-northeast-1');
+    expect(row.associatedCountFetchFailed).toBe(false);
+    expect(row.tagsFetchFailed).toBe(false);
+  });
+
+  it('fetch_failed フラグが true のときは true を引き継ぐ', () => {
+    const raw = {
+      ...base,
+      associated_count_fetch_failed: true,
+      tags_fetch_failed: true,
+    };
+    const row = wafFromRaw(raw, 'ap-northeast-1');
+    expect(row.associatedCountFetchFailed).toBe(true);
+    expect(row.tagsFetchFailed).toBe(true);
+  });
+});
+
+describe('iamFromRaw', () => {
+  const base: IAMRaw = {
+    id: 'user-1',
+    name: 'deploy-bot',
+    state: 'active',
+    arn: 'arn:aws:iam::123456789012:user/deploy-bot',
+    kind: 'user',
+    mfa_enabled: true,
+    last_activity: '2026-01-01T00:00:00Z',
+    groups: ['admins'],
+    policies: ['AdministratorAccess'],
+  };
+
+  it('fetch_failed フラグが省略された場合は false に既定する', () => {
+    const row = iamFromRaw(base, 'ap-northeast-1');
+    expect(row.mfaEnabledFetchFailed).toBe(false);
+    expect(row.groupsFetchFailed).toBe(false);
+    expect(row.policiesFetchFailed).toBe(false);
+  });
+
+  it('fetch_failed フラグが true のときは true を引き継ぐ', () => {
+    const raw = {
+      ...base,
+      mfa_enabled_fetch_failed: true,
+      groups_fetch_failed: true,
+      policies_fetch_failed: true,
+    };
+    const row = iamFromRaw(raw, 'ap-northeast-1');
+    expect(row.mfaEnabledFetchFailed).toBe(true);
+    expect(row.groupsFetchFailed).toBe(true);
+    expect(row.policiesFetchFailed).toBe(true);
+  });
+});
+
+describe('sqsFromRaw', () => {
+  const base: SQSRaw = {
+    id: 'queue-1',
+    name: 'orders',
+    state: 'active',
+    type: 'standard',
+    available_messages: 10,
+    in_flight: 2,
+    retention_days: 4,
+    tags: { Env: 'prod' },
+    cost_monthly: 0,
+  };
+
+  it('fetch_failed フラグが省略された場合は false に既定する', () => {
+    const row = sqsFromRaw(base, 'ap-northeast-1');
+    expect(row.tagsFetchFailed).toBe(false);
+  });
+
+  it('fetch_failed フラグが true のときは true を引き継ぐ', () => {
+    const raw = { ...base, tags_fetch_failed: true };
+    const row = sqsFromRaw(raw, 'ap-northeast-1');
+    expect(row.tagsFetchFailed).toBe(true);
+  });
+});
+
+describe('dynamoFromRaw', () => {
+  const base: DynamoRaw = {
+    id: 'table-1',
+    name: 'orders',
+    state: 'active',
+    mode: 'PAY_PER_REQUEST',
+    item_count: 100,
+    size_bytes: 2048,
+    gsi_count: 1,
+    tags: { Env: 'prod' },
+    cost_monthly: 0,
+  };
+
+  it('fetch_failed フラグが省略された場合は false に既定する', () => {
+    const row = dynamoFromRaw(base, 'ap-northeast-1');
+    expect(row.tagsFetchFailed).toBe(false);
+  });
+
+  it('fetch_failed フラグが true のときは true を引き継ぐ', () => {
+    const raw = { ...base, tags_fetch_failed: true };
+    const row = dynamoFromRaw(raw, 'ap-northeast-1');
+    expect(row.tagsFetchFailed).toBe(true);
   });
 });
 

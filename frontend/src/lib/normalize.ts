@@ -216,6 +216,7 @@ export function dynamoFromRaw(raw: DynamoRaw, region: string): DynamoRow {
     sizeBytes: raw.size_bytes,
     gsiCount: raw.gsi_count,
     tags: raw.tags ?? {},
+    tagsFetchFailed: raw.tags_fetch_failed ?? false,
   };
 }
 
@@ -494,9 +495,12 @@ export function iamFromRaw(raw: IAMRaw, _region: string): IAMRow {
     arn: raw.arn,
     kind: raw.kind,
     mfaEnabled: raw.mfa_enabled,
+    mfaEnabledFetchFailed: raw.mfa_enabled_fetch_failed ?? false,
     lastActivity: raw.last_activity,
     groups: raw.groups ?? [],
+    groupsFetchFailed: raw.groups_fetch_failed ?? false,
     policies: raw.policies ?? [],
+    policiesFetchFailed: raw.policies_fetch_failed ?? false,
   };
 }
 
@@ -623,6 +627,7 @@ export function sqsFromRaw(raw: SQSRaw, region: string): SQSRow {
     inFlight: raw.in_flight,
     retentionDays: raw.retention_days,
     tags: raw.tags ?? {},
+    tagsFetchFailed: raw.tags_fetch_failed ?? false,
   };
 }
 
@@ -651,7 +656,9 @@ export function wafFromRaw(raw: WAFRaw, region: string): WAFRow {
     description: raw.description ?? '',
     ruleCount: raw.rule_count,
     associatedCount: raw.associated_count,
+    associatedCountFetchFailed: raw.associated_count_fetch_failed ?? false,
     tags: raw.tags ?? {},
+    tagsFetchFailed: raw.tags_fetch_failed ?? false,
   };
 }
 

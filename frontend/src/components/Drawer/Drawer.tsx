@@ -274,7 +274,9 @@ export function Drawer({
                   )}
                 </>
               )}
-              {tab === 'Tags' && service !== 'cfn' && <DrawerTags tags={resource.tags} />}
+              {tab === 'Tags' && service !== 'cfn' && (
+                <DrawerTags tags={resource.tags} fetchFailed={resource.tagsFetchFailed} />
+              )}
               {tab === 'Tags' && service === 'cfn' && (
                 <DrawerCFNTags profile={profile} region={region} stack={resource.name} />
               )}

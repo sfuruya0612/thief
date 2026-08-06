@@ -24,14 +24,16 @@ type WAFResource struct {
 	Name string `json:"name"`
 	// ARN は CLOUDFRONT スコープの Associated 集計 (cloudFrontACLCounts /
 	// applyCloudFrontCounts) でのみ使う内部フィールドで、API レスポンスには含めない。
-	ARN             string            `json:"-"`
-	State           string            `json:"state"`
-	Scope           string            `json:"scope"`
-	Description     string            `json:"description"`
-	RuleCount       int               `json:"rule_count"`
-	AssociatedCount int               `json:"associated_count"`
-	Tags            map[string]string `json:"tags"`
-	CostMonthly     float64           `json:"cost_monthly"`
+	ARN                        string            `json:"-"`
+	State                      string            `json:"state"`
+	Scope                      string            `json:"scope"`
+	Description                string            `json:"description"`
+	RuleCount                  int               `json:"rule_count"`
+	AssociatedCount            int               `json:"associated_count"`
+	AssociatedCountFetchFailed bool              `json:"associated_count_fetch_failed,omitempty"`
+	Tags                       map[string]string `json:"tags"`
+	TagsFetchFailed            bool              `json:"tags_fetch_failed,omitempty"`
+	CostMonthly                float64           `json:"cost_monthly"`
 }
 
 func (r WAFResource) ResourceID() string    { return r.ID }
@@ -82,8 +84,12 @@ func ListWAFResources(ctx context.Context, profile, region string) ([]WAFResourc
 			return err
 		}
 		if len(acls) > 0 {
-			if err := applyCloudFrontAssociatedCounts(gctx, profile, acls); err != nil {
+			degraded, err := applyCloudFrontAssociatedCounts(gctx, profile, acls)
+			if err != nil {
 				return err
+			}
+			if degraded {
+				markCloudFrontAssociatedCountFetchFailed(acls)
 			}
 		}
 		cfACLs = acls
@@ -146,41 +152,8 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 			if acl.WebACL != nil {
 				ruleCount = len(acl.WebACL.Rules)
 			}
-			// ListResourcesForWebACL は REGIONAL でのみ有効。ResourceType 省略は
-			// APPLICATION_LOAD_BALANCER 扱いになり ALB 以外の関連が数えられないため、
-			// 既知の全種別についてそれぞれ呼んで合算する。失敗しても ACL 情報は返す
-			// (キャンセル起因は全体エラーとして伝播)
-			associatedCount := 0
-			if scope == waftypes.ScopeRegional {
-				resourceTypes := wafRegionalResourceTypes()
-				arnLists := make([][]string, 0, len(resourceTypes))
-				for _, rt := range resourceTypes {
-					resOut, resErr := client.ListResourcesForWebACL(gctx, &wafv2.ListResourcesForWebACLInput{
-						WebACLArn:    s.ARN,
-						ResourceType: rt,
-					})
-					if resErr == nil && resOut != nil {
-						arnLists = append(arnLists, resOut.ResourceArns)
-					} else if err := handleIgnoredErr(resErr, "list resources for web acl failed (ignored)", "web_acl_arn", ptrStr(s.ARN), "resource_type", string(rt)); err != nil {
-						return err
-					} else {
-						arnLists = append(arnLists, nil)
-					}
-				}
-				associatedCount = sumResourceARNs(arnLists)
-			}
-			// タグ取得も失敗を無視する (キャンセル起因は全体エラーとして伝播)
-			tags := map[string]string{}
-			tagsOut, tagErr := client.ListTagsForResource(gctx, &wafv2.ListTagsForResourceInput{
-				ResourceARN: s.ARN,
-			})
-			if tagErr == nil && tagsOut != nil && tagsOut.TagInfoForResource != nil {
-				tags = tagsToMapFunc(tagsOut.TagInfoForResource.TagList, func(t waftypes.Tag) (*string, *string) { return t.Key, t.Value })
-			} else if err := handleIgnoredErr(tagErr, "list tags for web acl failed (ignored)", "web_acl", ptrStr(s.Name), "web_acl_arn", ptrStr(s.ARN)); err != nil {
-				return err
-			}
-			resources[i] = newWAFResource(ptrStr(s.Id), ptrStr(s.Name), ptrStr(s.ARN), scope, ruleCount, associatedCount, tags, s.Description)
-			return nil
+			resources[i], err = wafACLDetail(gctx, client, scope, s, ruleCount)
+			return err
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -192,17 +165,81 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 	return resources, nil
 }
 
-func newWAFResource(id, name, arn string, scope waftypes.Scope, ruleCount, associatedCount int, tags map[string]string, description *string) WAFResource {
+// wafACLDetailClient は wafACLDetail が必要とする wafv2 API を narrow interface
+// として切り出したもの (テストで手書きモックに差し替えるため)。
+type wafACLDetailClient interface {
+	ListResourcesForWebACL(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error)
+	ListTagsForResource(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error)
+}
+
+// wafACLDetail は Web ACL 1 件分の関連リソース件数とタグを取得し WAFResource に
+// 変換する。いずれの取得も失敗を無視するため、error はキャンセル起因の失敗
+// (handleIgnoredErrFlag が伝播させるもの) に限られる。
+func wafACLDetail(ctx context.Context, client wafACLDetailClient, scope waftypes.Scope, s waftypes.WebACLSummary, ruleCount int) (WAFResource, error) {
+	// ListResourcesForWebACL は REGIONAL でのみ有効。ResourceType 省略は
+	// APPLICATION_LOAD_BALANCER 扱いになり ALB 以外の関連が数えられないため、
+	// 既知の全種別についてそれぞれ呼んで合算する。失敗しても ACL 情報は返す
+	// (キャンセル起因は全体エラーとして伝播)
+	associatedCount := 0
+	var associatedCountFetchFailed bool
+	if scope == waftypes.ScopeRegional {
+		resourceTypes := wafRegionalResourceTypes()
+		arnLists := make([][]string, 0, len(resourceTypes))
+		for _, rt := range resourceTypes {
+			resOut, resErr := client.ListResourcesForWebACL(ctx, &wafv2.ListResourcesForWebACLInput{
+				WebACLArn:    s.ARN,
+				ResourceType: rt,
+			})
+			if resErr == nil && resOut != nil {
+				arnLists = append(arnLists, resOut.ResourceArns)
+				continue
+			}
+			degraded, err := handleIgnoredErrFlag(resErr, "list resources for web acl failed (ignored)", "web_acl_arn", ptrStr(s.ARN), "resource_type", string(rt))
+			if err != nil {
+				return WAFResource{}, err
+			}
+			arnLists = append(arnLists, nil)
+			// resErr == nil の項は「エラーは無いが resOut が nil で成功分岐に入れなかった」
+			// ケース (SDK が呼び出し自体は成功させつつ nil を返す想定外の応答) を縮退として
+			// 扱うためのもの。handleIgnoredErrFlag の degraded だけでは resErr が nil の場合に
+			// 常に false を返すため拾えない。
+			associatedCountFetchFailed = associatedCountFetchFailed || degraded || resErr == nil
+		}
+		associatedCount = sumResourceARNs(arnLists)
+	}
+	// タグ取得も失敗を無視する (キャンセル起因は全体エラーとして伝播)
+	tags := map[string]string{}
+	var tagsFetchFailed bool
+	tagsOut, tagErr := client.ListTagsForResource(ctx, &wafv2.ListTagsForResourceInput{
+		ResourceARN: s.ARN,
+	})
+	if tagErr == nil && tagsOut != nil && tagsOut.TagInfoForResource != nil {
+		tags = tagsToMapFunc(tagsOut.TagInfoForResource.TagList, func(t waftypes.Tag) (*string, *string) { return t.Key, t.Value })
+	} else {
+		degraded, err := handleIgnoredErrFlag(tagErr, "list tags for web acl failed (ignored)", "web_acl", ptrStr(s.Name), "web_acl_arn", ptrStr(s.ARN))
+		if err != nil {
+			return WAFResource{}, err
+		}
+		// tagErr == nil の項は「エラーは無いが tagsOut または TagInfoForResource が nil で
+		// 成功分岐に入れなかった」ケースを縮退として扱うためのもの。resErr == nil と同じ理由。
+		tagsFetchFailed = degraded || tagErr == nil
+	}
+	return newWAFResource(ptrStr(s.Id), ptrStr(s.Name), ptrStr(s.ARN), scope, ruleCount, associatedCount, associatedCountFetchFailed, tags, tagsFetchFailed, s.Description), nil
+}
+
+func newWAFResource(id, name, arn string, scope waftypes.Scope, ruleCount, associatedCount int, associatedCountFetchFailed bool, tags map[string]string, tagsFetchFailed bool, description *string) WAFResource {
 	return WAFResource{
-		ID:              id,
-		Name:            name,
-		ARN:             arn,
-		State:           "active",
-		Scope:           string(scope),
-		Description:     ptrStr(description),
-		RuleCount:       ruleCount,
-		AssociatedCount: associatedCount,
-		Tags:            tags,
+		ID:                         id,
+		Name:                       name,
+		ARN:                        arn,
+		State:                      "active",
+		Scope:                      string(scope),
+		Description:                ptrStr(description),
+		RuleCount:                  ruleCount,
+		AssociatedCount:            associatedCount,
+		AssociatedCountFetchFailed: associatedCountFetchFailed,
+		Tags:                       tags,
+		TagsFetchFailed:            tagsFetchFailed,
 	}
 }
 
@@ -226,18 +263,41 @@ func sumResourceARNs(arnLists [][]string) int {
 // applyCloudFrontAssociatedCounts は CLOUDFRONT スコープの ACL 群に CloudFront
 // ディストリビューションの関連付け件数を適用する。ディストリビューション一覧の
 // 取得に失敗した場合は部分集計を適用せず、Warn ログと全 ACL 0 表示に劣化させる
-// (キャンセル起因は全体エラーとして伝播)。
-func applyCloudFrontAssociatedCounts(ctx context.Context, profile string, acls []WAFResource) error {
+// (キャンセル起因は全体エラーとして伝播)。degraded は縮退が発生したかを示す。
+func applyCloudFrontAssociatedCounts(ctx context.Context, profile string, acls []WAFResource) (bool, error) {
 	client, err := newCloudFrontClient(ctx, profile)
 	if err != nil {
-		return handleIgnoredErr(err, "create cloudfront client for waf associated count failed (ignored)", "profile", profile)
+		return handleIgnoredErrFlag(err, "create cloudfront client for waf associated count failed (ignored)", "profile", profile)
 	}
+	return applyCloudFrontAssociatedCountsWithClient(ctx, client, profile, acls)
+}
+
+// markCloudFrontAssociatedCountFetchFailed は applyCloudFrontAssociatedCounts が
+// degraded を返したときに、CLOUDFRONT スコープの全 ACL の AssociatedCountFetchFailed
+// を true にする。
+func markCloudFrontAssociatedCountFetchFailed(acls []WAFResource) {
+	for i := range acls {
+		acls[i].AssociatedCountFetchFailed = true
+	}
+}
+
+// cloudFrontDistributionLister は applyCloudFrontAssociatedCountsWithClient が
+// 必要とする cloudfront API を narrow interface として切り出したもの
+// (テストで手書きモックに差し替えるため)。
+type cloudFrontDistributionLister interface {
+	ListDistributions(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error)
+}
+
+// applyCloudFrontAssociatedCountsWithClient は applyCloudFrontAssociatedCounts の
+// クライアント生成後の本体。degraded はディストリビューション一覧の取得に失敗し、
+// 部分集計を適用せず縮退した (Warn ログを出して続行した) かを示す。
+func applyCloudFrontAssociatedCountsWithClient(ctx context.Context, client cloudFrontDistributionLister, profile string, acls []WAFResource) (bool, error) {
 	var summaries []cftypes.DistributionSummary
 	paginator := cloudfront.NewListDistributionsPaginator(client, &cloudfront.ListDistributionsInput{})
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return handleIgnoredErr(err, "list cloudfront distributions for waf associated count failed (ignored)", "profile", profile)
+			return handleIgnoredErrFlag(err, "list cloudfront distributions for waf associated count failed (ignored)", "profile", profile)
 		}
 		if page.DistributionList == nil {
 			continue
@@ -245,7 +305,7 @@ func applyCloudFrontAssociatedCounts(ctx context.Context, profile string, acls [
 		summaries = append(summaries, page.DistributionList.Items...)
 	}
 	applyCloudFrontCounts(acls, cloudFrontACLCounts(summaries))
-	return nil
+	return false, nil
 }
 
 // cloudFrontACLCounts は CloudFront ディストリビューション一覧から、Web ACL の

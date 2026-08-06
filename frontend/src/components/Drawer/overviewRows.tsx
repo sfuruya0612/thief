@@ -28,6 +28,7 @@ import type {
   ServiceAccountRow,
 } from '../../types/gcp';
 import { formatBytes } from '../tables/columns';
+import { FetchFailedWarning } from '../primitives';
 
 export type OverviewEntry = [string, ReactNode];
 
@@ -169,10 +170,28 @@ export function iamOverviewRows(r: IAMRow): OverviewEntry[] {
     ['Resource ID', r.id],
     ['ARN', r.arn],
     ['Kind', r.kind],
-    ['MFA', r.mfaEnabled ? 'enabled' : 'disabled'],
+    [
+      'MFA',
+      <>
+        {r.mfaEnabled ? 'enabled' : 'disabled'}
+        {r.mfaEnabledFetchFailed && <FetchFailedWarning />}
+      </>,
+    ],
     ['Last active', r.lastActivity || dash],
-    ['Policies attached', r.policies.length],
-    ['Groups', r.groups.length],
+    [
+      'Policies attached',
+      <>
+        {r.policies.length}
+        {r.policiesFetchFailed && <FetchFailedWarning />}
+      </>,
+    ],
+    [
+      'Groups',
+      <>
+        {r.groups.length}
+        {r.groupsFetchFailed && <FetchFailedWarning />}
+      </>,
+    ],
   ];
 }
 
@@ -248,7 +267,13 @@ export function wafOverviewRows(r: WAFRow): OverviewEntry[] {
     ['Scope', r.scope],
     ['Description', r.description || dash],
     ['Rules', r.ruleCount],
-    ['Associated resources', r.associatedCount],
+    [
+      'Associated resources',
+      <>
+        {r.associatedCount}
+        {r.associatedCountFetchFailed && <FetchFailedWarning />}
+      </>,
+    ],
     ['Region', r.region],
   ];
 }

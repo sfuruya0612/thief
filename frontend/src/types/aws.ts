@@ -122,6 +122,7 @@ export interface DynamoRaw {
   size_bytes: number;
   gsi_count: number;
   tags: Record<string, string>;
+  tags_fetch_failed?: boolean;
   cost_monthly: number;
 }
 
@@ -135,6 +136,7 @@ export interface DynamoRow {
   sizeBytes: number;
   gsiCount: number;
   tags: Record<string, string>;
+  tagsFetchFailed: boolean;
 }
 
 // DynamoDB Item 検索 (Drawer の Items タブ)
@@ -484,9 +486,12 @@ export interface IAMRaw {
   arn: string;
   kind: string;
   mfa_enabled: boolean;
+  mfa_enabled_fetch_failed?: boolean;
   last_activity: string;
   groups: string[] | null;
+  groups_fetch_failed?: boolean;
   policies: string[] | null;
+  policies_fetch_failed?: boolean;
 }
 
 export interface IAMRow {
@@ -497,9 +502,12 @@ export interface IAMRow {
   arn: string;
   kind: string;
   mfaEnabled: boolean;
+  mfaEnabledFetchFailed: boolean;
   lastActivity: string;
   groups: string[];
+  groupsFetchFailed: boolean;
   policies: string[];
+  policiesFetchFailed: boolean;
 }
 
 // ============================================================
@@ -722,6 +730,7 @@ export interface SQSRaw {
   in_flight: number;
   retention_days: number;
   tags: Record<string, string>;
+  tags_fetch_failed?: boolean;
   cost_monthly: number;
 }
 
@@ -735,6 +744,7 @@ export interface SQSRow {
   inFlight: number;
   retentionDays: number;
   tags: Record<string, string>;
+  tagsFetchFailed: boolean;
 }
 
 // ============================================================
@@ -775,7 +785,9 @@ export interface WAFRaw {
   description: string;
   rule_count: number;
   associated_count: number;
+  associated_count_fetch_failed?: boolean;
   tags: Record<string, string>;
+  tags_fetch_failed?: boolean;
   cost_monthly: number;
 }
 
@@ -788,7 +800,9 @@ export interface WAFRow {
   description: string;
   ruleCount: number;
   associatedCount: number;
+  associatedCountFetchFailed: boolean;
   tags: Record<string, string>;
+  tagsFetchFailed: boolean;
 }
 
 // Web ACL のルール (Drawer の Rules タブでオンデマンド取得)

@@ -134,6 +134,44 @@ describe('Drawer のタブ構成', () => {
   });
 });
 
+describe('Drawer の Tags タブと tagsFetchFailed の連携', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  function switchToTagsTab(container: HTMLElement) {
+    const tab = Array.from(container.querySelectorAll('.dtab')).find(
+      (el) => el.textContent === 'Tags',
+    );
+    expect(tab).not.toBeUndefined();
+    fireEvent.click(tab!);
+  }
+
+  it('tagsFetchFailed が true のとき Tags タブに取得失敗の見出しと警告アイコンを表示する', () => {
+    const { container } = renderDrawer({
+      service: 'waf',
+      resource: { ...RESOURCE, tags: {}, tagsFetchFailed: true },
+    });
+
+    switchToTagsTab(container);
+
+    expect(container.textContent).toContain('Tags (取得失敗)');
+    expect(container.querySelector('.fetch-failed-warning')).not.toBeNull();
+  });
+
+  it('tagsFetchFailed が false のとき Tags タブは通常の件数見出しで警告アイコンを表示しない', () => {
+    const { container } = renderDrawer({
+      service: 'waf',
+      resource: { ...RESOURCE, tags: { env: 'prod' }, tagsFetchFailed: false },
+    });
+
+    switchToTagsTab(container);
+
+    expect(container.textContent).toContain('Tags (1)');
+    expect(container.querySelector('.fetch-failed-warning')).toBeNull();
+  });
+});
+
 describe('Drawer の CloudFront Behaviors タブ', () => {
   const originalFetch = globalThis.fetch;
 

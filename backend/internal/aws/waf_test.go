@@ -1,29 +1,58 @@
 package aws
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
+	"github.com/aws/aws-sdk-go-v2/service/wafv2"
 	waftypes "github.com/aws/aws-sdk-go-v2/service/wafv2/types"
 )
 
+// mockWAFACLDetailClient は wafACLDetailClient の手書きモック。
+type mockWAFACLDetailClient struct {
+	listResourcesForWebACL func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error)
+	listTagsForResource    func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error)
+}
+
+func (m *mockWAFACLDetailClient) ListResourcesForWebACL(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+	return m.listResourcesForWebACL(ctx, params, optFns...)
+}
+
+func (m *mockWAFACLDetailClient) ListTagsForResource(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+	return m.listTagsForResource(ctx, params, optFns...)
+}
+
+// mockCloudFrontDistributionLister は cloudFrontDistributionLister の手書きモック。
+type mockCloudFrontDistributionLister struct {
+	listDistributions func(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error)
+}
+
+func (m *mockCloudFrontDistributionLister) ListDistributions(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+	return m.listDistributions(ctx, params, optFns...)
+}
+
 func TestNewWAFResource(t *testing.T) {
 	tests := []struct {
-		name            string
-		id              string
-		aclName         string
-		arn             string
-		scope           waftypes.Scope
-		ruleCount       int
-		associatedCount int
-		tags            map[string]string
-		description     *string
-		want            WAFResource
+		name                       string
+		id                         string
+		aclName                    string
+		arn                        string
+		scope                      waftypes.Scope
+		ruleCount                  int
+		associatedCount            int
+		associatedCountFetchFailed bool
+		tags                       map[string]string
+		tagsFetchFailed            bool
+		description                *string
+		want                       WAFResource
 	}{
 		{
 			name:            "regional で description が nil なら空文字",
@@ -92,10 +121,36 @@ func TestNewWAFResource(t *testing.T) {
 				Tags:            map[string]string{"Team": "platform"},
 			},
 		},
+		{
+			name:                       "associated count と tags の取得失敗を反映する",
+			id:                         "acl-4",
+			aclName:                    "degraded-acl",
+			arn:                        "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/degraded-acl/acl-4",
+			scope:                      waftypes.ScopeRegional,
+			ruleCount:                  1,
+			associatedCount:            0,
+			associatedCountFetchFailed: true,
+			tags:                       map[string]string{},
+			tagsFetchFailed:            true,
+			description:                nil,
+			want: WAFResource{
+				ID:                         "acl-4",
+				Name:                       "degraded-acl",
+				ARN:                        "arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/degraded-acl/acl-4",
+				State:                      "active",
+				Scope:                      "REGIONAL",
+				Description:                "",
+				RuleCount:                  1,
+				AssociatedCount:            0,
+				AssociatedCountFetchFailed: true,
+				Tags:                       map[string]string{},
+				TagsFetchFailed:            true,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := newWAFResource(tt.id, tt.aclName, tt.arn, tt.scope, tt.ruleCount, tt.associatedCount, tt.tags, tt.description)
+			got := newWAFResource(tt.id, tt.aclName, tt.arn, tt.scope, tt.ruleCount, tt.associatedCount, tt.associatedCountFetchFailed, tt.tags, tt.tagsFetchFailed, tt.description)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %#v want %#v", got, tt.want)
 			}
@@ -386,6 +441,52 @@ func TestWAFResourceJSONHasNoARNKey(t *testing.T) {
 	}
 }
 
+func TestWAFResourceJSONFetchFailedOmitempty(t *testing.T) {
+	tests := []struct {
+		name                       string
+		associatedCountFetchFailed bool
+		tagsFetchFailed            bool
+		wantAssociatedKey          bool
+		wantTagsKey                bool
+	}{
+		{
+			name:                       "両方 false ならキーが省略される",
+			associatedCountFetchFailed: false,
+			tagsFetchFailed:            false,
+			wantAssociatedKey:          false,
+			wantTagsKey:                false,
+		},
+		{
+			name:                       "両方 true ならキーが true で出力される",
+			associatedCountFetchFailed: true,
+			tagsFetchFailed:            true,
+			wantAssociatedKey:          true,
+			wantTagsKey:                true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := json.Marshal(WAFResource{
+				ID:                         "acl-1",
+				Name:                       "edge-acl",
+				AssociatedCountFetchFailed: tt.associatedCountFetchFailed,
+				TagsFetchFailed:            tt.tagsFetchFailed,
+			})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			gotAssociatedKey := strings.Contains(string(b), `"associated_count_fetch_failed":true`)
+			if gotAssociatedKey != tt.wantAssociatedKey {
+				t.Errorf("json = %s, associated_count_fetch_failed key present = %v, want %v", b, gotAssociatedKey, tt.wantAssociatedKey)
+			}
+			gotTagsKey := strings.Contains(string(b), `"tags_fetch_failed":true`)
+			if gotTagsKey != tt.wantTagsKey {
+				t.Errorf("json = %s, tags_fetch_failed key present = %v, want %v", b, gotTagsKey, tt.wantTagsKey)
+			}
+		})
+	}
+}
+
 func TestWAFRegionalResourceTypes(t *testing.T) {
 	want := map[waftypes.ResourceType]bool{
 		waftypes.ResourceTypeApplicationLoadBalancer: true,
@@ -437,6 +538,230 @@ func TestSumResourceARNs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWAFACLDetail(t *testing.T) {
+	summary := waftypes.WebACLSummary{
+		Id:   aws.String("acl-1"),
+		Name: aws.String("edge-acl"),
+		ARN:  aws.String("arn:aws:wafv2:ap-northeast-1:123456789012:regional/webacl/edge-acl/acl-1"),
+	}
+
+	t.Run("REGIONAL で関連リソースとタグの取得が両方成功する", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return &wafv2.ListResourcesForWebACLOutput{ResourceArns: []string{"arn:resource-1"}}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return &wafv2.ListTagsForResourceOutput{
+					TagInfoForResource: &waftypes.TagInfoForResource{
+						TagList: []waftypes.Tag{{Key: aws.String("Env"), Value: aws.String("prod")}},
+					},
+				}, nil
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 2)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		wantCount := len(wafRegionalResourceTypes())
+		if got.AssociatedCount != wantCount {
+			t.Errorf("AssociatedCount = %d, want %d", got.AssociatedCount, wantCount)
+		}
+		if got.AssociatedCountFetchFailed {
+			t.Error("AssociatedCountFetchFailed = true, want false")
+		}
+		if got.TagsFetchFailed {
+			t.Error("TagsFetchFailed = true, want false")
+		}
+		if want := (map[string]string{"Env": "prod"}); !reflect.DeepEqual(got.Tags, want) {
+			t.Errorf("Tags = %#v, want %#v", got.Tags, want)
+		}
+	})
+
+	t.Run("REGIONAL で一部の resource type だけ取得に失敗しても残りが合算され失敗フラグが立つ", func(t *testing.T) {
+		failingType := wafRegionalResourceTypes()[0]
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				if params.ResourceType == failingType {
+					return nil, errors.New("throttled")
+				}
+				return &wafv2.ListResourcesForWebACLOutput{ResourceArns: []string{"arn:resource-1"}}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return &wafv2.ListTagsForResourceOutput{TagInfoForResource: &waftypes.TagInfoForResource{}}, nil
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 2)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		wantCount := len(wafRegionalResourceTypes()) - 1
+		if got.AssociatedCount != wantCount {
+			t.Errorf("AssociatedCount = %d, want %d", got.AssociatedCount, wantCount)
+		}
+		if !got.AssociatedCountFetchFailed {
+			t.Error("AssociatedCountFetchFailed = false, want true")
+		}
+	})
+
+	t.Run("タグ取得の失敗で TagsFetchFailed が立ちタグは空のまま", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return &wafv2.ListResourcesForWebACLOutput{}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 2)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		if !got.TagsFetchFailed {
+			t.Error("TagsFetchFailed = false, want true")
+		}
+		if len(got.Tags) != 0 {
+			t.Errorf("Tags = %#v, want empty", got.Tags)
+		}
+	})
+
+	t.Run("resource type 取得がエラーなしで nil 応答を返すと失敗フラグが立つ", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return nil, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return &wafv2.ListTagsForResourceOutput{TagInfoForResource: &waftypes.TagInfoForResource{}}, nil
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 2)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		if got.AssociatedCount != 0 {
+			t.Errorf("AssociatedCount = %d, want 0", got.AssociatedCount)
+		}
+		if !got.AssociatedCountFetchFailed {
+			t.Error("AssociatedCountFetchFailed = false, want true")
+		}
+	})
+
+	t.Run("タグ取得がエラーなしで nil 応答を返すと TagsFetchFailed が立つ", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return &wafv2.ListResourcesForWebACLOutput{}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return nil, nil
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 2)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		if !got.TagsFetchFailed {
+			t.Error("TagsFetchFailed = false, want true")
+		}
+		if len(got.Tags) != 0 {
+			t.Errorf("Tags = %#v, want empty", got.Tags)
+		}
+	})
+
+	t.Run("タグ取得がエラーなしで TagInfoForResource が nil の応答を返すと TagsFetchFailed が立つ", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return &wafv2.ListResourcesForWebACLOutput{}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return &wafv2.ListTagsForResourceOutput{TagInfoForResource: nil}, nil
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 2)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		if !got.TagsFetchFailed {
+			t.Error("TagsFetchFailed = false, want true")
+		}
+		if len(got.Tags) != 0 {
+			t.Errorf("Tags = %#v, want empty", got.Tags)
+		}
+	})
+
+	t.Run("CLOUDFRONT スコープでは ListResourcesForWebACL を呼ばず AssociatedCount は 0 のまま", func(t *testing.T) {
+		called := false
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				called = true
+				return &wafv2.ListResourcesForWebACLOutput{}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return &wafv2.ListTagsForResourceOutput{TagInfoForResource: &waftypes.TagInfoForResource{}}, nil
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeCloudfront, summary, 1)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		if called {
+			t.Error("ListResourcesForWebACL was called for CLOUDFRONT scope, want not called")
+		}
+		if got.AssociatedCount != 0 || got.AssociatedCountFetchFailed {
+			t.Errorf("AssociatedCount = %d, AssociatedCountFetchFailed = %v, want 0, false", got.AssociatedCount, got.AssociatedCountFetchFailed)
+		}
+	})
+
+	t.Run("CLOUDFRONT スコープでもタグ取得の失敗で TagsFetchFailed が立つ", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return &wafv2.ListResourcesForWebACLOutput{}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+		got, err := wafACLDetail(context.Background(), client, waftypes.ScopeCloudfront, summary, 1)
+		if err != nil {
+			t.Fatalf("wafACLDetail() error = %v", err)
+		}
+		if !got.TagsFetchFailed {
+			t.Error("TagsFetchFailed = false, want true")
+		}
+		if len(got.Tags) != 0 {
+			t.Errorf("Tags = %#v, want empty", got.Tags)
+		}
+	})
+
+	t.Run("resource type 取得のキャンセルはエラーとして伝播する", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return nil, context.Canceled
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return &wafv2.ListTagsForResourceOutput{TagInfoForResource: &waftypes.TagInfoForResource{}}, nil
+			},
+		}
+		_, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 1)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("wafACLDetail() error = %v, want context.Canceled", err)
+		}
+	})
+
+	t.Run("タグ取得のキャンセルはエラーとして伝播する", func(t *testing.T) {
+		client := &mockWAFACLDetailClient{
+			listResourcesForWebACL: func(ctx context.Context, params *wafv2.ListResourcesForWebACLInput, optFns ...func(*wafv2.Options)) (*wafv2.ListResourcesForWebACLOutput, error) {
+				return &wafv2.ListResourcesForWebACLOutput{}, nil
+			},
+			listTagsForResource: func(ctx context.Context, params *wafv2.ListTagsForResourceInput, optFns ...func(*wafv2.Options)) (*wafv2.ListTagsForResourceOutput, error) {
+				return nil, context.Canceled
+			},
+		}
+		_, err := wafACLDetail(context.Background(), client, waftypes.ScopeRegional, summary, 1)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("wafACLDetail() error = %v, want context.Canceled", err)
+		}
+	})
 }
 
 func TestCloudFrontACLCounts(t *testing.T) {
@@ -522,6 +847,126 @@ func TestApplyCloudFrontCounts(t *testing.T) {
 				t.Errorf("applyCloudFrontCounts() associated counts = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestApplyCloudFrontAssociatedCountsWithClient(t *testing.T) {
+	acl := WAFResource{ID: "acl-1", ARN: "arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-1"}
+
+	t.Run("ディストリビューション一覧の取得に成功すると関連件数が反映される", func(t *testing.T) {
+		client := &mockCloudFrontDistributionLister{
+			listDistributions: func(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+				return &cloudfront.ListDistributionsOutput{
+					DistributionList: &cftypes.DistributionList{
+						Items:       []cftypes.DistributionSummary{{WebACLId: aws.String(acl.ARN)}},
+						IsTruncated: aws.Bool(false),
+					},
+				}, nil
+			},
+		}
+		acls := []WAFResource{acl}
+		degraded, err := applyCloudFrontAssociatedCountsWithClient(context.Background(), client, "default", acls)
+		if err != nil {
+			t.Fatalf("applyCloudFrontAssociatedCountsWithClient() error = %v", err)
+		}
+		if degraded {
+			t.Error("degraded = true, want false")
+		}
+		if acls[0].AssociatedCount != 1 {
+			t.Errorf("AssociatedCount = %d, want 1", acls[0].AssociatedCount)
+		}
+	})
+
+	t.Run("ディストリビューション一覧の取得に失敗すると縮退し ACL は変更されない", func(t *testing.T) {
+		client := &mockCloudFrontDistributionLister{
+			listDistributions: func(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+		acls := []WAFResource{acl}
+		degraded, err := applyCloudFrontAssociatedCountsWithClient(context.Background(), client, "default", acls)
+		if err != nil {
+			t.Fatalf("applyCloudFrontAssociatedCountsWithClient() error = %v", err)
+		}
+		if !degraded {
+			t.Error("degraded = false, want true")
+		}
+		if acls[0].AssociatedCount != 0 {
+			t.Errorf("AssociatedCount = %d, want 0 (未変更)", acls[0].AssociatedCount)
+		}
+	})
+
+	t.Run("ディストリビューション一覧取得のキャンセルはエラーとして伝播する", func(t *testing.T) {
+		client := &mockCloudFrontDistributionLister{
+			listDistributions: func(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+				return nil, context.Canceled
+			},
+		}
+		acls := []WAFResource{acl}
+		_, err := applyCloudFrontAssociatedCountsWithClient(context.Background(), client, "default", acls)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("applyCloudFrontAssociatedCountsWithClient() error = %v, want context.Canceled", err)
+		}
+	})
+
+	t.Run("縮退時に markCloudFrontAssociatedCountFetchFailed を適用すると AssociatedCountFetchFailed が true になる", func(t *testing.T) {
+		client := &mockCloudFrontDistributionLister{
+			listDistributions: func(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+		acls := []WAFResource{acl}
+		degraded, err := applyCloudFrontAssociatedCountsWithClient(context.Background(), client, "default", acls)
+		if err != nil {
+			t.Fatalf("applyCloudFrontAssociatedCountsWithClient() error = %v", err)
+		}
+		if !degraded {
+			t.Fatal("degraded = false, want true")
+		}
+		// waf.go の ListWAFResources が行う合成 (if degraded { markCloudFrontAssociatedCountFetchFailed(acls) }) を
+		// ここで手動で再現して検証する。ListWAFResources 自体は AWS クライアント生成を要求するため直接は呼べず、
+		// この合成がそちらでも壊れていないかまでは検知できない点に注意。
+		markCloudFrontAssociatedCountFetchFailed(acls)
+		if !acls[0].AssociatedCountFetchFailed {
+			t.Error("AssociatedCountFetchFailed = false, want true")
+		}
+	})
+}
+
+func TestMarkCloudFrontAssociatedCountFetchFailed(t *testing.T) {
+	acls := []WAFResource{
+		{ID: "acl-1", AssociatedCountFetchFailed: false},
+		{ID: "acl-2", AssociatedCountFetchFailed: false},
+	}
+	markCloudFrontAssociatedCountFetchFailed(acls)
+	for _, acl := range acls {
+		if !acl.AssociatedCountFetchFailed {
+			t.Errorf("acl %s: AssociatedCountFetchFailed = false, want true", acl.ID)
+		}
+	}
+}
+
+// TestApplyCloudFrontAssociatedCounts はクライアント生成に失敗した場合の縮退を検証する。
+// 存在しないプロファイル名を渡すと config.LoadDefaultConfig がネットワークアクセスなしに
+// 即座に失敗するため、newCloudFrontClient のエラーパスをモック無しで再現できる。
+func TestApplyCloudFrontAssociatedCounts(t *testing.T) {
+	acls := []WAFResource{{ID: "acl-1", ARN: "arn:aws:wafv2:us-east-1:123456789012:global/webacl/cf-acl/acl-1"}}
+	degraded, err := applyCloudFrontAssociatedCounts(context.Background(), "definitely-not-a-real-profile-xyz", acls)
+	if err != nil {
+		t.Fatalf("applyCloudFrontAssociatedCounts() error = %v", err)
+	}
+	if !degraded {
+		t.Error("degraded = false, want true")
+	}
+	if acls[0].AssociatedCount != 0 {
+		t.Errorf("AssociatedCount = %d, want 0 (未変更)", acls[0].AssociatedCount)
+	}
+	// waf.go の ListWAFResources が行う合成 (if degraded { markCloudFrontAssociatedCountFetchFailed(acls) }) を
+	// ここで手動で再現して検証する。ListWAFResources 自体は AWS クライアント生成を要求するため直接は呼べず、
+	// この合成がそちらでも壊れていないかまでは検知できない点に注意。
+	markCloudFrontAssociatedCountFetchFailed(acls)
+	if !acls[0].AssociatedCountFetchFailed {
+		t.Error("AssociatedCountFetchFailed = false, want true")
 	}
 }
 

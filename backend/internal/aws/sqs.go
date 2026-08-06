@@ -24,6 +24,7 @@ type SQSResource struct {
 	InFlight          int               `json:"in_flight"`
 	RetentionDays     int               `json:"retention_days"`
 	Tags              map[string]string `json:"tags"`
+	TagsFetchFailed   bool              `json:"tags_fetch_failed,omitempty"`
 	CostMonthly       float64           `json:"cost_monthly"`
 }
 
@@ -82,14 +83,11 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 				return fmt.Errorf("get queue attributes %s: %w", url, err)
 			}
 			// タグ取得は失敗してもキュー情報は返す (キャンセル起因は全体エラーとして伝播)
-			tags := map[string]string{}
-			tagsOut, tagErr := client.ListQueueTags(gctx, &sqs.ListQueueTagsInput{QueueUrl: aws.String(url)})
-			if tagErr == nil && tagsOut != nil {
-				tags = tagsOut.Tags
-			} else if err := handleIgnoredErr(tagErr, "list sqs queue tags failed (ignored)", "queue_url", url); err != nil {
+			tags, tagsFetchFailed, err := fetchSQSQueueTags(gctx, client, url)
+			if err != nil {
 				return err
 			}
-			resources[i] = sqsFromAttributes(url, attrs.Attributes, tags)
+			resources[i] = sqsFromAttributes(url, attrs.Attributes, tags, tagsFetchFailed)
 			return nil
 		})
 	}
@@ -107,7 +105,31 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 	return resources, nil
 }
 
-func sqsFromAttributes(url string, attrs map[string]string, tags map[string]string) SQSResource {
+// sqsQueueTagsClient は SQS キューのタグ取得に必要な API 呼び出しを抽象化する。
+type sqsQueueTagsClient interface {
+	ListQueueTags(ctx context.Context, params *sqs.ListQueueTagsInput, optFns ...func(*sqs.Options)) (*sqs.ListQueueTagsOutput, error)
+}
+
+// fetchSQSQueueTags はキューのタグを取得する。取得に失敗した場合は空 map と
+// tagsFetchFailed=true を返す (キャンセル起因は全体エラーとして伝播)。
+func fetchSQSQueueTags(ctx context.Context, client sqsQueueTagsClient, url string) (map[string]string, bool, error) {
+	tags := map[string]string{}
+	tagsOut, tagErr := client.ListQueueTags(ctx, &sqs.ListQueueTagsInput{QueueUrl: aws.String(url)})
+	if tagErr == nil && tagsOut != nil {
+		if tagsOut.Tags != nil {
+			tags = tagsOut.Tags
+		}
+		return tags, false, nil
+	}
+	degraded, err := handleIgnoredErrFlag(tagErr, "list sqs queue tags failed (ignored)", "queue_url", url)
+	if err != nil {
+		return nil, false, err
+	}
+	tagsFetchFailed := degraded || tagErr == nil
+	return tags, tagsFetchFailed, nil
+}
+
+func sqsFromAttributes(url string, attrs map[string]string, tags map[string]string, tagsFetchFailed bool) SQSResource {
 	name := url
 	if idx := strings.LastIndex(url, "/"); idx >= 0 && idx < len(url)-1 {
 		name = url[idx+1:]
@@ -135,6 +157,7 @@ func sqsFromAttributes(url string, attrs map[string]string, tags map[string]stri
 		InFlight:          inflight,
 		RetentionDays:     retentionDays,
 		Tags:              tags,
+		TagsFetchFailed:   tagsFetchFailed,
 	}
 }
 
