@@ -43,6 +43,14 @@ func tagsToMapFunc[T any](tags []T, kv func(T) (key, value *string)) map[string]
 	return m
 }
 
+// capacityModeOnDemand と capacityModeProvisioned は DynamoDB と Kinesis の
+// キャパシティモードを JSON/UI 表示用に正規化した値。未知の enum 値は
+// 両サービスとも capacityModeProvisioned へ縮退させる。
+const (
+	capacityModeOnDemand    = "on-demand"
+	capacityModeProvisioned = "provisioned"
+)
+
 // DisplayState は SDK 由来の state 文字列を JSON/UI 表示用に小文字・ハイフン正規化する。
 // 意味は丸めない (available と running は別値のまま保持する)。
 func DisplayState(raw string) string {

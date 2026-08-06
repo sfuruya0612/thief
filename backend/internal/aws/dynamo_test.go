@@ -70,6 +70,16 @@ func TestDynamoFromDescription(t *testing.T) {
 			want: DynamoResource{Name: "bar", Mode: "provisioned"},
 		},
 		{
+			name: "unknown billing mode falls back to provisioned",
+			in: &dynamodbtypes.TableDescription{
+				TableName: aws.String("qux"),
+				BillingModeSummary: &dynamodbtypes.BillingModeSummary{
+					BillingMode: dynamodbtypes.BillingMode("UNKNOWN"),
+				},
+			},
+			want: DynamoResource{Name: "qux", Mode: "provisioned"},
+		},
+		{
 			name: "provisioned default (no summary)",
 			in:   &dynamodbtypes.TableDescription{TableName: aws.String("baz")},
 			want: DynamoResource{Name: "baz", Mode: "provisioned"},

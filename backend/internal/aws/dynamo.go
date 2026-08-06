@@ -150,17 +150,14 @@ func dynamoFromDescription(t *dynamodbtypes.TableDescription) DynamoResource {
 	if t == nil {
 		return DynamoResource{}
 	}
-	mode := ""
+	// PAY_PER_REQUEST だけを判別し、BillingModeSummary が未設定の場合と
+	// 既知の 2 値以外の未知の enum 値は kinesis と同じくプロビジョンドへ縮退させる。
+	mode := capacityModeProvisioned
 	if t.BillingModeSummary != nil {
 		switch t.BillingModeSummary.BillingMode {
 		case dynamodbtypes.BillingModePayPerRequest:
-			mode = "on-demand"
-		case dynamodbtypes.BillingModeProvisioned:
-			mode = "provisioned"
+			mode = capacityModeOnDemand
 		}
-	} else {
-		// BillingModeSummary が未設定の場合、既定はプロビジョンド
-		mode = "provisioned"
 	}
 	return DynamoResource{
 		ID:        ptrStr(t.TableArn),
