@@ -279,6 +279,8 @@
 
 ### misc
 
+- frontend/src/components/tables/columns.tsx の全 33 の列定義エクスポートについて、列順序 (key と header の並び) と列幅の合計を検証するテストを整備する (挙動は変えない)
+  - @sfuruya0612
 - internal/aws/elasticache.go の DescribeCacheClusters の 2 つの呼び出し経路を狭いインターフェースを受け取る関数に抽出し、ShowCacheNodeInfo が全ページの呼び出しで送られることを検証するモックテストを追加する (挙動は変えない)
   - @sfuruya0612
 - internal/aws/torow.go の呼び出し元の無い 11 の ToRow() メソッドと、それだけが使っていたヘルパー関数 tagMapStr を削除する (挙動は変えない)
