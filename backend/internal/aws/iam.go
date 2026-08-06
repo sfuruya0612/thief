@@ -15,15 +15,18 @@ import (
 
 // IAMResource represents an IAM user.
 type IAMResource struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	State        string   `json:"state"`
-	ARN          string   `json:"arn"`
-	Kind         string   `json:"kind"` // user
-	MFAEnabled   bool     `json:"mfa_enabled"`
-	LastActivity string   `json:"last_activity"`
-	Groups       []string `json:"groups"`
-	Policies     []string `json:"policies"`
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	State                 string   `json:"state"`
+	ARN                   string   `json:"arn"`
+	Kind                  string   `json:"kind"` // user
+	MFAEnabled            bool     `json:"mfa_enabled"`
+	MFAEnabledFetchFailed bool     `json:"mfa_enabled_fetch_failed,omitempty"`
+	LastActivity          string   `json:"last_activity"`
+	Groups                []string `json:"groups"`
+	GroupsFetchFailed     bool     `json:"groups_fetch_failed,omitempty"`
+	Policies              []string `json:"policies"`
+	PoliciesFetchFailed   bool     `json:"policies_fetch_failed,omitempty"`
 }
 
 func (r IAMResource) ResourceID() string    { return r.ID }
@@ -117,41 +120,68 @@ func ListIAMResources(ctx context.Context, profile, _ string) ([]IAMResource, er
 	return resources, nil
 }
 
+// iamUserDetailClient は iamFromUser が要求する API 呼び出しを抽象化する。
+type iamUserDetailClient interface {
+	ListMFADevices(ctx context.Context, params *iam.ListMFADevicesInput, optFns ...func(*iam.Options)) (*iam.ListMFADevicesOutput, error)
+	ListGroupsForUser(ctx context.Context, params *iam.ListGroupsForUserInput, optFns ...func(*iam.Options)) (*iam.ListGroupsForUserOutput, error)
+	ListAttachedUserPolicies(ctx context.Context, params *iam.ListAttachedUserPoliciesInput, optFns ...func(*iam.Options)) (*iam.ListAttachedUserPoliciesOutput, error)
+}
+
+// iamRoleDetailClient は iamFromRole が要求する API 呼び出しを抽象化する。
+type iamRoleDetailClient interface {
+	ListAttachedRolePolicies(ctx context.Context, params *iam.ListAttachedRolePoliciesInput, optFns ...func(*iam.Options)) (*iam.ListAttachedRolePoliciesOutput, error)
+}
+
 // iamFromUser はユーザーの詳細 (MFA / グループ / ポリシー) を取得して IAMResource に変換する。
 // 詳細呼び出しの失敗は欠損データとして無視するため、error はキャンセル起因の失敗
 // (handleIgnoredErr が伝播させるもの) に限られる。
-func iamFromUser(ctx context.Context, client *iam.Client, u iamtypes.User) (IAMResource, error) {
+func iamFromUser(ctx context.Context, client iamUserDetailClient, u iamtypes.User) (IAMResource, error) {
 	name := ptrStr(u.UserName)
 
 	// MFA devices (失敗は無視、キャンセル起因は全体エラーとして伝播)
-	mfaOut, err := client.ListMFADevices(ctx, &iam.ListMFADevicesInput{UserName: aws.String(name)})
+	mfaOut, mfaErr := client.ListMFADevices(ctx, &iam.ListMFADevicesInput{UserName: aws.String(name)})
 	mfaEnabled := false
-	if err == nil {
+	var mfaEnabledFetchFailed bool
+	if mfaErr == nil {
 		mfaEnabled = len(mfaOut.MFADevices) > 0
-	} else if err := handleIgnoredErr(err, "list iam mfa devices failed (ignored)", "user", name); err != nil {
-		return IAMResource{}, err
+	} else {
+		degraded, err := handleIgnoredErrFlag(mfaErr, "list iam mfa devices failed (ignored)", "user", name)
+		if err != nil {
+			return IAMResource{}, err
+		}
+		mfaEnabledFetchFailed = degraded
 	}
 
 	// Groups (失敗は無視、キャンセル起因は全体エラーとして伝播)
-	groupsOut, err := client.ListGroupsForUser(ctx, &iam.ListGroupsForUserInput{UserName: aws.String(name)})
+	groupsOut, groupsErr := client.ListGroupsForUser(ctx, &iam.ListGroupsForUserInput{UserName: aws.String(name)})
 	var groups []string
-	if err == nil {
+	var groupsFetchFailed bool
+	if groupsErr == nil {
 		for _, g := range groupsOut.Groups {
 			groups = append(groups, ptrStr(g.GroupName))
 		}
-	} else if err := handleIgnoredErr(err, "list iam groups for user failed (ignored)", "user", name); err != nil {
-		return IAMResource{}, err
+	} else {
+		degraded, err := handleIgnoredErrFlag(groupsErr, "list iam groups for user failed (ignored)", "user", name)
+		if err != nil {
+			return IAMResource{}, err
+		}
+		groupsFetchFailed = degraded
 	}
 
 	// Attached policies (失敗は無視、キャンセル起因は全体エラーとして伝播)
-	policiesOut, err := client.ListAttachedUserPolicies(ctx, &iam.ListAttachedUserPoliciesInput{UserName: aws.String(name)})
+	policiesOut, policiesErr := client.ListAttachedUserPolicies(ctx, &iam.ListAttachedUserPoliciesInput{UserName: aws.String(name)})
 	var policies []string
-	if err == nil {
+	var policiesFetchFailed bool
+	if policiesErr == nil {
 		for _, p := range policiesOut.AttachedPolicies {
 			policies = append(policies, ptrStr(p.PolicyName))
 		}
-	} else if err := handleIgnoredErr(err, "list iam attached user policies failed (ignored)", "user", name); err != nil {
-		return IAMResource{}, err
+	} else {
+		degraded, err := handleIgnoredErrFlag(policiesErr, "list iam attached user policies failed (ignored)", "user", name)
+		if err != nil {
+			return IAMResource{}, err
+		}
+		policiesFetchFailed = degraded
 	}
 
 	var passwordLastUsed *time.Time
@@ -159,41 +189,49 @@ func iamFromUser(ctx context.Context, client *iam.Client, u iamtypes.User) (IAMR
 		passwordLastUsed = u.PasswordLastUsed
 	}
 
-	return newIAMUserResource(ptrStr(u.UserId), name, ptrStr(u.Arn), mfaEnabled, passwordLastUsed, groups, policies), nil
+	return newIAMUserResource(ptrStr(u.UserId), name, ptrStr(u.Arn), mfaEnabled, mfaEnabledFetchFailed, passwordLastUsed, groups, groupsFetchFailed, policies, policiesFetchFailed), nil
 }
 
-func newIAMUserResource(id, name, arn string, mfaEnabled bool, passwordLastUsed *time.Time, groups, policies []string) IAMResource {
+func newIAMUserResource(id, name, arn string, mfaEnabled, mfaEnabledFetchFailed bool, passwordLastUsed *time.Time, groups []string, groupsFetchFailed bool, policies []string, policiesFetchFailed bool) IAMResource {
 	lastActivity := ""
 	if passwordLastUsed != nil {
 		lastActivity = passwordLastUsed.Format(time.RFC3339)
 	}
 	return IAMResource{
-		ID:           id,
-		Name:         name,
-		ARN:          arn,
-		Kind:         "user",
-		MFAEnabled:   mfaEnabled,
-		LastActivity: lastActivity,
-		Groups:       groups,
-		Policies:     policies,
+		ID:                    id,
+		Name:                  name,
+		ARN:                   arn,
+		Kind:                  "user",
+		MFAEnabled:            mfaEnabled,
+		MFAEnabledFetchFailed: mfaEnabledFetchFailed,
+		LastActivity:          lastActivity,
+		Groups:                groups,
+		GroupsFetchFailed:     groupsFetchFailed,
+		Policies:              policies,
+		PoliciesFetchFailed:   policiesFetchFailed,
 	}
 }
 
 // iamFromRole はロールの詳細 (アタッチ済みポリシー) を取得して IAMResource に変換する。
 // 詳細呼び出しの失敗は欠損データとして無視するため、error はキャンセル起因の失敗
 // (handleIgnoredErr が伝播させるもの) に限られる。
-func iamFromRole(ctx context.Context, client *iam.Client, role iamtypes.Role) (IAMResource, error) {
+func iamFromRole(ctx context.Context, client iamRoleDetailClient, role iamtypes.Role) (IAMResource, error) {
 	name := ptrStr(role.RoleName)
 
 	// Attached policies (失敗は無視、キャンセル起因は全体エラーとして伝播)
-	policiesOut, err := client.ListAttachedRolePolicies(ctx, &iam.ListAttachedRolePoliciesInput{RoleName: aws.String(name)})
+	policiesOut, policiesErr := client.ListAttachedRolePolicies(ctx, &iam.ListAttachedRolePoliciesInput{RoleName: aws.String(name)})
 	var policies []string
-	if err == nil {
+	var policiesFetchFailed bool
+	if policiesErr == nil {
 		for _, p := range policiesOut.AttachedPolicies {
 			policies = append(policies, ptrStr(p.PolicyName))
 		}
-	} else if err := handleIgnoredErr(err, "list iam attached role policies failed (ignored)", "role", name); err != nil {
-		return IAMResource{}, err
+	} else {
+		degraded, err := handleIgnoredErrFlag(policiesErr, "list iam attached role policies failed (ignored)", "role", name)
+		if err != nil {
+			return IAMResource{}, err
+		}
+		policiesFetchFailed = degraded
 	}
 
 	var lastUsed *time.Time
@@ -201,21 +239,25 @@ func iamFromRole(ctx context.Context, client *iam.Client, role iamtypes.Role) (I
 		lastUsed = role.RoleLastUsed.LastUsedDate
 	}
 
-	return newIAMRoleResource(ptrStr(role.RoleId), name, ptrStr(role.Arn), lastUsed, policies), nil
+	return newIAMRoleResource(ptrStr(role.RoleId), name, ptrStr(role.Arn), lastUsed, policies, policiesFetchFailed), nil
 }
 
-func newIAMRoleResource(id, name, arn string, lastUsed *time.Time, policies []string) IAMResource {
+func newIAMRoleResource(id, name, arn string, lastUsed *time.Time, policies []string, policiesFetchFailed bool) IAMResource {
 	lastActivity := ""
 	if lastUsed != nil {
 		lastActivity = lastUsed.Format(time.RFC3339)
 	}
 	return IAMResource{
-		ID:           id,
-		Name:         name,
-		ARN:          arn,
-		Kind:         "role",
-		LastActivity: lastActivity,
-		Policies:     policies,
+		ID:                    id,
+		Name:                  name,
+		ARN:                   arn,
+		Kind:                  "role",
+		MFAEnabledFetchFailed: false,
+		LastActivity:          lastActivity,
+		Groups:                nil,
+		GroupsFetchFailed:     false,
+		Policies:              policies,
+		PoliciesFetchFailed:   policiesFetchFailed,
 	}
 }
 

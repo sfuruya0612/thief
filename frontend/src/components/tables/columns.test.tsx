@@ -5,10 +5,17 @@ import {
   cacheColumns,
   cloudfrontBehaviorColumns,
   cloudfrontColumns,
+  iamColumns,
   kinesisColumns,
   wafColumns,
 } from './columns';
-import type { CacheRow, CloudFrontBehaviorRow, CloudFrontRow, WAFRow } from '../../types/aws';
+import type {
+  CacheRow,
+  CloudFrontBehaviorRow,
+  CloudFrontRow,
+  IAMRow,
+  WAFRow,
+} from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -19,7 +26,9 @@ const baseRow: WAFRow = {
   description: '',
   ruleCount: 3,
   associatedCount: 1,
+  associatedCountFetchFailed: false,
   tags: {},
+  tagsFetchFailed: false,
 };
 
 describe('wafColumns', () => {
@@ -87,6 +96,87 @@ describe('wafColumns', () => {
     const associatedCount = wafColumns.find((c) => c.key === 'associatedCount');
     expect(ruleCount?.align).toBe('right');
     expect(associatedCount?.align).toBe('right');
+  });
+
+  it('associatedCountFetchFailed が true の行は警告アイコンを併記する', () => {
+    const col = wafColumns.find((c) => c.key === 'associatedCount');
+    if (!col) throw new Error('associatedCount column not found');
+    const { container } = render(<>{col.cell({ ...baseRow, associatedCountFetchFailed: true })}</>);
+    expect(container.querySelector('.fetch-failed-warning')).not.toBeNull();
+    expect(container).toHaveTextContent('1');
+  });
+
+  it('associatedCountFetchFailed が false の行は警告アイコンを表示しない', () => {
+    const col = wafColumns.find((c) => c.key === 'associatedCount');
+    if (!col) throw new Error('associatedCount column not found');
+    const { container } = render(<>{col.cell(baseRow)}</>);
+    expect(container.querySelector('.fetch-failed-warning')).toBeNull();
+  });
+});
+
+const iamBaseRow: IAMRow = {
+  region: 'global',
+  id: 'user-1',
+  name: 'deploy-bot',
+  state: 'active',
+  arn: 'arn:aws:iam::123456789012:user/deploy-bot',
+  kind: 'user',
+  mfaEnabled: true,
+  mfaEnabledFetchFailed: false,
+  lastActivity: '2026-01-01T00:00:00Z',
+  groups: ['admins'],
+  groupsFetchFailed: false,
+  policies: ['AdministratorAccess'],
+  policiesFetchFailed: false,
+};
+
+describe('iamColumns', () => {
+  it('mfaEnabledFetchFailed が true の行は赤バツの代わりに警告アイコンを表示する', () => {
+    const col = iamColumns.find((c) => c.key === 'mfaEnabled');
+    if (!col) throw new Error('mfaEnabled column not found');
+    const { container } = render(
+      <>{col.cell({ ...iamBaseRow, mfaEnabled: false, mfaEnabledFetchFailed: true })}</>,
+    );
+    expect(container.querySelector('.fetch-failed-warning')).not.toBeNull();
+    expect(container).not.toHaveTextContent('✕');
+  });
+
+  it('mfaEnabledFetchFailed が false の行は mfaEnabled の値どおり表示する', () => {
+    const col = iamColumns.find((c) => c.key === 'mfaEnabled');
+    if (!col) throw new Error('mfaEnabled column not found');
+    const { container } = render(<>{col.cell({ ...iamBaseRow, mfaEnabled: false })}</>);
+    expect(container.querySelector('.fetch-failed-warning')).toBeNull();
+    expect(container).toHaveTextContent('✕');
+  });
+
+  it('policiesFetchFailed が true の行は件数に警告アイコンを併記する', () => {
+    const col = iamColumns.find((c) => c.key === 'policies');
+    if (!col) throw new Error('policies column not found');
+    const { container } = render(<>{col.cell({ ...iamBaseRow, policiesFetchFailed: true })}</>);
+    expect(container.querySelector('.fetch-failed-warning')).not.toBeNull();
+    expect(container).toHaveTextContent('1');
+  });
+
+  it('policiesFetchFailed が false の行は警告アイコンを表示しない', () => {
+    const col = iamColumns.find((c) => c.key === 'policies');
+    if (!col) throw new Error('policies column not found');
+    const { container } = render(<>{col.cell({ ...iamBaseRow, policiesFetchFailed: false })}</>);
+    expect(container.querySelector('.fetch-failed-warning')).toBeNull();
+  });
+
+  it('groupsFetchFailed が true の行は件数に警告アイコンを併記する', () => {
+    const col = iamColumns.find((c) => c.key === 'groups');
+    if (!col) throw new Error('groups column not found');
+    const { container } = render(<>{col.cell({ ...iamBaseRow, groupsFetchFailed: true })}</>);
+    expect(container.querySelector('.fetch-failed-warning')).not.toBeNull();
+    expect(container).toHaveTextContent('1');
+  });
+
+  it('groupsFetchFailed が false の行は警告アイコンを表示しない', () => {
+    const col = iamColumns.find((c) => c.key === 'groups');
+    if (!col) throw new Error('groups column not found');
+    const { container } = render(<>{col.cell({ ...iamBaseRow, groupsFetchFailed: false })}</>);
+    expect(container.querySelector('.fetch-failed-warning')).toBeNull();
   });
 });
 

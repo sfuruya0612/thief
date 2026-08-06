@@ -125,6 +125,37 @@ func TestIsThrottled(t *testing.T) {
 	}
 }
 
+func TestHandleIgnoredErrFlag(t *testing.T) {
+	tests := []struct {
+		name          string
+		err           error
+		wantDegraded  bool
+		wantErrTarget error
+	}{
+		{name: "nil", err: nil, wantDegraded: false, wantErrTarget: nil},
+		{name: "warn suppressed error", err: errors.New("throttled"), wantDegraded: true, wantErrTarget: nil},
+		{name: "canceled", err: context.Canceled, wantDegraded: false, wantErrTarget: context.Canceled},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, wantDegraded: false, wantErrTarget: context.DeadlineExceeded},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			degraded, propagated := handleIgnoredErrFlag(tt.err, "test message")
+			if degraded != tt.wantDegraded {
+				t.Errorf("handleIgnoredErrFlag(%v) degraded = %v, want %v", tt.err, degraded, tt.wantDegraded)
+			}
+			if tt.wantErrTarget == nil {
+				if propagated != nil {
+					t.Errorf("handleIgnoredErrFlag(%v) propagated = %v, want nil", tt.err, propagated)
+				}
+				return
+			}
+			if !errors.Is(propagated, tt.wantErrTarget) {
+				t.Errorf("handleIgnoredErrFlag(%v) propagated = %v, want errors.Is match with %v", tt.err, propagated, tt.wantErrTarget)
+			}
+		})
+	}
+}
+
 func TestShouldWarnIgnoredErr(t *testing.T) {
 	tests := []struct {
 		name string

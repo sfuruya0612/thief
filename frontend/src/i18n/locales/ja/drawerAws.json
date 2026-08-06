@@ -1,4 +1,10 @@
 {
+  "fetchFailedWarning": {
+    "tooltip": "取得に失敗しました (権限不足または一時的なエラーの可能性があります)"
+  },
+  "drawerTags": {
+    "fetchFailedHeading": "Tags (取得失敗)"
+  },
   "dynamoItems": {
     "countUnit": "{{n}} 件",
     "previewLabel": "Preview (最大 {{count}} 件、Scan)",

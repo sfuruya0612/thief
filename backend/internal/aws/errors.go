@@ -92,6 +92,18 @@ func handleIgnoredErr(err error, msg string, attrs ...any) error {
 	return nil
 }
 
+// handleIgnoredErrFlag は handleIgnoredErr を呼び出し、その結果から呼び出し側が
+// 縮退の発生を機械的に判定できる bool を併せて返す。degraded が true になるのは
+// err が非 nil で、かつ handleIgnoredErr が (Warn ログを出して) nil を返した場合
+// (縮退して続行する場合) に限る。err が nil の場合、または err がキャンセル起因で
+// handleIgnoredErr がそのまま返す場合は false になる (後者は呼び出し側が
+// propagated を見て全体エラーとして return するため、フラグは意味を持たない)。
+func handleIgnoredErrFlag(err error, msg string, attrs ...any) (degraded bool, propagated error) {
+	propagated = handleIgnoredErr(err, msg, attrs...)
+	degraded = err != nil && propagated == nil
+	return degraded, propagated
+}
+
 // IsThrottled returns true when err indicates the AWS API throttled the request.
 func IsThrottled(err error) bool {
 	var apiErr smithy.APIError

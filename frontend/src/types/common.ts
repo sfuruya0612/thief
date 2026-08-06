@@ -100,6 +100,7 @@ export interface BaseRow {
   state?: string;
   region?: string;
   tags?: Record<string, string>;
+  tagsFetchFailed?: boolean;
 }
 
 // S3 / GCS オブジェクトプレビュー API の共通レスポンス形状

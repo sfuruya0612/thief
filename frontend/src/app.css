@@ -1953,6 +1953,13 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   flex: 1;
 }
 
+.fetch-failed-warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--warn);
+  cursor: help;
+}
+
 .nonaws-cols {
   display: grid;
   grid-template-columns: 260px 1fr;

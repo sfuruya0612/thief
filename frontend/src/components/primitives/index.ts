@@ -6,3 +6,4 @@ export { CellBar } from './CellBar';
 export type { CellBarProps } from './CellBar';
 export { Money } from './Money';
 export type { MoneyProps } from './Money';
+export { FetchFailedWarning } from './FetchFailedWarning';

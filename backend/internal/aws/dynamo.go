@@ -24,15 +24,16 @@ const dynamoItemQueryMaxLimit = 100
 
 // DynamoResource represents a DynamoDB table.
 type DynamoResource struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	State       string            `json:"state"`
-	Mode        string            `json:"mode"`
-	ItemCount   int64             `json:"item_count"`
-	SizeBytes   int64             `json:"size_bytes"`
-	GSICount    int               `json:"gsi_count"`
-	Tags        map[string]string `json:"tags"`
-	CostMonthly float64           `json:"cost_monthly"`
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	State           string            `json:"state"`
+	Mode            string            `json:"mode"`
+	ItemCount       int64             `json:"item_count"`
+	SizeBytes       int64             `json:"size_bytes"`
+	GSICount        int               `json:"gsi_count"`
+	Tags            map[string]string `json:"tags"`
+	TagsFetchFailed bool              `json:"tags_fetch_failed,omitempty"`
+	CostMonthly     float64           `json:"cost_monthly"`
 }
 
 func (r DynamoResource) ResourceID() string    { return r.ID }
@@ -90,18 +91,17 @@ func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoR
 			}
 			// タグ取得は失敗してもテーブル情報は返す (キャンセル起因は全体エラーとして伝播)
 			tags := map[string]string{}
-			if desc.Table != nil && desc.Table.TableArn != nil {
-				tagsOut, tagErr := client.ListTagsOfResource(gctx, &dynamodb.ListTagsOfResourceInput{
-					ResourceArn: desc.Table.TableArn,
-				})
-				if tagErr == nil {
-					tags = dynamoTagsToMap(tagsOut.Tags)
-				} else if err := handleIgnoredErr(tagErr, "list tags of dynamodb table failed (ignored)", "table", name); err != nil {
+			var tagsFetchFailed bool
+			if desc.Table != nil {
+				var err error
+				tags, tagsFetchFailed, err = fetchDynamoTableTags(gctx, client, desc.Table.TableArn)
+				if err != nil {
 					return err
 				}
 			}
 			r := dynamoFromDescription(desc.Table)
 			r.Tags = tags
+			r.TagsFetchFailed = tagsFetchFailed
 			resources[i] = r
 			return nil
 		})
@@ -118,6 +118,32 @@ func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoR
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
+}
+
+// dynamoTableTagsClient は DynamoDB テーブルのタグ取得に必要な API 呼び出しを抽象化する。
+type dynamoTableTagsClient interface {
+	ListTagsOfResource(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error)
+}
+
+// fetchDynamoTableTags はテーブルのタグを取得する。tableArn が nil の場合は
+// API を呼ばず空 map と tagsFetchFailed=false を返す (取得の余地が無いため縮退
+// 扱いにはしない、issue 本文の指示どおり)。取得に失敗した場合は空 map と
+// tagsFetchFailed=true を返す (キャンセル起因は全体エラーとして伝播)。
+func fetchDynamoTableTags(ctx context.Context, client dynamoTableTagsClient, tableArn *string) (map[string]string, bool, error) {
+	if tableArn == nil {
+		return map[string]string{}, false, nil
+	}
+	tagsOut, tagErr := client.ListTagsOfResource(ctx, &dynamodb.ListTagsOfResourceInput{
+		ResourceArn: tableArn,
+	})
+	if tagErr == nil {
+		return dynamoTagsToMap(tagsOut.Tags), false, nil
+	}
+	degraded, err := handleIgnoredErrFlag(tagErr, "list tags of dynamodb table failed (ignored)", "table_arn", ptrStr(tableArn))
+	if err != nil {
+		return nil, false, err
+	}
+	return map[string]string{}, degraded, nil
 }
 
 func dynamoFromDescription(t *dynamodbtypes.TableDescription) DynamoResource {

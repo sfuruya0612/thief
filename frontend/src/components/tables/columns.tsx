@@ -38,7 +38,7 @@ import type {
   WAFRow,
   WAFRuleRow,
 } from '../../types/aws';
-import { StatusBadge } from '../primitives';
+import { FetchFailedWarning, StatusBadge } from '../primitives';
 import { Dash, dashStyle, dimMono, monoStyle, mutedMono } from './cells';
 
 export interface ColumnDef<T> {
@@ -1359,7 +1359,12 @@ export const wafColumns: ColumnDef<WAFRow>[] = [
     header: 'Associated',
     width: '12%',
     align: 'right',
-    cell: (r) => <span style={mutedMono}>{r.associatedCount}</span>,
+    cell: (r) => (
+      <span style={mutedMono}>
+        {r.associatedCount}
+        {r.associatedCountFetchFailed && <FetchFailedWarning />}
+      </span>
+    ),
   },
 ];
 
@@ -1417,12 +1422,14 @@ export const iamColumns: ColumnDef<IAMRow>[] = [
     key: 'mfaEnabled',
     header: 'MFA',
     width: '9%',
-    cell: (r) =>
-      r.mfaEnabled ? (
+    cell: (r) => {
+      if (r.mfaEnabledFetchFailed) return <FetchFailedWarning />;
+      return r.mfaEnabled ? (
         <span style={{ color: 'var(--ok)' }}>✓</span>
       ) : (
         <span style={{ color: 'var(--err)' }}>✕</span>
-      ),
+      );
+    },
   },
   { key: 'state', header: 'Activity', width: '13%', cell: (r) => <StatusBadge state={r.state} /> },
   {
@@ -1436,14 +1443,24 @@ export const iamColumns: ColumnDef<IAMRow>[] = [
     header: 'Policies',
     width: '14%',
     align: 'right',
-    cell: (r) => <span style={monoStyle}>{r.policies.length}</span>,
+    cell: (r) => (
+      <span style={monoStyle}>
+        {r.policies.length}
+        {r.policiesFetchFailed && <FetchFailedWarning />}
+      </span>
+    ),
   },
   {
     key: 'groups',
     header: 'Groups',
     width: '15%',
     align: 'right',
-    cell: (r) => <span style={mutedMono}>{r.groups.length}</span>,
+    cell: (r) => (
+      <span style={mutedMono}>
+        {r.groups.length}
+        {r.groupsFetchFailed && <FetchFailedWarning />}
+      </span>
+    ),
   },
 ];
 
