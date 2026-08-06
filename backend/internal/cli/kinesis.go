@@ -9,13 +9,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var kinesisColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "State"},
+	{Header: "Mode"},
+	{Header: "Shards"},
+	{Header: "Retention(h)"},
+	{Header: "Encryption"},
+}
+
 func newKinesisCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "kinesis",
 		Short: "List Kinesis Data Streams",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, ListConfig[awsinternal.KinesisResource]{
-				Columns:  []util.Column{{Header: "Name"}, {Header: "State"}, {Header: "Mode"}, {Header: "Shards"}, {Header: "Retention(h)"}, {Header: "Encryption"}},
+				Columns:  kinesisColumns,
 				EmptyMsg: "No Kinesis streams found",
 				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.KinesisResource, error) {
 					return awsinternal.ListKinesisResources(ctx, cfg.Profile, cfg.Region)

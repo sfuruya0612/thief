@@ -9,13 +9,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var elbColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "Type"},
+	{Header: "State"},
+	{Header: "Scheme"},
+	{Header: "DNS"},
+	{Header: "VPC"},
+	{Header: "AZs"},
+}
+
 func newELBCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "elb",
 		Short: "List Elastic Load Balancers (ALB/NLB/CLB)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, ListConfig[awsinternal.ELBResource]{
-				Columns:  []util.Column{{Header: "Name"}, {Header: "Type"}, {Header: "State"}, {Header: "Scheme"}, {Header: "DNS"}, {Header: "VPC"}, {Header: "AZs"}},
+				Columns:  elbColumns,
 				EmptyMsg: "No load balancers found",
 				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.ELBResource, error) {
 					return awsinternal.ListELBResources(ctx, cfg.Profile, cfg.Region)

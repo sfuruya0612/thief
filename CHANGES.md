@@ -277,6 +277,8 @@
 
 ### misc
 
+- internal/cli の列定義 ([]util.Column) と ToRow() の要素数・順序の対応を検証するテストを追加し、関数内リテラルのまま残っていた 5 ファイル (cloudfront / cost / elb / kinesis / lambda) の列定義をパッケージレベル変数に抽出する (挙動は変えない)
+  - @sfuruya0612
 - DynamoDB と Kinesis のキャパシティモード文字列 ("on-demand" / "provisioned") の重複リテラルを internal/aws/resource.go の共通定数に集約する (挙動は変えない)
   - @sfuruya0612
 - frontend の staleTime 既定 (60 秒) を QueryClient のグローバル設定 (`main.tsx`) に集約し、各 useQuery に重複していた 34 箇所の `staleTime: 60_000` 指定を削除する (挙動は変えない。暗黙の既定値 0 に依存していた Secrets/SSM の値取得とオブジェクトプレビューの 4 フックには `staleTime: 0` を明示する)

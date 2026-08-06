@@ -18,6 +18,20 @@ import (
 // costDateFormat is the standard date format used by Cost Explorer.
 const costDateFormat = "2006-01-02"
 
+var costColumns = []util.Column{
+	{Header: "Date"},
+	{Header: "Service"},
+	{Header: "Unblended"},
+	{Header: "NetAmortized"},
+	{Header: "Unit"},
+}
+
+var forecastColumns = []util.Column{
+	{Header: "Period"},
+	{Header: "Amount"},
+	{Header: "Unit"},
+}
+
 func newCostCmd() *cobra.Command {
 	costCmd := &cobra.Command{
 		Use:   "cost",
@@ -65,7 +79,7 @@ func newCostCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			includeToday, _ := cmd.Flags().GetBool("include-today")
 			return runList(cmd, ListConfig[awsinternal.CostResource]{
-				Columns:  []util.Column{{Header: "Date"}, {Header: "Service"}, {Header: "Unblended"}, {Header: "NetAmortized"}, {Header: "Unit"}},
+				Columns:  costColumns,
 				EmptyMsg: "No cost data found",
 				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.CostResource, error) {
 					return awsinternal.GetCost(ctx, cfg.Profile, cfg.Region, awsinternal.CostQueryOptions{IncludeToday: includeToday})
@@ -80,7 +94,7 @@ func newCostCmd() *cobra.Command {
 		Short: "Show cost forecast for current month",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, ListConfig[awsinternal.ForecastResource]{
-				Columns:  []util.Column{{Header: "Period"}, {Header: "Amount"}, {Header: "Unit"}},
+				Columns:  forecastColumns,
 				EmptyMsg: "No forecast data found",
 				Fetch: func(ctx context.Context, cfg *config.Config) ([]awsinternal.ForecastResource, error) {
 					return awsinternal.GetForecast(ctx, cfg.Profile, cfg.Region)
