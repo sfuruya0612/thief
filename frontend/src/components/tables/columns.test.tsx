@@ -2,12 +2,39 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import {
+  apigwColumns,
   cacheColumns,
+  cacheParameterColumns,
+  cfnColumns,
+  cfnEventColumns,
+  cfnResourceColumns,
   cloudfrontBehaviorColumns,
   cloudfrontColumns,
+  dynamoColumns,
+  ec2Columns,
+  ecrColumns,
+  ecrImageColumns,
+  ecsColumns,
+  ecsServiceColumns,
+  ecsTaskColumns,
+  elbColumns,
+  elbListenerColumns,
+  elbRuleColumns,
+  elbTargetGroupColumns,
+  elbTargetHealthColumns,
   iamColumns,
   kinesisColumns,
+  lambdaColumns,
+  natgwColumns,
+  rdsColumns,
+  rdsParameterColumns,
+  s3Columns,
+  s3ObjectColumns,
+  secretColumns,
+  sqsColumns,
+  ssmColumns,
   wafColumns,
+  wafRuleColumns,
 } from './columns';
 import type {
   CacheRow,
@@ -244,12 +271,8 @@ const cloudfrontBehaviorBaseRow: CloudFrontBehaviorRow = {
   isDefault: false,
 };
 
+// 列順序と列幅の合計は後方の一覧網羅ブロック (issue 0104) が検証する。
 describe('cloudfrontBehaviorColumns', () => {
-  it('列幅の合計が 100% になる', () => {
-    const total = cloudfrontBehaviorColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
-    expect(total).toBe(100);
-  });
-
   it('allowedMethods が複数件のとき、カンマ + 半角スペースで結合して表示する', () => {
     const col = cloudfrontBehaviorColumns.find((c) => c.key === 'allowedMethods');
     if (!col) throw new Error('allowedMethods column not found');
@@ -352,12 +375,8 @@ const cacheBaseRow: CacheRow = {
   nodeAvailabilityZones: [],
 };
 
+// 列順序と列幅の合計は後方の一覧網羅ブロック (issue 0104) が検証する。
 describe('cacheColumns', () => {
-  it('列幅の合計が 100% になる', () => {
-    const total = cacheColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
-    expect(total).toBe(100);
-  });
-
   it('nodeAvailabilityZones が複数件のとき、カンマ + 半角スペースで結合して表示する', () => {
     const col = cacheColumns.find((c) => c.key === 'nodeAvailabilityZones');
     if (!col) throw new Error('nodeAvailabilityZones column not found');
@@ -377,5 +396,351 @@ describe('cacheColumns', () => {
     if (!col) throw new Error('nodeAvailabilityZones column not found');
     const { container } = render(<>{col.cell(cacheBaseRow)}</>);
     expect(container).toHaveTextContent('—');
+  });
+});
+
+// 全列定義の列順序 (key / header) と列幅の合計を一覧で検証する (issue 0104)。
+// wafColumns / cloudfrontColumns / kinesisColumns は前方の個別 describe が
+// 順序と幅の合計を検証済みのため、このブロックには含めない。
+// 個別の width 値は検証しない (issues/closed/0089 の「幅は調整の自由度として残す」方針)。
+interface ColumnOrderCase {
+  name: string;
+  columns: readonly { key: string; header: string; width: string }[];
+  keys: string[];
+  headers: string[];
+  // 列幅の合計の期待値 (%)。100 にならない 3 定義は現状の実測値を期待値とする。
+  widthSum: number;
+}
+
+const columnOrderCases: ColumnOrderCase[] = [
+  {
+    name: 'ec2Columns',
+    columns: ec2Columns,
+    keys: ['name', 'state', 'instanceType', 'region', 'az', 'privateIp', 'publicIp', 'uptime'],
+    headers: ['Name', 'State', 'Type', 'Region', 'AZ', 'Private IP', 'Public IP', 'Uptime'],
+    widthSum: 100,
+  },
+  {
+    name: 'rdsColumns',
+    columns: rdsColumns,
+    keys: [
+      'name',
+      'state',
+      'engine',
+      'engineVersion',
+      'clusterId',
+      'class',
+      'region',
+      'multiAz',
+      'endpoint',
+      'uptime',
+    ],
+    headers: [
+      'Identifier',
+      'State',
+      'Engine',
+      'Engine Version',
+      'Cluster',
+      'Class',
+      'Region',
+      'MultiAZ',
+      'Endpoint',
+      'Uptime',
+    ],
+    widthSum: 100,
+  },
+  {
+    name: 'rdsParameterColumns',
+    columns: rdsParameterColumns,
+    keys: ['name', 'value', 'applyType', 'dataType', 'isModifiable', 'source'],
+    headers: ['Name', 'Value', 'Apply type', 'Data type', 'Modifiable', 'Source'],
+    widthSum: 96,
+  },
+  {
+    name: 'cacheParameterColumns',
+    columns: cacheParameterColumns,
+    keys: ['name', 'value', 'changeType', 'dataType', 'isModifiable', 'source'],
+    headers: ['Name', 'Value', 'Change type', 'Data type', 'Modifiable', 'Source'],
+    widthSum: 96,
+  },
+  {
+    name: 'cacheColumns',
+    columns: cacheColumns,
+    keys: [
+      'name',
+      'state',
+      'engine',
+      'replicationGroupId',
+      'nodeType',
+      'region',
+      'nodeAvailabilityZones',
+      'numNodes',
+      'endpoint',
+    ],
+    headers: [
+      'Cluster',
+      'State',
+      'Engine',
+      'Replication Group',
+      'Node type',
+      'Region',
+      'AZs',
+      'Nodes',
+      'Endpoint',
+    ],
+    widthSum: 100,
+  },
+  {
+    name: 'lambdaColumns',
+    columns: lambdaColumns,
+    keys: ['name', 'state', 'runtime', 'region', 'memoryMb', 'timeoutSec'],
+    headers: ['Function', 'State', 'Runtime', 'Region', 'Memory', 'Timeout'],
+    widthSum: 100,
+  },
+  {
+    name: 'ecsColumns',
+    columns: ecsColumns,
+    keys: [
+      'name',
+      'state',
+      'activeServices',
+      'runningTasks',
+      'pendingTasks',
+      'registeredEc2',
+      'region',
+    ],
+    headers: ['Cluster', 'State', 'Active svc', 'Running', 'Pending', 'Registered EC2', 'Region'],
+    widthSum: 100,
+  },
+  {
+    name: 'ecsServiceColumns',
+    columns: ecsServiceColumns,
+    keys: [
+      'name',
+      'status',
+      'desiredCount',
+      'runningCount',
+      'pendingCount',
+      'launchType',
+      'taskDefinition',
+    ],
+    headers: [
+      'Service',
+      'State',
+      'Desired',
+      'Running',
+      'Pending',
+      'Launch type',
+      'Task definition',
+    ],
+    widthSum: 100,
+  },
+  {
+    name: 'ecsTaskColumns',
+    columns: ecsTaskColumns,
+    keys: [
+      'group',
+      'containerNames',
+      'lastStatus',
+      'desiredStatus',
+      'launchType',
+      'enableExecuteCommand',
+      'arn',
+    ],
+    headers: [
+      'Group',
+      'Containers',
+      'Last status',
+      'Desired status',
+      'Launch type',
+      'Exec enabled',
+      'ARN',
+    ],
+    widthSum: 100,
+  },
+  {
+    name: 'ecrColumns',
+    columns: ecrColumns,
+    keys: ['name', 'uri', 'imageTagMutability', 'scanOnPush', 'createdAt'],
+    headers: ['Repository', 'URI', 'Tag mutability', 'Scan on push', 'Created'],
+    widthSum: 100,
+  },
+  {
+    name: 'ecrImageColumns',
+    columns: ecrImageColumns,
+    keys: ['imageTag', 'imageDigest', 'imageSizeBytes', 'pushedAt', 'lastPulledAt'],
+    headers: ['Tag', 'Digest', 'Size', 'Pushed', 'Pulled'],
+    widthSum: 100,
+  },
+  {
+    name: 'ssmColumns',
+    columns: ssmColumns,
+    keys: ['name', 'type', 'version', 'lastModified'],
+    headers: ['Name', 'Type', 'Version', 'Last modified'],
+    widthSum: 100,
+  },
+  {
+    name: 'secretColumns',
+    columns: secretColumns,
+    keys: ['name', 'description', 'lastChanged'],
+    headers: ['Name', 'Description', 'Last changed'],
+    widthSum: 100,
+  },
+  {
+    name: 's3Columns',
+    columns: s3Columns,
+    keys: ['name', 'state', 'region', 'createdAt', 'public', 'encryption'],
+    headers: ['Bucket', 'State', 'Region', 'Created', 'Public', 'Encryption'],
+    widthSum: 100,
+  },
+  {
+    name: 's3ObjectColumns',
+    columns: s3ObjectColumns,
+    keys: ['key', 'size', 'lastModified', 'storageClass'],
+    headers: ['Key', 'Size', 'Last modified', 'Storage class'],
+    widthSum: 90,
+  },
+  {
+    name: 'elbColumns',
+    columns: elbColumns,
+    keys: ['name', 'state', 'type', 'scheme', 'region', 'dnsName', 'azs'],
+    headers: ['Name', 'State', 'Type', 'Scheme', 'Region', 'DNS name', 'AZs'],
+    widthSum: 100,
+  },
+  {
+    name: 'elbListenerColumns',
+    columns: elbListenerColumns,
+    keys: ['protocol', 'port', 'defaultActionType', 'defaultTargetGroupArn', 'arn'],
+    headers: ['Protocol', 'Port', 'Default action', 'Default target group', 'ARN'],
+    widthSum: 100,
+  },
+  {
+    name: 'elbRuleColumns',
+    columns: elbRuleColumns,
+    keys: ['priority', 'conditions', 'actionType', 'targetGroupArn', 'arn'],
+    headers: ['Priority', 'Conditions', 'Action', 'Target group', 'ARN'],
+    widthSum: 100,
+  },
+  {
+    name: 'elbTargetGroupColumns',
+    columns: elbTargetGroupColumns,
+    keys: ['name', 'protocol', 'port', 'targetType', 'healthCheckPath', 'vpcId', 'arn'],
+    headers: ['Name', 'Protocol', 'Port', 'Target type', 'Health check', 'VPC', 'ARN'],
+    widthSum: 100,
+  },
+  {
+    name: 'elbTargetHealthColumns',
+    columns: elbTargetHealthColumns,
+    keys: ['targetId', 'port', 'state', 'availabilityZone', 'reason', 'description'],
+    headers: ['Target', 'Port', 'State', 'AZ', 'Reason', 'Description'],
+    widthSum: 100,
+  },
+  {
+    name: 'cloudfrontBehaviorColumns',
+    columns: cloudfrontBehaviorColumns,
+    keys: [
+      'order',
+      'pathPattern',
+      'targetOriginId',
+      'viewerProtocolPolicy',
+      'allowedMethods',
+      'compress',
+    ],
+    headers: [
+      'Precedence',
+      'Path pattern',
+      'Target origin',
+      'Viewer protocol',
+      'Allowed methods',
+      'Compress',
+    ],
+    widthSum: 100,
+  },
+  {
+    name: 'apigwColumns',
+    columns: apigwColumns,
+    keys: ['name', 'state', 'type', 'stage', 'endpoint', 'region'],
+    headers: ['API', 'State', 'Type', 'Stage', 'Endpoint', 'Region'],
+    widthSum: 100,
+  },
+  {
+    name: 'natgwColumns',
+    columns: natgwColumns,
+    keys: ['name', 'state', 'id', 'vpcId', 'elasticIp', 'region', 'uptime'],
+    headers: ['Name', 'State', 'Gateway ID', 'VPC', 'Elastic IP', 'Region', 'Uptime'],
+    widthSum: 100,
+  },
+  {
+    name: 'dynamoColumns',
+    columns: dynamoColumns,
+    keys: ['name', 'state', 'mode', 'itemCount', 'sizeBytes', 'gsiCount', 'region'],
+    headers: ['Table', 'State', 'Mode', 'Items', 'Size', 'GSI', 'Region'],
+    widthSum: 100,
+  },
+  {
+    name: 'sqsColumns',
+    columns: sqsColumns,
+    keys: ['name', 'state', 'type', 'availableMessages', 'inFlight', 'retentionDays', 'region'],
+    headers: ['Queue', 'State', 'Type', 'Available', 'In flight', 'Retention', 'Region'],
+    widthSum: 100,
+  },
+  {
+    name: 'wafRuleColumns',
+    columns: wafRuleColumns,
+    keys: ['name', 'priority', 'action', 'statement'],
+    headers: ['Name', 'Priority', 'Action', 'Statement'],
+    widthSum: 100,
+  },
+  {
+    name: 'iamColumns',
+    columns: iamColumns,
+    keys: ['name', 'kind', 'mfaEnabled', 'state', 'lastActivity', 'policies', 'groups'],
+    headers: ['Name', 'Kind', 'MFA', 'Activity', 'Last active', 'Policies', 'Groups'],
+    widthSum: 100,
+  },
+  {
+    name: 'cfnColumns',
+    columns: cfnColumns,
+    keys: ['name', 'state', 'driftStatus', 'createdAt', 'updatedAt'],
+    headers: ['Stack', 'State', 'Drift', 'Created', 'Updated'],
+    widthSum: 100,
+  },
+  {
+    name: 'cfnEventColumns',
+    columns: cfnEventColumns,
+    keys: [
+      'timestamp',
+      'logicalResourceId',
+      'resourceType',
+      'resourceStatus',
+      'resourceStatusReason',
+    ],
+    headers: ['Time', 'Logical ID', 'Type', 'Status', 'Reason'],
+    widthSum: 100,
+  },
+  {
+    name: 'cfnResourceColumns',
+    columns: cfnResourceColumns,
+    keys: [
+      'logicalResourceId',
+      'physicalResourceId',
+      'resourceType',
+      'resourceStatus',
+      'lastUpdatedTime',
+    ],
+    headers: ['Logical ID', 'Physical ID', 'Type', 'Status', 'Updated'],
+    widthSum: 100,
+  },
+];
+
+describe.each(columnOrderCases)('$name', ({ columns, keys, headers, widthSum }) => {
+  it('列の並び (key / header) が定義順のまま保たれる', () => {
+    expect(columns.map((c) => c.key)).toEqual(keys);
+    expect(columns.map((c) => c.header)).toEqual(headers);
+  });
+
+  it(`列幅の合計が ${widthSum}% になる`, () => {
+    const total = columns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
+    expect(total).toBe(widthSum);
   });
 });
