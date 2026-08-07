@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/cfn.go の ListCFNStacks と ListCfnStackSummaries について、ListStacks の呼び出しを狭いインターフェースを受け取る関数に抽出し、複数ページの全呼び出しで StackStatusFilter が意図したステータス集合で送られることを検証するテストを追加する (テストの追加のみで挙動は変えない)
+  - @sfuruya0612
 - internal/aws/athena.go の listAthenaQueryHistory について、ListQueryExecutions の全ページの呼び出しで ListQueryExecutionsInput.WorkGroup が引数どおりに設定される (workgroup が空のときは nil のまま) ことを検証するテストを追加する (テストの追加のみで挙動は変えない)
   - @sfuruya0612
 - backend の API レスポンス構造体の JSON タグと frontend の Raw 型の対応をゴールデン JSON で検証する契約テストを追加する (backend の go test がゴールデンの生成と比較を、frontend の tsc --noEmit がキー集合の双方向一致と型の適合の検査を担う)

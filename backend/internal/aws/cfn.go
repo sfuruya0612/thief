@@ -26,13 +26,23 @@ func (r CFNStackResource) ResourceName() string  { return r.Name }
 func (r CFNStackResource) ResourceState() string { return NormalizeState(r.State) }
 func (r CFNStackResource) ServiceName() string   { return "cfn" }
 
+// cfnListStacksClient は ListStacks の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *cloudformation.Client がこれを満たす。
+// ページネータが要求する cloudformation.ListStacksAPIClient と同じメソッドセットである。
+type cfnListStacksClient interface {
+	ListStacks(ctx context.Context, params *cloudformation.ListStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStacksOutput, error)
+}
+
 // ListCFNStacks returns all non-deleted CloudFormation stacks for the given profile/region.
 func ListCFNStacks(ctx context.Context, profile, region string) ([]CFNStackResource, error) {
 	client, err := newCfnClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
+	return listCFNStacks(ctx, client)
+}
 
+func listCFNStacks(ctx context.Context, client cfnListStacksClient) ([]CFNStackResource, error) {
 	// Exclude deleted stacks.
 	statusFilter := []cfntypes.StackStatus{
 		cfntypes.StackStatusCreateComplete,
@@ -385,7 +395,10 @@ func ListCfnStackSummaries(ctx context.Context, profile, region string) ([]CfnSt
 	if err != nil {
 		return nil, err
 	}
+	return listCfnStackSummaries(ctx, client)
+}
 
+func listCfnStackSummaries(ctx context.Context, client cfnListStacksClient) ([]CfnStackSummary, error) {
 	// DELETE_COMPLETE を除外して一覧の関心を保つ。
 	statusFilters := []cfntypes.StackStatus{
 		cfntypes.StackStatusCreateInProgress,
