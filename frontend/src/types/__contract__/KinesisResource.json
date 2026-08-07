@@ -1,0 +1,13 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "mode": "s4",
+  "shard_count": 5,
+  "retention_hours": 6,
+  "encryption_type": "s7",
+  "tags": {
+    "s8": "s9"
+  },
+  "cost_monthly": 10.5
+}

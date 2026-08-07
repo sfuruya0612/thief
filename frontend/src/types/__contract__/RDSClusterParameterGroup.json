@@ -1,0 +1,15 @@
+{
+  "group_name": "s1",
+  "parameters": [
+    {
+      "name": "s2",
+      "value": "s3",
+      "allowed_values": "s4",
+      "apply_type": "s5",
+      "data_type": "s6",
+      "source": "s7",
+      "is_modifiable": true,
+      "description": "s8"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "scope": "s4",
+  "description": "s5",
+  "rule_count": 6,
+  "associated_count": 7,
+  "associated_count_fetch_failed": true,
+  "tags": {
+    "s8": "s9"
+  },
+  "tags_fetch_failed": true,
+  "cost_monthly": 10.5
+}

@@ -1,0 +1,7 @@
+{
+  "name": "s1",
+  "priority": 2,
+  "action": "s3",
+  "statement": "s4",
+  "rule_json": "s5"
+}

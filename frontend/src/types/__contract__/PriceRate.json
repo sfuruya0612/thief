@@ -1,0 +1,18 @@
+{
+  "rate_id": "s1",
+  "model": "s2",
+  "group": "s3",
+  "label": "s4",
+  "attributes": {
+    "s5": "s6"
+  },
+  "term": {
+    "lease": "s7",
+    "offering_class": "s8",
+    "payment": "s9"
+  },
+  "unit": "s10",
+  "price_usd": 11.5,
+  "upfront_usd": 12.5,
+  "currency": "s13"
+}

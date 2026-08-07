@@ -1,0 +1,15 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "instance_type": "s4",
+  "az": "s5",
+  "private_ip": "s6",
+  "public_ip": "s7",
+  "vpc_id": "s8",
+  "tags": {
+    "s9": "s10"
+  },
+  "cost_monthly": 11.5,
+  "launch_time": "2026-01-02T03:04:05Z"
+}

@@ -1,0 +1,10 @@
+{
+  "arn": "s1",
+  "name": "s2",
+  "status": "s3",
+  "desired_count": 4,
+  "running_count": 5,
+  "pending_count": 6,
+  "task_definition": "s7",
+  "launch_type": "s8"
+}

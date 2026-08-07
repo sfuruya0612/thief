@@ -1,0 +1,26 @@
+{
+  "service": "s1",
+  "region": "s2",
+  "fetched_at": "2026-01-02T03:04:05Z",
+  "license_unresolved": true,
+  "rates": [
+    {
+      "rate_id": "s3",
+      "model": "s4",
+      "group": "s5",
+      "label": "s6",
+      "attributes": {
+        "s7": "s8"
+      },
+      "term": {
+        "lease": "s9",
+        "offering_class": "s10",
+        "payment": "s11"
+      },
+      "unit": "s12",
+      "price_usd": 13.5,
+      "upfront_usd": 14.5,
+      "currency": "s15"
+    }
+  ]
+}

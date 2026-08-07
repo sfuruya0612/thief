@@ -1,0 +1,13 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "type": "s4",
+  "scheme": "s5",
+  "dns_name": "s6",
+  "vpc_id": "s7",
+  "azs": [
+    "s8"
+  ],
+  "cost_monthly": 9.5
+}

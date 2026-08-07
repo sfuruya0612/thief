@@ -1,0 +1,10 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "region": "s4",
+  "created_at": "s5",
+  "public": true,
+  "encryption": "s6",
+  "cost_monthly": 7.5
+}

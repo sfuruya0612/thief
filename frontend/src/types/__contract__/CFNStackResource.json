@@ -1,0 +1,11 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "creation_time": "s4",
+  "last_updated_time": "s5",
+  "drift_status": "s6",
+  "tags": {
+    "s7": "s8"
+  }
+}

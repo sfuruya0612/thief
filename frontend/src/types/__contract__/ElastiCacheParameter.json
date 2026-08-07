@@ -1,0 +1,11 @@
+{
+  "name": "s1",
+  "value": "s2",
+  "allowed_values": "s3",
+  "change_type": "s4",
+  "data_type": "s5",
+  "source": "s6",
+  "is_modifiable": true,
+  "minimum_engine_version": "s7",
+  "description": "s8"
+}

@@ -1,0 +1,14 @@
+{
+  "columns": [
+    {
+      "name": "s1",
+      "type": "s2"
+    }
+  ],
+  "rows": [
+    [
+      "s3"
+    ]
+  ],
+  "next_token": "s4"
+}

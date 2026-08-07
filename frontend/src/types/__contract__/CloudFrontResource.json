@@ -1,0 +1,27 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "domain_name": "s4",
+  "aliases": [
+    "s5"
+  ],
+  "origins": [
+    "s6"
+  ],
+  "behaviors": [
+    {
+      "path_pattern": "s7",
+      "target_origin_id": "s8",
+      "viewer_protocol_policy": "s9",
+      "allowed_methods": [
+        "s10"
+      ],
+      "compress": true,
+      "is_default": true
+    }
+  ],
+  "enabled": true,
+  "price_class": "s11",
+  "cost_monthly": 12.5
+}

@@ -1,0 +1,18 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "arn": "s4",
+  "kind": "s5",
+  "mfa_enabled": true,
+  "mfa_enabled_fetch_failed": true,
+  "last_activity": "s6",
+  "groups": [
+    "s7"
+  ],
+  "groups_fetch_failed": true,
+  "policies": [
+    "s8"
+  ],
+  "policies_fetch_failed": true
+}

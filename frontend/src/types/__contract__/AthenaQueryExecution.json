@@ -1,0 +1,14 @@
+{
+  "id": "s1",
+  "sql": "s2",
+  "state": "s3",
+  "state_reason": "s4",
+  "submitted_at": "s5",
+  "completed_at": "s6",
+  "elapsed_ms": 7,
+  "bytes_scanned": 8,
+  "output_location": "s9",
+  "workgroup": "s10",
+  "catalog": "s11",
+  "database": "s12"
+}

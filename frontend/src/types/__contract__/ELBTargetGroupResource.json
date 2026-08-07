@@ -1,0 +1,12 @@
+{
+  "arn": "s1",
+  "name": "s2",
+  "protocol": "s3",
+  "port": 4,
+  "target_type": "s5",
+  "vpc_id": "s6",
+  "health_check_path": "s7",
+  "load_balancer_arns": [
+    "s8"
+  ]
+}

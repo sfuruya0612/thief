@@ -1,0 +1,11 @@
+{
+  "name": "s1",
+  "partition_key": {
+    "name": "s2",
+    "type": "s3"
+  },
+  "sort_key": {
+    "name": "s4",
+    "type": "s5"
+  }
+}
