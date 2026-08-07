@@ -204,9 +204,18 @@ func DescribeDynamoTable(ctx context.Context, profile, region, table string) (Dy
 	return describeDynamoTableWith(ctx, client, table)
 }
 
+// dynamoItemQueryClient は Item 検索とキースキーマ取得に必要な API 呼び出しを抽象化する。
+// QueryDynamoItems の 1 関数が引数に応じて Scan と Query を呼び分けるため、両者を 1 つの
+// インターフェースにまとめる。DescribeTable は Query 経路がキー名の解決に使う。
+type dynamoItemQueryClient interface {
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
+	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	DescribeTable(ctx context.Context, params *dynamodb.DescribeTableInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error)
+}
+
 // describeDynamoTableWith は生成済みクライアントでキースキーマを取得するコア。
 // QueryDynamoItems が自前のクライアントを再利用して config の二重ロードを避けるために分離している。
-func describeDynamoTableWith(ctx context.Context, client *dynamodb.Client, table string) (DynamoTableSchema, error) {
+func describeDynamoTableWith(ctx context.Context, client dynamoItemQueryClient, table string) (DynamoTableSchema, error) {
 	desc, err := client.DescribeTable(ctx, &dynamodb.DescribeTableInput{
 		TableName: aws.String(table),
 	})
@@ -289,7 +298,12 @@ func QueryDynamoItems(ctx context.Context, profile, region, table string, req Dy
 	if err != nil {
 		return nil, err
 	}
+	return queryDynamoItems(ctx, client, table, req)
+}
 
+// queryDynamoItems は生成済みクライアントで Item 検索を行うコア。
+// ScanInput / QueryInput に何を載せるかを単体テストで固定できるよう、クライアントの生成と分離してある。
+func queryDynamoItems(ctx context.Context, client dynamoItemQueryClient, table string, req DynamoItemQuery) ([]map[string]any, error) {
 	limit := resolveDynamoItemLimit(req.Limit)
 
 	filterExpr, filterNames, filterValues := dynamoAttrFilterExpression(req.AttrName, req.AttrValue)

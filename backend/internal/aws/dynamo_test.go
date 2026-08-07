@@ -434,3 +434,259 @@ func TestDynamoResourceJSONFetchFailedOmitempty(t *testing.T) {
 		})
 	}
 }
+
+// mockDynamoItemQueryClient は dynamoItemQueryClient の手書きモック。
+// 受け取った ScanInput / QueryInput をポインタのまま呼び出し順に記録する。queryDynamoItems は
+// Scan か Query のどちらかを 1 回だけ呼んで返り、ページングで Input を使い回さないため、
+// 記録した後に内容が書き換わることはない。
+// DescribeTable は問い合わせられたテーブル名を記録したうえで、pkName / skName から組み立てた
+// キースキーマを返す。skName が空のテーブルはソートキーを持たない。
+type mockDynamoItemQueryClient struct {
+	pkName string
+	pkType string
+	skName string
+	skType string
+
+	scanInputs         []*dynamodb.ScanInput
+	queryInputs        []*dynamodb.QueryInput
+	describeTableNames []string
+}
+
+func (m *mockDynamoItemQueryClient) Scan(_ context.Context, params *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+	m.scanInputs = append(m.scanInputs, params)
+	return &dynamodb.ScanOutput{}, nil
+}
+
+func (m *mockDynamoItemQueryClient) Query(_ context.Context, params *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	m.queryInputs = append(m.queryInputs, params)
+	return &dynamodb.QueryOutput{}, nil
+}
+
+func (m *mockDynamoItemQueryClient) DescribeTable(_ context.Context, params *dynamodb.DescribeTableInput, _ ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
+	m.describeTableNames = append(m.describeTableNames, ptrStr(params.TableName))
+	desc := &dynamodbtypes.TableDescription{
+		AttributeDefinitions: []dynamodbtypes.AttributeDefinition{
+			{AttributeName: aws.String(m.pkName), AttributeType: dynamodbtypes.ScalarAttributeType(m.pkType)},
+		},
+		KeySchema: []dynamodbtypes.KeySchemaElement{
+			{AttributeName: aws.String(m.pkName), KeyType: dynamodbtypes.KeyTypeHash},
+		},
+	}
+	if m.skName != "" {
+		desc.AttributeDefinitions = append(desc.AttributeDefinitions,
+			dynamodbtypes.AttributeDefinition{AttributeName: aws.String(m.skName), AttributeType: dynamodbtypes.ScalarAttributeType(m.skType)})
+		desc.KeySchema = append(desc.KeySchema,
+			dynamodbtypes.KeySchemaElement{AttributeName: aws.String(m.skName), KeyType: dynamodbtypes.KeyTypeRange})
+	}
+	return &dynamodb.DescribeTableOutput{Table: desc}, nil
+}
+
+// assertDynamoFilterExpression は FilterExpression が期待どおりかを検査する。
+// want が空文字のときは、フィルタ未指定として nil のままであることを求める。
+func assertDynamoFilterExpression(t *testing.T, got *string, want string) {
+	t.Helper()
+	if want == "" {
+		if got != nil {
+			t.Errorf("FilterExpression = %q, want nil", *got)
+		}
+		return
+	}
+	if got == nil {
+		t.Errorf("FilterExpression = nil, want %q", want)
+		return
+	}
+	if *got != want {
+		t.Errorf("FilterExpression = %q, want %q", *got, want)
+	}
+}
+
+// TestQueryDynamoItemsScanInput は PK 未指定の経路が ScanInput に載せる値を検証する。
+// Limit を落とすと AWS 既定のページサイズで返るようになり、フィルタ式を落とすと絞り込みが
+// 効かず全件が返るが、どちらもコンパイルと API 呼び出しは成功してしまう。
+// Limit は経路と条件ごとに別の値を渡す。全ケースで同じ値にすると、引数を無視してその値を
+// 固定で送る実装に変えてもテストが通ってしまう。既定値のケースだけは resolveDynamoItemLimit が
+// 呼ばれていること (req.Limit をそのまま載せていないこと) の確認を兼ねる。
+func TestQueryDynamoItemsScanInput(t *testing.T) {
+	const table = "items"
+
+	tests := []struct {
+		name       string
+		req        DynamoItemQuery
+		wantLimit  int32
+		wantFilter string
+		wantNames  map[string]string
+		wantValues map[string]dynamodbtypes.AttributeValue
+	}{
+		{
+			name:      "フィルタ未指定",
+			req:       DynamoItemQuery{Limit: 7},
+			wantLimit: 7,
+		},
+		{
+			name:      "Limit 未指定は既定値",
+			req:       DynamoItemQuery{},
+			wantLimit: dynamoItemQueryLimit,
+		},
+		{
+			name:       "属性フィルタ指定",
+			req:        DynamoItemQuery{AttrName: "status", AttrValue: "active", Limit: 23},
+			wantLimit:  23,
+			wantFilter: "#filterAttr = :filterVal",
+			wantNames:  map[string]string{"#filterAttr": "status"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":filterVal": &dynamodbtypes.AttributeValueMemberS{Value: "active"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockDynamoItemQueryClient{pkName: "id", pkType: "S"}
+			if _, err := queryDynamoItems(context.Background(), client, table, tt.req); err != nil {
+				t.Fatalf("queryDynamoItems: %v", err)
+			}
+			if len(client.scanInputs) != 1 {
+				t.Fatalf("Scan called %d times, want 1", len(client.scanInputs))
+			}
+			// PK 未指定なので Query 経路へ落ちてはならない。キースキーマも不要なので
+			// DescribeTable も呼ばない。
+			if len(client.queryInputs) != 0 {
+				t.Fatalf("Query called %d times, want 0", len(client.queryInputs))
+			}
+			if len(client.describeTableNames) != 0 {
+				t.Errorf("DescribeTable called for %v, want no call", client.describeTableNames)
+			}
+			in := client.scanInputs[0]
+			if got := ptrStr(in.TableName); got != table {
+				t.Errorf("TableName = %q, want %q", got, table)
+			}
+			if in.Limit == nil {
+				t.Errorf("Limit = nil, want %d", tt.wantLimit)
+			} else if *in.Limit != tt.wantLimit {
+				t.Errorf("Limit = %d, want %d", *in.Limit, tt.wantLimit)
+			}
+			assertDynamoFilterExpression(t, in.FilterExpression, tt.wantFilter)
+			if !reflect.DeepEqual(in.ExpressionAttributeNames, tt.wantNames) {
+				t.Errorf("ExpressionAttributeNames = %#v, want %#v", in.ExpressionAttributeNames, tt.wantNames)
+			}
+			if !reflect.DeepEqual(in.ExpressionAttributeValues, tt.wantValues) {
+				t.Errorf("ExpressionAttributeValues = %#v, want %#v", in.ExpressionAttributeValues, tt.wantValues)
+			}
+		})
+	}
+}
+
+// TestQueryDynamoItemsQueryInput は PK 指定の経路が QueryInput に載せる値を検証する。
+// 名前と値のマップはキー条件由来とフィルタ由来をマージするため、マージ後の最終形を固定する。
+// Limit の値を条件ごとに変える意図は TestQueryDynamoItemsScanInput と同じ。
+func TestQueryDynamoItemsQueryInput(t *testing.T) {
+	const table = "items"
+
+	tests := []struct {
+		name       string
+		client     *mockDynamoItemQueryClient
+		req        DynamoItemQuery
+		wantLimit  int32
+		wantKeyCob string
+		wantFilter string
+		wantNames  map[string]string
+		wantValues map[string]dynamodbtypes.AttributeValue
+	}{
+		{
+			name:       "PK のみ",
+			client:     &mockDynamoItemQueryClient{pkName: "id", pkType: "S"},
+			req:        DynamoItemQuery{PKValue: "pk-1", Limit: 31},
+			wantLimit:  31,
+			wantKeyCob: "#pk = :pk",
+			wantNames:  map[string]string{"#pk": "id"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":pk": &dynamodbtypes.AttributeValueMemberS{Value: "pk-1"},
+			},
+		},
+		{
+			// PK と SK でキー属性の型を変える。両方 S にすると、SK の値の変換に
+			// SortKey.Type ではなく PartitionKey.Type を渡す取り違えを検出できない。
+			name:       "PK と SK",
+			client:     &mockDynamoItemQueryClient{pkName: "id", pkType: "S", skName: "seq", skType: "N"},
+			req:        DynamoItemQuery{PKValue: "pk-2", SKValue: "20260807", Limit: 42},
+			wantLimit:  42,
+			wantKeyCob: "#pk = :pk AND #sk = :sk",
+			wantNames:  map[string]string{"#pk": "id", "#sk": "seq"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":pk": &dynamodbtypes.AttributeValueMemberS{Value: "pk-2"},
+				":sk": &dynamodbtypes.AttributeValueMemberN{Value: "20260807"},
+			},
+		},
+		{
+			name:       "Limit 未指定は既定値",
+			client:     &mockDynamoItemQueryClient{pkName: "id", pkType: "S"},
+			req:        DynamoItemQuery{PKValue: "pk-5"},
+			wantLimit:  dynamoItemQueryLimit,
+			wantKeyCob: "#pk = :pk",
+			wantNames:  map[string]string{"#pk": "id"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":pk": &dynamodbtypes.AttributeValueMemberS{Value: "pk-5"},
+			},
+		},
+		{
+			name:       "SK 指定だがテーブルに SK が無い",
+			client:     &mockDynamoItemQueryClient{pkName: "id", pkType: "S"},
+			req:        DynamoItemQuery{PKValue: "pk-3", SKValue: "2026-08-07", Limit: 5},
+			wantLimit:  5,
+			wantKeyCob: "#pk = :pk",
+			wantNames:  map[string]string{"#pk": "id"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":pk": &dynamodbtypes.AttributeValueMemberS{Value: "pk-3"},
+			},
+		},
+		{
+			name:       "PK と属性フィルタ",
+			client:     &mockDynamoItemQueryClient{pkName: "id", pkType: "S"},
+			req:        DynamoItemQuery{PKValue: "pk-4", AttrName: "status", AttrValue: "active", Limit: 88},
+			wantLimit:  88,
+			wantKeyCob: "#pk = :pk",
+			wantFilter: "#filterAttr = :filterVal",
+			wantNames:  map[string]string{"#pk": "id", "#filterAttr": "status"},
+			wantValues: map[string]dynamodbtypes.AttributeValue{
+				":pk":        &dynamodbtypes.AttributeValueMemberS{Value: "pk-4"},
+				":filterVal": &dynamodbtypes.AttributeValueMemberS{Value: "active"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := queryDynamoItems(context.Background(), tt.client, table, tt.req); err != nil {
+				t.Fatalf("queryDynamoItems: %v", err)
+			}
+			if len(tt.client.queryInputs) != 1 {
+				t.Fatalf("Query called %d times, want 1", len(tt.client.queryInputs))
+			}
+			// PK 指定時は Scan を使わない (コスト/負荷の前提)。
+			if len(tt.client.scanInputs) != 0 {
+				t.Fatalf("Scan called %d times, want 0", len(tt.client.scanInputs))
+			}
+			// キー名の解決は検索対象と同じテーブルに対して行う。
+			if !reflect.DeepEqual(tt.client.describeTableNames, []string{table}) {
+				t.Errorf("DescribeTable called for %v, want %v", tt.client.describeTableNames, []string{table})
+			}
+			in := tt.client.queryInputs[0]
+			if got := ptrStr(in.TableName); got != table {
+				t.Errorf("TableName = %q, want %q", got, table)
+			}
+			if got := ptrStr(in.KeyConditionExpression); got != tt.wantKeyCob {
+				t.Errorf("KeyConditionExpression = %q, want %q", got, tt.wantKeyCob)
+			}
+			if in.Limit == nil {
+				t.Errorf("Limit = nil, want %d", tt.wantLimit)
+			} else if *in.Limit != tt.wantLimit {
+				t.Errorf("Limit = %d, want %d", *in.Limit, tt.wantLimit)
+			}
+			assertDynamoFilterExpression(t, in.FilterExpression, tt.wantFilter)
+			if !reflect.DeepEqual(in.ExpressionAttributeNames, tt.wantNames) {
+				t.Errorf("ExpressionAttributeNames = %#v, want %#v", in.ExpressionAttributeNames, tt.wantNames)
+			}
+			if !reflect.DeepEqual(in.ExpressionAttributeValues, tt.wantValues) {
+				t.Errorf("ExpressionAttributeValues = %#v, want %#v", in.ExpressionAttributeValues, tt.wantValues)
+			}
+		})
+	}
+}
