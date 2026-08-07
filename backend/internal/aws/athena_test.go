@@ -359,6 +359,67 @@ func TestListAthenaQueryHistoryEmpty(t *testing.T) {
 	}
 }
 
+// TestListAthenaQueryHistorySendsWorkGroup は ListQueryExecutions の全呼び出しで
+// WorkGroup が引数どおりに設定されることを検証する。workgroup が空のときは
+// ワークグループを跨いだ全履歴を対象とするため、WorkGroup が nil のままであることも確認する。
+func TestListAthenaQueryHistorySendsWorkGroup(t *testing.T) {
+	tests := []struct {
+		name      string
+		workgroup string
+		want      *string
+	}{
+		{name: "workgroup given", workgroup: "analytics", want: aws.String("analytics")},
+		{name: "workgroup empty", workgroup: "", want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// ページ送りをまたいでも WorkGroup が維持されることを見るため 2 ページ返す。
+			var inputs []athena.ListQueryExecutionsInput
+			client := &fakeAthena{
+				listQueryExecutions: func(p *athena.ListQueryExecutionsInput) (*athena.ListQueryExecutionsOutput, error) {
+					// listAthenaQueryHistory は同じ Input を使い回して NextToken だけを
+					// 書き換えるため、呼び出し時点の値をコピーして記録する。
+					inputs = append(inputs, *p)
+					if len(inputs) == 1 {
+						return &athena.ListQueryExecutionsOutput{
+							QueryExecutionIds: []string{"exec-1"},
+							NextToken:         aws.String("page-2"),
+						}, nil
+					}
+					return &athena.ListQueryExecutionsOutput{QueryExecutionIds: []string{"exec-2"}}, nil
+				},
+				batchGetQueryExecution: func(p *athena.BatchGetQueryExecutionInput) (*athena.BatchGetQueryExecutionOutput, error) {
+					execs := make([]athenatypes.QueryExecution, 0, len(p.QueryExecutionIds))
+					for _, id := range p.QueryExecutionIds {
+						execs = append(execs, athenatypes.QueryExecution{QueryExecutionId: aws.String(id)})
+					}
+					return &athena.BatchGetQueryExecutionOutput{QueryExecutions: execs}, nil
+				},
+			}
+
+			if _, err := listAthenaQueryHistory(context.Background(), client, tt.workgroup, 2); err != nil {
+				t.Fatalf("listAthenaQueryHistory: %v", err)
+			}
+
+			if len(inputs) != 2 {
+				t.Fatalf("ListQueryExecutions called %d times, want 2", len(inputs))
+			}
+			for i, in := range inputs {
+				if diff := cmp.Diff(tt.want, in.WorkGroup); diff != "" {
+					t.Errorf("call %d: WorkGroup mismatch (-want +got):\n%s", i+1, diff)
+				}
+			}
+			// 2 回目が実際のページ送り (1 ページ目の NextToken の引き継ぎ) であること。
+			if inputs[0].NextToken != nil {
+				t.Errorf("call 1: NextToken = %q, want nil", aws.ToString(inputs[0].NextToken))
+			}
+			if got := aws.ToString(inputs[1].NextToken); got != "page-2" {
+				t.Errorf("call 2: NextToken = %q, want %q", got, "page-2")
+			}
+		})
+	}
+}
+
 func TestListAthenaTablesPaginatesAndDefaultsCatalog(t *testing.T) {
 	var catalogs []string
 	client := &fakeAthena{
