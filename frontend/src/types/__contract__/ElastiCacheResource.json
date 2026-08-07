@@ -1,0 +1,17 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "engine": "s4",
+  "engine_version": "s5",
+  "node_type": "s6",
+  "num_nodes": 7,
+  "endpoint": "s8",
+  "port": 9,
+  "parameter_group": "s10",
+  "replication_group_id": "s11",
+  "node_availability_zones": [
+    "s12"
+  ],
+  "cost_monthly": 13.5
+}

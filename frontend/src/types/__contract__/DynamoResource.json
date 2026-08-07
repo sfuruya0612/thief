@@ -1,0 +1,14 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "mode": "s4",
+  "item_count": 5,
+  "size_bytes": 6,
+  "gsi_count": 7,
+  "tags": {
+    "s8": "s9"
+  },
+  "tags_fetch_failed": true,
+  "cost_monthly": 10.5
+}

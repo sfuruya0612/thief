@@ -1,0 +1,8 @@
+{
+  "repository_name": "s1",
+  "image_tag": "s2",
+  "image_digest": "s3",
+  "pushed_at": "s4",
+  "last_pulled_at": "s5",
+  "image_size_bytes": 6
+}

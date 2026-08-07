@@ -1,0 +1,14 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "runtime": "s4",
+  "memory_mb": 5,
+  "timeout_sec": 6,
+  "handler": "s7",
+  "role": "s8",
+  "tags": {
+    "s9": "s10"
+  },
+  "cost_monthly": 11.5
+}

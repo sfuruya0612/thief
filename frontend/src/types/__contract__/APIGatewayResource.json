@@ -1,0 +1,12 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "type": "s4",
+  "stage": "s5",
+  "endpoint": "s6",
+  "tags": {
+    "s7": "s8"
+  },
+  "cost_monthly": 9.5
+}

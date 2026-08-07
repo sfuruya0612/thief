@@ -1,0 +1,13 @@
+{
+  "events": [
+    {
+      "timestamp": "s1",
+      "ingestion_time": "s2",
+      "message": "s3",
+      "log_group": "s4",
+      "log_stream": "s5",
+      "event_id": "s6"
+    }
+  ],
+  "next_page_token": "s7"
+}

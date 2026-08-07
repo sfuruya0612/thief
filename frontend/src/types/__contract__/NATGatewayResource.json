@@ -1,0 +1,13 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "vpc_id": "s4",
+  "subnet_id": "s5",
+  "elastic_ip": "s6",
+  "tags": {
+    "s7": "s8"
+  },
+  "cost_monthly": 9.5,
+  "launch_time": "2026-01-02T03:04:05Z"
+}

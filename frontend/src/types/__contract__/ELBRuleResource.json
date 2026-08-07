@@ -1,0 +1,10 @@
+{
+  "arn": "s1",
+  "priority": "s2",
+  "is_default": true,
+  "conditions": [
+    "s3"
+  ],
+  "action_type": "s4",
+  "target_group_arn": "s5"
+}

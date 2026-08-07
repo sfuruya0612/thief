@@ -1,0 +1,7 @@
+{
+  "timestamp": "s1",
+  "logical_resource_id": "s2",
+  "resource_type": "s3",
+  "resource_status": "s4",
+  "resource_status_reason": "s5"
+}

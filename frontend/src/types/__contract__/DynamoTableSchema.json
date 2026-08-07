@@ -1,0 +1,27 @@
+{
+  "table_name": "s1",
+  "table": {
+    "name": "s2",
+    "partition_key": {
+      "name": "s3",
+      "type": "s4"
+    },
+    "sort_key": {
+      "name": "s5",
+      "type": "s6"
+    }
+  },
+  "gsis": [
+    {
+      "name": "s7",
+      "partition_key": {
+        "name": "s8",
+        "type": "s9"
+      },
+      "sort_key": {
+        "name": "s10",
+        "type": "s11"
+      }
+    }
+  ]
+}

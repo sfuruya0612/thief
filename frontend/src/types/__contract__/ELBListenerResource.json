@@ -1,0 +1,8 @@
+{
+  "arn": "s1",
+  "load_balancer_arn": "s2",
+  "protocol": "s3",
+  "port": 4,
+  "default_action_type": "s5",
+  "default_target_group_arn": "s6"
+}

@@ -1,0 +1,26 @@
+{
+  "stack_name": "s1",
+  "status": "s2",
+  "drift_status": "s3",
+  "created_time": "s4",
+  "updated_time": "s5",
+  "description": "s6",
+  "parameters": [
+    {
+      "key": "s7",
+      "value": "s8",
+      "resolved_value": "s9"
+    }
+  ],
+  "outputs": [
+    {
+      "key": "s10",
+      "value": "s11",
+      "export_name": "s12",
+      "description": "s13"
+    }
+  ],
+  "tags": {
+    "s14": "s15"
+  }
+}

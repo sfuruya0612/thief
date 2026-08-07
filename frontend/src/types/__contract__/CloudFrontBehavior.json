@@ -1,0 +1,10 @@
+{
+  "path_pattern": "s1",
+  "target_origin_id": "s2",
+  "viewer_protocol_policy": "s3",
+  "allowed_methods": [
+    "s4"
+  ],
+  "compress": true,
+  "is_default": true
+}

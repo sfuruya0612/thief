@@ -1,0 +1,14 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "type": "s4",
+  "available_messages": 5,
+  "in_flight": 6,
+  "retention_days": 7,
+  "tags": {
+    "s8": "s9"
+  },
+  "tags_fetch_failed": true,
+  "cost_monthly": 10.5
+}

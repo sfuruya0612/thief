@@ -1,0 +1,9 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "uri": "s4",
+  "created_at": "s5",
+  "image_tag_mutability": "s6",
+  "scan_on_push": true
+}

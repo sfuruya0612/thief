@@ -1,0 +1,8 @@
+{
+  "target_id": "s1",
+  "port": 2,
+  "availability_zone": "s3",
+  "state": "s4",
+  "reason": "s5",
+  "description": "s6"
+}

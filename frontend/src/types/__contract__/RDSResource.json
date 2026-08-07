@@ -1,0 +1,21 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "engine": "s4",
+  "engine_version": "s5",
+  "class": "s6",
+  "multi_az": true,
+  "endpoint": "s7",
+  "port": 8,
+  "vpc_id": "s9",
+  "parameter_groups": [
+    "s10"
+  ],
+  "cluster_id": "s11",
+  "tags": {
+    "s12": "s13"
+  },
+  "cost_monthly": 14.5,
+  "launch_time": "2026-01-02T03:04:05Z"
+}

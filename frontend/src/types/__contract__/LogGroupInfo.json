@@ -1,0 +1,7 @@
+{
+  "name": "s1",
+  "arn": "s2",
+  "stored_bytes": 3,
+  "retention_days": 4,
+  "creation_time": "s5"
+}
