@@ -107,6 +107,13 @@ func (i EC2InstanceInfo) ToRow() []string {
 	}
 }
 
+// ec2DescribeInstancesClient は DescribeInstances の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *ec2.Client がこれを満たす。
+// ページネータが要求する ec2.DescribeInstancesAPIClient と同じメソッドセットである。
+type ec2DescribeInstancesClient interface {
+	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+}
+
 // ListEC2Instances はレガシー CLI 互換のフィールドで EC2 インスタンス一覧を返す。
 // ListEC2Resources と異なり terminated を除外せず、running / instance-id フィルタに対応する。
 func ListEC2Instances(ctx context.Context, profile, region string, opts EC2ListOptions) ([]EC2InstanceInfo, error) {
@@ -114,7 +121,13 @@ func ListEC2Instances(ctx context.Context, profile, region string, opts EC2ListO
 	if err != nil {
 		return nil, err
 	}
+	return listEC2Instances(ctx, client, opts)
+}
 
+// listEC2Instances は生成済みクライアントでインスタンス一覧を取得するコア。
+// DescribeInstancesInput に載せる Filters を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+func listEC2Instances(ctx context.Context, client ec2DescribeInstancesClient, opts EC2ListOptions) ([]EC2InstanceInfo, error) {
 	input := &ec2.DescribeInstancesInput{}
 	if opts.Running {
 		input.Filters = append(input.Filters, ec2types.Filter{
