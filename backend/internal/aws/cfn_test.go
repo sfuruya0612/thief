@@ -1,13 +1,162 @@
 package aws
 
 import (
+	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+// mockCfnListStacksClient は cfnListStacksClient の手書きモック。受け取った Input を
+// 呼び出し順に記録し、pages に用意したレスポンスを 1 呼び出しにつき 1 ページ返す。
+type mockCfnListStacksClient struct {
+	pages  []*cloudformation.ListStacksOutput
+	inputs []*cloudformation.ListStacksInput
+}
+
+func (m *mockCfnListStacksClient) ListStacks(_ context.Context, params *cloudformation.ListStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.ListStacksOutput, error) {
+	m.inputs = append(m.inputs, params)
+	idx := len(m.inputs) - 1
+	if idx >= len(m.pages) {
+		return nil, fmt.Errorf("unexpected ListStacks call %d: only %d pages prepared", idx+1, len(m.pages))
+	}
+	return m.pages[idx], nil
+}
+
+// cfnListStacksPages は NextToken で連結された 2 ページ構成のレスポンスを返す。
+// ページネータが 2 ページ目の呼び出しでも元のパラメータを維持することを検証するために使う。
+func cfnListStacksPages() []*cloudformation.ListStacksOutput {
+	return []*cloudformation.ListStacksOutput{
+		{
+			StackSummaries: []cfntypes.StackSummary{{StackName: aws.String("stack-1")}},
+			NextToken:      aws.String("page-2"),
+		},
+		{
+			StackSummaries: []cfntypes.StackSummary{{StackName: aws.String("stack-2")}},
+		},
+	}
+}
+
+// assertCfnStackStatusFilterOnAllCalls は全 2 回の呼び出しの Input で StackStatusFilter が
+// want と同じ集合であることと、2 回目の呼び出しに 1 ページ目の NextToken が引き継がれている
+// (実際にページ送りが起きた) ことを検証する。
+func assertCfnStackStatusFilterOnAllCalls(t *testing.T, inputs []*cloudformation.ListStacksInput, want []string) {
+	t.Helper()
+	if len(inputs) != 2 {
+		t.Fatalf("ListStacks called %d times, want 2", len(inputs))
+	}
+	for i, in := range inputs {
+		got := make([]string, 0, len(in.StackStatusFilter))
+		for _, s := range in.StackStatusFilter {
+			got = append(got, string(s))
+		}
+		// フィルタは集合として意味を持つため、列挙の順序には依存せずに比較する。
+		sortStrings := cmpopts.SortSlices(func(a, b string) bool { return a < b })
+		if diff := cmp.Diff(want, got, sortStrings); diff != "" {
+			t.Errorf("call %d: StackStatusFilter mismatch (-want +got):\n%s", i+1, diff)
+		}
+	}
+	if inputs[0].NextToken != nil {
+		t.Errorf("call 1: NextToken = %q, want nil", aws.ToString(inputs[0].NextToken))
+	}
+	if got := aws.ToString(inputs[1].NextToken); got != "page-2" {
+		t.Errorf("call 2: NextToken = %q, want %q", got, "page-2")
+	}
+}
+
+// TestListStacksSendsStackStatusFilter は 2 つの一覧経路が、それぞれのステータス集合で
+// ListStacks を呼ぶことを検証する。期待値は SDK の定数ではなく AWS API のステータス
+// 文字列で書き、実装の列挙をそのまま写さずに集合を固定する。
+// listCFNStacks は Web API 用の 18 種、listCfnStackSummaries は DELETE_COMPLETE のみを
+// 除いたレガシー CLI 互換の 22 種である。前者が削除されていない 4 状態を落としている点は
+// issues/0122 で扱うため、ここでは現状の集合をそのまま固定する。
+func TestListStacksSendsStackStatusFilter(t *testing.T) {
+	tests := []struct {
+		name string
+		list func(context.Context, cfnListStacksClient) (int, error)
+		want []string
+	}{
+		{
+			name: "listCFNStacks sends the 18 status web api set",
+			list: func(ctx context.Context, c cfnListStacksClient) (int, error) {
+				resources, err := listCFNStacks(ctx, c)
+				return len(resources), err
+			},
+			want: []string{
+				"CREATE_COMPLETE",
+				"UPDATE_COMPLETE",
+				"ROLLBACK_COMPLETE",
+				"UPDATE_ROLLBACK_COMPLETE",
+				"CREATE_IN_PROGRESS",
+				"UPDATE_IN_PROGRESS",
+				"DELETE_IN_PROGRESS",
+				"ROLLBACK_IN_PROGRESS",
+				"CREATE_FAILED",
+				"UPDATE_FAILED",
+				"ROLLBACK_FAILED",
+				"UPDATE_ROLLBACK_FAILED",
+				"IMPORT_COMPLETE",
+				"IMPORT_IN_PROGRESS",
+				"IMPORT_ROLLBACK_COMPLETE",
+				"IMPORT_ROLLBACK_FAILED",
+				"IMPORT_ROLLBACK_IN_PROGRESS",
+				"REVIEW_IN_PROGRESS",
+			},
+		},
+		{
+			name: "listCfnStackSummaries sends the 22 status legacy cli set",
+			list: func(ctx context.Context, c cfnListStacksClient) (int, error) {
+				summaries, err := listCfnStackSummaries(ctx, c)
+				return len(summaries), err
+			},
+			want: []string{
+				"CREATE_IN_PROGRESS",
+				"CREATE_FAILED",
+				"CREATE_COMPLETE",
+				"ROLLBACK_IN_PROGRESS",
+				"ROLLBACK_FAILED",
+				"ROLLBACK_COMPLETE",
+				"DELETE_IN_PROGRESS",
+				"DELETE_FAILED",
+				"UPDATE_IN_PROGRESS",
+				"UPDATE_COMPLETE_CLEANUP_IN_PROGRESS",
+				"UPDATE_COMPLETE",
+				"UPDATE_FAILED",
+				"UPDATE_ROLLBACK_IN_PROGRESS",
+				"UPDATE_ROLLBACK_FAILED",
+				"UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+				"UPDATE_ROLLBACK_COMPLETE",
+				"REVIEW_IN_PROGRESS",
+				"IMPORT_IN_PROGRESS",
+				"IMPORT_COMPLETE",
+				"IMPORT_ROLLBACK_IN_PROGRESS",
+				"IMPORT_ROLLBACK_FAILED",
+				"IMPORT_ROLLBACK_COMPLETE",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockCfnListStacksClient{pages: cfnListStacksPages()}
+			got, err := tt.list(context.Background(), client)
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			// 2 ページ分を読み切っていること (ページ送りが実際に起きたこと) を先に固定する。
+			if got != 2 {
+				t.Fatalf("got %d items, want 2", got)
+			}
+			assertCfnStackStatusFilterOnAllCalls(t, client.inputs, tt.want)
+		})
+	}
+}
 
 func TestCfnEventFromSDK(t *testing.T) {
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
