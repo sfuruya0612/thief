@@ -190,7 +190,17 @@ func ListSSMOnlineInstanceIDs(ctx context.Context, profile, region string) ([]st
 	if err != nil {
 		return nil, err
 	}
+	return listSSMOnlineInstanceIDs(ctx, client)
+}
 
+// listSSMOnlineInstanceIDs は生成済みクライアントでオンラインの EC2 インスタンス ID を取得するコア。
+// DescribeInstanceInformationInput に載せる Filters を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+// 使う API は DescribeInstanceInformation だけなので、引数の型はページネータ
+// (ssm.NewDescribeInstanceInformationPaginator) が要求する SDK 公開の
+// ssm.DescribeInstanceInformationAPIClient をそのまま使い、同じメソッドセットを重複して
+// 定義しない。テストではモックを差し込み、実行時は *ssm.Client がこれを満たす。
+func listSSMOnlineInstanceIDs(ctx context.Context, client ssm.DescribeInstanceInformationAPIClient) ([]string, error) {
 	input := &ssm.DescribeInstanceInformationInput{
 		Filters: []ssmtypes.InstanceInformationStringFilter{
 			{Key: aws.String("PingStatus"), Values: []string{"Online"}},
