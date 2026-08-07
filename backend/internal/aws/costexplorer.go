@@ -34,12 +34,9 @@ const (
 )
 
 // getCostDetails は Cost Explorer GetCostAndUsage を呼び、明細一覧を返す。
-func getCostDetails(ctx context.Context, profile, region, startDate, endDate string, granularity cetypes.Granularity, groupBy []cetypes.GroupDefinition, metric CostMetric) ([]CostDetail, error) {
-	client, err := newCostExplorerClient(ctx, profile, region)
-	if err != nil {
-		return nil, err
-	}
-
+// 集計軸は呼び出し元が groupBy で与える。groupBy が空のときは GroupBy を設定せず、
+// API は期間合計だけを返す。テストでは costExplorerAPI の手書きフェイクを差し込む。
+func getCostDetails(ctx context.Context, client costExplorerAPI, startDate, endDate string, granularity cetypes.Granularity, groupBy []cetypes.GroupDefinition, metric CostMetric) ([]CostDetail, error) {
 	metricStr := string(metric)
 	if metricStr == "" {
 		metricStr = string(UnblendedCost)
@@ -122,20 +119,57 @@ func costGroupByDefinition(key string) []cetypes.GroupDefinition {
 
 // GetCostByService はサービス単位で集計したコスト明細を返す。
 func GetCostByService(ctx context.Context, profile, region, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
-	return getCostDetails(ctx, profile, region, startDate, endDate, granularity, costGroupByDefinition("SERVICE"), metric)
+	client, err := newCostExplorerClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getCostByService(ctx, client, startDate, endDate, granularity, metric)
+}
+
+// getCostByService は SERVICE 次元を集計軸として明細を取得する。
+// どの次元を送るかを単体テストで固定できるよう、クライアントの生成と分離してある。
+func getCostByService(ctx context.Context, client costExplorerAPI, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
+	return getCostDetails(ctx, client, startDate, endDate, granularity, costGroupByDefinition("SERVICE"), metric)
 }
 
 // GetCostByAccount はリンクアカウント単位で集計したコスト明細を返す。
 func GetCostByAccount(ctx context.Context, profile, region, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
-	return getCostDetails(ctx, profile, region, startDate, endDate, granularity, costGroupByDefinition("LINKED_ACCOUNT"), metric)
+	client, err := newCostExplorerClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getCostByAccount(ctx, client, startDate, endDate, granularity, metric)
+}
+
+// getCostByAccount は LINKED_ACCOUNT 次元を集計軸として明細を取得する。
+func getCostByAccount(ctx context.Context, client costExplorerAPI, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
+	return getCostDetails(ctx, client, startDate, endDate, granularity, costGroupByDefinition("LINKED_ACCOUNT"), metric)
 }
 
 // GetCostByUsageType は使用タイプ単位で集計したコスト明細を返す。
 func GetCostByUsageType(ctx context.Context, profile, region, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
-	return getCostDetails(ctx, profile, region, startDate, endDate, granularity, costGroupByDefinition("USAGE_TYPE"), metric)
+	client, err := newCostExplorerClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getCostByUsageType(ctx, client, startDate, endDate, granularity, metric)
+}
+
+// getCostByUsageType は USAGE_TYPE 次元を集計軸として明細を取得する。
+func getCostByUsageType(ctx context.Context, client costExplorerAPI, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
+	return getCostDetails(ctx, client, startDate, endDate, granularity, costGroupByDefinition("USAGE_TYPE"), metric)
 }
 
 // GetCostForPeriod は集計軸なしの期間合計コスト明細を返す。
 func GetCostForPeriod(ctx context.Context, profile, region, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
-	return getCostDetails(ctx, profile, region, startDate, endDate, granularity, nil, metric)
+	client, err := newCostExplorerClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getCostForPeriod(ctx, client, startDate, endDate, granularity, metric)
+}
+
+// getCostForPeriod は集計軸を指定せずに期間合計の明細を取得する。
+func getCostForPeriod(ctx context.Context, client costExplorerAPI, startDate, endDate string, granularity cetypes.Granularity, metric CostMetric) ([]CostDetail, error) {
+	return getCostDetails(ctx, client, startDate, endDate, granularity, nil, metric)
 }
