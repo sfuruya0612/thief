@@ -187,6 +187,12 @@ func ListECRRepoInfos(ctx context.Context, profile, region string) ([]ECRRepoInf
 	return repos, nil
 }
 
+// ecrDescribeImagesClient は DescribeImages の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *ecr.Client がこれを満たす。
+type ecrDescribeImagesClient interface {
+	DescribeImages(ctx context.Context, params *ecr.DescribeImagesInput, optFns ...func(*ecr.Options)) (*ecr.DescribeImagesOutput, error)
+}
+
 // ListECRImageInfos は指定リポジトリのイメージ一覧を PushedAt 降順で返す。
 // all が false のときはタグ付きイメージの先頭ページのみ、true のときは全ページを取得する。
 func ListECRImageInfos(ctx context.Context, profile, region, repoName string, all bool) ([]ECRImageInfo, error) {
@@ -194,7 +200,13 @@ func ListECRImageInfos(ctx context.Context, profile, region, repoName string, al
 	if err != nil {
 		return nil, err
 	}
+	return listECRImageInfos(ctx, client, repoName, all)
+}
 
+// listECRImageInfos は生成済みクライアントでイメージ一覧を取得するコア。
+// DescribeImagesInput に載せる MaxResults と Filter を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+func listECRImageInfos(ctx context.Context, client ecrDescribeImagesClient, repoName string, all bool) ([]ECRImageInfo, error) {
 	var images []ECRImageInfo
 	var nextToken *string
 	for {
