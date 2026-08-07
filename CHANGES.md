@@ -283,6 +283,8 @@
 
 ### misc
 
+- govulncheck が検出した github.com/klauspost/compress の脆弱性 (GO-2026-5841、compress/s2 の脆弱性) を解消するため github.com/klauspost/compress を v1.16.7 から v1.19.2 に更新する (indirect 依存。該当シンボルにはコードから到達しないため報告の解消が目的。同時に報告される GO-2026-5932 は Fixed in N/A のためスコープ外)
+  - @sfuruya0612
 - internal/aws/cloudwatchlogs.go の StartLiveTail からイベントストリームの読み取りループを、イベントチャネルとエラー取得関数を引数に取る内部関数 runLiveTailStream に抽出し、SessionUpdate の変換送信 / SessionUpdate 以外の読み飛ばし / 送信コールバックのエラーでの中断 / ストリームエラーの伝播 / 正常終了の 5 ケースを検証するテーブル駆動テストを追加する (挙動は変えない)
   - @sfuruya0612
 - frontend/src/components/tables/columns.tsx の全 33 の列定義エクスポートについて、列順序 (key と header の並び) と列幅の合計を検証するテストを整備する (挙動は変えない)
