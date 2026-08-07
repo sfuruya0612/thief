@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/sqs.go の ListSQSResources について、ListQueues と GetQueueAttributes と ListQueueTags を持つ狭いインターフェース sqsQueueListClient を受け取る内部関数に呼び出しを抽出し、GetQueueAttributesInput の AttributeNames に全属性の取得指定が載ること、複数ページにまたがる全キューについて属性取得とタグ取得が行われることを検証するテストを追加する (挙動は変えない)
+  - @sfuruya0612
 - internal/aws/pricing.go の fetchSavingsPlans について、DescribeSavingsPlansOfferingRatesInput の SavingsPlanTypes と ServiceCodes に spec の値が載ること、Filters にリージョンの絞り込みが載ることを、複数ページの全呼び出しについて検証するテストを追加する (挙動は変えない)
   - @sfuruya0612
 - internal/aws の ECS 一覧取得 3 箇所 (ecs.go の ListECSResources、ecs_exec.go の ListECSTasks、ecs_cli.go の ListECSTaskInfos) について、DescribeClusters / DescribeTasks を加えた狭いインターフェース ecsClusterListClient / ecsTaskListClient を受け取る内部関数に呼び出しを抽出し (共通コアの listECSClusterArnsWith も引数を ecs.ListClustersAPIClient に変更)、DescribeClustersInput の Include にタグ取得指定が載ること、ListTasksInput の ServiceName と DesiredStatus が引数の指定どおりに設定される (未指定時はそれぞれ nil と空文字のまま) こと、DescribeTasksInput に Cluster と全ページ分のタスク ARN が載ることを検証するテストを追加する (挙動は変えない)

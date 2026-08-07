@@ -38,6 +38,21 @@ func (r SQSResource) ServiceName() string   { return "sqs" }
 // (s3BucketConcurrency と同型)。
 const sqsQueueConcurrency = 30
 
+// sqsQueueTagsClient は SQS キューのタグ取得に必要な API 呼び出しを抽象化する。
+type sqsQueueTagsClient interface {
+	ListQueueTags(ctx context.Context, params *sqs.ListQueueTagsInput, optFns ...func(*sqs.Options)) (*sqs.ListQueueTagsOutput, error)
+}
+
+// sqsQueueListClient はキュー一覧の取得に必要な API を抽象化する。
+// URL の列挙とキューごとの属性・タグの取得という 2 段構えのため、ページネータが要求する
+// sqs.ListQueuesAPIClient に GetQueueAttributes と、タグ取得の sqsQueueTagsClient を加える。
+// テストではモックを差し込み、実行時は *sqs.Client がこれを満たす。
+type sqsQueueListClient interface {
+	sqs.ListQueuesAPIClient
+	sqsQueueTagsClient
+	GetQueueAttributes(ctx context.Context, params *sqs.GetQueueAttributesInput, optFns ...func(*sqs.Options)) (*sqs.GetQueueAttributesOutput, error)
+}
+
 // ListSQSResources returns all SQS queues for the given profile/region.
 func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResource, error) {
 	// 各フェーズの所要時間を計測してログに残す (issue 0081: クライアント生成の区間は
@@ -52,6 +67,22 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 	slog.Info("sqs client created",
 		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
+	resources, err := listSQSResources(ctx, client, profile, region)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("sqs list all done",
+		"profile", profile, "region", region,
+		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
+	return resources, nil
+}
+
+// listSQSResources は生成済みクライアントでキュー一覧と各キューの属性・タグを取得するコア。
+// GetQueueAttributesInput に載せる AttributeNames を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+// profile と region はフェーズごとの所要時間ログの属性にのみ使う。
+func listSQSResources(ctx context.Context, client sqsQueueListClient, profile, region string) ([]SQSResource, error) {
 	listStart := time.Now()
 	var urls []string
 	paginator := sqs.NewListQueuesPaginator(client, &sqs.ListQueuesInput{})
@@ -99,15 +130,7 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 		"duration_ms", time.Since(detailStart).Milliseconds(),
 		"concurrency", sqsQueueConcurrency, "count", len(resources))
 
-	slog.Info("sqs list all done",
-		"profile", profile, "region", region,
-		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
-}
-
-// sqsQueueTagsClient は SQS キューのタグ取得に必要な API 呼び出しを抽象化する。
-type sqsQueueTagsClient interface {
-	ListQueueTags(ctx context.Context, params *sqs.ListQueueTagsInput, optFns ...func(*sqs.Options)) (*sqs.ListQueueTagsOutput, error)
 }
 
 // fetchSQSQueueTags はキューのタグを取得する。取得に失敗した場合は空 map と
