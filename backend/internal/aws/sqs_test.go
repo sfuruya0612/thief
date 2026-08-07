@@ -4,11 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 // mockSQSQueueTagsClient は sqsQueueTagsClient の手書きモック。
@@ -18,6 +25,138 @@ type mockSQSQueueTagsClient struct {
 
 func (m *mockSQSQueueTagsClient) ListQueueTags(ctx context.Context, params *sqs.ListQueueTagsInput, optFns ...func(*sqs.Options)) (*sqs.ListQueueTagsOutput, error) {
 	return m.listQueueTags(ctx, params, optFns...)
+}
+
+// mockSQSQueueListClient は listSQSResources が要求する sqsQueueListClient を
+// テスト用に実装する手書きモック。受け取った Input を記録し、用意したレスポンスを返す。
+// キューごとの GetQueueAttributes と ListQueueTags は errgroup で並列に呼ばれるため、
+// 記録は mutex で保護する。呼び出し順は不定なので、検証側で QueueUrl 順に整列してから比較する。
+// ListQueues は SDK のページネータ経由で逐次呼ばれ、ページネータは呼び出しごとに Input を
+// 値でコピーして NextToken だけ差し替える。GetQueueAttributesInput と ListQueueTagsInput は
+// キューごとに新しく確保される。いずれも記録した後に内容が書き換わることはなく、
+// ポインタのまま記録してよい。
+type mockSQSQueueListClient struct {
+	listPages []*sqs.ListQueuesOutput
+	// attrs はキュー URL ごとに GetQueueAttributes が返す属性。
+	attrs map[string]map[string]string
+
+	mu         sync.Mutex
+	listInputs []*sqs.ListQueuesInput
+	attrInputs []*sqs.GetQueueAttributesInput
+	tagInputs  []*sqs.ListQueueTagsInput
+}
+
+func (m *mockSQSQueueListClient) ListQueues(_ context.Context, params *sqs.ListQueuesInput, _ ...func(*sqs.Options)) (*sqs.ListQueuesOutput, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.listInputs = append(m.listInputs, params)
+	idx := len(m.listInputs) - 1
+	if idx >= len(m.listPages) {
+		return nil, fmt.Errorf("unexpected ListQueues call %d: only %d pages prepared", idx+1, len(m.listPages))
+	}
+	return m.listPages[idx], nil
+}
+
+func (m *mockSQSQueueListClient) GetQueueAttributes(_ context.Context, params *sqs.GetQueueAttributesInput, _ ...func(*sqs.Options)) (*sqs.GetQueueAttributesOutput, error) {
+	m.mu.Lock()
+	m.attrInputs = append(m.attrInputs, params)
+	m.mu.Unlock()
+	return &sqs.GetQueueAttributesOutput{Attributes: m.attrs[ptrStr(params.QueueUrl)]}, nil
+}
+
+func (m *mockSQSQueueListClient) ListQueueTags(_ context.Context, params *sqs.ListQueueTagsInput, _ ...func(*sqs.Options)) (*sqs.ListQueueTagsOutput, error) {
+	m.mu.Lock()
+	m.tagInputs = append(m.tagInputs, params)
+	m.mu.Unlock()
+	return &sqs.ListQueueTagsOutput{}, nil
+}
+
+// TestListSQSResourcesSendsAttributeNamesAll は GetQueueAttributes へ AttributeNames に
+// QueueAttributeNameAll を載せて送ることを検証する。この指定が無いと SQS は属性を 1 つも返さず、
+// sqsFromAttributes が参照する QueueArn / FifoQueue / MessageRetentionPeriod / メッセージ数が
+// 呼び出しを成功させたまま静かに既定値 (ID は URL フォールバック、Type は常に Standard、
+// カウント類は 0) に落ちる。
+// 期待値の AttributeNames は実装の定数式ではなく AWS API の値で直接書き下している。
+// 併せて ListQueues と ListQueueTags の Input も検証する。前者はページ送りが行われること、
+// 後者は一覧経路がキューごとにタグ取得を呼ぶこと (省いてもキュー情報は返るため他の
+// アサーションでは検出できない) を固定する。
+func TestListSQSResourcesSendsAttributeNamesAll(t *testing.T) {
+	const (
+		urlA = "https://sqs.ap-northeast-1.amazonaws.com/123456789012/alpha"
+		urlB = "https://sqs.ap-northeast-1.amazonaws.com/123456789012/bravo"
+		arnA = "arn:aws:sqs:ap-northeast-1:123456789012:alpha"
+		arnB = "arn:aws:sqs:ap-northeast-1:123456789012:bravo"
+	)
+
+	client := &mockSQSQueueListClient{
+		// URL の列挙は 2 ページに分ける。両ページのキューについて属性取得が行われることを
+		// 確かめる。
+		listPages: []*sqs.ListQueuesOutput{
+			{QueueUrls: []string{urlA}, NextToken: aws.String("page-2")},
+			{QueueUrls: []string{urlB}},
+		},
+		attrs: map[string]map[string]string{
+			urlA: {"QueueArn": arnA},
+			urlB: {"QueueArn": arnB},
+		},
+	}
+
+	got, err := listSQSResources(context.Background(), client, "test-profile", "ap-northeast-1")
+	if err != nil {
+		t.Fatalf("listSQSResources() error = %v", err)
+	}
+
+	// SQS の各 Input は unexported フィールド (noSmithyDocumentSerde) を持つため無視する。
+	opts := cmpopts.IgnoreUnexported(
+		sqs.ListQueuesInput{},
+		sqs.GetQueueAttributesInput{},
+		sqs.ListQueueTagsInput{},
+	)
+
+	// ページ送りが 2 回目の呼び出しへ NextToken として引き継がれることを固定する。
+	// ページネータは Limit 未指定のため MaxResults を設定しない。
+	wantListInputs := []*sqs.ListQueuesInput{
+		{},
+		{NextToken: aws.String("page-2")},
+	}
+	if diff := cmp.Diff(wantListInputs, client.listInputs, opts); diff != "" {
+		t.Errorf("ListQueues inputs mismatch (-want +got):\n%s", diff)
+	}
+
+	// 呼び出し順は errgroup により不定のため QueueUrl 順に整列する。g.Wait() の後なので
+	// 全 goroutine の記録が完了しており、ここでのロックは不要。
+	slices.SortFunc(client.attrInputs, func(a, b *sqs.GetQueueAttributesInput) int {
+		return strings.Compare(ptrStr(a.QueueUrl), ptrStr(b.QueueUrl))
+	})
+	// Input 全体を比較し、AttributeNames に加えて QueueUrl の対応付けも固定する。
+	// スライス全体を比較することで呼び出し回数も同時に固定される。
+	wantAttrInputs := []*sqs.GetQueueAttributesInput{
+		{QueueUrl: aws.String(urlA), AttributeNames: []sqstypes.QueueAttributeName{"All"}},
+		{QueueUrl: aws.String(urlB), AttributeNames: []sqstypes.QueueAttributeName{"All"}},
+	}
+	if diff := cmp.Diff(wantAttrInputs, client.attrInputs, opts); diff != "" {
+		t.Errorf("GetQueueAttributes inputs mismatch (-want +got):\n%s", diff)
+	}
+
+	slices.SortFunc(client.tagInputs, func(a, b *sqs.ListQueueTagsInput) int {
+		return strings.Compare(ptrStr(a.QueueUrl), ptrStr(b.QueueUrl))
+	})
+	wantTagInputs := []*sqs.ListQueueTagsInput{
+		{QueueUrl: aws.String(urlA)},
+		{QueueUrl: aws.String(urlB)},
+	}
+	if diff := cmp.Diff(wantTagInputs, client.tagInputs, opts); diff != "" {
+		t.Errorf("ListQueueTags inputs mismatch (-want +got):\n%s", diff)
+	}
+
+	// 両ページの URL が集約され、取得した属性が結果へ反映されることも確認する。
+	gotIDs := make([]string, 0, len(got))
+	for _, r := range got {
+		gotIDs = append(gotIDs, r.ID)
+	}
+	if diff := cmp.Diff([]string{arnA, arnB}, gotIDs); diff != "" {
+		t.Errorf("queue IDs mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestSQSFromAttributes(t *testing.T) {
