@@ -26,13 +26,37 @@ func (r ECSResource) ResourceName() string  { return r.Name }
 func (r ECSResource) ResourceState() string { return NormalizeState(r.State) }
 func (r ECSResource) ServiceName() string   { return "ecs" }
 
+// ecsClusterListClient はクラスタ一覧の取得に必要な API を抽象化する。
+// ARN の列挙と詳細取得の 2 段構えのため、ページネータが要求する
+// ecs.ListClustersAPIClient に DescribeClusters を加える。
+// テストではモックを差し込み、実行時は *ecs.Client がこれを満たす。
+type ecsClusterListClient interface {
+	ecs.ListClustersAPIClient
+	DescribeClusters(ctx context.Context, params *ecs.DescribeClustersInput, optFns ...func(*ecs.Options)) (*ecs.DescribeClustersOutput, error)
+}
+
+// ecsTaskListClient はタスク一覧の取得に必要な API を抽象化する。
+// ARN の列挙と詳細取得の 2 段構えのため、ページネータが要求する
+// ecs.ListTasksAPIClient に DescribeTasks を加える。
+// ListECSTasks (ecs_exec.go) と ListECSTaskInfos (ecs_cli.go) が同じ形で使う。
+type ecsTaskListClient interface {
+	ecs.ListTasksAPIClient
+	DescribeTasks(ctx context.Context, params *ecs.DescribeTasksInput, optFns ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+}
+
 // ListECSResources returns all ECS clusters for the given profile/region.
 func ListECSResources(ctx context.Context, profile, region string) ([]ECSResource, error) {
 	client, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
 	}
+	return listECSResources(ctx, client)
+}
 
+// listECSResources は生成済みクライアントでクラスタ一覧を取得するコア。
+// DescribeClustersInput に載せる Include を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+func listECSResources(ctx context.Context, client ecsClusterListClient) ([]ECSResource, error) {
 	arns, err := listECSClusterArnsWith(ctx, client)
 	if err != nil {
 		return nil, err
@@ -60,7 +84,9 @@ func ListECSResources(ctx context.Context, profile, region string) ([]ECSResourc
 
 // listECSClusterArnsWith は ECS クラスタの ARN 一覧をページネーションで取得する。
 // ListECSResources と ListECSClusterArns の両方から使う共通コア。
-func listECSClusterArnsWith(ctx context.Context, client *ecs.Client) ([]string, error) {
+// ListClusters しか使わないため、引数はページネータが要求する
+// ecs.ListClustersAPIClient に絞ってある (ecsClusterListClient も満たす)。
+func listECSClusterArnsWith(ctx context.Context, client ecs.ListClustersAPIClient) ([]string, error) {
 	var arns []string
 	paginator := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
 	for paginator.HasMorePages() {

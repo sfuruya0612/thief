@@ -1,12 +1,15 @@
 package aws
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestECSServiceFromSDK(t *testing.T) {
@@ -158,6 +161,69 @@ func TestECSTaskFromSDK(t *testing.T) {
 			got := ecsTaskFromSDK(tt.in)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestListECSTasksSendsServiceName は service 引数の有無で ListTasksInput の ServiceName が
+// 切り替わることを検証する。ServiceName の設定を落とすと呼び出しは成功したままサービスによる
+// タスクの絞り込みが効かなくなり、クラスタ内の全タスクが返る。
+func TestListECSTasksSendsServiceName(t *testing.T) {
+	const cluster = "demo-cluster"
+
+	tests := []struct {
+		name    string
+		service string
+		// wantInputs は呼び出し順に期待する Input。要素数が期待する呼び出し回数を兼ねる。
+		wantInputs []*ecs.ListTasksInput
+	}{
+		{
+			name:    "service 未指定のとき ServiceName は nil",
+			service: "",
+			wantInputs: []*ecs.ListTasksInput{
+				{Cluster: aws.String(cluster)},
+				{Cluster: aws.String(cluster), NextToken: aws.String("page-2")},
+			},
+		},
+		{
+			name:    "service 指定時は ServiceName に載る",
+			service: "web-service",
+			wantInputs: []*ecs.ListTasksInput{
+				{Cluster: aws.String(cluster), ServiceName: aws.String("web-service")},
+				{Cluster: aws.String(cluster), ServiceName: aws.String("web-service"), NextToken: aws.String("page-2")},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockECSTaskListClient{listPages: ecsListTasksPages()}
+			if _, err := listECSTasks(context.Background(), client, cluster, tt.service); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(client.listInputs) != len(tt.wantInputs) {
+				t.Fatalf("ListTasks called %d times, want %d", len(client.listInputs), len(tt.wantInputs))
+			}
+			// Input 全体を比較し、ServiceName に加えて Cluster と NextToken の引き継ぎも
+			// 同時に固定する。ページ送り後の呼び出しでも絞り込みが維持される。
+			opts := cmpopts.IgnoreUnexported(ecs.ListTasksInput{})
+			for i, in := range client.listInputs {
+				if diff := cmp.Diff(tt.wantInputs[i], in, opts); diff != "" {
+					t.Errorf("call %d: input mismatch (-want +got):\n%s", i+1, diff)
+				}
+			}
+
+			// 続く DescribeTasks へは両ページ分の ARN が 1 回でまとめて渡る。Cluster を落とすと
+			// 実際の API では必須パラメータ不足で失敗し、Tasks を落とすとタスクが 1 件も返らないが、
+			// どちらも ListTasksInput の比較だけでは検出できない。スライス全体を比較することで
+			// 呼び出し回数も同時に固定する。
+			wantDescribe := []*ecs.DescribeTasksInput{
+				{Cluster: aws.String(cluster), Tasks: []string{ecsTaskArnPage1, ecsTaskArnPage2}},
+			}
+			describeOpts := cmpopts.IgnoreUnexported(ecs.DescribeTasksInput{})
+			if diff := cmp.Diff(wantDescribe, client.describeInputs, describeOpts); diff != "" {
+				t.Errorf("DescribeTasks inputs mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -203,7 +203,13 @@ func ListECSTaskInfos(ctx context.Context, profile, region, cluster, desiredStat
 	if err != nil {
 		return nil, err
 	}
+	return listECSTaskInfos(ctx, client, cluster, desiredStatus)
+}
 
+// listECSTaskInfos は生成済みクライアントでタスク一覧をコンテナ単位に展開して返すコア。
+// ListTasksInput に載せる DesiredStatus を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+func listECSTaskInfos(ctx context.Context, client ecsTaskListClient, cluster, desiredStatus string) ([]ECSTaskInfo, error) {
 	input := &ecs.ListTasksInput{Cluster: aws.String(cluster)}
 	if desiredStatus != "" {
 		input.DesiredStatus = ecstypes.DesiredStatus(desiredStatus)

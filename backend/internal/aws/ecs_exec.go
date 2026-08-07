@@ -122,7 +122,13 @@ func ListECSTasks(ctx context.Context, profile, region, cluster, service string)
 	if err != nil {
 		return nil, err
 	}
+	return listECSTasks(ctx, client, cluster, service)
+}
 
+// listECSTasks は生成済みクライアントでタスク一覧を取得するコア。
+// ListTasksInput に載せる ServiceName を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+func listECSTasks(ctx context.Context, client ecsTaskListClient, cluster, service string) ([]ECSTaskResource, error) {
 	input := &ecs.ListTasksInput{Cluster: aws.String(cluster)}
 	if service != "" {
 		input.ServiceName = aws.String(service)

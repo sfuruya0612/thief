@@ -1,12 +1,15 @@
 package aws
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestArnPart(t *testing.T) {
@@ -133,5 +136,69 @@ func TestEcsTaskInfosFromSDK_Defaults(t *testing.T) {
 	if got[0].PlatformFamily != "None" || got[0].PlatformVersion != "None" || got[0].StartedAt != "None" {
 		t.Errorf("defaults = (%q, %q, %q), want (None, None, None)",
 			got[0].PlatformFamily, got[0].PlatformVersion, got[0].StartedAt)
+	}
+}
+
+// TestListECSTaskInfosSendsDesiredStatus は desiredStatus 引数の有無で ListTasksInput の
+// DesiredStatus が切り替わることを検証する。DesiredStatus の設定を落とすと呼び出しは成功した
+// まま希望ステータスによる絞り込みが効かなくなる。
+// 期待値は実装を通さず AWS API の値 ("RUNNING") で直接書き下している。
+func TestListECSTaskInfosSendsDesiredStatus(t *testing.T) {
+	const cluster = "demo-cluster"
+
+	tests := []struct {
+		name          string
+		desiredStatus string
+		// wantInputs は呼び出し順に期待する Input。要素数が期待する呼び出し回数を兼ねる。
+		wantInputs []*ecs.ListTasksInput
+	}{
+		{
+			name:          "desiredStatus 未指定のとき DesiredStatus は空",
+			desiredStatus: "",
+			wantInputs: []*ecs.ListTasksInput{
+				{Cluster: awssdk.String(cluster)},
+				{Cluster: awssdk.String(cluster), NextToken: awssdk.String("page-2")},
+			},
+		},
+		{
+			name:          "desiredStatus 指定時は DesiredStatus に載る",
+			desiredStatus: "RUNNING",
+			wantInputs: []*ecs.ListTasksInput{
+				{Cluster: awssdk.String(cluster), DesiredStatus: ecstypes.DesiredStatus("RUNNING")},
+				{Cluster: awssdk.String(cluster), DesiredStatus: ecstypes.DesiredStatus("RUNNING"), NextToken: awssdk.String("page-2")},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockECSTaskListClient{listPages: ecsListTasksPages()}
+			if _, err := listECSTaskInfos(context.Background(), client, cluster, tt.desiredStatus); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(client.listInputs) != len(tt.wantInputs) {
+				t.Fatalf("ListTasks called %d times, want %d", len(client.listInputs), len(tt.wantInputs))
+			}
+			// Input 全体を比較し、DesiredStatus に加えて Cluster と NextToken の引き継ぎも
+			// 同時に固定する。ページ送り後の呼び出しでも絞り込みが維持される。
+			opts := cmpopts.IgnoreUnexported(ecs.ListTasksInput{})
+			for i, in := range client.listInputs {
+				if diff := cmp.Diff(tt.wantInputs[i], in, opts); diff != "" {
+					t.Errorf("call %d: input mismatch (-want +got):\n%s", i+1, diff)
+				}
+			}
+
+			// 続く DescribeTasks へは両ページ分の ARN が 1 回でまとめて渡る。Cluster を落とすと
+			// 実際の API では必須パラメータ不足で失敗し、Tasks を落とすとタスクが 1 件も返らないが、
+			// どちらも ListTasksInput の比較だけでは検出できない。スライス全体を比較することで
+			// 呼び出し回数も同時に固定する。
+			wantDescribe := []*ecs.DescribeTasksInput{
+				{Cluster: awssdk.String(cluster), Tasks: []string{ecsTaskArnPage1, ecsTaskArnPage2}},
+			}
+			describeOpts := cmpopts.IgnoreUnexported(ecs.DescribeTasksInput{})
+			if diff := cmp.Diff(wantDescribe, client.describeInputs, describeOpts); diff != "" {
+				t.Errorf("DescribeTasks inputs mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
