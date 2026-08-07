@@ -192,7 +192,17 @@ func StartLiveTail(ctx context.Context, profile, region string, groupIdentifiers
 	stream := out.GetStream()
 	defer stream.Close()
 
-	for event := range stream.Events() {
+	return runLiveTailStream(stream.Events(), stream.Err, send)
+}
+
+// runLiveTailStream は Live Tail のイベントチャネルを読み、SessionUpdate のログイベントを
+// send へ 1 件ずつ渡す。SessionStart 等の SessionUpdate 以外のイベントは読み飛ばす。
+// send がエラーを返したらそのエラーを返して即座に中断する。events のクローズ後は
+// streamErr を確認し、ストリームエラーがあればラップして返し、無ければ nil を返す。
+// SDK のストリームリーダー型 (StartLiveTailResponseStreamReader) やモック用コンストラクタに
+// 依存せず、チャネルと関数だけを受け取ることで、実クライアント無しの単体テストを可能にする。
+func runLiveTailStream(events <-chan cwltypes.StartLiveTailResponseStream, streamErr func() error, send func(LogEventInfo) error) error {
+	for event := range events {
 		update, ok := event.(*cwltypes.StartLiveTailResponseStreamMemberSessionUpdate)
 		if !ok {
 			// SessionStart や未知のイベントは無視する。
@@ -204,7 +214,7 @@ func StartLiveTail(ctx context.Context, profile, region string, groupIdentifiers
 			}
 		}
 	}
-	if err := stream.Err(); err != nil {
+	if err := streamErr(); err != nil {
 		return fmt.Errorf("live tail stream: %w", err)
 	}
 	return nil

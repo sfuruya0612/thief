@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/cloudwatchlogs.go の StartLiveTail からイベントストリームの読み取りループを、イベントチャネルとエラー取得関数を引数に取る内部関数 runLiveTailStream に抽出し、SessionUpdate の変換送信 / SessionUpdate 以外の読み飛ばし / 送信コールバックのエラーでの中断 / ストリームエラーの伝播 / 正常終了の 5 ケースを検証するテーブル駆動テストを追加する (挙動は変えない)
+  - @sfuruya0612
 - frontend/src/components/tables/columns.tsx の全 33 の列定義エクスポートについて、列順序 (key と header の並び) と列幅の合計を検証するテストを整備する (挙動は変えない)
   - @sfuruya0612
 - internal/aws/elasticache.go の DescribeCacheClusters の 2 つの呼び出し経路を狭いインターフェースを受け取る関数に抽出し、ShowCacheNodeInfo が全ページの呼び出しで送られることを検証するモックテストを追加する (挙動は変えない)
