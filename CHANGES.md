@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/ecr.go の ListECRImageInfos について、DescribeImages を持つ狭いインターフェース ecrDescribeImagesClient を受け取る内部関数に呼び出しを抽出し、all=true (全ページ取得) と all=false (タグ付きの先頭ページのみ) の各分岐について DescribeImagesInput の MaxResults と Filter が指定どおりに構築されることを、全呼び出しについて検証するテストを追加する (挙動は変えない)
+  - @sfuruya0612
 - internal/aws/ec2.go の ListEC2Instances について、DescribeInstances を持つ狭いインターフェース ec2DescribeInstancesClient を受け取る内部関数に呼び出しを抽出し、EC2ListOptions の組み合わせ (両方なし / Running のみ / InstanceIDs のみ / 両方) ごとに DescribeInstancesInput.Filters が指定どおりに構築される (未指定時は nil のまま) ことを、複数ページの全呼び出しについて検証するテストを追加する (挙動は変えない)
   - @sfuruya0612
 - internal/aws/dynamo.go の QueryDynamoItems について、Scan / Query / DescribeTable を持つ狭いインターフェース dynamoItemQueryClient を受け取る内部関数に呼び出しを抽出し (DescribeDynamoTable が使う describeDynamoTableWith の引数も同じインターフェースへ揃える)、キー未指定の Scan 経路とキー指定の Query 経路の両方で Limit とフィルタ式関連フィールドが指定どおりに設定される (未指定時は nil のまま) ことを検証するテストを追加する (挙動は変えない)
