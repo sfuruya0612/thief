@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/athena.go の listAthenaQueryHistory について、ListQueryExecutions の全ページの呼び出しで ListQueryExecutionsInput.WorkGroup が引数どおりに設定される (workgroup が空のときは nil のまま) ことを検証するテストを追加する (テストの追加のみで挙動は変えない)
+  - @sfuruya0612
 - backend の API レスポンス構造体の JSON タグと frontend の Raw 型の対応をゴールデン JSON で検証する契約テストを追加する (backend の go test がゴールデンの生成と比較を、frontend の tsc --noEmit がキー集合の双方向一致と型の適合の検査を担う)
   - @sfuruya0612
 - govulncheck が検出した github.com/klauspost/compress の脆弱性 (GO-2026-5841、compress/s2 の脆弱性) を解消するため github.com/klauspost/compress を v1.16.7 から v1.19.2 に更新する (indirect 依存。該当シンボルにはコードから到達しないため報告の解消が目的。同時に報告される GO-2026-5932 は Fixed in N/A のためスコープ外)
