@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/dynamo.go の QueryDynamoItems について、Scan / Query / DescribeTable を持つ狭いインターフェース dynamoItemQueryClient を受け取る内部関数に呼び出しを抽出し (DescribeDynamoTable が使う describeDynamoTableWith の引数も同じインターフェースへ揃える)、キー未指定の Scan 経路とキー指定の Query 経路の両方で Limit とフィルタ式関連フィールドが指定どおりに設定される (未指定時は nil のまま) ことを検証するテストを追加する (挙動は変えない)
+  - @sfuruya0612
 - internal/aws/costexplorer.go の getCostDetails を cost.go の既存インターフェース costExplorerAPI を受け取る形に変え、サービス別 / リンクアカウント別 / 使用タイプ別 / 期間合計の 4 経路それぞれについて集計軸を固定する内部関数を新設したうえで、各経路が GetCostAndUsage へ送る GroupBy と Metrics と Granularity を検証するテストを追加する (挙動は変えない)
   - @sfuruya0612
 - internal/aws/cloudwatchlogs.go の FilterLogEvents について、呼び出しを狭いインターフェースを受け取る関数に抽出し、FilterPattern / StartTime / EndTime / StartFromHead がロググループごとの全呼び出しで指定どおりに設定される (未指定時は nil のまま) ことを検証するテストを追加する。あわせて StartLiveTail のリクエスト構築を純関数 newStartLiveTailInput に切り出し、LogEventFilterPattern の設定を検証するテストを追加する (テストの追加のみで挙動は変えない)
