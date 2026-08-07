@@ -1,6 +1,8 @@
 package aws
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -225,5 +227,108 @@ func TestLiveTailEventFromSDK(t *testing.T) {
 	}
 	if got.LogStream != "stream-1" {
 		t.Errorf("LogStream = %q", got.LogStream)
+	}
+}
+
+// liveTailSessionUpdate は SessionUpdate イベントを組み立てるテストヘルパー。
+func liveTailSessionUpdate(messages ...string) cwltypes.StartLiveTailResponseStream {
+	results := make([]cwltypes.LiveTailSessionLogEvent, len(messages))
+	for i, m := range messages {
+		results[i] = cwltypes.LiveTailSessionLogEvent{
+			Timestamp:     aws.Int64(1784516645678),
+			IngestionTime: aws.Int64(1784516645700),
+			Message:       aws.String(m),
+			LogStreamName: aws.String("stream-1"),
+		}
+	}
+	return &cwltypes.StartLiveTailResponseStreamMemberSessionUpdate{
+		Value: cwltypes.LiveTailSessionUpdate{SessionResults: results},
+	}
+}
+
+func TestRunLiveTailStream(t *testing.T) {
+	errSend := errors.New("client disconnected")
+	errStream := errors.New("session timed out")
+
+	tests := []struct {
+		name string
+		// events はクローズ済みチャネルへ事前投入するイベント列。
+		events []cwltypes.StartLiveTailResponseStream
+		// streamErr はチャネルクローズ後に返すストリームエラー。
+		streamErr error
+		// sendErr が non-nil なら send は呼ばれるたびにこのエラーを返す。
+		sendErr error
+		// wantSent は send へ渡ったメッセージの期待列。
+		wantSent []string
+		// wantErr は返り値のエラーが errors.Is で一致すべきエラー (nil なら正常終了)。
+		wantErr error
+		// wantWrapped はエラーが "live tail stream:" でラップされて返ることの検査。
+		// false でエラーがある場合は、ラップされずに素通しで返ることを検査する。
+		wantWrapped bool
+	}{
+		{
+			name:     "SessionUpdate のログが変換されて send へ渡る",
+			events:   []cwltypes.StartLiveTailResponseStream{liveTailSessionUpdate("first", "second")},
+			wantSent: []string{"first", "second"},
+		},
+		{
+			name: "SessionUpdate 以外のイベントは読み飛ばす",
+			events: []cwltypes.StartLiveTailResponseStream{
+				&cwltypes.StartLiveTailResponseStreamMemberSessionStart{Value: cwltypes.LiveTailSessionStart{}},
+				liveTailSessionUpdate("after start"),
+			},
+			wantSent: []string{"after start"},
+		},
+		{
+			name:     "send のエラーでループが中断してそのエラーが返る",
+			events:   []cwltypes.StartLiveTailResponseStream{liveTailSessionUpdate("first", "second")},
+			sendErr:  errSend,
+			wantSent: []string{"first"},
+			wantErr:  errSend,
+		},
+		{
+			name:        "クローズ後にストリームエラーがあれば伝播する",
+			streamErr:   errStream,
+			wantErr:     errStream,
+			wantWrapped: true,
+		},
+		{
+			name: "クローズ後にストリームエラーが無ければ nil を返す",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := make(chan cwltypes.StartLiveTailResponseStream, len(tt.events))
+			for _, e := range tt.events {
+				events <- e
+			}
+			close(events)
+
+			var sent []string
+			send := func(info LogEventInfo) error {
+				sent = append(sent, info.Message)
+				return tt.sendErr
+			}
+			streamErr := func() error { return tt.streamErr }
+
+			err := runLiveTailStream(events, streamErr, send)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantWrapped && !strings.Contains(err.Error(), "live tail stream:") {
+				t.Errorf("err = %v, want wrapped with %q", err, "live tail stream:")
+			}
+			if err != nil && !tt.wantWrapped && strings.Contains(err.Error(), "live tail stream:") {
+				t.Errorf("err = %v, want passed through without %q", err, "live tail stream:")
+			}
+			if len(sent) != len(tt.wantSent) {
+				t.Fatalf("sent = %v, want %v", sent, tt.wantSent)
+			}
+			for i := range sent {
+				if sent[i] != tt.wantSent[i] {
+					t.Errorf("sent[%d] = %q, want %q", i, sent[i], tt.wantSent[i])
+				}
+			}
+		})
 	}
 }
