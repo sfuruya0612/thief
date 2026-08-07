@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/savingsplans"
 	sptypes "github.com/aws/aws-sdk-go-v2/service/savingsplans/types"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 // 実際に AWS Price List API から取得した生 JSON (issue 0045 実装時にライブ検証済み) を
@@ -1052,11 +1053,18 @@ func (f *fakePricingClient) GetProducts(_ context.Context, p *pricing.GetProduct
 	return f.getProducts(p)
 }
 
+// fakeSavingsPlansClient は savingsPlansAPI のテスト用実装。inputs には受け取った Input を
+// 呼び出し順に記録する。savingsPlansAPI の唯一の呼び出し元である fetchSavingsPlans は
+// ページごとに Input を新しく確保するため、記録した後に内容が書き換わることはなく、
+// ポインタのまま記録してよい。Input を作り直さずフィールドだけ書き換えて再送する
+// 呼び出し元が増えた場合はこの前提が崩れるため、値でコピーして記録する必要がある。
 type fakeSavingsPlansClient struct {
 	describe func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error)
+	inputs   []*savingsplans.DescribeSavingsPlansOfferingRatesInput
 }
 
 func (f *fakeSavingsPlansClient) DescribeSavingsPlansOfferingRates(_ context.Context, p *savingsplans.DescribeSavingsPlansOfferingRatesInput, _ ...func(*savingsplans.Options)) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+	f.inputs = append(f.inputs, p)
 	return f.describe(p)
 }
 
@@ -1256,6 +1264,116 @@ func TestFetchSavingsPlansPaginationStopsOnEmptyStringNextToken(t *testing.T) {
 	}
 	if len(rates) != 1 {
 		t.Errorf("len(rates) = %d, want 1", len(rates))
+	}
+}
+
+// TestFetchSavingsPlansSendsPlanTypesServiceCodesAndRegionFilter は
+// DescribeSavingsPlansOfferingRates へ spec の SavingsPlanTypes / ServiceCodes と、
+// リージョンの Filters を載せて送ることを検証する。
+// これらはいずれも省略可能な絞り込みパラメータのため、落としても呼び出しは成功し、絞り込み
+// 範囲だけが静かに広がる。特にリージョンの Filters が落ちると全リージョンのレートが返るが、
+// PriceRate はリージョンを保持しないため混入がレスポンス上どこにも現れない。
+//
+// spec は savingsPlanServiceSpecs を参照せずテスト内で組み立てる。実装の定数を経由すると、
+// 定数を固定値に置き換える変更を検出できない。2 ケースで planTypes / serviceCodes /
+// region の値をすべて変え、planTypes と serviceCodes はどちらも 2 件ずつ持たせてある。
+// 引数を無視して固定値を送る実装も、先頭 1 件だけを送る実装も、両ケースで落ちる。
+// リージョンにも既定値になりやすい ap-northeast-1 を使わない。
+func TestFetchSavingsPlansSendsPlanTypesServiceCodesAndRegionFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		region string
+		spec   savingsPlanServiceSpec
+		// wantInputs は呼び出し順に期待する Input。要素数が期待する呼び出し回数を兼ねる。
+		wantInputs []*savingsplans.DescribeSavingsPlansOfferingRatesInput
+	}{
+		{
+			name:   "compute と ec2-instance のプランを eu-west-1 で取得する",
+			region: "eu-west-1",
+			spec: savingsPlanServiceSpec{
+				planTypes:    []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeCompute, sptypes.SavingsPlanTypeEc2Instance},
+				serviceCodes: []sptypes.SavingsPlanRateServiceCode{sptypes.SavingsPlanRateServiceCodeEc2, sptypes.SavingsPlanRateServiceCodeFargate},
+			},
+			wantInputs: []*savingsplans.DescribeSavingsPlansOfferingRatesInput{
+				{
+					SavingsPlanTypes: []sptypes.SavingsPlanType{"Compute", "EC2Instance"},
+					ServiceCodes:     []sptypes.SavingsPlanRateServiceCode{"AmazonEC2", "AmazonECS"},
+					Filters: []sptypes.SavingsPlanOfferingRateFilterElement{
+						{Name: "region", Values: []string{"eu-west-1"}},
+					},
+				},
+				{
+					SavingsPlanTypes: []sptypes.SavingsPlanType{"Compute", "EC2Instance"},
+					ServiceCodes:     []sptypes.SavingsPlanRateServiceCode{"AmazonEC2", "AmazonECS"},
+					Filters: []sptypes.SavingsPlanOfferingRateFilterElement{
+						{Name: "region", Values: []string{"eu-west-1"}},
+					},
+					NextToken: strPtr("page2"),
+				},
+			},
+		},
+		{
+			name:   "database と ec2-instance のプランを us-east-1 で取得する",
+			region: "us-east-1",
+			spec: savingsPlanServiceSpec{
+				planTypes:    []sptypes.SavingsPlanType{sptypes.SavingsPlanTypeDatabase, sptypes.SavingsPlanTypeEc2Instance},
+				serviceCodes: []sptypes.SavingsPlanRateServiceCode{sptypes.SavingsPlanRateServiceCodeRds, sptypes.SavingsPlanRateServiceCodeElasticache},
+			},
+			wantInputs: []*savingsplans.DescribeSavingsPlansOfferingRatesInput{
+				{
+					SavingsPlanTypes: []sptypes.SavingsPlanType{"Database", "EC2Instance"},
+					ServiceCodes:     []sptypes.SavingsPlanRateServiceCode{"AmazonRDS", "AmazonElastiCache"},
+					Filters: []sptypes.SavingsPlanOfferingRateFilterElement{
+						{Name: "region", Values: []string{"us-east-1"}},
+					},
+				},
+				{
+					SavingsPlanTypes: []sptypes.SavingsPlanType{"Database", "EC2Instance"},
+					ServiceCodes:     []sptypes.SavingsPlanRateServiceCode{"AmazonRDS", "AmazonElastiCache"},
+					Filters: []sptypes.SavingsPlanOfferingRateFilterElement{
+						{Name: "region", Values: []string{"us-east-1"}},
+					},
+					NextToken: strPtr("page2"),
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 2 ページ構成にして、ページ送り後の呼び出しでも絞り込みが維持されることを確かめる。
+			// 次ページの有無は受け取った NextToken ではなく呼び出し回数で決める。引き継ぎを
+			// 壊した実装でも 2 回で必ず終端し、無限ループにならずに検証できる。
+			calls := 0
+			client := &fakeSavingsPlansClient{
+				describe: func(*savingsplans.DescribeSavingsPlansOfferingRatesInput) (*savingsplans.DescribeSavingsPlansOfferingRatesOutput, error) {
+					calls++
+					if calls == 1 {
+						token := "page2"
+						return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{NextToken: &token}, nil
+					}
+					return &savingsplans.DescribeSavingsPlansOfferingRatesOutput{}, nil
+				},
+			}
+
+			if _, err := fetchSavingsPlans(context.Background(), client, tt.region, tt.spec); err != nil {
+				t.Fatalf("fetchSavingsPlans() err = %v", err)
+			}
+
+			if len(client.inputs) != len(tt.wantInputs) {
+				t.Fatalf("DescribeSavingsPlansOfferingRates called %d times, want %d", len(client.inputs), len(tt.wantInputs))
+			}
+			// Input 全体を比較し、絞り込み 3 種に加えて NextToken の引き継ぎと、
+			// 期待していないフィールド (UsageTypes や Operations 等) が設定されないことも固定する。
+			opts := cmpopts.IgnoreUnexported(
+				savingsplans.DescribeSavingsPlansOfferingRatesInput{},
+				sptypes.SavingsPlanOfferingRateFilterElement{},
+			)
+			for i, in := range client.inputs {
+				if diff := cmp.Diff(tt.wantInputs[i], in, opts); diff != "" {
+					t.Errorf("call %d: input mismatch (-want +got):\n%s", i+1, diff)
+				}
+			}
+		})
 	}
 }
 
