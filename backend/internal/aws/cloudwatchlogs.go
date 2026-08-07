@@ -75,10 +75,18 @@ func ListLogGroups(ctx context.Context, profile, region string) ([]LogGroupInfo,
 	return groups, nil
 }
 
+// cwLogsFilterEventsClient は FilterLogEvents の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *cloudwatchlogs.Client がこれを満たす。
+type cwLogsFilterEventsClient interface {
+	FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
+}
+
 // FilterLogEvents は選択されたロググループ群を横断してログイベントを検索し、時刻降順で
 // 1 ページ分返す。groupIdentifiers はロググループの ARN (末尾 :* を含まない版)。
 // pageToken は前回返した NextPageToken (空なら初回)。perGroupLimit が 0 以下なら既定値を使う。
 func FilterLogEvents(ctx context.Context, profile, region string, groupIdentifiers []string, pattern, start, end, pageToken string, perGroupLimit int) (*LogEventPage, error) {
+	// ロググループ未選択なら API を呼ぶ必要が無いため、クライアント生成 (資格情報の解決) の
+	// 前に打ち切る。この判定を filterLogEvents 側へ移すと、未選択でも資格情報が必要になる。
 	if len(groupIdentifiers) == 0 {
 		return &LogEventPage{}, nil
 	}
@@ -86,6 +94,10 @@ func FilterLogEvents(ctx context.Context, profile, region string, groupIdentifie
 	if err != nil {
 		return nil, err
 	}
+	return filterLogEvents(ctx, client, groupIdentifiers, pattern, start, end, pageToken, perGroupLimit)
+}
+
+func filterLogEvents(ctx context.Context, client cwLogsFilterEventsClient, groupIdentifiers []string, pattern, start, end, pageToken string, perGroupLimit int) (*LogEventPage, error) {
 	if perGroupLimit <= 0 {
 		perGroupLimit = defaultLogEventPerGroupLimit
 	}
@@ -181,11 +193,7 @@ func StartLiveTail(ctx context.Context, profile, region string, groupIdentifiers
 		return err
 	}
 
-	in := &cloudwatchlogs.StartLiveTailInput{LogGroupIdentifiers: groupIdentifiers}
-	if pattern != "" {
-		in.LogEventFilterPattern = aws.String(pattern)
-	}
-	out, err := client.StartLiveTail(ctx, in)
+	out, err := client.StartLiveTail(ctx, newStartLiveTailInput(groupIdentifiers, pattern))
 	if err != nil {
 		return fmt.Errorf("start live tail: %w", err)
 	}
@@ -193,6 +201,20 @@ func StartLiveTail(ctx context.Context, profile, region string, groupIdentifiers
 	defer stream.Close()
 
 	return runLiveTailStream(stream.Events(), stream.Err, send)
+}
+
+// newStartLiveTailInput は Live Tail セッションの開始リクエストを組み立てる。
+// StartLiveTailOutput はイベントストリームを非公開フィールドに持ち外部から構築できず、
+// API 呼び出し層をモックに差し替えられない (issues/closed/0107 の背景に記録がある)。
+// そのため Input の構築だけを純関数として切り出し、単体テストの対象にする。
+// pattern が空のときはフィルタ無し (全イベント) を意味するため、
+// LogEventFilterPattern は nil のままにする。
+func newStartLiveTailInput(groupIdentifiers []string, pattern string) *cloudwatchlogs.StartLiveTailInput {
+	in := &cloudwatchlogs.StartLiveTailInput{LogGroupIdentifiers: groupIdentifiers}
+	if pattern != "" {
+		in.LogEventFilterPattern = aws.String(pattern)
+	}
+	return in
 }
 
 // runLiveTailStream は Live Tail のイベントチャネルを読み、SessionUpdate のログイベントを

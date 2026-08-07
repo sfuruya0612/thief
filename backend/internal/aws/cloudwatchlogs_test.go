@@ -1,13 +1,167 @@
 package aws
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwltypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+// mockCWLogsFilterEventsClient は cwLogsFilterEventsClient の手書きモック。受け取った Input を
+// 呼び出し順に記録し、イベントを含まない空のレスポンスを返す。
+type mockCWLogsFilterEventsClient struct {
+	inputs []*cloudwatchlogs.FilterLogEventsInput
+}
+
+func (m *mockCWLogsFilterEventsClient) FilterLogEvents(_ context.Context, params *cloudwatchlogs.FilterLogEventsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
+	m.inputs = append(m.inputs, params)
+	return &cloudwatchlogs.FilterLogEventsOutput{}, nil
+}
+
+// TestFilterLogEventsSendsRequestParams は検索条件が FilterLogEventsInput へ設定されることを
+// 検証する。期待値は各フィールドの値そのもので書き、未指定の条件では nil のままである
+// (= AWS 側の既定に委ねる) ことも固定する。
+// StartFromHead は StartTime を指定したときだけ設定される。startFromHead=false (最新優先) は
+// startTime が 2024-01-01 以降のときのみ許可される API 制約に合わせた実装であるため、
+// 両者が連動することをテストでも固定する。
+func TestFilterLogEventsSendsRequestParams(t *testing.T) {
+	// 2026-08-07T00:00:00Z / 2026-08-07T01:00:00Z の epoch ミリ秒。
+	const (
+		startRFC3339 = "2026-08-07T00:00:00Z"
+		endRFC3339   = "2026-08-07T01:00:00Z"
+	)
+	startMs := time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endMs := time.Date(2026, 8, 7, 1, 0, 0, 0, time.UTC).UnixMilli()
+
+	tests := []struct {
+		name              string
+		pattern           string
+		start             string
+		end               string
+		wantFilterPattern *string
+		wantStartTime     *int64
+		wantEndTime       *int64
+		wantStartFromHead *bool
+	}{
+		{
+			name:              "no conditions",
+			wantFilterPattern: nil,
+			wantStartTime:     nil,
+			wantEndTime:       nil,
+			wantStartFromHead: nil,
+		},
+		{
+			name:              "pattern only",
+			pattern:           "ERROR",
+			wantFilterPattern: aws.String("ERROR"),
+			wantStartTime:     nil,
+			wantEndTime:       nil,
+			wantStartFromHead: nil,
+		},
+		{
+			name:              "start only sets start from head",
+			start:             startRFC3339,
+			wantFilterPattern: nil,
+			wantStartTime:     aws.Int64(startMs),
+			wantEndTime:       nil,
+			wantStartFromHead: aws.Bool(false),
+		},
+		{
+			name:              "end only leaves start from head unset",
+			end:               endRFC3339,
+			wantFilterPattern: nil,
+			wantStartTime:     nil,
+			wantEndTime:       aws.Int64(endMs),
+			wantStartFromHead: nil,
+		},
+		{
+			name:              "all conditions",
+			pattern:           "ERROR",
+			start:             startRFC3339,
+			end:               endRFC3339,
+			wantFilterPattern: aws.String("ERROR"),
+			wantStartTime:     aws.Int64(startMs),
+			wantEndTime:       aws.Int64(endMs),
+			wantStartFromHead: aws.Bool(false),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 検索条件はグループごとの全呼び出しへ等しく載る必要があるため 2 グループを渡す。
+			// 末尾の perGroupLimit はこのテストの検証対象ではなく、既定値フォールバックへ
+			// 落ちない正の値であればよい。
+			groups := []string{"arn:aws:logs:ap-northeast-1:123456789012:log-group:app", "arn:aws:logs:ap-northeast-1:123456789012:log-group:worker"}
+			client := &mockCWLogsFilterEventsClient{}
+			if _, err := filterLogEvents(context.Background(), client, groups, tt.pattern, tt.start, tt.end, "", 50); err != nil {
+				t.Fatalf("filterLogEvents: %v", err)
+			}
+			if len(client.inputs) != len(groups) {
+				t.Fatalf("FilterLogEvents called %d times, want %d", len(client.inputs), len(groups))
+			}
+			for i, in := range client.inputs {
+				if diff := cmp.Diff(tt.wantFilterPattern, in.FilterPattern); diff != "" {
+					t.Errorf("call %d: FilterPattern mismatch (-want +got):\n%s", i+1, diff)
+				}
+				if diff := cmp.Diff(tt.wantStartTime, in.StartTime); diff != "" {
+					t.Errorf("call %d: StartTime mismatch (-want +got):\n%s", i+1, diff)
+				}
+				if diff := cmp.Diff(tt.wantEndTime, in.EndTime); diff != "" {
+					t.Errorf("call %d: EndTime mismatch (-want +got):\n%s", i+1, diff)
+				}
+				if diff := cmp.Diff(tt.wantStartFromHead, in.StartFromHead); diff != "" {
+					t.Errorf("call %d: StartFromHead mismatch (-want +got):\n%s", i+1, diff)
+				}
+				// 各呼び出しが意図したグループに対応していること (グループの取り違えや、同じ
+				// グループの重複呼び出しが無いこと) の確認。呼び出し回数の検査だけでは、
+				// 1 つのグループを 2 回呼んで別のグループを落とす取り違えを検出できない。
+				if diff := cmp.Diff(aws.String(groups[i]), in.LogGroupIdentifier); diff != "" {
+					t.Errorf("call %d: LogGroupIdentifier mismatch (-want +got):\n%s", i+1, diff)
+				}
+			}
+		})
+	}
+}
+
+// TestNewStartLiveTailInput は Live Tail の開始リクエストの構築を検証する。
+// pattern が空のときにフィルタ無し (LogEventFilterPattern が nil) になることも固定する。
+func TestNewStartLiveTailInput(t *testing.T) {
+	groups := []string{"arn:aws:logs:ap-northeast-1:123456789012:log-group:app"}
+
+	tests := []struct {
+		name    string
+		pattern string
+		want    *cloudwatchlogs.StartLiveTailInput
+	}{
+		{
+			name:    "pattern given",
+			pattern: "ERROR",
+			want: &cloudwatchlogs.StartLiveTailInput{
+				LogGroupIdentifiers:   groups,
+				LogEventFilterPattern: aws.String("ERROR"),
+			},
+		},
+		{
+			name:    "pattern empty",
+			pattern: "",
+			want:    &cloudwatchlogs.StartLiveTailInput{LogGroupIdentifiers: groups},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := newStartLiveTailInput(groups, tt.pattern)
+			if diff := cmp.Diff(tt.want, got, cmpopts.IgnoreUnexported(cloudwatchlogs.StartLiveTailInput{})); diff != "" {
+				t.Errorf("StartLiveTailInput mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func TestLogGroupNameFromIdentifier(t *testing.T) {
 	tests := []struct {
