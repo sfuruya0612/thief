@@ -283,6 +283,8 @@
 
 ### misc
 
+- internal/aws/cloudwatchlogs.go の FilterLogEvents について、呼び出しを狭いインターフェースを受け取る関数に抽出し、FilterPattern / StartTime / EndTime / StartFromHead がロググループごとの全呼び出しで指定どおりに設定される (未指定時は nil のまま) ことを検証するテストを追加する。あわせて StartLiveTail のリクエスト構築を純関数 newStartLiveTailInput に切り出し、LogEventFilterPattern の設定を検証するテストを追加する (テストの追加のみで挙動は変えない)
+  - @sfuruya0612
 - internal/aws/cfn.go の ListCFNStacks と ListCfnStackSummaries について、ListStacks の呼び出しを狭いインターフェースを受け取る関数に抽出し、複数ページの全呼び出しで StackStatusFilter が意図したステータス集合で送られることを検証するテストを追加する (テストの追加のみで挙動は変えない)
   - @sfuruya0612
 - internal/aws/athena.go の listAthenaQueryHistory について、ListQueryExecutions の全ページの呼び出しで ListQueryExecutionsInput.WorkGroup が引数どおりに設定される (workgroup が空のときは nil のまま) ことを検証するテストを追加する (テストの追加のみで挙動は変えない)
