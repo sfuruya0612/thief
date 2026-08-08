@@ -71,12 +71,35 @@ func assertCfnStackStatusFilterOnAllCalls(t *testing.T, inputs []*cloudformation
 	}
 }
 
+// cfnLiveStackStatuses は SDK が知る StackStatus 全種から、スタックが存在しなくなる
+// DELETE_COMPLETE だけを除いた集合を返す。これが Web API の一覧が送るべきフィルタの
+// 仕様そのものである。
+// 実装の列挙を写した手書きの期待値では、実装と期待値の両方に同じ書き漏らしを入れると
+// 検出できない。issue 0122 の取りこぼしはまさにその形の欠陥だったため、Web API 経路の
+// 期待値は実装が参照していない Values() から組み立てる。AWS がステータスを追加して
+// SDK が更新されたときも、実装が追随していなければこのテストが落ちる。
+func cfnLiveStackStatuses(t *testing.T) []string {
+	t.Helper()
+	all := cfntypes.StackStatus("").Values()
+	live := make([]string, 0, len(all))
+	for _, s := range all {
+		if s == cfntypes.StackStatusDeleteComplete {
+			continue
+		}
+		live = append(live, string(s))
+	}
+	if len(live) != len(all)-1 {
+		t.Fatalf("StackStatus.Values() has %d values and %d live ones, want exactly one DELETE_COMPLETE", len(all), len(live))
+	}
+	return live
+}
+
 // TestListStacksSendsStackStatusFilter は 2 つの一覧経路が、それぞれのステータス集合で
-// ListStacks を呼ぶことを検証する。期待値は SDK の定数ではなく AWS API のステータス
-// 文字列で書き、実装の列挙をそのまま写さずに集合を固定する。
-// listCFNStacks は Web API 用の 18 種、listCfnStackSummaries は DELETE_COMPLETE のみを
-// 除いたレガシー CLI 互換の 22 種である。前者が削除されていない 4 状態を落としている点は
-// issues/0122 で扱うため、ここでは現状の集合をそのまま固定する。
+// ListStacks を呼ぶことを検証する。
+// Web API 経路の期待値は cfnLiveStackStatuses が SDK の Values() から組み立てる。
+// レガシー CLI 経路は独立に維持される互換集合のため、AWS API のステータス文字列で
+// 手書きし、実装の列挙をそのまま写さずに固定する。実装側も 2 経路を共有の定数へ
+// 括り出しておらず、片方だけがずれればもう片方のケースで検知できる。
 func TestListStacksSendsStackStatusFilter(t *testing.T) {
 	tests := []struct {
 		name string
@@ -84,31 +107,12 @@ func TestListStacksSendsStackStatusFilter(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "listCFNStacks sends the 18 status web api set",
+			name: "listCFNStacks sends every live status for the web api",
 			list: func(ctx context.Context, c cfnListStacksClient) (int, error) {
 				resources, err := listCFNStacks(ctx, c)
 				return len(resources), err
 			},
-			want: []string{
-				"CREATE_COMPLETE",
-				"UPDATE_COMPLETE",
-				"ROLLBACK_COMPLETE",
-				"UPDATE_ROLLBACK_COMPLETE",
-				"CREATE_IN_PROGRESS",
-				"UPDATE_IN_PROGRESS",
-				"DELETE_IN_PROGRESS",
-				"ROLLBACK_IN_PROGRESS",
-				"CREATE_FAILED",
-				"UPDATE_FAILED",
-				"ROLLBACK_FAILED",
-				"UPDATE_ROLLBACK_FAILED",
-				"IMPORT_COMPLETE",
-				"IMPORT_IN_PROGRESS",
-				"IMPORT_ROLLBACK_COMPLETE",
-				"IMPORT_ROLLBACK_FAILED",
-				"IMPORT_ROLLBACK_IN_PROGRESS",
-				"REVIEW_IN_PROGRESS",
-			},
+			want: cfnLiveStackStatuses(t),
 		},
 		{
 			name: "listCfnStackSummaries sends the 22 status legacy cli set",
