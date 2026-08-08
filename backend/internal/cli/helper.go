@@ -45,15 +45,66 @@ func loadConfig(cmd *cobra.Command) (*config.Config, error) {
 	return cfg, nil
 }
 
+// readWithContext は read を別の goroutine で走らせ、read の結果か ctx のキャンセルの
+// どちらか早い方を返す。
+//
+// 標準入力からの読み取りは ctx を一切見ないため、これを挟まないと入力を待つ間 Ctrl-C が
+// 効かない。main が signal.NotifyContext でシグナルの既定の動作 (プロセスの即時終了) を
+// 止めているため、シグナルは context のキャンセルとしてしか届かず、それを見ない読み取りは
+// 入力が来るまで待ち続ける。
+//
+// read の goroutine は入力か EOF が来るまで残る。標準入力の読み取りを外から中断する
+// 移植性のある方法が無いため避けられない。ctx がキャンセルされるのはシグナルを受けた
+// ときだけであり、その場合 CLI は直後に終了するため、この goroutine がプロセスの寿命を
+// 超えて残ることはない。チャネルはバッファ 1 にしてあるので、受信側が先に戻っても
+// goroutine は送信でブロックせず終了できる。
+func readWithContext[T any](ctx context.Context, read func() (T, error)) (T, error) {
+	type result struct {
+		value T
+		err   error
+	}
+
+	done := make(chan result, 1)
+	go func() {
+		value, err := read()
+		done <- result{value: value, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	case res := <-done:
+		return res.value, res.err
+	}
+}
+
+// promptSelection は対話式の選択の入力を 1 行分読む。
+// 読み取れなかった場合 (空行や EOF) は空文字を返し、選択なしとしての扱いを呼び出し側に委ねる。
+// ctx がキャンセルされた場合は入力を待たずにエラーを返す。
+func promptSelection(ctx context.Context, in io.Reader) (string, error) {
+	return readWithContext(ctx, func() (string, error) {
+		var input string
+		if _, err := fmt.Fscanln(in, &input); err != nil {
+			// 空入力はそのまま扱う。
+			return "", nil
+		}
+		return input, nil
+	})
+}
+
 // readUpdateValue は値更新コマンド (ssm param put / secretsmanager put) の新しい値を解決する。
 // --value フラグが明示指定されていればその値を、そうでなければ stdin 全体を読み、末尾の
 // 改行を 1 つだけ取り除いて返す (`echo secret | thief ...` が "secret" を送れるようにし、
 // かつ機密値をシェル履歴に残さず渡せるようにするため)。
-func readUpdateValue(cmd *cobra.Command, stdin io.Reader) (string, error) {
+//
+// stdin が端末のまま値を渡し忘れた場合は入力待ちになる。ctx を見て抜けられるようにして
+// おかないと、そこから Ctrl-C で戻れない。
+func readUpdateValue(ctx context.Context, cmd *cobra.Command, stdin io.Reader) (string, error) {
 	if f := cmd.Flag("value"); f != nil && f.Changed {
 		return f.Value.String(), nil
 	}
-	b, err := io.ReadAll(stdin)
+	b, err := readWithContext(ctx, func() ([]byte, error) { return io.ReadAll(stdin) })
 	if err != nil {
 		return "", fmt.Errorf("read value from stdin: %w", err)
 	}
@@ -97,7 +148,7 @@ func runList[T util.Row](cmd *cobra.Command, lc ListConfig[T]) error {
 		return err
 	}
 
-	items, err := lc.Fetch(context.Background(), cfg)
+	items, err := lc.Fetch(commandContext(cmd), cfg)
 	if err != nil {
 		return err
 	}

@@ -112,8 +112,32 @@ func newSSOCmd() *cobra.Command {
 	return ssoCmd
 }
 
+// ssoLoginDeps は ssoLogin が呼ぶ外部処理をまとめる。
+// getToken はブラウザの起動と AWS への往復を伴い、saveCache は $HOME/.aws/sso/cache へ
+// 書き込むため、いずれもテストからは実行できない。コマンドに載った context が
+// トークン取得まで届いていることを検証するために差し替える。
+type ssoLoginDeps struct {
+	getToken  func(ctx context.Context, region, url string) (*SSOTokenCache, error)
+	saveCache func(cache *SSOTokenCache) error
+}
+
+// defaultSSOLoginDeps は本番で使う実装を返す。
+func defaultSSOLoginDeps() ssoLoginDeps {
+	return ssoLoginDeps{
+		getToken:  getSSOToken,
+		saveCache: saveSSOCacheFile,
+	}
+}
+
 // ssoLogin authenticates with AWS SSO and caches the credentials.
 func ssoLogin(cmd *cobra.Command, args []string) error {
+	return ssoLoginWith(cmd, defaultSSOLoginDeps())
+}
+
+// ssoLoginWith は ssoLogin の本体。
+// トークン取得へ渡す context はコマンドから取る。デバイス認可フローはユーザが
+// ブラウザで承認するまで待つため、Ctrl-C がここへ届かないと待ち続ける。
+func ssoLoginWith(cmd *cobra.Command, deps ssoLoginDeps) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
@@ -127,13 +151,13 @@ func ssoLogin(cmd *cobra.Command, args []string) error {
 
 	startUrl := fmt.Sprintf("https://%s.awsapps.com/start/", url)
 
-	cache, err := getSSOToken(context.Background(), region, startUrl)
+	cache, err := deps.getToken(commandContext(cmd), region, startUrl)
 	if err != nil {
 		return fmt.Errorf("get token: %w", err)
 	}
 
 	// ~/.aws/sso/cache 配下にキャッシュファイルを作成する。
-	if err = saveSSOCacheFile(cache); err != nil {
+	if err = deps.saveCache(cache); err != nil {
 		return fmt.Errorf("save cache file: %w", err)
 	}
 
@@ -190,7 +214,7 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 
 	startUrl := fmt.Sprintf("https://%s.awsapps.com/start/", url)
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	cache, err := getSSOToken(ctx, region, startUrl)
 	if err != nil {
 		return fmt.Errorf("get token: %w", err)
@@ -211,10 +235,9 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 
 	// 対話式のアカウント選択。
 	cmd.Print("\nSelect accounts to configure (comma-separated numbers, or 'all' for all accounts): ")
-	var accountInput string
-	if _, err := fmt.Scanln(&accountInput); err != nil {
-		// 空入力はそのまま扱う。
-		accountInput = ""
+	accountInput, err := promptSelection(ctx, cmd.InOrStdin())
+	if err != nil {
+		return err
 	}
 
 	accountsToProcess := selectIndices(cmd, accountInput, len(accounts), "account")
@@ -246,10 +269,9 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 
 		// 対話式のロール選択。
 		cmd.Print("Select roles to configure (comma-separated numbers, or 'all' for all roles): ")
-		var roleInput string
-		if _, err := fmt.Scanln(&roleInput); err != nil {
-			// 空入力はそのまま扱う。
-			roleInput = ""
+		roleInput, err := promptSelection(ctx, cmd.InOrStdin())
+		if err != nil {
+			return err
 		}
 
 		selectedRoles := selectIndices(cmd, roleInput, len(roles), "role")

@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] CLI の全コマンドが Ctrl-C と SIGTERM でキャンセルされる context で AWS / Google Cloud / Datadog / TiDB を呼び出すようにする (main が `signal.NotifyContext` で作った context を cobra の `ExecuteContextC` 経由で各コマンドへ渡し、それまで各コマンドが個別に呼んでいた `context.Background()` 30 箇所を `commandContext(cmd)` に置き換える。これで一覧取得や BigQuery のクエリ、SSO デバイス認可の承認待ちを Ctrl-C で即座に打ち切れる。context を受け取る口が無かった TiDB Cloud のクライアントには第一引数として context を追加し、Digest 認証の 2 往復の両方に紐付ける。`sso generate-config` のアカウント選択とロール選択、`ssm param put` / `secretsmanager put` の標準入力からの値の読み取りも、読み取りを別の goroutine に出して context のキャンセルで待機を打ち切るようにする (`signal.NotifyContext` はシグナルの既定の動作を止めるため、context を見ない読み取りを残すと入力待ちの間 Ctrl-C が無反応になる)。ただし SSM セッションの切断と API サーバのシャットダウンは、中断で context がキャンセル済みでも完了させる必要があるため専用の短命 context を使う。`server` コマンドが自前で張っていた `signal.NotifyContext` は main の 1 箇所に集約する)
+  - @sfuruya0612
 - [UPDATE] internal/util のエラーラップを `%v` から `%w` に変え、文言を「動詞 + 対象」の形式に揃える (`util.Parser` の `json Marshal error` を `encode value` に、`util.Select` の `failed to start bubble tea program` を `run bubble tea program` に変更する。これで呼び出し側が `errors.As` で `*json.UnsupportedTypeError` などの型を取り出せるようになり、internal/aws と internal/cli で揃えた文言形式に internal/util も合流する。`Parser` 側が marshal も json も名乗らないのは、呼び出し元 3 箇所がいずれも marshal を含む接頭辞を前置し、encoding/json 自身のエラーも json: で始まるためである)
   - @sfuruya0612
 - [UPDATE] SSO OIDC のエラーラップ文言から failed to を除き、対応する API を示す動詞句を含めるようにする (register sso oidc client / start sso oidc device authorization / create sso oidc token の 3 箇所。`%w` によるラップは維持する。これで internal/aws のエラーラップ文言が「動詞 + サービス名 + リソース名」の形式に揃う)
@@ -172,6 +174,8 @@
   - @sfuruya0612
 - [ADD] ElastiCache の Web 一覧に所属レプリケーショングループ (`replication_group_id`) の列を追加する。`DescribeCacheClusters` が既に返す `ReplicationGroupId` を使い、追加の API 呼び出しなしで Redis / Valkey の各ノードがどのレプリケーショングループに属するかを判別できるようにする。単一ノードの Redis / Valkey や Memcached など所属しないクラスターは列を空 (Dash 表示) とする
   - @sfuruya0612
+- [CHANGE] CLI が中断シグナルを自分で受け取り、後始末をしてから終了コード 130 で終わるようにし、失敗時の標準エラー出力から usage 全文を削除する (中断は `interrupted` の 1 行のみを表示する。終了コードは Ctrl-C の場合これまでもシグナルの既定の動作により 130 (128 + SIGINT) だったため変わらず、変わるのは表示と後始末が入る点である。SIGTERM は既定の動作による 143 (128 + SIGTERM) から 130 になる。中断はどちらも同じ扱いとし、終了コードを 1 つに固定する。ただし gRPC を使う Google Cloud の呼び出しのように SDK が `context.Canceled` へのラップの連鎖を保たない場合は `errors.Is` で判別できないため、`ctx` のキャンセル自体を見て中断と判定し、辿れない分だけ元のエラーを添えた `interrupted: <内容>` を表示する。`Error:` は実行時の失敗だけが名乗り、その表示は `Error: <内容>` の 1 行のみとする。usage 全文の代わりに、使い方の誤り、すなわちコマンドの本体に入る前に落ちた失敗 (未知のコマンド、フラグ解析の失敗、位置引数の個数、必須フラグの未指定) に限り `Run '<コマンドパス> --help' for usage.` を表示する。session-manager-plugin の実行中は `util.ExecCommand` が SIGTERM を子プロセスへ転送する。Ctrl-C は端末がフォアグラウンドのプロセスグループ全体へ配送するため従来どおり親は握りつぶして子プロセスに委ねるが、SIGTERM は送られた 1 プロセスにしか届かないため、転送しないと親は子プロセスの終了を待ち続け、既定の動作を止めた後は SIGTERM で終了できなくなる。エラー表示を `cli.Run` に集約し、cobra 側の表示は `SilenceErrors` / `SilenceUsage` で止める)
+  - @sfuruya0612
 - [CHANGE] RDS クラスターパラメータ API (`GET .../rds/cluster-parameters`) のレスポンスをパラメータ配列からクラスターパラメータグループのオブジェクト (`{"group_name", "parameters"}`) に変更し、Drawer の Cluster Parameters タブの見出しを clusterId からクラスターパラメータグループ名に変更する (Instance Parameters タブと見出しの意味を揃え、どのグループを見ているかを判別できるようにする。CLI の出力列は変更しない)
   - @sfuruya0612
 - [CHANGE] Docker によるアプリ起動を廃止し、`compose.yaml` / 各 `Dockerfile` / `frontend/nginx.conf` と `docker:up` / `docker:down` タスクを削除する。起動は `mise run backend:run` / `frontend:run` のネイティブ起動に一本化する (`example/` の floci はコンテナ単体構成に変更し、`HOME` 環境変数の差し替えで隔離するよう継続提供する)
@@ -297,6 +301,8 @@
 
 ### misc
 
+- internal/cli の本番コードが `context.Background` / `context.TODO` を呼ぶ場所を go/ast で列挙して 3 箇所 (commandContext のフォールバック、SSM セッションの切断、API サーバのシャットダウン) に固定するテストと、その列挙がサブディレクトリ・レシーバ付きメソッド・パッケージ変数の初期化式・関数リテラルを取りこぼさないことを固定するテストを追加する (コマンドが `commandContext(cmd)` の代わりに根の context を作り直しても、その場でシグナル連動が切れるだけでコンパイルも lint も通ってしまうため、増えたら落ちる検査を置く)。同じ列挙で `fmt.Scan` 系・`fmt.Fscan` 系・`io.ReadAll`・`os.Stdin` の参照を集め、context を見ない標準入力の読み取りを `promptSelection` と `readUpdateValue` の 2 箇所に固定するテストも追加する。あわせて ls 系のほぼ全コマンドが通る `runList` が `Fetch` へコマンドの context をそのまま渡すことを検証するテストと、TiDB Cloud のクライアントが受け取った context を Digest 認証の 2 往復の両方へ載せることを検証するテストを追加する (テストの追加のみで挙動は変えない)
+  - @sfuruya0612
 - internal/aws/sso_oidc.go のデバイス認可のポーリングについて、関数の境界で自分の前提を検証するようにする。WaitForSSOToken は deviceAuth が nil なら参照外しせずエラーを返し、waitForSSOToken は間隔か猶予が正でない方針を渡されたら CreateToken を呼ぶ前にエラーを返す (間隔が 0 以下だと待機で時刻が進まず打ち切り判定が成立しないまま連打し続けるため、ここは無限ループの防波堤にあたる)。あわせて打ち切りのエラーをセンチネル化して呼び出し側が errors.Is で判別できるようにし、打ち切りと ctx のキャンセルが同時に成立している場合は ctx.Err() を優先して返すようにする。現行の呼び出し元は非 nil の応答と newSSOTokenPollPolicy が組んだ方針のみを渡し、ctx も context.Background() なので、いずれも現時点の挙動は変わらない
   - @sfuruya0612
 - internal/aws/sso_oidc.go の RegisterSSOClient と StartSSODeviceAuthorization と WaitForSSOToken について、それぞれ RegisterClient / StartDeviceAuthorization / CreateToken を持つ狭いインターフェースを受け取る内部関数に呼び出しを抽出し、internal/aws/sso_oidc_test.go に次のテストを追加する。RegisterClientInput の ClientName と ClientType、StartDeviceAuthorizationInput の ClientId と ClientSecret と StartUrl、CreateTokenInput の 4 フィールドが引数どおりに構築され再試行しても同一であることを検証するテスト。register sso oidc client と start sso oidc device authorization と create sso oidc token の 3 つのラップ文言と、そこでエラーチェーンが保たれることを検証するテスト。トークンポーリングの分岐 (SlowDown での間隔倍加、AuthorizationPending での再試行継続、それ以外のエラーでの即時失敗、最大試行回数の超過、待機中の ctx キャンセル、初回成功) を検証するテスト。本番のポーリング間隔と最大試行回数と打ち切りまでの総待ち時間をリテラルで固定するテスト (待機を差し替え可能にしてテストの実行時間が実際の間隔に依存しないようにする。挙動は変えない)

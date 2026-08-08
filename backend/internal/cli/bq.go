@@ -109,7 +109,7 @@ func listBqDatasets(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	client, err := newBQClient(ctx, cfg)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func listBqTables(cmd *cobra.Command, args []string) error {
 	}
 	datasetID, _ := cmd.Flags().GetString("dataset")
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	client, err := newBQClient(ctx, cfg)
 	if err != nil {
 		return err
@@ -184,7 +184,7 @@ func showBqTableInfo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	client, err := newBQClient(ctx, cfg)
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func executeBqQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	client, err := newBQClient(ctx, cfg)
 	if err != nil {
 		return err

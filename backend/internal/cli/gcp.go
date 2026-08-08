@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"time"
@@ -171,7 +170,7 @@ func gcpRunProjects(cmd *cobra.Command) error {
 		return err
 	}
 	if !ok {
-		projects, err = gcp.RefreshProjectsOnDisk(context.Background(), dir)
+		projects, err = gcp.RefreshProjectsOnDisk(commandContext(cmd), dir)
 		if err != nil {
 			return err
 		}
@@ -190,7 +189,7 @@ func gcpRunProjectsRefresh(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	projects, err := gcp.RefreshProjectsOnDisk(context.Background(), dir)
+	projects, err := gcp.RefreshProjectsOnDisk(commandContext(cmd), dir)
 	if err != nil {
 		return err
 	}
@@ -221,7 +220,7 @@ func gcpRunCloudRun(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	items, err := gcp.ListCloudRun(context.Background(), projectID)
+	items, err := gcp.ListCloudRun(commandContext(cmd), projectID)
 	if err != nil {
 		return err
 	}
@@ -249,7 +248,7 @@ func gcpRunBuckets(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	buckets, err := gcp.ListBuckets(context.Background(), projectID)
+	buckets, err := gcp.ListBuckets(commandContext(cmd), projectID)
 	if err != nil {
 		return err
 	}
@@ -276,7 +275,7 @@ func gcpRunIAMBindings(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	bindings, err := gcp.ListIAMBindings(context.Background(), projectID)
+	bindings, err := gcp.ListIAMBindings(commandContext(cmd), projectID)
 	if err != nil {
 		return err
 	}
@@ -302,7 +301,7 @@ func gcpRunServiceAccounts(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	accounts, err := gcp.ListServiceAccounts(context.Background(), projectID)
+	accounts, err := gcp.ListServiceAccounts(commandContext(cmd), projectID)
 	if err != nil {
 		return err
 	}
@@ -329,7 +328,7 @@ func gcpRunLoggingList(cmd *cobra.Command, filter string, since time.Duration, l
 		return err
 	}
 	start := time.Now().Add(-since).UTC().Format(time.RFC3339)
-	page, err := gcp.ListLogEntries(context.Background(), projectID, filter, start, "", "", limit)
+	page, err := gcp.ListLogEntries(commandContext(cmd), projectID, filter, start, "", "", limit)
 	if err != nil {
 		return err
 	}
@@ -356,7 +355,7 @@ func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
 	if err != nil {
 		return err
 	}
-	objects, truncated, err := gcp.ListObjects(context.Background(), projectID, bucket, prefix)
+	objects, truncated, err := gcp.ListObjects(commandContext(cmd), projectID, bucket, prefix)
 	if err != nil {
 		return err
 	}

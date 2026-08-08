@@ -66,7 +66,7 @@ func newSSMCmd() *cobra.Command {
 			}
 			withDecryption, _ := cmd.Flags().GetBool("with-decryption")
 
-			param, err := awsinternal.GetSSMParameterDetail(context.Background(), cfg.Profile, cfg.Region, args[0], withDecryption)
+			param, err := awsinternal.GetSSMParameterDetail(commandContext(cmd), cfg.Profile, cfg.Region, args[0], withDecryption)
 			if err != nil {
 				return err
 			}
@@ -88,11 +88,11 @@ func newSSMCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			value, err := readUpdateValue(cmd, cmd.InOrStdin())
+			value, err := readUpdateValue(commandContext(cmd), cmd, cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
-			if err := awsinternal.PutSSMParameter(context.Background(), cfg.Profile, cfg.Region, args[0], value); err != nil {
+			if err := awsinternal.PutSSMParameter(commandContext(cmd), cfg.Profile, cfg.Region, args[0], value); err != nil {
 				return err
 			}
 			cmd.Printf("Updated SSM parameter %s\n", args[0])

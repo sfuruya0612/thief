@@ -13,6 +13,12 @@ func NewRootCmd() *cobra.Command {
 		Long: `Thief is a command-line interface tool designed to interact with
 and manage resources across various cloud platforms and services,
 including AWS, BigQuery, Datadog, and TiDB.`,
+
+		// エラーと usage の表示は Run に集約する。Cobra にも表示させると同じ文言が
+		// 2 回並ぶ。中断時に usage 全文が出るのも防ぐ。使い方の誤りに対する help への
+		// 誘導は Run が出し直す。
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
 	// Persistent flags available to all subcommands.

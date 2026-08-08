@@ -97,7 +97,7 @@ func describeCfnStack(cmd *cobra.Command, args []string) error {
 	}
 	stackName := args[0]
 
-	detail, err := awsinternal.DescribeCfnStack(context.Background(), cfg.Profile, cfg.Region, stackName)
+	detail, err := awsinternal.DescribeCfnStack(commandContext(cmd), cfg.Profile, cfg.Region, stackName)
 	if err != nil {
 		return fmt.Errorf("describe stack: %w", err)
 	}
@@ -151,7 +151,7 @@ func describeCfnChangeset(cmd *cobra.Command, args []string) error {
 	stackName := args[0]
 	changeSetName := args[1]
 
-	changes, err := awsinternal.DescribeCfnChangeSet(context.Background(), cfg.Profile, cfg.Region, stackName, changeSetName)
+	changes, err := awsinternal.DescribeCfnChangeSet(commandContext(cmd), cfg.Profile, cfg.Region, stackName, changeSetName)
 	if err != nil {
 		return fmt.Errorf("describe change set: %w", err)
 	}

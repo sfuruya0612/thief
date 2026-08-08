@@ -126,7 +126,7 @@ func displayECSServices(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	clusterArns, err := awsinternal.ListECSClusterArns(ctx, cfg.Profile, cfg.Region)
 	if err != nil {
 		return fmt.Errorf("list ECS clusters: %w", err)
@@ -155,7 +155,7 @@ func displayECSTasks(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	cluster := cmd.Flag("cluster").Value.String()
 	if cluster == "" {
 		arns, err := awsinternal.ListECSClusterArns(ctx, cfg.Profile, cfg.Region)
@@ -206,7 +206,7 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) error {
 		return errors.New("--cluster, --task, and --container flags are required")
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	session, err := awsinternal.ExecuteECSCommandSession(ctx, cfg.Profile, cfg.Region, cluster, task, container, command)
 	if err != nil {
 		return fmt.Errorf("execute command: %w", err)

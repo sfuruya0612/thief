@@ -1,6 +1,7 @@
 package tidb
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +56,7 @@ func TestListProjectsPaginatesAllPages(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	c := newTestClient(t, srv)
 
-	projects, err := c.ListProjects()
+	projects, err := c.ListProjects(context.Background())
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -90,7 +91,7 @@ func TestListClustersPaginatesAllPages(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	c := newTestClient(t, srv)
 
-	clusters, err := c.ListClusters("proj1")
+	clusters, err := c.ListClusters(context.Background(), "proj1")
 	if err != nil {
 		t.Fatalf("ListClusters() error = %v", err)
 	}
@@ -109,7 +110,7 @@ func TestGetCostReturnsEmptySliceWhenDetailsIsEmpty(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	c := newTestClient(t, srv)
 
-	costs, err := c.GetCost("2024-01")
+	costs, err := c.GetCost(context.Background(), "2024-01")
 	if err != nil {
 		t.Fatalf("GetCost() error = %v", err)
 	}
@@ -131,7 +132,7 @@ func TestGetCostReturnsCosts(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	c := newTestClient(t, srv)
 
-	costs, err := c.GetCost("2024-01")
+	costs, err := c.GetCost(context.Background(), "2024-01")
 	if err != nil {
 		t.Fatalf("GetCost() error = %v", err)
 	}
@@ -170,7 +171,7 @@ func TestGetCostDefaultsToCurrentMonthWhenMonthIsEmpty(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	c := newTestClient(t, srv)
 
-	if _, err := c.GetCost(""); err != nil {
+	if _, err := c.GetCost(context.Background(), ""); err != nil {
 		t.Fatalf("GetCost() error = %v", err)
 	}
 
@@ -194,7 +195,7 @@ func TestGetCostRangeFetchesEachMonthAndSwapsReversedRange(t *testing.T) {
 	c := newTestClient(t, srv)
 
 	// end より start が後ろでも自動で入れ替わり、両端を含む全月が取得されること。
-	costs, err := c.GetCostRange("2024-03", "2024-01")
+	costs, err := c.GetCostRange(context.Background(), "2024-03", "2024-01")
 	if err != nil {
 		t.Fatalf("GetCostRange() error = %v", err)
 	}

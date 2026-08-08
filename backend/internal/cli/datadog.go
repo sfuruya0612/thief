@@ -85,7 +85,7 @@ func showDatadogCost(cmd *cobra.Command, fetch datadogCostFetcher) error {
 
 	ddCfg := datadog.NewConfiguration(cfg.Datadog.Site)
 	api := datadog.NewUsageMeteringV2API(ddCfg)
-	ctx := datadog.NewContext(context.Background(), cfg.DatadogAPIKey(), cfg.DatadogAppKey())
+	ctx := datadog.NewContext(commandContext(cmd), cfg.DatadogAPIKey(), cfg.DatadogAppKey())
 
 	items, err := fetch(ctx, api, startMonth, endMonth, cfg.Datadog.View)
 	if err != nil {

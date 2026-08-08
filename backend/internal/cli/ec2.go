@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
 )
+
+// ec2TerminateTimeout は SSM セッションの切断に与える猶予。
+// 中断でコマンドの context がキャンセル済みでも切断だけは通したいため、専用の
+// context を作る際の期限として使う。internal/session の cleanup と同じ 5 秒に揃える。
+const ec2TerminateTimeout = 5 * time.Second
 
 var ec2Columns = []util.Column{
 	{Header: "Name"},
@@ -80,7 +86,7 @@ func displayEC2Instances(cmd *cobra.Command, args []string) error {
 	running, _ := cmd.Flags().GetBool("running")
 	global, _ := cmd.Flags().GetBool("global")
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	opts := awsinternal.EC2ListOptions{Running: running}
 
 	var list []awsinternal.EC2InstanceInfo
@@ -146,15 +152,14 @@ func startEC2Session(cmd *cobra.Command, args []string) error {
 
 // startEC2SessionWith は startEC2Session の本体。
 // 失敗の報告は返り値だけに任せ、この関数は標準エラー出力へ何も書かない。
-// SilenceErrors はリポジトリのどこにも設定されておらず Cobra が返り値を表示するため、
-// ここで書くと同じ内容が 2 回並ぶ。
+// 返り値のエラーは cli.Run が 1 箇所で表示するため、ここで書くと同じ内容が 2 回並ぶ。
 func startEC2SessionWith(cmd *cobra.Command, deps ec2SessionDeps) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
 
-	ctx := context.Background()
+	ctx := commandContext(cmd)
 	instanceID := cmd.Flag("instance-id").Value.String()
 
 	if instanceID == "" {
@@ -189,6 +194,17 @@ func startEC2SessionWith(cmd *cobra.Command, deps ec2SessionDeps) error {
 	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", cfg.Region)
 	execErr := deps.execPlugin(plug, string(sessJSON), cfg.Region, "StartSession", cfg.Profile, string(paramsJSON), ssmEndpoint)
 
+	// 切断は ctx とは別の context で行う。session-manager-plugin の実行中の Ctrl-C は
+	// util.ExecCommand が握りつぶして子プロセスに処理を委ねるが、os/signal は登録済みの
+	// 全チャネルへ同じシグナルを配送するため、main の signal.NotifyContext にも届いて
+	// ctx はキャンセル済みになる。SIGTERM も util.ExecCommand が子プロセスへ転送して
+	// 委ねるが、同じ理由で ctx はキャンセル済みになる。キャンセル済みの context で
+	// TerminateSSMSession を呼ぶと必ず失敗し、セッションが AWS 側に残る。
+	//
+	// internal/session/bridge.go の cleanup が同じ理由で専用の短命 context を使っている。
+	termCtx, cancelTerm := context.WithTimeout(context.Background(), ec2TerminateTimeout)
+	defer cancelTerm()
+
 	if execErr != nil {
 		// 実行が失敗しても SSM セッションは AWS 側に残るため、必ず切断を試みる。
 		// 切断も失敗した場合は 2 つの失敗を両方 %w で包む。Go 1.20 以降 fmt.Errorf は
@@ -196,13 +212,13 @@ func startEC2SessionWith(cmd *cobra.Command, deps ec2SessionDeps) error {
 		//
 		// どちらの経路も execute command: で始める。実行の失敗の見え方が、無関係な
 		// 後処理である切断の成否によって変わらないようにするためである。
-		if termErr := deps.terminateSession(ctx, cfg.Profile, cfg.Region, session.SessionID); termErr != nil {
+		if termErr := deps.terminateSession(termCtx, cfg.Profile, cfg.Region, session.SessionID); termErr != nil {
 			return fmt.Errorf("execute command: %w; terminate session: %w", execErr, termErr)
 		}
 		return fmt.Errorf("execute command: %w", execErr)
 	}
 
-	if err := deps.terminateSession(ctx, cfg.Profile, cfg.Region, session.SessionID); err != nil {
+	if err := deps.terminateSession(termCtx, cfg.Profile, cfg.Region, session.SessionID); err != nil {
 		return fmt.Errorf("terminate session: %w", err)
 	}
 

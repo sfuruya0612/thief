@@ -50,11 +50,11 @@ func newSecretsManagerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			value, err := readUpdateValue(cmd, cmd.InOrStdin())
+			value, err := readUpdateValue(commandContext(cmd), cmd, cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
-			if err := awsinternal.PutSecretValue(context.Background(), cfg.Profile, cfg.Region, args[0], value); err != nil {
+			if err := awsinternal.PutSecretValue(commandContext(cmd), cfg.Profile, cfg.Region, args[0], value); err != nil {
 				return err
 			}
 			cmd.Printf("Updated secret %s\n", args[0])

@@ -348,3 +348,156 @@ func TestDefaultSSOTokenDepsIsFullyWired(t *testing.T) {
 		t.Error("display is nil")
 	}
 }
+
+// TestDefaultSSOLoginDepsIsFullyWired は ssoLogin の本番用の依存がすべて埋まっていることを
+// 検証する。いずれかが nil のままだと ssoLoginWith が nil 関数を呼んで panic する。
+// ssoLoginWith のテストは差し替えたダミーを通るため、この漏れを検知できない。
+func TestDefaultSSOLoginDepsIsFullyWired(t *testing.T) {
+	deps := defaultSSOLoginDeps()
+	if deps.getToken == nil {
+		t.Error("getToken is nil")
+	}
+	if deps.saveCache == nil {
+		t.Error("saveCache is nil")
+	}
+}
+
+// ssoCtxKey は context に載せた値を取り出して同一性を確かめるためのキー。
+type ssoCtxKey struct{}
+
+// TestGetSSOTokenForwardsContextToEveryStage は、デバイス認可フローの各段が呼び出し元から
+// 渡された context をそのまま受け取ることを検証する。
+//
+// waitForToken は RFC 8628 §3.5 に従いユーザの承認をポーリングで待つ。ここで context が
+// 落ちていると Ctrl-C が届かず、承認されるかサーバ側の期限が切れるまで待ち続ける。
+// registerClient と startDeviceAuth も AWS への往復であり、同じ理由で context が必要になる。
+func TestGetSSOTokenForwardsContextToEveryStage(t *testing.T) {
+	want := context.WithValue(context.Background(), ssoCtxKey{}, "carried")
+
+	got := make(map[string]context.Context)
+	deps := okSSOTokenDeps()
+	deps.registerClient = func(ctx context.Context, _, _, _ string) (*awsinternal.SSOClientRegistration, error) {
+		got["registerClient"] = ctx
+		return &awsinternal.SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}, nil
+	}
+	deps.startDeviceAuth = func(ctx context.Context, _ string, _ *awsinternal.SSOClientRegistration, _ string) (*awsinternal.SSODeviceAuthorization, error) {
+		got["startDeviceAuth"] = ctx
+		return &awsinternal.SSODeviceAuthorization{DeviceCode: "dc", UserCode: "uc"}, nil
+	}
+	deps.waitForToken = func(ctx context.Context, _ string, _ *awsinternal.SSOClientRegistration, _ *awsinternal.SSODeviceAuthorization, _ string) (*awsinternal.SSOToken, error) {
+		got["waitForToken"] = ctx
+		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+	}
+
+	if _, err := getSSOTokenWith(want, "ap-northeast-1", "https://example.awsapps.com/start/", deps); err != nil {
+		t.Fatalf("getSSOTokenWith() error = %v", err)
+	}
+
+	for _, stage := range []string{"registerClient", "startDeviceAuth", "waitForToken"} {
+		ctx, ok := got[stage]
+		if !ok {
+			t.Errorf("%s was not called", stage)
+			continue
+		}
+		if ctx != want {
+			t.Errorf("%s received %v, want the context passed to getSSOTokenWith", stage, ctx)
+		}
+	}
+}
+
+// TestSSOLoginPassesCommandContextToTokenRetrieval は sso login がコマンドに載った
+// context をトークン取得へ渡すことを検証する。
+//
+// デバイス認可フローはユーザがブラウザで承認するまで待つ。この CLI で利用者が
+// Ctrl-C を押す可能性が最も高い場所であり、context が届かなければ待ち続ける。
+// getSSOToken への引数を commandContext(cmd) から context.Background() に戻しても
+// コンパイルも lint も通るため、ここで落とす。
+func TestSSOLoginPassesCommandContextToTokenRetrieval(t *testing.T) {
+	// loadConfig の先の config.Load が $XDG_CONFIG_HOME/thief/config.yaml と
+	// $HOME/.thief/config.yaml を読む。実行環境の設定に依存しないよう空にする。
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	want := context.WithValue(context.Background(), ssoCtxKey{}, "carried")
+
+	cmd := newSSOLoginCmd(t)
+	cmd.SetContext(want)
+
+	var got context.Context
+	saved := 0
+	err := ssoLoginWith(cmd, ssoLoginDeps{
+		getToken: func(ctx context.Context, _, _ string) (*SSOTokenCache, error) {
+			got = ctx
+			return &SSOTokenCache{AccessToken: "token"}, nil
+		},
+		saveCache: func(*SSOTokenCache) error {
+			saved++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("ssoLoginWith() error = %v", err)
+	}
+
+	if got != want {
+		t.Fatalf("getToken received %v, want the context set on the command", got)
+	}
+	if saved != 1 {
+		t.Errorf("saveCache called %d times, want 1", saved)
+	}
+}
+
+// TestSSOLoginFallsBackToBackgroundContext は Execute 系を通らないコマンドでも
+// トークン取得が nil ではない context を受け取ることを検証する。
+// nil の context をそのまま AWS SDK へ渡すと実行時に壊れる。
+func TestSSOLoginFallsBackToBackgroundContext(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cmd := newSSOLoginCmd(t)
+	if cmd.Context() != nil {
+		t.Fatal("cobra.Command.Context() != nil; フォールバックの前提が変わった")
+	}
+
+	var got context.Context
+	err := ssoLoginWith(cmd, ssoLoginDeps{
+		getToken: func(ctx context.Context, _, _ string) (*SSOTokenCache, error) {
+			got = ctx
+			return &SSOTokenCache{AccessToken: "token"}, nil
+		},
+		saveCache: func(*SSOTokenCache) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("ssoLoginWith() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("getToken received a nil context, want non-nil")
+	}
+	if err := got.Err(); err != nil {
+		t.Errorf("getToken ctx.Err() = %v, want nil", err)
+	}
+}
+
+// newSSOLoginCmd は ssoLoginWith が読むフラグだけを持つコマンドを返す。
+// profile と region は明示指定して config の解決結果に依存しないようにする。
+func newSSOLoginCmd(t *testing.T) *cobra.Command {
+	t.Helper()
+
+	cmd := &cobra.Command{Use: "login"}
+	cmd.Flags().String("url", "", "")
+	cmd.Flags().String("profile", "", "")
+	cmd.Flags().String("region", "", "")
+	for name, value := range map[string]string{
+		"url":     "example",
+		"profile": "test-profile",
+		"region":  "ap-northeast-1",
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatalf("set %s flag: %v", name, err)
+		}
+	}
+
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	return cmd
+}

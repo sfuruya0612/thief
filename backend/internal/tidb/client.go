@@ -2,6 +2,7 @@
 package tidb
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"io"
@@ -38,19 +39,22 @@ func NewClient(publicKey, privateKey string) *Client {
 }
 
 // Get performs an authenticated GET request to the TiDB Cloud API.
-func (c *Client) Get(endpoint string) (*http.Response, error) {
-	return c.get(c.baseURL + endpoint)
+func (c *Client) Get(ctx context.Context, endpoint string) (*http.Response, error) {
+	return c.get(ctx, c.baseURL+endpoint)
 }
 
 // getBilling performs an authenticated GET request to the TiDB Cloud billing API,
 // which is served from a separate host from the main v1beta API.
-func (c *Client) getBilling(endpoint string) (*http.Response, error) {
-	return c.get(c.billingURL + endpoint)
+func (c *Client) getBilling(ctx context.Context, endpoint string) (*http.Response, error) {
+	return c.get(ctx, c.billingURL+endpoint)
 }
 
-func (c *Client) get(url string) (*http.Response, error) {
+// get は Digest 認証のチャレンジ応答を 2 往復で行う。
+// どちらのリクエストも ctx に紐付ける。Digest 認証は 1 回目の 401 を待つ必要があるため、
+// ctx が届かないと中断のたびにその待ちが残る。
+func (c *Client) get(ctx context.Context, url string) (*http.Response, error) {
 	// First request to get the WWW-Authenticate challenge.
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
@@ -62,7 +66,7 @@ func (c *Client) get(url string) (*http.Response, error) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		// Re-issue with no auth — unusual but handle gracefully.
-		return c.doRequest(url, "")
+		return c.doRequest(ctx, url, "")
 	}
 
 	challenge := resp.Header.Get("WWW-Authenticate")
@@ -70,11 +74,11 @@ func (c *Client) get(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build digest header: %w", err)
 	}
-	return c.doRequest(url, authHeader)
+	return c.doRequest(ctx, url, authHeader)
 }
 
-func (c *Client) doRequest(url, authHeader string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (c *Client) doRequest(ctx context.Context, url, authHeader string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}

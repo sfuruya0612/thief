@@ -1,6 +1,7 @@
 package tidb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -91,10 +92,10 @@ type billResponse struct {
 }
 
 // ListProjects returns all TiDB Cloud projects.
-func (c *Client) ListProjects() ([]Project, error) {
+func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	projects := []Project{}
 	for page := 1; ; page++ {
-		resp, err := c.Get(fmt.Sprintf("/api/v1beta/projects?page=%d&page_size=%d", page, tidbListPageSize))
+		resp, err := c.Get(ctx, fmt.Sprintf("/api/v1beta/projects?page=%d&page_size=%d", page, tidbListPageSize))
 		if err != nil {
 			return nil, fmt.Errorf("list tidb projects: %w", err)
 		}
@@ -129,10 +130,10 @@ func (c *Client) ListProjects() ([]Project, error) {
 }
 
 // ListClusters returns all clusters for the given project.
-func (c *Client) ListClusters(projectID string) ([]Cluster, error) {
+func (c *Client) ListClusters(ctx context.Context, projectID string) ([]Cluster, error) {
 	clusters := []Cluster{}
 	for page := 1; ; page++ {
-		resp, err := c.Get(fmt.Sprintf("/api/v1beta/projects/%s/clusters?page=%d&page_size=%d", projectID, page, tidbListPageSize))
+		resp, err := c.Get(ctx, fmt.Sprintf("/api/v1beta/projects/%s/clusters?page=%d&page_size=%d", projectID, page, tidbListPageSize))
 		if err != nil {
 			return nil, fmt.Errorf("list tidb clusters: %w", err)
 		}
@@ -169,12 +170,12 @@ func (c *Client) ListClusters(projectID string) ([]Cluster, error) {
 
 // GetCost returns billing cost details for the given month (YYYY-MM).
 // If month is empty, the current year-month is used.
-func (c *Client) GetCost(month string) ([]Cost, error) {
+func (c *Client) GetCost(ctx context.Context, month string) ([]Cost, error) {
 	if month == "" {
 		month = time.Now().Format("2006-01")
 	}
 
-	resp, err := c.getBilling(fmt.Sprintf("/v1beta1/billsDetails/%s", month))
+	resp, err := c.getBilling(ctx, fmt.Sprintf("/v1beta1/billsDetails/%s", month))
 	if err != nil {
 		return nil, fmt.Errorf("get tidb cost: %w", err)
 	}
@@ -225,7 +226,7 @@ func parseFloat(s string) float64 {
 // API only accepts a single month per request, so this issues one request
 // per month. If startMonth or endMonth is empty, the current year-month is
 // used for that end of the range.
-func (c *Client) GetCostRange(startMonth, endMonth string) ([]Cost, error) {
+func (c *Client) GetCostRange(ctx context.Context, startMonth, endMonth string) ([]Cost, error) {
 	now := time.Now()
 	if startMonth == "" {
 		startMonth = now.Format("2006-01")
@@ -248,7 +249,7 @@ func (c *Client) GetCostRange(startMonth, endMonth string) ([]Cost, error) {
 
 	costs := []Cost{}
 	for m := start; !m.After(end); m = m.AddDate(0, 1, 0) {
-		monthCosts, err := c.GetCost(m.Format("2006-01"))
+		monthCosts, err := c.GetCost(ctx, m.Format("2006-01"))
 		if err != nil {
 			return nil, err
 		}
