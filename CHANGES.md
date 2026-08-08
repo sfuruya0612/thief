@@ -218,6 +218,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] SSO ログインのエラーが errors.Is / errors.As で判別できず、メッセージに同じ語句が 2 回続く不具合を修正する (internal/cli/sso.go の getSSOToken が 4 箇所すべてで `%v` を使いエラーチェーンを切っていたのを、呼び出し先が既に「どの API で失敗したか」を述べている 3 箇所はラップを削って伝播させ、文脈を持たない openBrowser のみ `%w` でラップする形に改める。あわせてデバイス認可フローの 4 つの外部呼び出しを差し替え可能にし、各段の失敗でチェーンが保たれることと呼び出し先の文言を重ねないことを検証するテストを追加する)
+  - @sfuruya0612
 - [FIX] CloudFormation の Web API の一覧取得で、削除されていないのに一覧から落ちていた 4 状態 (DELETE_FAILED / UPDATE_ROLLBACK_IN_PROGRESS / UPDATE_COMPLETE_CLEANUP_IN_PROGRESS / UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS) のスタックを表示するようにする (ListStacks に渡す StackStatusFilter を DELETE_COMPLETE のみを除く 22 種に揃え、CLI の一覧と結果を一致させる)
   - @sfuruya0612
 - [FIX] Cost Explorer の API (cost / cost forecast) が SSO トークン期限切れを 500 INTERNAL_ERROR で返し画面に再ログイン導線が出ない問題を、他の AWS リソース API と同じく 401 SSO_TOKEN_EXPIRED を返すように修正する
