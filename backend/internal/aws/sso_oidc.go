@@ -45,13 +45,25 @@ func newSSOOidcClient(ctx context.Context, region string) (*ssooidc.Client, erro
 	})
 }
 
+// ssoOidcRegisterClientAPI は RegisterClient の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *ssooidc.Client がこれを満たす。
+type ssoOidcRegisterClientAPI interface {
+	RegisterClient(ctx context.Context, params *ssooidc.RegisterClientInput, optFns ...func(*ssooidc.Options)) (*ssooidc.RegisterClientOutput, error)
+}
+
 // RegisterSSOClient は SSO OIDC クライアントを登録し、クライアント ID とシークレットを返す。
 func RegisterSSOClient(ctx context.Context, region, clientName, clientType string) (*SSOClientRegistration, error) {
 	client, err := newSSOOidcClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
+	return registerSSOClient(ctx, client, clientName, clientType)
+}
 
+// registerSSOClient は生成済みクライアントでクライアント登録を行うコア。
+// RegisterClientInput に載せる ClientName と ClientType を単体テストで固定できるよう、
+// クライアントの生成と分離してある。
+func registerSSOClient(ctx context.Context, client ssoOidcRegisterClientAPI, clientName, clientType string) (*SSOClientRegistration, error) {
 	o, err := client.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: awssdk.String(clientName),
 		ClientType: awssdk.String(clientType),
@@ -67,6 +79,12 @@ func RegisterSSOClient(ctx context.Context, region, clientName, clientType strin
 	}, nil
 }
 
+// ssoOidcStartDeviceAuthorizationAPI は StartDeviceAuthorization の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *ssooidc.Client がこれを満たす。
+type ssoOidcStartDeviceAuthorizationAPI interface {
+	StartDeviceAuthorization(ctx context.Context, params *ssooidc.StartDeviceAuthorizationInput, optFns ...func(*ssooidc.Options)) (*ssooidc.StartDeviceAuthorizationOutput, error)
+}
+
 // StartSSODeviceAuthorization はデバイス認可フローを開始し、
 // ユーザーがブラウザで承認するための情報を返す。
 func StartSSODeviceAuthorization(ctx context.Context, region string, reg *SSOClientRegistration, startURL string) (*SSODeviceAuthorization, error) {
@@ -74,7 +92,13 @@ func StartSSODeviceAuthorization(ctx context.Context, region string, reg *SSOCli
 	if err != nil {
 		return nil, err
 	}
+	return startSSODeviceAuthorization(ctx, client, reg, startURL)
+}
 
+// startSSODeviceAuthorization は生成済みクライアントでデバイス認可を開始するコア。
+// StartDeviceAuthorizationInput に載せる ClientId / ClientSecret / StartUrl を
+// 単体テストで固定できるよう、クライアントの生成と分離してある。
+func startSSODeviceAuthorization(ctx context.Context, client ssoOidcStartDeviceAuthorizationAPI, reg *SSOClientRegistration, startURL string) (*SSODeviceAuthorization, error) {
 	o, err := client.StartDeviceAuthorization(ctx, &ssooidc.StartDeviceAuthorizationInput{
 		ClientId:     awssdk.String(reg.ClientID),
 		ClientSecret: awssdk.String(reg.ClientSecret),
@@ -91,6 +115,32 @@ func StartSSODeviceAuthorization(ctx context.Context, region string, reg *SSOCli
 	}, nil
 }
 
+// ssoOidcCreateTokenAPI は CreateToken の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *ssooidc.Client がこれを満たす。
+type ssoOidcCreateTokenAPI interface {
+	CreateToken(ctx context.Context, params *ssooidc.CreateTokenInput, optFns ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error)
+}
+
+// ssoTokenPollPolicy はデバイス認可フローのポーリングの初期間隔と打ち切り条件をまとめる。
+// 全フィールドが必須で、本番の値は productionSSOTokenPollPolicy が組む。
+//
+// after は次の試行までの待機を表すチャネルを返す。テストから待機を差し替えられるように
+// してある。差し替えが必要な理由は internal/aws/sso_oidc_test.go 側に書いてある。
+type ssoTokenPollPolicy struct {
+	interval    time.Duration
+	maxAttempts int
+	after       func(d time.Duration) <-chan time.Time
+}
+
+// productionSSOTokenPollPolicy は本番で使うポーリング方針を返す。
+func productionSSOTokenPollPolicy() ssoTokenPollPolicy {
+	return ssoTokenPollPolicy{
+		interval:    ssoTokenPollInterval,
+		maxAttempts: ssoTokenPollMaxAttempts,
+		after:       time.After,
+	}
+}
+
 // WaitForSSOToken はユーザーのブラウザ承認が完了するまで CreateToken をポーリングし、
 // アクセストークンを返す。承認待ち (AuthorizationPending) は再試行し、
 // レート制限 (SlowDown) では間隔を倍にして再試行する。それ以外のエラーは即時失敗する。
@@ -99,7 +149,14 @@ func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistrat
 	if err != nil {
 		return nil, err
 	}
+	return waitForSSOToken(ctx, client, reg, deviceCode, grantType, productionSSOTokenPollPolicy())
+}
 
+// waitForSSOToken は生成済みクライアントでトークンをポーリングするコア。
+// 分岐 (SlowDown での間隔倍加、AuthorizationPending での再試行、それ以外での即時失敗、
+// 最大試行回数の超過、ctx のキャンセル) を単体テストで検証できるよう、
+// クライアントの生成とポーリング方針から分離してある。
+func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSOClientRegistration, deviceCode, grantType string, policy ssoTokenPollPolicy) (*SSOToken, error) {
 	input := &ssooidc.CreateTokenInput{
 		ClientId:     awssdk.String(reg.ClientID),
 		ClientSecret: awssdk.String(reg.ClientSecret),
@@ -107,8 +164,8 @@ func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistrat
 		GrantType:    awssdk.String(grantType),
 	}
 
-	interval := ssoTokenPollInterval
-	for i := 0; i < ssoTokenPollMaxAttempts; i++ {
+	interval := policy.interval
+	for i := 0; i < policy.maxAttempts; i++ {
 		o, err := client.CreateToken(ctx, input)
 		if err == nil {
 			return &SSOToken{
@@ -121,6 +178,11 @@ func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistrat
 		var slowDown *ssooidctypes.SlowDownException
 		switch {
 		case errors.As(err, &slowDown):
+			// RFC 8628 §3.5 は slow_down に対して間隔を固定 5 秒増やすことを MUST と
+			// 定めており、倍加は仕様外である。上限も無いため SlowDown が続くと待機が
+			// 指数的に伸び、34 回で time.Duration が int64 を超えて負になる。
+			// 挙動を変えない範囲では直せないため issue 0129 で扱う。
+			// 単体テストは連続 2 回までしか固定していない。
 			interval *= 2
 		case errors.As(err, &pending):
 			// ユーザーのブラウザ承認待ち。間隔は変えずに再試行する。
@@ -131,7 +193,7 @@ func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistrat
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(interval):
+		case <-policy.after(interval):
 		}
 	}
 

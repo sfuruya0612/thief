@@ -291,6 +291,8 @@
 
 ### misc
 
+- internal/aws/sso_oidc.go の RegisterSSOClient と StartSSODeviceAuthorization と WaitForSSOToken について、それぞれ RegisterClient / StartDeviceAuthorization / CreateToken を持つ狭いインターフェースを受け取る内部関数に呼び出しを抽出し、internal/aws/sso_oidc_test.go に次のテストを追加する。RegisterClientInput の ClientName と ClientType、StartDeviceAuthorizationInput の ClientId と ClientSecret と StartUrl、CreateTokenInput の 4 フィールドが引数どおりに構築され再試行しても同一であることを検証するテスト。register sso oidc client と start sso oidc device authorization と create sso oidc token の 3 つのラップ文言と、そこでエラーチェーンが保たれることを検証するテスト。トークンポーリングの分岐 (SlowDown での間隔倍加、AuthorizationPending での再試行継続、それ以外のエラーでの即時失敗、最大試行回数の超過、待機中の ctx キャンセル、初回成功) を検証するテスト。本番のポーリング間隔と最大試行回数と打ち切りまでの総待ち時間をリテラルで固定するテスト (待機を差し替え可能にしてテストの実行時間が実際の間隔に依存しないようにする。挙動は変えない)
+  - @sfuruya0612
 - internal/aws/cfn_test.go に SDK が知る StackStatus の集合を固定するテストを追加し、AWS がステータスを追加したときに Web API とレガシー CLI の 2 経路の statusFilter を見直す契機を作る (2 経路の期待値は独立に維持したまま、SDK の集合そのものを別に固定する。挙動は変えない)
   - @sfuruya0612
 - internal/aws/ssm.go の ListSSMOnlineInstanceIDs について、DescribeInstanceInformation を持つ SDK 公開のインターフェース ssm.DescribeInstanceInformationAPIClient を受け取る内部関数に呼び出しを抽出し、DescribeInstanceInformationInput の Filters に PingStatus=Online と ResourceType=EC2Instance が載ることを複数ページの全呼び出しについて検証するテストと、ページ取得の失敗をラップしたまま伝播し部分的な結果を返さないことを検証するテストを追加する (挙動は変えない)
