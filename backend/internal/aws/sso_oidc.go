@@ -57,7 +57,7 @@ func RegisterSSOClient(ctx context.Context, region, clientName, clientType strin
 		ClientType: awssdk.String(clientType),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to register client: %w", err)
+		return nil, fmt.Errorf("register sso oidc client: %w", err)
 	}
 
 	return &SSOClientRegistration{
@@ -81,7 +81,7 @@ func StartSSODeviceAuthorization(ctx context.Context, region string, reg *SSOCli
 		StartUrl:     awssdk.String(startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to start device authorization: %w", err)
+		return nil, fmt.Errorf("start sso oidc device authorization: %w", err)
 	}
 
 	return &SSODeviceAuthorization{
@@ -125,7 +125,7 @@ func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistrat
 		case errors.As(err, &pending):
 			// ユーザーのブラウザ承認待ち。間隔は変えずに再試行する。
 		default:
-			return nil, fmt.Errorf("token creation failed: %w", err)
+			return nil, fmt.Errorf("create sso oidc token: %w", err)
 		}
 
 		select {
