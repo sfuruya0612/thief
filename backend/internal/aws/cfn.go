@@ -43,7 +43,11 @@ func ListCFNStacks(ctx context.Context, profile, region string) ([]CFNStackResou
 }
 
 func listCFNStacks(ctx context.Context, client cfnListStacksClient) ([]CFNStackResource, error) {
-	// Exclude deleted stacks.
+	// 削除済みのスタックだけを除外する。StackStatus 23 種のうちスタックが存在しなくなるのは
+	// DELETE_COMPLETE の 1 種だけなので、残る 22 種をそのまま渡す。DELETE_FAILED や
+	// UPDATE_ROLLBACK_IN_PROGRESS のように手当てが必要な状態を一覧から落とさないためである
+	// (issue 0122)。listCfnStackSummaries と同じ集合だが、レガシー CLI 互換の集合として
+	// 独立に維持されているため共有の定数へは括り出さない。
 	statusFilter := []cfntypes.StackStatus{
 		cfntypes.StackStatusCreateComplete,
 		cfntypes.StackStatusUpdateComplete,
@@ -51,10 +55,14 @@ func listCFNStacks(ctx context.Context, client cfnListStacksClient) ([]CFNStackR
 		cfntypes.StackStatusUpdateRollbackComplete,
 		cfntypes.StackStatusCreateInProgress,
 		cfntypes.StackStatusUpdateInProgress,
+		cfntypes.StackStatusUpdateCompleteCleanupInProgress,
 		cfntypes.StackStatusDeleteInProgress,
 		cfntypes.StackStatusRollbackInProgress,
+		cfntypes.StackStatusUpdateRollbackInProgress,
+		cfntypes.StackStatusUpdateRollbackCompleteCleanupInProgress,
 		cfntypes.StackStatusCreateFailed,
 		cfntypes.StackStatusUpdateFailed,
+		cfntypes.StackStatusDeleteFailed,
 		cfntypes.StackStatusRollbackFailed,
 		cfntypes.StackStatusUpdateRollbackFailed,
 		cfntypes.StackStatusImportComplete,

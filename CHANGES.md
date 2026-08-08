@@ -214,6 +214,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] CloudFormation の Web API の一覧取得で、削除されていないのに一覧から落ちていた 4 状態 (DELETE_FAILED / UPDATE_ROLLBACK_IN_PROGRESS / UPDATE_COMPLETE_CLEANUP_IN_PROGRESS / UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS) のスタックを表示するようにする (ListStacks に渡す StackStatusFilter を DELETE_COMPLETE のみを除く 22 種に揃え、CLI の一覧と結果を一致させる)
+  - @sfuruya0612
 - [FIX] Cost Explorer の API (cost / cost forecast) が SSO トークン期限切れを 500 INTERNAL_ERROR で返し画面に再ログイン導線が出ない問題を、他の AWS リソース API と同じく 401 SSO_TOKEN_EXPIRED を返すように修正する
   - @sfuruya0612
 - [FIX] backend のリソースキャッシュのキーが要素をエスケープせず `:` で連結していたため、異なる条件のリクエストが同一のキーへ衝突し別の条件の結果が返る不具合を修正する。キーの要素には Cost Explorer の絞り込み条件、DynamoDB のスキャン条件の属性値、S3/GCS のオブジェクトプレフィックスなどの自由入力が入るため、各要素を `url.QueryEscape` でエスケープしてから連結するようにする (キャッシュはインメモリのためキー形式の変更による永続的な影響はない)
