@@ -332,28 +332,64 @@ func selectIndices(cmd *cobra.Command, input string, max int, kind string) []int
 	return selected
 }
 
+// ssoTokenDeps は getSSOToken がデバイス認可フローで呼ぶ外部処理をまとめる。
+// 差し替え可能にしている理由はフィールドによって 2 つある。
+// registerClient / startDeviceAuth / waitForToken / openBrowser は AWS への接続かブラウザの
+// 起動を伴い、テストからは実行できない。エラーの伝播を検証するために差し替える。
+// display は標準出力へ書くだけでエラーを返さないが、テスト実行時の出力を汚さないために
+// 差し替える。
+// これらは元から自由関数であり、絞り込む対象の具象型が無い。internal/aws のように
+// SDK クライアントをコンシューマ定義インターフェースで受けるのではなく、関数値を
+// 持たせているのはそのためである。
+type ssoTokenDeps struct {
+	registerClient  func(ctx context.Context, region, clientName, clientType string) (*awsinternal.SSOClientRegistration, error)
+	startDeviceAuth func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, startURL string) (*awsinternal.SSODeviceAuthorization, error)
+	openBrowser     func(url string) error
+	waitForToken    func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, deviceCode, grantType string) (*awsinternal.SSOToken, error)
+	display         func(startURL, userCode string)
+}
+
+// defaultSSOTokenDeps は本番で使う実装を返す。
+func defaultSSOTokenDeps() ssoTokenDeps {
+	return ssoTokenDeps{
+		registerClient:  awsinternal.RegisterSSOClient,
+		startDeviceAuth: awsinternal.StartSSODeviceAuthorization,
+		openBrowser:     openBrowser,
+		waitForToken:    awsinternal.WaitForSSOToken,
+		display:         ssoLoginDisplay,
+	}
+}
+
 // getSSOToken はデバイス認可フローでアクセストークンを取得する。
 func getSSOToken(ctx context.Context, region, url string) (*SSOTokenCache, error) {
-	registration, err := awsinternal.RegisterSSOClient(ctx, region, ssoClientName, ssoClientType)
+	return getSSOTokenWith(ctx, region, url, defaultSSOTokenDeps())
+}
+
+// getSSOTokenWith は getSSOToken の本体。
+// awsinternal の 3 つの呼び出しは、どの API で失敗したかを示す文言で既にラップされて返る。
+// この層から足せる情報が無いため包み直さず、そのまま伝播させる。
+// openBrowser だけは exec の裸のエラーを返すため、何をしようとしたかをここで足す。
+func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps) (*SSOTokenCache, error) {
+	registration, err := deps.registerClient(ctx, region, ssoClientName, ssoClientType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to register client: %v", err)
+		return nil, err
 	}
 
-	deviceAuth, err := awsinternal.StartSSODeviceAuthorization(ctx, region, registration, url)
+	deviceAuth, err := deps.startDeviceAuth(ctx, region, registration, url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start device authorization: %v", err)
+		return nil, err
 	}
 
-	if err := openBrowser(deviceAuth.VerificationURIComplete); err != nil {
-		return nil, fmt.Errorf("failed to open browser: %v", err)
+	if err := deps.openBrowser(deviceAuth.VerificationURIComplete); err != nil {
+		return nil, fmt.Errorf("open browser: %w", err)
 	}
 
 	// aws sso login コマンドと同じ出力にする。
-	ssoLoginDisplay(url, deviceAuth.UserCode)
+	deps.display(url, deviceAuth.UserCode)
 
-	token, err := awsinternal.WaitForSSOToken(ctx, region, registration, deviceAuth.DeviceCode, ssoGrantType)
+	token, err := deps.waitForToken(ctx, region, registration, deviceAuth.DeviceCode, ssoGrantType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get token: %v", err)
+		return nil, err
 	}
 
 	expireAt := time.Now().UTC().Add(time.Duration(token.ExpiresIn) * time.Second)
