@@ -134,7 +134,7 @@ func ListSSMParameterInfos(ctx context.Context, profile, region, path string) ([
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to describe parameters: %w", err)
+			return nil, fmt.Errorf("describe ssm parameters: %w", err)
 		}
 		for _, p := range page.Parameters {
 			lastModified := ""
@@ -166,12 +166,12 @@ func GetSSMParameterDetail(ctx context.Context, profile, region, name string, wi
 		WithDecryption: aws.Bool(withDecryption),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get parameter %s: %w", name, err)
+		return nil, fmt.Errorf("get ssm parameter %s: %w", name, err)
 	}
 
 	p := out.Parameter
 	if p == nil {
-		return nil, fmt.Errorf("failed to get parameter %s: empty response", name)
+		return nil, fmt.Errorf("get ssm parameter %s: empty response", name)
 	}
 
 	return &SSMParameterValue{
@@ -213,7 +213,7 @@ func listSSMOnlineInstanceIDs(ctx context.Context, client ssm.DescribeInstanceIn
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get next page: %w", err)
+			return nil, fmt.Errorf("describe ssm instance information: %w", err)
 		}
 		for _, inst := range page.InstanceInformationList {
 			if inst.InstanceId != nil {

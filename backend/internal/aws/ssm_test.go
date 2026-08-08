@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -98,7 +99,8 @@ func TestListSSMOnlineInstanceIDsSendsPingStatusAndResourceTypeFilters(t *testin
 
 // TestListSSMOnlineInstanceIDsPropagatesPageError は途中のページ取得が失敗したときに、
 // エラーを握り潰さず、取得済みの部分的な結果も返さないことを検証する。
-// エラーの文言そのものは固定せず、%w によるラップが維持されることだけを見る。
+// 文言は完全一致では固定せず、%w によるラップが維持されることと、何の取得に失敗したかが
+// 文言に残ることだけを見る。
 func TestListSSMOnlineInstanceIDsPropagatesPageError(t *testing.T) {
 	// 1 ページ目は NextToken を返すが 2 ページ目を用意しない。ページネータは 2 回目の
 	// 呼び出しを行い、モックがエラーを返す。
@@ -116,6 +118,14 @@ func TestListSSMOnlineInstanceIDsPropagatesPageError(t *testing.T) {
 	got, err := listSSMOnlineInstanceIDs(context.Background(), client)
 	if !errors.Is(err, errSSMNoMorePages) {
 		t.Fatalf("listSSMOnlineInstanceIDs() error = %v, want error wrapping %v", err, errSSMNoMorePages)
+	}
+	// この関数は internal/cli/ec2.go の EC2 一覧表示から呼ばれ、同じ処理の中で EC2 と SSM の
+	// 2 系統の API を叩く。どちらの取得で失敗したかをログから判別できる必要があるため、
+	// 対象を示す語がラップの文言に残っていることを確認する。動詞や語順の変更で壊れないよう
+	// 完全一致では固定しない。
+	const wantIn = "ssm instance information"
+	if !strings.Contains(err.Error(), wantIn) {
+		t.Errorf("listSSMOnlineInstanceIDs() error = %v, want it to contain %q", err, wantIn)
 	}
 	// 1 ページ目の取得に成功していても部分的な結果は返さない。
 	if got != nil {
