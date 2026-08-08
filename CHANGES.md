@@ -287,6 +287,8 @@
 
 ### misc
 
+- internal/aws/cfn_test.go に SDK が知る StackStatus の集合を固定するテストを追加し、AWS がステータスを追加したときに Web API とレガシー CLI の 2 経路の statusFilter を見直す契機を作る (2 経路の期待値は独立に維持したまま、SDK の集合そのものを別に固定する。挙動は変えない)
+  - @sfuruya0612
 - internal/aws/ssm.go の ListSSMOnlineInstanceIDs について、DescribeInstanceInformation を持つ SDK 公開のインターフェース ssm.DescribeInstanceInformationAPIClient を受け取る内部関数に呼び出しを抽出し、DescribeInstanceInformationInput の Filters に PingStatus=Online と ResourceType=EC2Instance が載ることを複数ページの全呼び出しについて検証するテストと、ページ取得の失敗をラップしたまま伝播し部分的な結果を返さないことを検証するテストを追加する (挙動は変えない)
   - @sfuruya0612
 - internal/aws/sqs.go の ListSQSResources について、ListQueues と GetQueueAttributes と ListQueueTags を持つ狭いインターフェース sqsQueueListClient を受け取る内部関数に呼び出しを抽出し、GetQueueAttributesInput の AttributeNames に全属性の取得指定が載ること、複数ページにまたがる全キューについて属性取得とタグ取得が行われることを検証するテストを追加する (挙動は変えない)

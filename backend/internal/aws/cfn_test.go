@@ -162,6 +162,59 @@ func TestListStacksSendsStackStatusFilter(t *testing.T) {
 	}
 }
 
+// cfnPinnedStackStatuses は SDK が知る StackStatus 全種を AWS API のステータス文字列で
+// 書き下したもの。
+// listCfnStackSummaries の期待値と 22 種が重なるが、あちらは「レガシー CLI が送るべき集合」
+// という本リポジトリの仕様であり、こちらは「SDK が知る全種」という外部の事実である。
+// 意味が異なるため共有せず、それぞれ独立に固定する。
+func cfnPinnedStackStatuses() []string {
+	return []string{
+		"CREATE_IN_PROGRESS",
+		"CREATE_FAILED",
+		"CREATE_COMPLETE",
+		"ROLLBACK_IN_PROGRESS",
+		"ROLLBACK_FAILED",
+		"ROLLBACK_COMPLETE",
+		"DELETE_IN_PROGRESS",
+		"DELETE_FAILED",
+		"DELETE_COMPLETE",
+		"UPDATE_IN_PROGRESS",
+		"UPDATE_COMPLETE_CLEANUP_IN_PROGRESS",
+		"UPDATE_COMPLETE",
+		"UPDATE_FAILED",
+		"UPDATE_ROLLBACK_IN_PROGRESS",
+		"UPDATE_ROLLBACK_FAILED",
+		"UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+		"UPDATE_ROLLBACK_COMPLETE",
+		"REVIEW_IN_PROGRESS",
+		"IMPORT_IN_PROGRESS",
+		"IMPORT_COMPLETE",
+		"IMPORT_ROLLBACK_IN_PROGRESS",
+		"IMPORT_ROLLBACK_FAILED",
+		"IMPORT_ROLLBACK_COMPLETE",
+	}
+}
+
+// TestCfnStackStatusSetIsPinned は SDK が知る StackStatus の集合を固定し、AWS がステータスを
+// 追加したときに 2 つの一覧経路を見直す契機を作る。
+// listCFNStacks の期待値は Values() から導出しているため、SDK が更新されれば実装の追随漏れを
+// TestListStacksSendsStackStatusFilter が検知する。一方 listCfnStackSummaries の期待値は
+// レガシー CLI 互換の集合として独立に維持される手書きの集合であり、実装と期待値が揃って
+// 古いまま取り残されても落ちない。両経路の期待値を共通化すると片方だけのずれを検知できなく
+// なるため共通化はせず、SDK の集合そのものをここで固定して追加を検知する。
+func TestCfnStackStatusSetIsPinned(t *testing.T) {
+	all := cfntypes.StackStatus("").Values()
+	got := make([]string, 0, len(all))
+	for _, s := range all {
+		got = append(got, string(s))
+	}
+	// 集合として意味を持つため、SDK 側の列挙順の変更では落とさない。
+	sortStrings := cmpopts.SortSlices(func(a, b string) bool { return a < b })
+	if diff := cmp.Diff(cfnPinnedStackStatuses(), got, sortStrings); diff != "" {
+		t.Errorf("StackStatus set changed (-want +got):\n%s\nupdate cfnPinnedStackStatuses, revisit statusFilter in both listCFNStacks and listCfnStackSummaries, and update the hand written expected set for listCfnStackSummaries in TestListStacksSendsStackStatusFilter", diff)
+	}
+}
+
 func TestCfnEventFromSDK(t *testing.T) {
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
