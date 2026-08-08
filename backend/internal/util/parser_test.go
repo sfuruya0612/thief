@@ -2,6 +2,8 @@ package util
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -71,20 +73,138 @@ func TestParser_Map(t *testing.T) {
 	}
 }
 
+// errFailingMarshaler は failingMarshaler が返すエラー。ラップの連鎖の終端として
+// 同一性を確かめられるようにしてある。
+var errFailingMarshaler = errors.New("failing marshaler")
+
+// failingMarshaler は MarshalJSON が必ず失敗する型。encoding/json はこれを
+// *json.MarshalerError で包んで返す。
+type failingMarshaler struct{}
+
+func (failingMarshaler) MarshalJSON() ([]byte, error) { return nil, errFailingMarshaler }
+
+// TestParser_Invalid は encoding/json の失敗をラップしたまま返すことを検証する。
+//
+// errors.As での到達を見るのが要点である。%v でラップすると Unwrap の連鎖が切れ、
+// 呼び出し側は json.Marshal が返した型を取り出せなくなる。文言の部分一致だけでは
+// %w から %v への差し戻しを検出できないため、両方を見る。
+//
+// 入力は json.Marshal が返す 3 つの型をそれぞれ引き出すものを選んでいる。循環参照は
+// *json.UnsupportedValueError、チャネルは *json.UnsupportedTypeError、MarshalJSON の
+// 失敗は *json.MarshalerError になる。
+//
+// *json.MarshalerError は自身も Unwrap を持つため、この行だけは Parser の %w と
+// MarshalerError の Unwrap を合わせた 2 段の連鎖を errors.Is で検証できる。
 func TestParser_Invalid(t *testing.T) {
-	// Create a circular reference which will cause json.Marshal to fail
-	m1 := make(map[string]interface{})
-	m2 := make(map[string]interface{})
-	m1["child"] = m2
-	m2["parent"] = m1
-
-	_, err := Parser(m1)
-
-	if err == nil {
-		t.Error("expected error, got nil")
+	cyclic := func() interface{} {
+		m1 := make(map[string]interface{})
+		m2 := make(map[string]interface{})
+		m1["child"] = m2
+		m2["parent"] = m1
+		return m1
 	}
-	if !strings.Contains(err.Error(), "json Marshal error") {
-		t.Errorf("expected error to contain 'json Marshal error', got %q", err.Error())
+
+	tests := []struct {
+		name    string
+		input   interface{}
+		wantAs  func(error) bool
+		wantErr string
+		// wantIs は 2 段以上たどれる入力でのみ指定する。nil なら検証しない。
+		wantIs error
+	}{
+		{
+			name:    "cycle",
+			input:   cyclic(),
+			wantAs:  func(err error) bool { return errors.As(err, new(*json.UnsupportedValueError)) },
+			wantErr: "*json.UnsupportedValueError",
+		},
+		{
+			name:    "unsupported type",
+			input:   make(chan int),
+			wantAs:  func(err error) bool { return errors.As(err, new(*json.UnsupportedTypeError)) },
+			wantErr: "*json.UnsupportedTypeError",
+		},
+		{
+			name:    "marshaler error",
+			input:   failingMarshaler{},
+			wantAs:  func(err error) bool { return errors.As(err, new(*json.MarshalerError)) },
+			wantErr: "*json.MarshalerError",
+			wantIs:  errFailingMarshaler,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := Parser(tt.input)
+
+			if b != nil {
+				t.Errorf("bytes = %q, want nil on error", b)
+			}
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.wantAs(err) {
+				t.Errorf("errors.As(err, %s) = false, want true; got %v (%T)", tt.wantErr, err, err)
+			}
+			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
+				t.Errorf("errors.Is(err, %v) = false, want true; got %v", tt.wantIs, err)
+			}
+
+			// 文言は「動詞 + 対象」の形式に揃えてある。旧文言の json Marshal error に
+			// 戻すとここで落ちる。error という語を含まないことも押さえる。
+			if !strings.HasPrefix(err.Error(), "encode value: ") {
+				t.Errorf("error = %q, want it to start with %q", err.Error(), "encode value: ")
+			}
+			if strings.Contains(err.Error(), "encode value: error") {
+				t.Errorf("error = %q, want no redundant %q in the wrapper", err.Error(), "error")
+			}
+		})
+	}
+}
+
+// TestParser_WrapperDoesNotRepeatCallerPrefix は Parser の文言が呼び出し元の接頭辞と
+// 重複しないことを固定する。
+//
+// util.Parser の呼び出し元はいずれも marshal を含む接頭辞を前置する。Parser 側も
+// marshal を名乗ると連結された文言に同じ動詞が 2 度出る。encoding/json 自身のエラーが
+// json: で始まるため、json も同じ理由で避けている。
+//
+// 接頭辞は internal/cli の実際の呼び出し経路 3 つをそのまま並べている。1 つだけを
+// 見ると、他の経路で重複が生じても気付けない。
+func TestParser_WrapperDoesNotRepeatCallerPrefix(t *testing.T) {
+	// 接頭辞は本番の呼び出し元から写したものである。向こうを変えたらここも変える。
+	tests := []struct {
+		name   string
+		prefix string
+	}{
+		// sessionManagerSessionJSON (session_plugin.go) は接頭辞を付けずに返し、
+		// その呼び出し元 (ec2.go / ecs.go) が marshal session を前置する。
+		{name: "marshal session", prefix: "marshal session"},
+		// ec2.go の StartSession 入力の組み立て。
+		{name: "marshal start session input", prefix: "marshal start session input"},
+		// ecs.go の Target の組み立て。
+		{name: "marshal target", prefix: "marshal target"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parser(make(chan int))
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			// 呼び出し元と同じ形に連結して、実際に利用者が見る文言で確かめる。
+			wrapped := fmt.Errorf("%s: %w", tt.prefix, err)
+			got := wrapped.Error()
+
+			if strings.Count(got, "marshal") != 1 {
+				t.Errorf("error = %q, want %q to appear exactly once", got, "marshal")
+			}
+			if strings.Contains(got, "json: json:") {
+				t.Errorf("error = %q, want no adjacent repetition of %q", got, "json:")
+			}
+			if !errors.As(wrapped, new(*json.UnsupportedTypeError)) {
+				t.Errorf("errors.As through the caller prefix = false, want true; got %v", wrapped)
+			}
+		})
 	}
 }
 

@@ -75,7 +75,7 @@ func Select(items []Item, prompt string) (Item, error) {
 	p := tea.NewProgram(initialModel)
 	m, err := p.Run()
 	if err != nil {
-		return nil, fmt.Errorf("failed to start bubble tea program: %v", err)
+		return nil, fmt.Errorf("run bubble tea program: %w", err)
 	}
 
 	finalModel := m.(model)
