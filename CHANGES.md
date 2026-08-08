@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] SSO OIDC のエラーラップ文言から failed to を除き、対応する API を示す動詞句を含めるようにする (register sso oidc client / start sso oidc device authorization / create sso oidc token の 3 箇所。`%w` によるラップは維持する。これで internal/aws のエラーラップ文言が「動詞 + サービス名 + リソース名」の形式に揃う)
+  - @sfuruya0612
 - [UPDATE] SSM のエラーラップ文言に何を取得しようとしたかを含めるようにする (listSSMOnlineInstanceIDs のページ取得失敗を `failed to get next page` から `describe ssm instance information` に変更し、あわせて ssm.go に残っていた `failed to` 形式の 3 箇所も internal/aws の他ファイルと同じ「動詞 + サービス名 + リソース名」の形式に揃える。`%w` によるラップは維持する。ページ取得失敗のテストには、対象を示す語が文言に残ることの部分一致検証を追加する)
   - @sfuruya0612
 - [UPDATE] Cost Explorer の絞り込み state (granularity / groupBy / 日付レンジ / metric / サービスとアカウントのフィルタ) をリージョン切り替え時に初期値へ戻すようにする
