@@ -1,7 +1,6 @@
 package util
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -11,6 +10,11 @@ import (
 // ExecCommand は外部プロセスを標準入出力を引き継いで実行する。
 // 実行中の SIGINT は子プロセス側 (例: session-manager-plugin) に処理を委ねるため、
 // 親プロセスでは無視する。
+//
+// 失敗時は exec が返したエラーをラップせずそのまま返す。何を実行しようとしたかを
+// 述べられるのは呼び出し側だけであり、この関数がラップしても文脈は増えない。
+// ラップしないことで、呼び出し側は errors.As で *exec.ExitError を取り出して
+// 終了コードで分岐できる。
 func ExecCommand(process string, args ...string) error {
 	call := exec.Command(process, args...)
 	call.Stderr = os.Stderr
@@ -32,9 +36,5 @@ func ExecCommand(process string, args ...string) error {
 	}()
 	defer close(done)
 
-	if err := call.Run(); err != nil {
-		return fmt.Errorf("%v", err)
-	}
-
-	return nil
+	return call.Run()
 }

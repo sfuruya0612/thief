@@ -218,6 +218,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] EC2 の SSM セッション (`thief ec2 session`) で、session-manager-plugin の実行失敗が errors.Is / errors.As で判別できず、同じ文言が標準エラー出力と Cobra の表示で 2 回並ぶ不具合を修正する (internal/util の ExecCommand が `%v` でエラーチェーンを切っていたのをラップせずそのまま返す形に改め、internal/cli/ec2.go の切断も失敗した経路で `%v` にしていた実行エラーを `%w` に変更して 2 つの失敗の両方に到達できるようにする。あわせて重複していた PrintErrf を削り、失敗の報告を返り値だけに任せる。切断の成否によって実行の失敗の見え方が変わらないよう、どちらの経路も `execute command:` で始める文言に統一する。ExecCommand が返すエラーの文字列表現は変わらない。ecs exec のセッション起動も同じ ExecCommand を通るため、こちらもチェーンが保たれるようになる)
+  - @sfuruya0612
 - [FIX] SSO ログインのエラーが errors.Is / errors.As で判別できず、メッセージに同じ語句が 2 回続く不具合を修正する (internal/cli/sso.go の getSSOToken が 4 箇所すべてで `%v` を使いエラーチェーンを切っていたのを、呼び出し先が既に「どの API で失敗したか」を述べている 3 箇所はラップを削って伝播させ、文脈を持たない openBrowser のみ `%w` でラップする形に改める。あわせてデバイス認可フローの 4 つの外部呼び出しを差し替え可能にし、各段の失敗でチェーンが保たれることと呼び出し先の文言を重ねないことを検証するテストを追加する)
   - @sfuruya0612
 - [FIX] CloudFormation の Web API の一覧取得で、削除されていないのに一覧から落ちていた 4 状態 (DELETE_FAILED / UPDATE_ROLLBACK_IN_PROGRESS / UPDATE_COMPLETE_CLEANUP_IN_PROGRESS / UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS) のスタックを表示するようにする (ListStacks に渡す StackStatusFilter を DELETE_COMPLETE のみを除く 22 種に揃え、CLI の一覧と結果を一致させる)
