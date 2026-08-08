@@ -261,7 +261,7 @@ func showCostByService(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	costs, err := awsinternal.GetCostByService(context.Background(), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
+	costs, err := awsinternal.GetCostByService(commandContext(cmd), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
 	if err != nil {
 		return fmt.Errorf("get costs by service: %w", err)
 	}
@@ -276,7 +276,7 @@ func showCostByAccount(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	costs, err := awsinternal.GetCostByAccount(context.Background(), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
+	costs, err := awsinternal.GetCostByAccount(commandContext(cmd), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
 	if err != nil {
 		return fmt.Errorf("get costs by account: %w", err)
 	}
@@ -291,7 +291,7 @@ func showCostByUsageType(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	costs, err := awsinternal.GetCostByUsageType(context.Background(), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
+	costs, err := awsinternal.GetCostByUsageType(commandContext(cmd), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
 	if err != nil {
 		return fmt.Errorf("get costs by usage type: %w", err)
 	}
@@ -306,7 +306,7 @@ func showCostOverview(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	costs, err := awsinternal.GetCostForPeriod(context.Background(), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
+	costs, err := awsinternal.GetCostForPeriod(commandContext(cmd), p.cfg.Profile, p.cfg.Region, p.startDate, p.endDate, p.granularity, p.metric)
 	if err != nil {
 		return fmt.Errorf("get cost for period: %w", err)
 	}

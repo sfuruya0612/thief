@@ -6,14 +6,14 @@ import (
 
 func (s *Server) handleTiDBProjects(w http.ResponseWriter, r *http.Request) {
 	s.serveCached(w, r, cacheKey("tidb-projects"), cacheTTL, writeInternalFromError, func() (any, error) {
-		return s.tidb.ListProjects()
+		return s.tidb.ListProjects(r.Context())
 	})
 }
 
 func (s *Server) handleTiDBClusters(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	s.serveCached(w, r, cacheKey("tidb-clusters", projectID), cacheTTL, writeInternalFromError, func() (any, error) {
-		return s.tidb.ListClusters(projectID)
+		return s.tidb.ListClusters(r.Context(), projectID)
 	})
 }
 
@@ -29,6 +29,6 @@ func (s *Server) handleTiDBCost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.serveCached(w, r, cacheKey("tidb-cost", start, end), cacheTTL, writeInternalFromError, func() (any, error) {
-		return s.tidb.GetCostRange(start, end)
+		return s.tidb.GetCostRange(r.Context(), start, end)
 	})
 }

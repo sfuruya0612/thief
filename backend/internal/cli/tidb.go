@@ -103,7 +103,7 @@ func listTidbProjects(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	projects, err := client.ListProjects()
+	projects, err := client.ListProjects(commandContext(cmd))
 	if err != nil {
 		return err
 	}
@@ -134,13 +134,15 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx := commandContext(cmd)
+
 	// プロジェクト ID が指定されていればそのプロジェクトのみ、
 	// 未指定なら全プロジェクトのクラスタを取得する。
 	var projectIDs []string
 	if len(args) == 1 {
 		projectIDs = []string{args[0]}
 	} else {
-		projects, err := client.ListProjects()
+		projects, err := client.ListProjects(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get projects: %w", err)
 		}
@@ -151,7 +153,7 @@ func listTidbClusters(cmd *cobra.Command, args []string) error {
 
 	var items [][]string
 	for _, projectID := range projectIDs {
-		clusters, err := client.ListClusters(projectID)
+		clusters, err := client.ListClusters(ctx, projectID)
 		if err != nil {
 			return fmt.Errorf("failed to get clusters for project %s: %w", projectID, err)
 		}
@@ -186,7 +188,7 @@ func showTidbCost(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("billed-month is required")
 	}
 
-	costs, err := client.GetCost(cfg.TiDB.BilledMonth)
+	costs, err := client.GetCost(commandContext(cmd), cfg.TiDB.BilledMonth)
 	if err != nil {
 		return err
 	}

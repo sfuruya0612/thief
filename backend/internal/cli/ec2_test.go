@@ -196,8 +196,8 @@ func TestStartEC2SessionKeepsExecErrorChain(t *testing.T) {
 }
 
 // TestStartEC2SessionReportsExecFailureOnlyThroughReturnValue は実行の失敗を標準エラー
-// 出力へ書かないことを検証する。SilenceErrors が設定されていないため Cobra が返り値を
-// 表示する。ここで書くと同じ内容が 2 回並ぶ。
+// 出力へ書かないことを検証する。返り値の表示は cli.Run が 1 箇所で行うため、ここで
+// 書くと同じ内容が 2 回並ぶ。
 func TestStartEC2SessionReportsExecFailureOnlyThroughReturnValue(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sh is not available on Windows")
@@ -224,7 +224,7 @@ func TestStartEC2SessionReportsExecFailureOnlyThroughReturnValue(t *testing.T) {
 				t.Fatal("startEC2SessionWith() error = nil, want an error")
 			}
 			if got := stderr.String(); got != "" {
-				t.Errorf("stderr = %q, want empty; Cobra already prints the returned error", got)
+				t.Errorf("stderr = %q, want empty; cli.Run already prints the returned error", got)
 			}
 			// 返り値には失敗の内容が残っている (標準エラー出力を消した代わりに情報が
 			// 落ちていないこと)。
@@ -401,5 +401,74 @@ func TestDefaultEC2SessionDepsIsFullyWired(t *testing.T) {
 		if v.Field(i).IsNil() {
 			t.Errorf("%s is nil", v.Type().Field(i).Name)
 		}
+	}
+}
+
+// TestStartEC2SessionTerminatesWithLiveContextAfterInterrupt は Ctrl-C でコマンドの
+// context がキャンセルされた後も SSM セッションの切断が通ることを検証する。
+//
+// session-manager-plugin の実行中の Ctrl-C は util.ExecCommand が握りつぶして子プロセスへ
+// 処理を委ねるが、os/signal は登録済みの全チャネルへ同じシグナルを配送するため、main の
+// signal.NotifyContext にも届いてコマンドの context はキャンセル済みになる。切断をその
+// context で行うと必ず失敗し、セッションが AWS 側に残り続ける。
+//
+// 一方で本流の呼び出しはコマンドの context を使わなければならない。中断が AWS への
+// 問い合わせに届かなくなる。切断だけを切り離していることを両側から押さえる。
+func TestStartEC2SessionTerminatesWithLiveContextAfterInterrupt(t *testing.T) {
+	tests := []struct {
+		name string
+		// execErr は session-manager-plugin の実行結果。切断は成功時と失敗時の
+		// 2 経路から呼ばれるため、両方を通す。
+		execErr error
+	}{
+		{name: "exec succeeds"},
+		{name: "exec fails", execErr: errors.New("plugin boom")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, _ := newEC2SessionCmd(t, "i-1234567890abcdef0")
+
+			// 中断でキャンセル済みになったコマンドの context を再現する。
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			cmd.SetContext(ctx)
+
+			var startCtxErr, termCtxErr error
+			var termHasDeadline bool
+			rec := &ec2SessionCall{}
+			deps := okEC2SessionDeps(rec)
+			deps.startSession = func(ctx context.Context, _, _, _ string) (*awsinternal.StartSessionResult, error) {
+				startCtxErr = ctx.Err()
+				return &awsinternal.StartSessionResult{SessionID: "sess-1"}, nil
+			}
+			deps.execPlugin = func(string, ...string) error { return tt.execErr }
+			deps.terminateSession = func(ctx context.Context, _, _, sessionID string) error {
+				termCtxErr = ctx.Err()
+				_, termHasDeadline = ctx.Deadline()
+				rec.terminateIDs = append(rec.terminateIDs, sessionID)
+				return nil
+			}
+
+			err := startEC2SessionWith(cmd, deps)
+			if (err != nil) != (tt.execErr != nil) {
+				t.Fatalf("startEC2SessionWith() error = %v, want error presence %t", err, tt.execErr != nil)
+			}
+
+			// 本流はコマンドの context を使う。Background に差し替えると中断が届かない。
+			if !errors.Is(startCtxErr, context.Canceled) {
+				t.Errorf("startSession ctx.Err() = %v, want %v", startCtxErr, context.Canceled)
+			}
+			// 切断はキャンセル済みの context から派生させてはならない。
+			if termCtxErr != nil {
+				t.Errorf("terminateSession ctx.Err() = %v, want nil", termCtxErr)
+			}
+			// かつ無期限でもない。応答が返らない場合に切断で止まり続ける。
+			if !termHasDeadline {
+				t.Error("terminateSession ctx has no deadline, want one")
+			}
+			if len(rec.terminateIDs) != 1 || rec.terminateIDs[0] != "sess-1" {
+				t.Errorf("terminate called with %v, want exactly [sess-1]", rec.terminateIDs)
+			}
+		})
 	}
 }
