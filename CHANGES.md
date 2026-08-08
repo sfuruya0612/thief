@@ -2,6 +2,8 @@
 
 ## develop
 
+- [UPDATE] SSM のエラーラップ文言に何を取得しようとしたかを含めるようにする (listSSMOnlineInstanceIDs のページ取得失敗を `failed to get next page` から `describe ssm instance information` に変更し、あわせて ssm.go に残っていた `failed to` 形式の 3 箇所も internal/aws の他ファイルと同じ「動詞 + サービス名 + リソース名」の形式に揃える。`%w` によるラップは維持する。ページ取得失敗のテストには、対象を示す語が文言に残ることの部分一致検証を追加する)
+  - @sfuruya0612
 - [UPDATE] Cost Explorer の絞り込み state (granularity / groupBy / 日付レンジ / metric / サービスとアカウントのフィルタ) をリージョン切り替え時に初期値へ戻すようにする
   - @sfuruya0612
 - [UPDATE] DynamoDB の一覧取得で、BillingMode が既知の 2 値 (PAY_PER_REQUEST / PROVISIONED) 以外の未知の値だった場合のキャパシティモードを、空欄のまま残す挙動から Kinesis と同じ provisioned への縮退に統一する (現行 SDK の enum は既知の 2 値のみでこのパスに到達しないため、現実の入力に対する表示は変わらない)
