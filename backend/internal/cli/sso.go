@@ -345,7 +345,7 @@ type ssoTokenDeps struct {
 	registerClient  func(ctx context.Context, region, clientName, clientType string) (*awsinternal.SSOClientRegistration, error)
 	startDeviceAuth func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, startURL string) (*awsinternal.SSODeviceAuthorization, error)
 	openBrowser     func(url string) error
-	waitForToken    func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, deviceCode, grantType string) (*awsinternal.SSOToken, error)
+	waitForToken    func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, deviceAuth *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error)
 	display         func(startURL, userCode string)
 }
 
@@ -387,7 +387,10 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 	// aws sso login コマンドと同じ出力にする。
 	deps.display(url, deviceAuth.UserCode)
 
-	token, err := deps.waitForToken(ctx, region, registration, deviceAuth.DeviceCode, ssoGrantType)
+	// deviceAuth を丸ごと渡す。waitForToken は device code だけでなく、サーバが指示した
+	// interval と expires_in からポーリング間隔と打ち切り期限を決める (RFC 8628 §3.2 / §3.5)。
+	// ここで DeviceCode だけ取り出すと、その指示が捨てられて既定値に落ちる。
+	token, err := deps.waitForToken(ctx, region, registration, deviceAuth, ssoGrantType)
 	if err != nil {
 		return nil, err
 	}

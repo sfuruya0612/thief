@@ -218,6 +218,8 @@
   - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
+- [FIX] SSO ログイン (`thief sso login`) で、ブラウザでの承認に 1 分以上かかると device code がまだ有効なのに `timeout waiting for authentication` で必ず失敗する不具合を修正する。MFA を挟む IdP では 1 分を超えることが普通にあり、実用上の障害だった。打ち切りを試行回数 60 回 × 1 秒の積 (実時間で約 60 秒) から StartDeviceAuthorization が返す `expires_in` を基準にした期限に変更する (AWS の既定値では 600 秒)。あわせて RFC 8628 への違反 3 点を直す。ポーリングの初期間隔をサーバが返す `interval` に従うようにし (§3.4)、指示が無い場合の既定を 5 秒とする (§3.2)。`slow_down` に対する間隔の増加を倍加から固定 5 秒の加算に変更する (§3.5)。これにより SlowDown が連続したときに待機が指数的に伸び、1 秒起点なら 34 回の倍加で `time.Duration` が int64 を超えて負になりバックオフが連打に反転する問題も同時に解消する。打ち切りを返す直前に 1 回分の待機が無駄に入っていたのも取り除く
+  - @sfuruya0612
 - [FIX] EC2 の SSM セッション (`thief ec2 session`) で、session-manager-plugin の実行失敗が errors.Is / errors.As で判別できず、同じ文言が標準エラー出力と Cobra の表示で 2 回並ぶ不具合を修正する (internal/util の ExecCommand が `%v` でエラーチェーンを切っていたのをラップせずそのまま返す形に改め、internal/cli/ec2.go の切断も失敗した経路で `%v` にしていた実行エラーを `%w` に変更して 2 つの失敗の両方に到達できるようにする。あわせて重複していた PrintErrf を削り、失敗の報告を返り値だけに任せる。切断の成否によって実行の失敗の見え方が変わらないよう、どちらの経路も `execute command:` で始める文言に統一する。ExecCommand が返すエラーの文字列表現は変わらない。ecs exec のセッション起動も同じ ExecCommand を通るため、こちらもチェーンが保たれるようになる)
   - @sfuruya0612
 - [FIX] SSO ログインのエラーが errors.Is / errors.As で判別できず、メッセージに同じ語句が 2 回続く不具合を修正する (internal/cli/sso.go の getSSOToken が 4 箇所すべてで `%v` を使いエラーチェーンを切っていたのを、呼び出し先が既に「どの API で失敗したか」を述べている 3 箇所はラップを削って伝播させ、文脈を持たない openBrowser のみ `%w` でラップする形に改める。あわせてデバイス認可フローの 4 つの外部呼び出しを差し替え可能にし、各段の失敗でチェーンが保たれることと呼び出し先の文言を重ねないことを検証するテストを追加する)
@@ -293,6 +295,8 @@
 
 ### misc
 
+- internal/aws/sso_oidc.go のデバイス認可のポーリングについて、関数の境界で自分の前提を検証するようにする。WaitForSSOToken は deviceAuth が nil なら参照外しせずエラーを返し、waitForSSOToken は間隔か猶予が正でない方針を渡されたら CreateToken を呼ぶ前にエラーを返す (間隔が 0 以下だと待機で時刻が進まず打ち切り判定が成立しないまま連打し続けるため、ここは無限ループの防波堤にあたる)。あわせて打ち切りのエラーをセンチネル化して呼び出し側が errors.Is で判別できるようにし、打ち切りと ctx のキャンセルが同時に成立している場合は ctx.Err() を優先して返すようにする。現行の呼び出し元は非 nil の応答と newSSOTokenPollPolicy が組んだ方針のみを渡し、ctx も context.Background() なので、いずれも現時点の挙動は変わらない
+  - @sfuruya0612
 - internal/aws/sso_oidc.go の RegisterSSOClient と StartSSODeviceAuthorization と WaitForSSOToken について、それぞれ RegisterClient / StartDeviceAuthorization / CreateToken を持つ狭いインターフェースを受け取る内部関数に呼び出しを抽出し、internal/aws/sso_oidc_test.go に次のテストを追加する。RegisterClientInput の ClientName と ClientType、StartDeviceAuthorizationInput の ClientId と ClientSecret と StartUrl、CreateTokenInput の 4 フィールドが引数どおりに構築され再試行しても同一であることを検証するテスト。register sso oidc client と start sso oidc device authorization と create sso oidc token の 3 つのラップ文言と、そこでエラーチェーンが保たれることを検証するテスト。トークンポーリングの分岐 (SlowDown での間隔倍加、AuthorizationPending での再試行継続、それ以外のエラーでの即時失敗、最大試行回数の超過、待機中の ctx キャンセル、初回成功) を検証するテスト。本番のポーリング間隔と最大試行回数と打ち切りまでの総待ち時間をリテラルで固定するテスト (待機を差し替え可能にしてテストの実行時間が実際の間隔に依存しないようにする。挙動は変えない)
   - @sfuruya0612
 - internal/aws/cfn_test.go に SDK が知る StackStatus の集合を固定するテストを追加し、AWS がステータスを追加したときに Web API とレガシー CLI の 2 経路の statusFilter を見直す契機を作る (2 経路の期待値は独立に維持したまま、SDK の集合そのものを別に固定する。挙動は変えない)

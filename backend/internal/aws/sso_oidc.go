@@ -12,11 +12,38 @@ import (
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 )
 
-// ssoTokenPollMaxAttempts / ssoTokenPollInterval はデバイス認可フローでの
-// トークンポーリングの最大試行回数と初期間隔。
+// デバイス認可フローでのトークンポーリングの既定値。いずれも RFC 8628 に根拠がある。
 const (
-	ssoTokenPollMaxAttempts = 60
-	ssoTokenPollInterval    = 1 * time.Second
+	// ssoTokenPollDefaultInterval は device authorization response が interval を
+	// 指示しなかったときに使う間隔。RFC 8628 §3.2 は interval を OPTIONAL と定め、
+	// "If no value is provided, clients MUST use 5 as the default." と述べる。
+	ssoTokenPollDefaultInterval = 5 * time.Second
+
+	// ssoTokenPollSlowDownIncrement は slow_down を受けたときの間隔の増分。
+	// RFC 8628 §3.5 は "the interval MUST be increased by 5 seconds for this and all
+	// subsequent requests" と定める。倍加ではなく固定の加算である。
+	ssoTokenPollSlowDownIncrement = 5 * time.Second
+
+	// ssoTokenPollDefaultTimeout は device authorization response が expires_in を
+	// 指示しなかったときに使う打ち切りまでの猶予。RFC 8628 §3.2 は expires_in を
+	// REQUIRED と定めるため、指示が無いのは仕様に従っていない応答である。それでも
+	// 際限なくポーリングしないよう上限を置く。値は AWS が実際に返す 600 秒に合わせた。
+	ssoTokenPollDefaultTimeout = 600 * time.Second
+)
+
+// デバイス認可フローのポーリングが返すセンチネルエラー。呼び出し側が文字列一致ではなく
+// errors.Is で判別できるようにしてある。パッケージ外に出す必要が生じていないので非公開。
+var (
+	// errSSOTokenTimeout は device code の有効期限までに承認が完了しなかったことを表す。
+	errSSOTokenTimeout = errors.New("timeout waiting for authentication")
+
+	// errNilSSODeviceAuthorization はデバイス認可の応答を受け取らずにポーリングを
+	// 要求されたことを表す。呼び出し側の誤りであり、参照外しで panic させずに返す。
+	errNilSSODeviceAuthorization = errors.New("nil sso device authorization")
+
+	// errInvalidSSOTokenPollPolicy はポーリング方針が不変条件を満たしていないことを表す。
+	// 間隔と猶予はいずれも正でなければならない。
+	errInvalidSSOTokenPollPolicy = errors.New("invalid sso token poll policy")
 )
 
 // SSOClientRegistration は SSO OIDC のクライアント登録結果を保持する。
@@ -31,6 +58,16 @@ type SSODeviceAuthorization struct {
 	DeviceCode              string
 	UserCode                string
 	VerificationURIComplete string
+
+	// Interval はサーバが指示したポーリング間隔 (秒)。RFC 8628 §3.2 の interval に対応する。
+	// §3.2 での位置づけは OPTIONAL かつ SHOULD だが、§3.5 の authorization_pending の説明が
+	// クライアントがこれ以上待つことを MUST と定める。OPTIONAL であるため、指示が無いとき
+	// SDK は 0 を入れる。
+	Interval int32
+
+	// ExpiresIn は device code と user code が無効になるまでの秒数。
+	// RFC 8628 §3.2 の expires_in に対応する。ポーリングの打ち切りはこれを基準に決まる。
+	ExpiresIn int32
 }
 
 // SSOToken はデバイス認可フローで取得したアクセストークンを保持する。
@@ -112,6 +149,8 @@ func startSSODeviceAuthorization(ctx context.Context, client ssoOidcStartDeviceA
 		DeviceCode:              ptrStr(o.DeviceCode),
 		UserCode:                ptrStr(o.UserCode),
 		VerificationURIComplete: ptrStr(o.VerificationUriComplete),
+		Interval:                o.Interval,
+		ExpiresIn:               o.ExpiresIn,
 	}, nil
 }
 
@@ -121,42 +160,93 @@ type ssoOidcCreateTokenAPI interface {
 	CreateToken(ctx context.Context, params *ssooidc.CreateTokenInput, optFns ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error)
 }
 
-// ssoTokenPollPolicy はデバイス認可フローのポーリングの初期間隔と打ち切り条件をまとめる。
-// 全フィールドが必須で、本番の値は productionSSOTokenPollPolicy が組む。
+// ssoTokenPollPolicy はデバイス認可フローのポーリングの間隔と打ち切り条件をまとめる。
+// 全フィールドが必須で、本番の値は newSSOTokenPollPolicy が組む。
 //
-// after は次の試行までの待機を表すチャネルを返す。テストから待機を差し替えられるように
-// してある。差し替えが必要な理由は internal/aws/sso_oidc_test.go 側に書いてある。
+// now と after はテストから時間を差し替えられるようにしてある。差し替えが必要な理由は
+// internal/aws/sso_oidc_test.go 側に書いてある。
 type ssoTokenPollPolicy struct {
-	interval    time.Duration
-	maxAttempts int
-	after       func(d time.Duration) <-chan time.Time
+	// interval は次の試行までの待ち時間の初期値。slow_down を受けるたびに増える。
+	interval time.Duration
+
+	// timeout はポーリングを打ち切るまでの猶予。device code の有効期限から決まる。
+	timeout time.Duration
+
+	// now は打ち切り判定に使う現在時刻を返す。
+	now func() time.Time
+
+	// after は次の試行までの待機を表すチャネルを返す。
+	after func(d time.Duration) <-chan time.Time
 }
 
-// productionSSOTokenPollPolicy は本番で使うポーリング方針を返す。
-func productionSSOTokenPollPolicy() ssoTokenPollPolicy {
+// newSSOTokenPollPolicy は device authorization response の指示からポーリング方針を組む。
+func newSSOTokenPollPolicy(deviceAuth *SSODeviceAuthorization) ssoTokenPollPolicy {
+	// RFC 8628 §3.5 の authorization_pending の説明は "Before each new request, the client
+	// MUST wait at least the number of seconds specified by the "interval" parameter of the
+	// device authorization response (see Section 3.2), or 5 seconds if none was provided"
+	// と定めるため、初期間隔はサーバの指示をそのまま採用する。指示が無いとき SDK は 0 を
+	// 入れるので §3.2 の既定 5 秒に倒す。負の値も同じ扱いにする。
+	// ここは無限ループの防波堤でもある。間隔が 0 以下だと打ち切り判定に使う時刻が進まず、
+	// CreateToken を待機なしで呼び続けることになる。
+	interval := ssoTokenPollDefaultInterval
+	if deviceAuth.Interval > 0 {
+		interval = time.Duration(deviceAuth.Interval) * time.Second
+	}
+
+	// 打ち切りは device code の有効期限に合わせる。試行回数で縛ると、間隔が変わるたびに
+	// 実時間の上限が動いてしまい、コードがまだ有効なのに打ち切る (または期限を過ぎても
+	// 叩き続ける) ことになる。
+	timeout := ssoTokenPollDefaultTimeout
+	if deviceAuth.ExpiresIn > 0 {
+		timeout = time.Duration(deviceAuth.ExpiresIn) * time.Second
+	}
+
 	return ssoTokenPollPolicy{
-		interval:    ssoTokenPollInterval,
-		maxAttempts: ssoTokenPollMaxAttempts,
-		after:       time.After,
+		interval: interval,
+		timeout:  timeout,
+		now:      time.Now,
+		after:    time.After,
 	}
 }
 
 // WaitForSSOToken はユーザーのブラウザ承認が完了するまで CreateToken をポーリングし、
-// アクセストークンを返す。承認待ち (AuthorizationPending) は再試行し、
-// レート制限 (SlowDown) では間隔を倍にして再試行する。それ以外のエラーは即時失敗する。
-func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistration, deviceCode, grantType string) (*SSOToken, error) {
+// アクセストークンを返す。承認待ち (AuthorizationPending) は間隔を変えずに再試行し、
+// レート制限 (SlowDown) では RFC 8628 §3.5 に従って間隔を 5 秒増やして再試行する。
+// それ以外のエラーは即時失敗する。device code の有効期限を過ぎたら打ち切る。
+func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistration, deviceAuth *SSODeviceAuthorization, grantType string) (*SSOToken, error) {
+	// deviceAuth は device code だけでなくポーリング方針の素にもなるため、この関数と
+	// newSSOTokenPollPolicy の両方で参照外しする。nil で来たら panic させずに返す。
+	// AGENTS.md は「リクエスト処理中の panic は禁止」と定めており、CLI のログイン処理も
+	// これに当たる。呼び出し元は startDeviceAuth の戻り値をそのまま渡す実装だが、
+	// これは関数値であり差し替えられ得るので、境界で自衛する。
+	if deviceAuth == nil {
+		return nil, errNilSSODeviceAuthorization
+	}
+
 	client, err := newSSOOidcClient(ctx, region)
 	if err != nil {
 		return nil, err
 	}
-	return waitForSSOToken(ctx, client, reg, deviceCode, grantType, productionSSOTokenPollPolicy())
+	return waitForSSOToken(ctx, client, reg, deviceAuth.DeviceCode, grantType, newSSOTokenPollPolicy(deviceAuth))
 }
 
 // waitForSSOToken は生成済みクライアントでトークンをポーリングするコア。
-// 分岐 (SlowDown での間隔倍加、AuthorizationPending での再試行、それ以外での即時失敗、
-// 最大試行回数の超過、ctx のキャンセル) を単体テストで検証できるよう、
+// 分岐 (SlowDown での間隔の増加、AuthorizationPending での再試行、それ以外での即時失敗、
+// 有効期限での打ち切り、ctx のキャンセル) を単体テストで検証できるよう、
 // クライアントの生成とポーリング方針から分離してある。
+//
+// 引数が deviceCode だけで SSODeviceAuthorization を丸ごと受け取らないのは、この関数が
+// 応答から読むのが device code だけだからである。interval と expires_in は
+// newSSOTokenPollPolicy が policy へ畳み込む。
 func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSOClientRegistration, deviceCode, grantType string, policy ssoTokenPollPolicy) (*SSOToken, error) {
+	// このループが有限で終わることは interval > 0 と timeout > 0 に依存している。間隔が
+	// 0 以下だと待機で時刻が進まず、打ち切り判定が永久に成立しないまま CreateToken を
+	// 連打し続ける。newSSOTokenPollPolicy はこの不変条件を必ず満たす方針を組むが、
+	// policy は構造体リテラルでも組めるため、ここで自分の前提を検証する。
+	if policy.interval <= 0 || policy.timeout <= 0 {
+		return nil, fmt.Errorf("%w: interval %s and timeout %s must both be positive", errInvalidSSOTokenPollPolicy, policy.interval, policy.timeout)
+	}
+
 	input := &ssooidc.CreateTokenInput{
 		ClientId:     awssdk.String(reg.ClientID),
 		ClientSecret: awssdk.String(reg.ClientSecret),
@@ -165,7 +255,19 @@ func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSO
 	}
 
 	interval := policy.interval
-	for i := 0; i < policy.maxAttempts; i++ {
+
+	// 期限はループに入る前に 1 回だけ確定させる。ループのたびに now() + timeout を
+	// 計算し直すと締切が常に未来へ逃げ、打ち切りが効かなくなる。
+	//
+	// なお本番の policy.now は time.Now であり、返る Time は単調時計の読みを持つ。
+	// time.Time.Add は単調成分を保持し、Before は両辺に単調成分があるとき壁時計を
+	// 無視して単調成分だけで比較する。したがって NTP 補正や手動の時刻変更でこの
+	// 判定が壊れることはない。単調時計はシステムのスリープ中に止まり得るが、その場合は
+	// 期限切れをサーバが expired_token として返すので、クライアント側の打ち切りより
+	// 明確な失敗になる。
+	deadline := policy.now().Add(policy.timeout)
+
+	for {
 		o, err := client.CreateToken(ctx, input)
 		if err == nil {
 			return &SSOToken{
@@ -178,16 +280,32 @@ func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSO
 		var slowDown *ssooidctypes.SlowDownException
 		switch {
 		case errors.As(err, &slowDown):
-			// RFC 8628 §3.5 は slow_down に対して間隔を固定 5 秒増やすことを MUST と
-			// 定めており、倍加は仕様外である。上限も無いため SlowDown が続くと待機が
-			// 指数的に伸び、34 回で time.Duration が int64 を超えて負になる。
-			// 挙動を変えない範囲では直せないため issue 0129 で扱う。
-			// 単体テストは連続 2 回までしか固定していない。
-			interval *= 2
+			// RFC 8628 §3.5: "the interval MUST be increased by 5 seconds for this and
+			// all subsequent requests"。増分は固定であり、倍加ではない。
+			interval += ssoTokenPollSlowDownIncrement
 		case errors.As(err, &pending):
 			// ユーザーのブラウザ承認待ち。間隔は変えずに再試行する。
 		default:
+			// RFC 8628 §3.5 は authorization_pending と slow_down 以外について
+			// "For any other error, the client MUST stop polling" と定める。したがって
+			// access_denied と expired_token も含め、ここは再試行せず即時失敗が正しい。
+			// これらを再試行に回すと仕様違反になる。
 			return nil, fmt.Errorf("create sso oidc token: %w", err)
+		}
+
+		// 待機を終える時刻が device code の有効期限に届くなら、待っても叩く先が無いので
+		// ここで打ち切る。待ってから打ち切ると、既に無効なコードのためにユーザーが
+		// 1 回分の間隔だけ余計に黙らされる。
+		//
+		// この判定は間隔の上限も兼ねている。interval が timeout 以上に伸びた時点で必ず
+		// 成立するため、slow_down が続いても待機が猶予を超えて伸びることはない。
+		if !policy.now().Add(interval).Before(deadline) {
+			// この判定は ctx を見ないため、直前に ctx がキャンセルされていると打ち切りの
+			// 方が先に返る。理由が利用者の中断なら、そちらを伝える方が実態に合う。
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return nil, errSSOTokenTimeout
 		}
 
 		select {
@@ -196,8 +314,6 @@ func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSO
 		case <-policy.after(interval):
 		}
 	}
-
-	return nil, fmt.Errorf("timeout waiting for authentication")
 }
 
 // SSOAccountInfo は generate-config で使うアカウントの基本情報を保持する。

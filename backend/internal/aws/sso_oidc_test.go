@@ -93,12 +93,19 @@ func (m *mockSSOOidcStartDeviceAuthorizationAPI) StartDeviceAuthorization(_ cont
 // TestStartSSODeviceAuthorizationSendsRegistrationAndStartURL は
 // StartDeviceAuthorizationInput が登録情報と start URL から構築されること、
 // およびレスポンスが SSODeviceAuthorization へ写ることを検証する。
+//
+// Interval と ExpiresIn は RFC 8628 §3.2 の interval / expires_in であり、ポーリングの
+// 間隔と打ち切り期限を決める。写し漏らすと newSSOTokenPollPolicy が既定値に倒れ、
+// サーバの指示が黙って無視される。値は既定値 (5 秒 / 600 秒) のどちらとも異なるものを
+// 使う。既定値と同じにすると、写さずに既定へ倒す実装でもこのテストが通ってしまう。
 func TestStartSSODeviceAuthorizationSendsRegistrationAndStartURL(t *testing.T) {
 	mock := &mockSSOOidcStartDeviceAuthorizationAPI{
 		out: &ssooidc.StartDeviceAuthorizationOutput{
 			DeviceCode:              aws.String("dc"),
 			UserCode:                aws.String("uc"),
 			VerificationUriComplete: aws.String("https://device.sso/verify?user_code=uc"),
+			Interval:                7,
+			ExpiresIn:               900,
 		},
 	}
 	reg := &SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}
@@ -127,6 +134,8 @@ func TestStartSSODeviceAuthorizationSendsRegistrationAndStartURL(t *testing.T) {
 		DeviceCode:              "dc",
 		UserCode:                "uc",
 		VerificationURIComplete: "https://device.sso/verify?user_code=uc",
+		Interval:                7,
+		ExpiresIn:               900,
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("device authorization mismatch (-want +got):\n%s", diff)
@@ -212,49 +221,85 @@ func ssoCreateTokenSlowDown() ssoCreateTokenStep {
 	return ssoCreateTokenStep{err: ssoOidcOperationError(&ssooidctypes.SlowDownException{})}
 }
 
-// recordingAfter は要求された待ち時間を記録し、即座に発火するチャネルを返す。
-// 実際には待たないため、テストの実行時間がポーリング間隔に依存しない。
-func recordingAfter(recorded *[]time.Duration) func(time.Duration) <-chan time.Time {
-	return func(d time.Duration) <-chan time.Time {
-		*recorded = append(*recorded, d)
-		ch := make(chan time.Time, 1)
-		ch <- time.Time{}
-		return ch
-	}
+// fakeSSOClock はテストの中だけで進む時計。after は要求された待ち時間を記録し、
+// その分だけ時刻を進めて即座に発火する。実際には待たないため、テストの実行時間が
+// ポーリング間隔にも device code の有効期限にも依存しない。
+//
+// after の中で時刻を進めるのが要点である。waitForSSOToken の打ち切りは now が返す時刻で
+// 判定するため、時計が止まったままだと待機をいくら重ねても期限に到達せず、テストが
+// 終わらない。逆に言えば、この時計は「本番で実際に流れる時間」をそのまま模している。
+//
+// waitForSSOToken は単一の goroutine から now と after を呼ぶため、排他は要らない。
+type fakeSSOClock struct {
+	origin   time.Time
+	current  time.Time
+	recorded []time.Duration
+}
+
+// newFakeSSOClock は固定の起点から始まる時計を返す。
+// 起点の値そのものに意味は無く、Add で単調に進むだけである。ゼロ値の time.Time を
+// 使わないのは、失敗時のログを絶対時刻として読めるようにするためだけである。
+func newFakeSSOClock() *fakeSSOClock {
+	origin := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	return &fakeSSOClock{origin: origin, current: origin}
+}
+
+func (c *fakeSSOClock) Now() time.Time { return c.current }
+
+func (c *fakeSSOClock) After(d time.Duration) <-chan time.Time {
+	c.recorded = append(c.recorded, d)
+	c.current = c.current.Add(d)
+	ch := make(chan time.Time, 1)
+	ch <- c.current
+	return ch
+}
+
+// elapsed は起点から進んだ時間、すなわち待機の合計を返す。
+func (c *fakeSSOClock) elapsed() time.Duration {
+	return c.current.Sub(c.origin)
 }
 
 const (
-	// testSSOPollInterval はテストで使う初期間隔。本番の既定値 ssoTokenPollInterval とは
-	// 別の値にしてある。同値にすると、policy.interval ではなく定数を直接読むように壊しても
-	// テストが通ってしまう。
-	testSSOPollInterval = 100 * time.Millisecond
+	// testSSOPollInterval はテストで使う初期間隔。本番の既定値
+	// ssoTokenPollDefaultInterval とは別の値にしてある。同値にすると、policy.interval
+	// ではなく定数を直接読むように壊してもテストが通ってしまう。
+	testSSOPollInterval = 3 * time.Second
 
-	// testSSOPollMaxAttempts は打ち切りに達しないだけの十分な試行回数。本番の既定値
-	// ssoTokenPollMaxAttempts とは別の値にしてある。理由は testSSOPollInterval と同じで、
-	// policy.maxAttempts ではなく定数を直接読むように壊したときに検出できるようにするため。
-	testSSOPollMaxAttempts = 5
+	// testSSOPollTimeout は打ち切りに達しないだけの十分な猶予。本番の既定値
+	// ssoTokenPollDefaultTimeout とは別の値にしてある。理由は testSSOPollInterval と
+	// 同じで、policy.timeout ではなく定数を直接読むように壊したときに検出できるように
+	// するため。
+	testSSOPollTimeout = 7 * time.Minute
 )
 
-// testSSOTokenPollPolicy は待ち時間を記録するだけの方針を返す。
-func testSSOTokenPollPolicy(interval time.Duration, maxAttempts int, recorded *[]time.Duration) ssoTokenPollPolicy {
-	return ssoTokenPollPolicy{
-		interval:    interval,
-		maxAttempts: maxAttempts,
-		after:       recordingAfter(recorded),
-	}
+// withFakeClock は方針の now と after だけを fake clock に差し替えた写しを返す。
+// interval と timeout は呼び出し側が渡した値をそのまま残す。
+func withFakeClock(policy ssoTokenPollPolicy, clock *fakeSSOClock) ssoTokenPollPolicy {
+	policy.now = clock.Now
+	policy.after = clock.After
+	return policy
+}
+
+// testSSOTokenPollPolicy はテスト用の間隔と猶予を持ち、待機を記録するだけの方針を返す。
+func testSSOTokenPollPolicy(clock *fakeSSOClock) ssoTokenPollPolicy {
+	return withFakeClock(ssoTokenPollPolicy{
+		interval: testSSOPollInterval,
+		timeout:  testSSOPollTimeout,
+	}, clock)
 }
 
 // TestWaitForSSOTokenPollIntervals は CreateToken が返すエラーの種類に応じて
 // 次の試行までの待ち時間がどう変わるかを検証する。
 //
-// SlowDown は間隔を倍にし、AuthorizationPending は間隔を変えない。
+// SlowDown は間隔を 5 秒増やし、AuthorizationPending は間隔を変えない。
+// 5 秒は RFC 8628 §3.5 の "the interval MUST be increased by 5 seconds for this and all
+// subsequent requests" である。期待値の 5 秒をリテラルで書いているのは意図的で、
+// ssoTokenPollSlowDownIncrement を記号参照すると定数を変えたときに期待値も一緒に動き、
+// 仕様から外れたことを検出できなくなる。
+//
+// 初期間隔を 3 秒にしているため、増分 5 秒と倍加 (3 秒 → 6 秒) は区別できる。
 // 経過時間の実測ではなく policy.after へ要求された値を記録して比較するため、
 // 計測誤差にも実行環境の負荷にも影響されない。
-//
-// 固定しているのは連続 2 回までの倍加である。倍加に上限が無いこと、およびそれが
-// 34 回で int64 を超えて負の待ち時間になることは意図的に固定していない。RFC 8628 §3.5
-// への違反であり、直すと挙動が変わるため issue 0129 で扱う。
-// つまりこのテストは「SlowDown の扱いが正しい」ことは主張しない。
 func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -262,9 +307,9 @@ func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 		wantIntervals []time.Duration
 	}{
 		{
-			name:          "slow down doubles the interval",
+			name:          "slow down increases the interval by five seconds",
 			steps:         []ssoCreateTokenStep{ssoCreateTokenSlowDown(), ssoCreateTokenSlowDown(), ssoCreateTokenSuccess()},
-			wantIntervals: []time.Duration{2 * testSSOPollInterval, 4 * testSSOPollInterval},
+			wantIntervals: []time.Duration{testSSOPollInterval + 5*time.Second, testSSOPollInterval + 10*time.Second},
 		},
 		{
 			name:          "authorization pending keeps the interval",
@@ -272,10 +317,11 @@ func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 			wantIntervals: []time.Duration{testSSOPollInterval, testSSOPollInterval},
 		},
 		{
-			// 倍加した間隔が、その後の承認待ちでも維持されることを確かめる。
-			name:          "interval doubled by slow down is kept across pending",
+			// 増えた間隔が、その後の承認待ちでも維持されることを確かめる。
+			// RFC 8628 §3.5 の "and all subsequent requests" がこれである。
+			name:          "interval increased by slow down is kept across pending",
 			steps:         []ssoCreateTokenStep{ssoCreateTokenSlowDown(), ssoCreateTokenPending(), ssoCreateTokenSuccess()},
-			wantIntervals: []time.Duration{2 * testSSOPollInterval, 2 * testSSOPollInterval},
+			wantIntervals: []time.Duration{testSSOPollInterval + 5*time.Second, testSSOPollInterval + 5*time.Second},
 		},
 		{
 			name:          "success on the first call does not wait",
@@ -285,12 +331,11 @@ func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var recorded []time.Duration
+			clock := newFakeSSOClock()
 			mock := &mockSSOOidcCreateTokenAPI{steps: tt.steps}
 			reg := &SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}
 
-			got, err := waitForSSOToken(context.Background(), mock, reg, "dc", "grant",
-				testSSOTokenPollPolicy(testSSOPollInterval, testSSOPollMaxAttempts, &recorded))
+			got, err := waitForSSOToken(context.Background(), mock, reg, "dc", "grant", testSSOTokenPollPolicy(clock))
 			if err != nil {
 				t.Fatalf("waitForSSOToken() error = %v, want nil", err)
 			}
@@ -302,7 +347,7 @@ func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 			if len(mock.inputs) != len(tt.steps) {
 				t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), len(tt.steps))
 			}
-			if diff := cmp.Diff(tt.wantIntervals, recorded); diff != "" {
+			if diff := cmp.Diff(tt.wantIntervals, clock.recorded); diff != "" {
 				t.Errorf("poll intervals mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -312,12 +357,11 @@ func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 // TestWaitForSSOTokenSendsCreateTokenInput は CreateTokenInput が登録情報と
 // デバイスコードから構築され、再試行しても同じ Input が送られることを検証する。
 func TestWaitForSSOTokenSendsCreateTokenInput(t *testing.T) {
-	var recorded []time.Duration
 	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{ssoCreateTokenPending(), ssoCreateTokenSuccess()}}
 	reg := &SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}
 
 	if _, err := waitForSSOToken(context.Background(), mock, reg, "dc", "urn:ietf:params:oauth:grant-type:device_code",
-		testSSOTokenPollPolicy(testSSOPollInterval, testSSOPollMaxAttempts, &recorded)); err != nil {
+		testSSOTokenPollPolicy(newFakeSSOClock())); err != nil {
 		t.Fatalf("waitForSSOToken() error = %v, want nil", err)
 	}
 
@@ -345,7 +389,7 @@ func TestWaitForSSOTokenSendsCreateTokenInput(t *testing.T) {
 // エラーで即座に失敗し、再試行しないことを検証する。
 func TestWaitForSSOTokenFailsImmediatelyOnOtherError(t *testing.T) {
 	base := &ssooidctypes.InvalidGrantException{Message: aws.String("bad grant")}
-	var recorded []time.Duration
+	clock := newFakeSSOClock()
 	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{
 		{err: ssoOidcOperationError(base)},
 		// 2 回目が呼ばれたら再試行してしまっている。steps に用意しておき、
@@ -354,7 +398,7 @@ func TestWaitForSSOTokenFailsImmediatelyOnOtherError(t *testing.T) {
 	}}
 
 	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant",
-		testSSOTokenPollPolicy(testSSOPollInterval, testSSOPollMaxAttempts, &recorded))
+		testSSOTokenPollPolicy(clock))
 	if got != nil {
 		t.Errorf("token = %v, want nil on error", got)
 	}
@@ -376,39 +420,114 @@ func TestWaitForSSOTokenFailsImmediatelyOnOtherError(t *testing.T) {
 	if len(mock.inputs) != 1 {
 		t.Errorf("CreateToken called %d times, want 1 (must not retry)", len(mock.inputs))
 	}
-	if len(recorded) != 0 {
-		t.Errorf("waited %v, want no wait before failing", recorded)
+	if len(clock.recorded) != 0 {
+		t.Errorf("waited %v, want no wait before failing", clock.recorded)
 	}
 }
 
-// TestWaitForSSOTokenTimesOutAfterMaxAttempts は最大試行回数を使い切ったときに
-// timeout を返すことを検証する。
-func TestWaitForSSOTokenTimesOutAfterMaxAttempts(t *testing.T) {
-	const maxAttempts = 3
-	steps := make([]ssoCreateTokenStep, maxAttempts)
+// awsSSODeviceAuthorization は AWS が実際に返す指示を持つデバイス認可の応答を返す。
+// interval 5 秒 / expires_in 600 秒である。
+func awsSSODeviceAuthorization() *SSODeviceAuthorization {
+	return &SSODeviceAuthorization{DeviceCode: "dc", UserCode: "uc", Interval: 5, ExpiresIn: 600}
+}
+
+// TestWaitForSSOTokenPollsUntilDeviceCodeExpires は打ち切りが device code の有効期限で
+// 決まることを検証する。方針は newSSOTokenPollPolicy に組ませ、時計だけを差し替えるため、
+// 本番の配線をそのまま通る。
+//
+// interval 5 秒 / expires_in 600 秒に対して、承認待ちが続いた場合の内訳は次のとおりである。
+//
+//   - n 回目の CreateToken は起点から 5*(n-1) 秒の時点で呼ばれる
+//   - 次の待機を終える時刻 5*n 秒が 600 秒に届くのは n = 120
+//   - よって CreateToken は 120 回、待機は 119 回、待機の合計は 595 秒
+//
+// 打ち切りまでの実時間が 595 秒であることが、この issue の主眼である。修正前は
+// ssoTokenPollMaxAttempts = 60 と 1 秒間隔の積で約 60 秒で打ち切っており、ブラウザで
+// MFA を通す間に CLI 側だけが先に失敗していた。ここを 60 秒に戻すと落ちる。
+//
+// 待機の回数が CreateToken の回数より 1 少ないことが、余分な待機が消えたことの検証である。
+// 修正前は最後の試行のあとにも待ってから打ち切っていたため両者は同数だった。
+func TestWaitForSSOTokenPollsUntilDeviceCodeExpires(t *testing.T) {
+	// 打ち切りが効かず呼び続けた場合に、mock の step 切れによる別のエラーではなく
+	// 呼び出し回数の不一致として捕まえられるよう、期待値より多めに用意する。
+	steps := make([]ssoCreateTokenStep, 200)
 	for i := range steps {
 		steps[i] = ssoCreateTokenPending()
 	}
-	var recorded []time.Duration
+	clock := newFakeSSOClock()
 	mock := &mockSSOOidcCreateTokenAPI{steps: steps}
+	deviceAuth := awsSSODeviceAuthorization()
 
-	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant",
-		testSSOTokenPollPolicy(testSSOPollInterval, maxAttempts, &recorded))
+	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, deviceAuth.DeviceCode, "grant",
+		withFakeClock(newSSOTokenPollPolicy(deviceAuth), clock))
 	if got != nil {
 		t.Errorf("token = %v, want nil on timeout", got)
 	}
-	if err == nil {
-		t.Fatal("waitForSSOToken() error = nil, want a timeout error")
+	if !errors.Is(err, errSSOTokenTimeout) {
+		t.Fatalf("errors.Is(err, errSSOTokenTimeout) = false, want true; got %v", err)
 	}
-	if msg := err.Error(); msg != "timeout waiting for authentication" {
-		t.Errorf("error = %q, want %q", msg, "timeout waiting for authentication")
+	if len(mock.inputs) != 120 {
+		t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), 120)
 	}
-	if len(mock.inputs) != maxAttempts {
-		t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), maxAttempts)
+	if len(clock.recorded) != 119 {
+		t.Errorf("waited %d times, want %d (one fewer than the number of attempts)", len(clock.recorded), 119)
 	}
-	// 最後の試行のあとにも待機してから打ち切る現行の挙動を固定する。
-	if len(recorded) != maxAttempts {
-		t.Errorf("waited %d times, want %d", len(recorded), maxAttempts)
+	if elapsed := clock.elapsed(); elapsed != 595*time.Second {
+		t.Errorf("total wait until timeout = %v, want %v", elapsed, 595*time.Second)
+	}
+}
+
+// TestWaitForSSOTokenSlowDownStaysBounded は SlowDown が続いても待ち時間が正のまま
+// 有効期限を超えて伸びないことを検証する。
+//
+// 修正前の実装は間隔を倍加しており、上限が無かった。5 秒を起点にすると 31 回の倍加で
+// time.Duration (int64 のナノ秒) を超えて負になり、負の値を time.After に渡すと即座に
+// 発火するためバックオフが連打に反転する。「すべての待ち時間が正である」の検証がそれを
+// 捕まえる。倍加のまま上限だけ足しても、5 秒ずつの増加になっていなければ内訳の比較で落ちる。
+//
+// interval 5 秒 / expires_in 600 秒に対する内訳は次のとおりである。k 回目の SlowDown の
+// あとの間隔は 5 + 5k 秒で、待機の累計は 2.5k^2 + 7.5k 秒になる。次の待機を終える時刻が
+// 600 秒に届くのは k = 14 の時点であり、そこで打ち切る。
+func TestWaitForSSOTokenSlowDownStaysBounded(t *testing.T) {
+	steps := make([]ssoCreateTokenStep, 200)
+	for i := range steps {
+		steps[i] = ssoCreateTokenSlowDown()
+	}
+	clock := newFakeSSOClock()
+	mock := &mockSSOOidcCreateTokenAPI{steps: steps}
+	deviceAuth := awsSSODeviceAuthorization()
+	policy := withFakeClock(newSSOTokenPollPolicy(deviceAuth), clock)
+
+	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, deviceAuth.DeviceCode, "grant", policy)
+	if got != nil {
+		t.Errorf("token = %v, want nil on timeout", got)
+	}
+	if !errors.Is(err, errSSOTokenTimeout) {
+		t.Fatalf("errors.Is(err, errSSOTokenTimeout) = false, want true; got %v", err)
+	}
+
+	// 5 秒ずつ増える内訳をリテラルで固定する。倍加なら 10s, 20s, 40s と伸びるため合わない。
+	wantIntervals := []time.Duration{
+		10 * time.Second, 15 * time.Second, 20 * time.Second, 25 * time.Second, 30 * time.Second,
+		35 * time.Second, 40 * time.Second, 45 * time.Second, 50 * time.Second, 55 * time.Second,
+		60 * time.Second, 65 * time.Second, 70 * time.Second, 75 * time.Second,
+	}
+	if diff := cmp.Diff(wantIntervals, clock.recorded); diff != "" {
+		t.Errorf("poll intervals mismatch (-want +got):\n%s", diff)
+	}
+	if len(mock.inputs) != len(wantIntervals)+1 {
+		t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), len(wantIntervals)+1)
+	}
+
+	// 内訳の比較とは別に、待ち時間が満たすべき不変条件を明示しておく。オーバーフローや
+	// 上限の消失は「正である」「猶予以下である」のどちらかを必ず破る。
+	for i, d := range clock.recorded {
+		if d <= 0 {
+			t.Errorf("wait %d = %v, want a positive duration", i+1, d)
+		}
+		if d > policy.timeout {
+			t.Errorf("wait %d = %v, want <= %v (the device code lifetime)", i+1, d, policy.timeout)
+		}
 	}
 }
 
@@ -431,8 +550,9 @@ func TestWaitForSSOTokenReturnsContextError(t *testing.T) {
 
 	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{ssoCreateTokenPending()}}
 	policy := ssoTokenPollPolicy{
-		interval:    testSSOPollInterval,
-		maxAttempts: testSSOPollMaxAttempts,
+		interval: testSSOPollInterval,
+		timeout:  testSSOPollTimeout,
+		now:      time.Now,
 		after: func(time.Duration) <-chan time.Time {
 			cancel()
 			return time.After(time.Second)
@@ -451,55 +571,238 @@ func TestWaitForSSOTokenReturnsContextError(t *testing.T) {
 	}
 }
 
-// TestProductionSSOTokenPollPolicyPinsWaitTimes は本番のポーリング方針が定数どおりに
-// 組まれていること、およびその定数から決まる最悪ケースの総待ち時間を固定する。
+// TestWaitForSSOTokenPrefersContextErrorOverTimeout は打ち切りと ctx のキャンセルが
+// 同時に成立しているとき、ctx.Err() を返すことを検証する。
 //
-// 期待値をリテラルで書いているのは意図的である。ssoTokenPollInterval や
-// ssoTokenPollMaxAttempts を記号参照すると、定数を変えたときに期待値も一緒に動いてしまい、
-// 待ち時間が化けたことを検出できない。定数を変えたらここで落ちるのが正しい。
-func TestProductionSSOTokenPollPolicyPinsWaitTimes(t *testing.T) {
-	policy := productionSSOTokenPollPolicy()
+// 打ち切りの判定は時刻だけを見るため、その直前に ctx がキャンセルされていると、理由が
+// 利用者の中断であっても打ち切りとして返ってしまう。呼び出し側は errors.Is で
+// context.Canceled を判別できなくなる。
+//
+// 猶予より間隔を長くすることで、初回の判定で必ず打ち切りに達する状況を決定的に作る。
+// ctx は呼び出し前にキャンセルしてあるので、両方の条件が同時に成立している。
+func TestWaitForSSOTokenPrefersContextErrorOverTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	if policy.interval != time.Second {
-		t.Errorf("interval = %v, want %v", policy.interval, time.Second)
+	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{ssoCreateTokenPending()}}
+	policy := ssoTokenPollPolicy{
+		interval: 10 * time.Second,
+		timeout:  time.Second,
+		now:      time.Now,
+		after: func(d time.Duration) <-chan time.Time {
+			t.Errorf("after(%v) was called; the deadline had already passed", d)
+			return time.After(0)
+		},
 	}
-	if policy.maxAttempts != 60 {
-		t.Errorf("maxAttempts = %d, want %d", policy.maxAttempts, 60)
+
+	got, err := waitForSSOToken(ctx, mock, &SSOClientRegistration{}, "dc", "grant", policy)
+	if got != nil {
+		t.Errorf("token = %v, want nil on cancel", got)
 	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("errors.Is(err, context.Canceled) = false, want true; got %v", err)
+	}
+	if errors.Is(err, errSSOTokenTimeout) {
+		t.Errorf("error = %v, want the cancellation reason rather than the timeout", err)
+	}
+}
+
+// TestWaitForSSOTokenRejectsInvalidPolicy は間隔か猶予が正でない方針を渡されたときに、
+// CreateToken を一度も呼ばずにエラーを返すことを検証する。
+//
+// この検証は無限ループの防波堤である。間隔が 0 以下だと待機で時刻が進まないため、
+// 打ち切り判定が永久に成立しないまま CreateToken を連打し続ける。newSSOTokenPollPolicy は
+// この不変条件を必ず満たすが、ssoTokenPollPolicy は構造体リテラルでも組めるため、
+// waitForSSOToken 自身が前提を検証しなければ契約が呼び出し元の善意に依存する。
+//
+// モックに成功を置いているのが要点である。検証を外すと打ち切りに達する前に成功が返るので、
+// テストはハングせず「エラーが nil」として即座に落ちる。
+func TestWaitForSSOTokenRejectsInvalidPolicy(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval time.Duration
+		timeout  time.Duration
+	}{
+		{name: "zero interval", interval: 0, timeout: testSSOPollTimeout},
+		{name: "negative interval", interval: -1 * time.Second, timeout: testSSOPollTimeout},
+		{name: "zero timeout", interval: testSSOPollInterval, timeout: 0},
+		{name: "negative timeout", interval: testSSOPollInterval, timeout: -1 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{ssoCreateTokenSuccess()}}
+			policy := ssoTokenPollPolicy{
+				interval: tt.interval,
+				timeout:  tt.timeout,
+				now:      time.Now,
+				after:    time.After,
+			}
+
+			got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant", policy)
+			if got != nil {
+				t.Errorf("token = %v, want nil on an invalid policy", got)
+			}
+			if !errors.Is(err, errInvalidSSOTokenPollPolicy) {
+				t.Fatalf("errors.Is(err, errInvalidSSOTokenPollPolicy) = false, want true; got %v", err)
+			}
+			if len(mock.inputs) != 0 {
+				t.Errorf("CreateToken called %d times, want 0", len(mock.inputs))
+			}
+		})
+	}
+}
+
+// TestWaitForSSOTokenRejectsNilDeviceAuthorization は WaitForSSOToken が nil の応答を
+// 参照外しせずエラーを返すことを検証する。
+//
+// WaitForSSOToken は device code とポーリング方針の両方を deviceAuth から読むため、
+// nil なら参照外しで panic する。AGENTS.md は「リクエスト処理中の panic は禁止」と定めており、
+// CLI のログイン処理もこれに当たる。検証を外すとこのテストは panic して落ちる。
+//
+// 検証を AWS のクライアント生成より前に置いてあるため、このテストは認証情報も
+// ネットワークも要求しない。生成より後ろに移すと環境依存のエラーが先に返り、
+// errors.Is の判定で落ちる。
+func TestWaitForSSOTokenRejectsNilDeviceAuthorization(t *testing.T) {
+	got, err := WaitForSSOToken(context.Background(), "ap-northeast-1", &SSOClientRegistration{}, nil, "grant")
+	if got != nil {
+		t.Errorf("token = %v, want nil on a nil device authorization", got)
+	}
+	if !errors.Is(err, errNilSSODeviceAuthorization) {
+		t.Fatalf("errors.Is(err, errNilSSODeviceAuthorization) = false, want true; got %v", err)
+	}
+}
+
+// TestSSOTokenPollSentinelMessages はセンチネルエラーの文言を固定する。
+//
+// 判別を errors.Is に移したことで、文言そのものを見るアサーションがどのテストからも
+// 消えた。打ち切りのエラーは thief sso login が利用者に表示するメッセージであり、
+// 黙って変わってよいものではないのでここで押さえる。
+//
+// あわせてリポジトリの文言規約 (エラーメッセージは英語) の検査も兼ねる。
+func TestSSOTokenPollSentinelMessages(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "timeout", err: errSSOTokenTimeout, want: "timeout waiting for authentication"},
+		{name: "nil device authorization", err: errNilSSODeviceAuthorization, want: "nil sso device authorization"},
+		{name: "invalid poll policy", err: errInvalidSSOTokenPollPolicy, want: "invalid sso token poll policy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.err.Error(); got != tt.want {
+				t.Errorf("message = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNewSSOTokenPollPolicyFollowsServerInstructions は device authorization response の
+// 指示がポーリング方針へどう写るかを固定する。
+//
+// 期待値をリテラルで書いているのは意図的である。ssoTokenPollDefaultInterval や
+// ssoTokenPollDefaultTimeout を記号参照すると、定数を変えたときに期待値も一緒に動いてしまい、
+// RFC 8628 §3.2 が定める既定値から外れたことを検出できない。定数を変えたらここで落ちるのが
+// 正しい。
+//
+// 0 以下を既定に倒すのは仕様上の既定値だからだけではない。間隔が 0 以下だと打ち切り判定に
+// 使う時刻が進まないまま CreateToken を呼び続けることになり、猶予が 0 以下だと打ち切りが
+// 消える。どちらも待機の無いループになるため、ここは無限ループの防波堤でもある。
+func TestNewSSOTokenPollPolicyFollowsServerInstructions(t *testing.T) {
+	tests := []struct {
+		name         string
+		deviceAuth   *SSODeviceAuthorization
+		wantInterval time.Duration
+		wantTimeout  time.Duration
+	}{
+		{
+			name:         "server instructs both",
+			deviceAuth:   &SSODeviceAuthorization{Interval: 7, ExpiresIn: 900},
+			wantInterval: 7 * time.Second,
+			wantTimeout:  900 * time.Second,
+		},
+		{
+			// RFC 8628 §3.2: "If no value is provided, clients MUST use 5 as the default."
+			name:         "interval is absent",
+			deviceAuth:   &SSODeviceAuthorization{Interval: 0, ExpiresIn: 900},
+			wantInterval: 5 * time.Second,
+			wantTimeout:  900 * time.Second,
+		},
+		{
+			name:         "interval is negative",
+			deviceAuth:   &SSODeviceAuthorization{Interval: -1, ExpiresIn: 900},
+			wantInterval: 5 * time.Second,
+			wantTimeout:  900 * time.Second,
+		},
+		{
+			// RFC 8628 §3.2 は expires_in を REQUIRED と定めるため、無いのは仕様に
+			// 従っていない応答である。それでも際限なくポーリングしないよう既定に倒す。
+			name:         "expires in is absent",
+			deviceAuth:   &SSODeviceAuthorization{Interval: 7, ExpiresIn: 0},
+			wantInterval: 7 * time.Second,
+			wantTimeout:  600 * time.Second,
+		},
+		{
+			name:         "expires in is negative",
+			deviceAuth:   &SSODeviceAuthorization{Interval: 7, ExpiresIn: -1},
+			wantInterval: 7 * time.Second,
+			wantTimeout:  600 * time.Second,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := newSSOTokenPollPolicy(tt.deviceAuth)
+
+			if policy.interval != tt.wantInterval {
+				t.Errorf("interval = %v, want %v", policy.interval, tt.wantInterval)
+			}
+			if policy.timeout != tt.wantTimeout {
+				t.Errorf("timeout = %v, want %v", policy.timeout, tt.wantTimeout)
+			}
+		})
+	}
+}
+
+// TestNewSSOTokenPollPolicyUsesRealClock は本番の方針が実時間の時計を持つことを検証する。
+//
+// after が nil なら最初の待機で panic するため気付ける。now が nil でも同様である。
+// 危険なのは nil ではなく止まった時計や別の時刻を返す時計を入れてしまう場合で、
+// その場合は打ち切りが効かず CreateToken を延々と呼び続ける。now() が実際に
+// time.Now() の範囲に収まることまで見て検出する。
+//
+// 2 回の time.Now() で挟むだけなので、待たずに済みフレークもしない。time.Now() は
+// 単調増加するため、その間に取った値が範囲外に出ることはない。
+//
+// ただし範囲の検査だけでは、方針を組んだ時点の時刻を捕まえて以後それを返し続ける時計
+// (now: func() time.Time { return start }) を見逃す。範囲は構築直後に取るため、
+// 固定された値もその中に収まってしまう。この時計は本番で最悪の壊れ方をする。deadline も
+// 判定側も同じ値になり、now()+interval < now()+timeout が恒真になって打ち切りが消え、
+// CreateToken を永久に呼び続ける。実時間を少しだけ進めてから 2 回目を読み、時刻が
+// 進むことまで確認して塞ぐ。
+//
+// 1 ミリ秒の待機は Go のタイマーの下限保証 (指定より早くは発火しない) で担保され、
+// time.Now() の単調成分はナノ秒精度なので、この検査はフレークしない。
+func TestNewSSOTokenPollPolicyUsesRealClock(t *testing.T) {
+	policy := newSSOTokenPollPolicy(awsSSODeviceAuthorization())
+
 	if policy.after == nil {
-		t.Fatal("after is nil; WaitForSSOToken would panic on the first wait")
+		t.Fatal("after is nil; waitForSSOToken would panic on the first wait")
+	}
+	if policy.now == nil {
+		t.Fatal("now is nil; waitForSSOToken would panic before the first attempt")
 	}
 
-	// 承認待ちが続いた場合の総待ち時間を固定する。SlowDown が来なければ間隔は倍にならない
-	// ため、これが打ち切りまでの実際の待ち時間になる。
-	var recorded []time.Duration
-	steps := make([]ssoCreateTokenStep, policy.maxAttempts)
-	for i := range steps {
-		steps[i] = ssoCreateTokenPending()
-	}
-	mock := &mockSSOOidcCreateTokenAPI{steps: steps}
-
-	// after だけを記録用に差し替える。interval と maxAttempts は本番の値をそのまま使う。
-	measured := policy
-	measured.after = recordingAfter(&recorded)
-
-	_, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant", measured)
-	if err == nil {
-		t.Fatal("waitForSSOToken() error = nil, want a timeout error")
-	}
-	if msg := err.Error(); msg != "timeout waiting for authentication" {
-		t.Fatalf("error = %q, want %q", msg, "timeout waiting for authentication")
-	}
-	if len(mock.inputs) != 60 {
-		t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), 60)
+	before := time.Now()
+	got := policy.now()
+	after := time.Now()
+	if got.Before(before) || got.After(after) {
+		t.Errorf("now() = %v, want a value in [%v, %v]", got, before, after)
 	}
 
-	var total time.Duration
-	for _, d := range recorded {
-		total += d
-	}
-	if total != 60*time.Second {
-		t.Errorf("total wait until timeout = %v, want %v", total, 60*time.Second)
+	time.Sleep(time.Millisecond)
+	if again := policy.now(); !again.After(got) {
+		t.Errorf("now() = %v on the second read, want a value after %v; the clock does not advance", again, got)
 	}
 }
 
@@ -511,12 +814,13 @@ func TestProductionSSOTokenPollPolicyPinsWaitTimes(t *testing.T) {
 // フレークしない。上限を見ると実行環境の負荷でフレークするので見ない。
 // この下限が無いと、本番の after を time.After(0) を返す実装に書き換えても
 // テストが通ってしまう (待機ゼロで 60 回連打する実装になる)。
-// interval を本番の 1 秒から短くしているため、テストの実行時間は 1 秒に依存しない。
+// interval を本番の 5 秒から短くしているため、テストの実行時間は 5 秒に依存しない。
+// timeout は本番の値 (expires_in 600 秒) をそのまま使う。打ち切りに達する前に成功するため、
+// 実際に 600 秒待つことはない。
 func TestWaitForSSOTokenUsesTimeAfterWhenNotStubbed(t *testing.T) {
 	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{ssoCreateTokenPending(), ssoCreateTokenSuccess()}}
-	policy := productionSSOTokenPollPolicy()
+	policy := newSSOTokenPollPolicy(awsSSODeviceAuthorization())
 	policy.interval = 30 * time.Millisecond
-	policy.maxAttempts = 2
 
 	start := time.Now()
 	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant", policy)

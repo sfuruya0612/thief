@@ -133,7 +133,7 @@ func okSSOTokenDeps() ssoTokenDeps {
 			return &awsinternal.SSODeviceAuthorization{DeviceCode: "dc", UserCode: "uc"}, nil
 		},
 		openBrowser: func(string) error { return nil },
-		waitForToken: func(context.Context, string, *awsinternal.SSOClientRegistration, string, string) (*awsinternal.SSOToken, error) {
+		waitForToken: func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
 			return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
 		},
 		// 標準出力への表示はテストに不要なため差し替える。
@@ -191,7 +191,7 @@ func TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording(t *testing.T) {
 		{
 			name: "wait for token",
 			fail: func(deps *ssoTokenDeps, err error) {
-				deps.waitForToken = func(context.Context, string, *awsinternal.SSOClientRegistration, string, string) (*awsinternal.SSOToken, error) {
+				deps.waitForToken = func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
 					return nil, err
 				}
 			},
@@ -253,6 +253,77 @@ func TestGetSSOTokenBuildsCacheFromDeps(t *testing.T) {
 	}
 	if cache.ClientSecret != "secret" {
 		t.Errorf("ClientSecret = %q, want %q", cache.ClientSecret, "secret")
+	}
+}
+
+// TestGetSSOTokenPassesDeviceAuthorizationThrough は startDeviceAuth が返した応答が
+// 後続の 3 段へ正しく渡ることを検証する。
+//
+//   - waitForToken には応答を丸ごと渡す。awsinternal 側はこの Interval と ExpiresIn から
+//     ポーリング間隔と打ち切り期限を決める (RFC 8628 §3.2 / §3.5)。DeviceCode だけ取り出して
+//     詰め直すと、サーバの指示が捨てられて既定値 (5 秒 / 600 秒) に落ちる。見た目には
+//     動いてしまうため、渡った値の中身まで比較して検出する。
+//   - openBrowser には VerificationURIComplete を渡す。ここを取り違えるとユーザーコードが
+//     埋まっていない URL や device code がブラウザに渡り、承認に進めない。
+//   - display には start URL と UserCode を渡す。
+func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
+	const (
+		region   = "ap-northeast-1"
+		startURL = "https://example.awsapps.com/start/"
+	)
+	deviceAuth := &awsinternal.SSODeviceAuthorization{
+		DeviceCode:              "dc",
+		UserCode:                "uc",
+		VerificationURIComplete: "https://device.sso/verify?user_code=uc",
+		Interval:                7,
+		ExpiresIn:               900,
+	}
+
+	var (
+		gotDeviceAuth  *awsinternal.SSODeviceAuthorization
+		gotGrantType   string
+		gotBrowserURL  string
+		gotDisplayURL  string
+		gotDisplayCode string
+	)
+	deps := okSSOTokenDeps()
+	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
+		return deviceAuth, nil
+	}
+	deps.openBrowser = func(url string) error {
+		gotBrowserURL = url
+		return nil
+	}
+	deps.display = func(url, userCode string) {
+		gotDisplayURL = url
+		gotDisplayCode = userCode
+	}
+	deps.waitForToken = func(_ context.Context, _ string, _ *awsinternal.SSOClientRegistration, da *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error) {
+		gotDeviceAuth = da
+		gotGrantType = grantType
+		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+	}
+
+	if _, err := getSSOTokenWith(context.Background(), region, startURL, deps); err != nil {
+		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
+	}
+
+	// ポインタの同一性ではなく中身を比較する。無害な写しを取る実装を落としたいのではなく、
+	// Interval と ExpiresIn が欠けることを落としたい。
+	if diff := cmp.Diff(deviceAuth, gotDeviceAuth); diff != "" {
+		t.Errorf("waitForToken device authorization mismatch (-want +got):\n%s", diff)
+	}
+	if gotGrantType != ssoGrantType {
+		t.Errorf("waitForToken grant type = %q, want %q", gotGrantType, ssoGrantType)
+	}
+	if gotBrowserURL != deviceAuth.VerificationURIComplete {
+		t.Errorf("openBrowser url = %q, want %q", gotBrowserURL, deviceAuth.VerificationURIComplete)
+	}
+	if gotDisplayURL != startURL {
+		t.Errorf("display start url = %q, want %q", gotDisplayURL, startURL)
+	}
+	if gotDisplayCode != deviceAuth.UserCode {
+		t.Errorf("display user code = %q, want %q", gotDisplayCode, deviceAuth.UserCode)
 	}
 }
 
