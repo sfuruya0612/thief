@@ -34,7 +34,7 @@
 | `mise run backend:build` | `go build ./...` |
 | `mise run backend:install` | `thief` CLI を `go install ./cmd/thief` で `$GOPATH/bin` に導入 |
 | `mise run backend:test` | `go test -race -cover ./...` |
-| `mise run backend:lint` | `go vet` + `staticcheck` + `govulncheck` + `golangci-lint` |
+| `mise run backend:lint` | `go vet` + `staticcheck` + `govulncheck` |
 | `mise run backend:fmt` | `gofmt -w .` + `goimports -w .` |
 | `mise run backend:tidy` | `go mod tidy -v` |
 | `mise run backend:mocks` | mockery でモック生成 |
