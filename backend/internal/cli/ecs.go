@@ -243,9 +243,9 @@ func ecsExecuteCommandWith(cmd *cobra.Command, deps ecsExecSessionDeps) error {
 	// 短命 context で行う。理由は startEC2SessionWith (ec2.go) と同じで、
 	// util.ExecCommand の実行中に届いた Ctrl-C / SIGTERM は main の signal.NotifyContext
 	// にも配送されて ctx をキャンセル済みにするため、ctx のままでは TerminateSSMSession
-	// が必ず失敗し、セッションが AWS 側に残る。ec2TerminateTimeout は ec2.go の同じ
-	// 後始末と共有する (issues/0136 でこの種の重複を検討する)。
-	termCtx, cancelTerm := context.WithTimeout(context.Background(), ec2TerminateTimeout)
+	// が必ず失敗し、セッションが AWS 側に残る。猶予の長さは internal/aws の
+	// TerminateSessionGracePeriod を ec2.go の同じ後始末と共有する。
+	termCtx, cancelTerm := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
 	defer cancelTerm()
 
 	terminateThen := func(cause error) error {

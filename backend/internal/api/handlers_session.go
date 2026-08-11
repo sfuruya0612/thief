@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/coder/websocket"
 
@@ -15,9 +14,6 @@ import (
 // ecsExecDefaultCommand は ECS Exec でコマンド未指定時に実行するデフォルトコマンド。
 // 旧 CLI (cmd/ecs.go の ecsExecCmd) のデフォルト値に揃える。
 const ecsExecDefaultCommand = "/bin/sh"
-
-// sessionTerminateTimeout はセッション確立に失敗した際の後始末 (TerminateSSMSession 呼び出し) に使うタイムアウト。
-const sessionTerminateTimeout = 5 * time.Second
 
 // handleEC2Session は EC2 インスタンスへの SSM Session Manager セッションを開始し、
 // ブラウザ WebSocket とデータチャネルの間をブリッジする。
@@ -101,7 +97,7 @@ func (s *Server) runSessionBridge(w http.ResponseWriter, r *http.Request, result
 // terminateBestEffort はアップグレード前のセットアップ失敗時に、専用の短命 context で
 // セッション終了処理を試みる。エラーはログに残すのみで呼び出し元には伝播しない。
 func terminateBestEffort(terminate session.TerminateFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), sessionTerminateTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
 	defer cancel()
 	if err := terminate(ctx); err != nil {
 		slog.Warn("failed to terminate session after setup failure", "err", err)
