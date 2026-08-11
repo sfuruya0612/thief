@@ -308,6 +308,8 @@
   - @sfuruya0612
 - [FIX] `util.Select` が context を見ないため、`thief ec2 session` / `thief ecs tasks` の対話式選択画面を表示している間 SIGTERM でプロセスが終了しない不具合を修正する (issue 0131 で導入した `signal.NotifyContext` がシグナルの既定の動作を止めるため、context を見ない待機は以前より止まりにくくなっていた退行)。`Select` の第一引数に `ctx context.Context` を追加し、`tea.NewProgram` に `tea.WithContext(ctx)` を渡すようにする。呼び出し側 2 箇所 (`ec2.go`、`ecs.go`) は `commandContext(cmd)` を渡す。あわせて、選択画面で Ctrl-C を押した場合の挙動を SIGINT / SIGTERM による中断と統一する。従来は `Update` が `ctrl+c` と `q` のどちらも `tea.Quit` を返し、`Select` が `no item selected` を返すため `cli.Run` からは実行時の失敗 (`Error: ...` / exit 1) に見えていた。`ctrl+c` だけ `tea.Interrupt` を返すように変え、`Program.Run` が返す `tea.ErrInterrupted` を含むエラーを `selectWith` が `errors.Is(err, context.Canceled)` が真になるエラーへ変換することで、`cli.Run` の中断判定にそのまま乗せる。他の中断経路と同じ `interrupted` 表示・exit 130 になる。`q` は「選択せずに終了」という意思決定のままとし、`tea.Quit` / `no item selected` の挙動は変えない
   - @sfuruya0612
+- [FIX] `thief sso login` がブラウザの自動起動に失敗すると、その時点でエラーを返して終了し、承認用の URI と user code の表示に到達しない不具合を修正する (RFC 8628 §3.3.1 はブラウザ等による非テキストでの提示を MAY と定めており必須ではない一方、§3.3 のテキストでの提示は実質必須である。従来の実装はこの優先順位が逆転していた。`getSSOTokenWith` で表示 (`display`) をブラウザの起動 (`openBrowser`) より先に行うようにし、`openBrowser` の失敗はエラーとして返さず新設した `reportBrowserFailure` で標準エラー出力への警告に落として `waitForToken` へ進むようにする。`VerificationURIComplete` が空 (RFC 8628 §3.2 で OPTIONAL) の場合はブラウザの起動を試みない)
+  - @sfuruya0612
 
 ### misc
 
