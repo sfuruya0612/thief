@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -368,7 +369,7 @@ type ssoTokenDeps struct {
 	startDeviceAuth func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, startURL string) (*awsinternal.SSODeviceAuthorization, error)
 	openBrowser     func(url string) error
 	waitForToken    func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, deviceAuth *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error)
-	display         func(startURL, userCode string)
+	display         func(verificationURI, userCode string)
 }
 
 // defaultSSOTokenDeps は本番で使う実装を返す。
@@ -378,7 +379,9 @@ func defaultSSOTokenDeps() ssoTokenDeps {
 		startDeviceAuth: awsinternal.StartSSODeviceAuthorization,
 		openBrowser:     openBrowser,
 		waitForToken:    awsinternal.WaitForSSOToken,
-		display:         ssoLoginDisplay,
+		display: func(verificationURI, userCode string) {
+			writeSSOLoginPrompt(os.Stdout, verificationURI, userCode)
+		},
 	}
 }
 
@@ -406,8 +409,10 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 		return nil, fmt.Errorf("open browser: %w", err)
 	}
 
-	// aws sso login コマンドと同じ出力にする。
-	deps.display(url, deviceAuth.UserCode)
+	// 提示する URI はサーバが返した verification_uri である (RFC 8628 §3.2 / §3.3)。
+	// start URL から組み立てた値を渡すと、サーバの指示と食い違ったときに
+	// ブラウザが開けなかった利用者の退路が塞がる。
+	deps.display(deviceAuth.VerificationURI, deviceAuth.UserCode)
 
 	// deviceAuth を丸ごと渡す。waitForToken は device code だけでなく、サーバが指示した
 	// interval と expires_in からポーリング間隔と打ち切り期限を決める (RFC 8628 §3.2 / §3.5)。
@@ -430,17 +435,35 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 	}, nil
 }
 
-func ssoLoginDisplay(startUrl, userCode string) {
-	url := fmt.Sprintf("%s#/device", startUrl)
+// writeSSOLoginPrompt はデバイス認可の承認手順を w へ書き出す。
+//
+// 書き出す内容は RFC 8628 §3.3 の User Interaction にあたる。認可サーバが返した
+// verification_uri と user_code をそのまま提示する。
+//
+// 書き出し先を引数で受け取るのは、内容をテストから読めるようにするためである。
+// 本番では os.Stdout を渡す。ここまでコマンドの出力先 (cmd.OutOrStdout) が届いて
+// いないのは、getSSOToken が cobra のコマンドを受け取らないためである。
+func writeSSOLoginPrompt(w io.Writer, verificationURI, userCode string) {
+	fmt.Fprintln(w, "Attempting to automatically open the SSO authorization page in your default browser.")
 
-	fmt.Println("Attempting to automatically open the SSO authorization page in your default browser.")
-	fmt.Println("If the browser does not open or you wish to use a different device to authorize this request, open the following URL:")
-	fmt.Println()
-	fmt.Println(url)
-	fmt.Println()
-	fmt.Println("Then enter the code:")
-	fmt.Println()
-	fmt.Println(userCode)
+	// verification_uri は RFC 8628 §3.2 で REQUIRED である。欠けているのはサーバ側の
+	// 仕様違反であり、こちらで start URL から URI を組み立てて補うことはしない。
+	// 組み立てた値には仕様上の裏付けが無く、サーバの指示として見せることになる。
+	// ポーリングは続行できるため、欠けていることを伝えて URI の行だけを省く。
+	if verificationURI == "" {
+		fmt.Fprintln(w, "warning: the authorization server did not return a verification URI; authorize in the browser page that was opened.")
+	} else {
+		fmt.Fprintln(w, "If the browser does not open or you wish to use a different device to authorize this request, open the following URL:")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, verificationURI)
+	}
+
+	// user_code の表示は RFC 8628 §3.3.1 の MUST である。verification_uri の有無に
+	// 関わらず出す。認可サーバは利用者にこのコードの確認を要求する。
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Then enter the code:")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, userCode)
 }
 
 func openBrowser(url string) error {

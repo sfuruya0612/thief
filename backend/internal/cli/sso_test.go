@@ -265,7 +265,8 @@ func TestGetSSOTokenBuildsCacheFromDeps(t *testing.T) {
 //     動いてしまうため、渡った値の中身まで比較して検出する。
 //   - openBrowser には VerificationURIComplete を渡す。ここを取り違えるとユーザーコードが
 //     埋まっていない URL や device code がブラウザに渡り、承認に進めない。
-//   - display には start URL と UserCode を渡す。
+//   - display には VerificationURI と UserCode を渡す (RFC 8628 §3.2 / §3.3)。start URL から
+//     組み立てた値を渡すと、サーバの指示と食い違ったときに利用者の退路が塞がる。
 func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 	const (
 		region   = "ap-northeast-1"
@@ -274,6 +275,7 @@ func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 	deviceAuth := &awsinternal.SSODeviceAuthorization{
 		DeviceCode:              "dc",
 		UserCode:                "uc",
+		VerificationURI:         "https://device.sso/verify",
 		VerificationURIComplete: "https://device.sso/verify?user_code=uc",
 		Interval:                7,
 		ExpiresIn:               900,
@@ -319,11 +321,71 @@ func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 	if gotBrowserURL != deviceAuth.VerificationURIComplete {
 		t.Errorf("openBrowser url = %q, want %q", gotBrowserURL, deviceAuth.VerificationURIComplete)
 	}
-	if gotDisplayURL != startURL {
-		t.Errorf("display start url = %q, want %q", gotDisplayURL, startURL)
+	if gotDisplayURL != deviceAuth.VerificationURI {
+		t.Errorf("display verification uri = %q, want %q", gotDisplayURL, deviceAuth.VerificationURI)
+	}
+	// start URL から組み立てた推測値が渡っていないことを明示的に見る。上の比較だけでは
+	// 期待値を書き換えれば通ってしまうため、捨てるべき値そのものを名指しで否定する。
+	if guessed := startURL + "#/device"; gotDisplayURL == guessed {
+		t.Errorf("display verification uri = %q; start URL から組み立てた推測値を渡している", guessed)
 	}
 	if gotDisplayCode != deviceAuth.UserCode {
 		t.Errorf("display user code = %q, want %q", gotDisplayCode, deviceAuth.UserCode)
+	}
+}
+
+// TestWriteSSOLoginPrompt は承認手順の表示内容を検証する。
+//
+// RFC 8628 §3.3 は user_code と verification_uri を利用者へ提示することを求める。
+// §3.3.1 は user_code の表示を MUST と定めており、verification_uri が欠けていても
+// 省いてはならない。
+func TestWriteSSOLoginPrompt(t *testing.T) {
+	const (
+		verificationURI = "https://device.sso.ap-northeast-1.amazonaws.com/"
+		userCode        = "ABCD-EFGH"
+	)
+
+	tests := []struct {
+		name string
+		uri  string
+		// wantContains は出力に含まれていてほしい行。
+		wantContains []string
+		// wantOmits は出力に含まれてはならない断片。
+		wantOmits []string
+	}{
+		{
+			name:         "server returned a verification uri",
+			uri:          verificationURI,
+			wantContains: []string{verificationURI, userCode, "open the following URL:"},
+			// 仕様上の裏付けが無い推測値を混ぜてはならない。
+			wantOmits: []string{"#/device", "warning:"},
+		},
+		{
+			// サーバの仕様違反。URI の行は省き、代わりに欠けていることを伝える。
+			// user_code は §3.3.1 の MUST であり必ず出す。
+			name:         "server omitted the verification uri",
+			uri:          "",
+			wantContains: []string{userCode, "warning: the authorization server did not return a verification URI"},
+			wantOmits:    []string{"#/device", "open the following URL:"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writeSSOLoginPrompt(&buf, tt.uri, userCode)
+
+			got := buf.String()
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("output = %q, want it to contain %q", got, want)
+				}
+			}
+			for _, omit := range tt.wantOmits {
+				if strings.Contains(got, omit) {
+					t.Errorf("output = %q, want it not to contain %q", got, omit)
+				}
+			}
+		})
 	}
 }
 
