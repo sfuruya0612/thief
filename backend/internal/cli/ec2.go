@@ -256,7 +256,7 @@ func selectEC2Instance(ctx context.Context, cfg *config.Config) (string, error) 
 		return "", errors.New("no matching EC2 instances found for SSM selection")
 	}
 
-	selected, err := util.Select(items, "Select an EC2 instance:")
+	selected, err := util.Select(ctx, items, "Select an EC2 instance:")
 	if err != nil {
 		return "", fmt.Errorf("select instance: %w", err)
 	}
