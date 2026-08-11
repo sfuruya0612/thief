@@ -520,8 +520,8 @@ func TestNoContextBlindStdinReadOutsideDesignatedFunctions(t *testing.T) {
 		// アカウント選択とロール選択で使い回す *bufio.Reader の構築。構築そのものは
 		// ブロックしない。実際に読む ReadString は promptSelection (readWithContext の中) が
 		// 呼ぶ。呼び出しのたびに構築し直すと bufio.Reader の先読み分が失われるため、
-		// ssoGenerateConfig の 1 箇所で構築して両方の呼び出しへ使い回す。
-		"sso.go:ssoGenerateConfig",
+		// ssoGenerateConfigWith の 1 箇所で構築して両方の呼び出しへ使い回す。
+		"sso.go:ssoGenerateConfigWith",
 	}
 
 	got := contextBlindReadCallSites(t, ".")

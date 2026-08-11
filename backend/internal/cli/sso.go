@@ -202,7 +202,40 @@ func ssoLogout(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// ssoGenerateConfigDeps は ssoGenerateConfig が呼ぶ外部処理をまとめる。
+// getToken はブラウザの起動と AWS への往復を伴い、listAccounts / listRoles は AWS への
+// 通信を伴い、configPath / readConfig / writeConfig は $HOME/.aws/config を読み書きする。
+// いずれもテストからは実行できないため、アカウント選択・ロール取得・既存設定の
+// 読み取り失敗時のフォールバックといった分岐を検証するために差し替える。
+type ssoGenerateConfigDeps struct {
+	getToken     func(ctx context.Context, region, url string) (*SSOTokenCache, error)
+	listAccounts func(ctx context.Context, region, accessToken string) ([]awsinternal.SSOAccountInfo, error)
+	listRoles    func(ctx context.Context, region, accessToken, accountID string) ([]string, error)
+	configPath   func() (string, error)
+	readConfig   func(path string) (string, error)
+	writeConfig  func(path, content string) error
+}
+
+// defaultSSOGenerateConfigDeps は本番で使う実装を返す。
+func defaultSSOGenerateConfigDeps() ssoGenerateConfigDeps {
+	return ssoGenerateConfigDeps{
+		getToken:     getSSOToken,
+		listAccounts: awsinternal.ListSSOAccountInfos,
+		listRoles:    awsinternal.ListSSOAccountRoleNames,
+		configPath:   getAwsConfigPath,
+		readConfig:   readAwsConfig,
+		writeConfig: func(path, content string) error {
+			return os.WriteFile(path, []byte(content), 0600)
+		},
+	}
+}
+
 func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
+	return ssoGenerateConfigWith(cmd, args, defaultSSOGenerateConfigDeps())
+}
+
+// ssoGenerateConfigWith は ssoGenerateConfig の本体。
+func ssoGenerateConfigWith(cmd *cobra.Command, args []string, deps ssoGenerateConfigDeps) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
@@ -217,12 +250,12 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 	startUrl := fmt.Sprintf("https://%s.awsapps.com/start/", url)
 
 	ctx := commandContext(cmd)
-	cache, err := getSSOToken(ctx, region, startUrl)
+	cache, err := deps.getToken(ctx, region, startUrl)
 	if err != nil {
 		return fmt.Errorf("get token: %w", err)
 	}
 
-	accounts, err := awsinternal.ListSSOAccountInfos(ctx, region, cache.AccessToken)
+	accounts, err := deps.listAccounts(ctx, region, cache.AccessToken)
 	if err != nil {
 		return fmt.Errorf("list accounts: %w", err)
 	}
@@ -260,7 +293,7 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 		account := accounts[accountIndex]
 		cmd.Printf("\nProcessing account %s (%s)...\n", account.AccountName, account.AccountID)
 
-		roles, err := awsinternal.ListSSOAccountRoleNames(ctx, region, cache.AccessToken, account.AccountID)
+		roles, err := deps.listRoles(ctx, region, cache.AccessToken, account.AccountID)
 		if err != nil {
 			return fmt.Errorf("list account roles for %s: %w", account.AccountID, err)
 		}
@@ -308,12 +341,12 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 	cmd.Printf("\nFound %d role configurations to add\n", len(profiles))
 
 	// 既存の設定を読み込む。
-	configPath, err := getAwsConfigPath()
+	configPath, err := deps.configPath()
 	if err != nil {
 		return fmt.Errorf("get AWS config path: %w", err)
 	}
 
-	existingConfig, err := readAwsConfig(configPath)
+	existingConfig, err := deps.readConfig(configPath)
 	if err != nil {
 		cmd.Printf("Warning: Reading existing config: %v\n", err)
 		existingConfig = ""
@@ -326,7 +359,7 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 	}
 
 	// 設定ファイルを書き込む。
-	if err := os.WriteFile(configPath, []byte(newConfig), 0600); err != nil {
+	if err := deps.writeConfig(configPath, newConfig); err != nil {
 		return fmt.Errorf("write config file: %w", err)
 	}
 

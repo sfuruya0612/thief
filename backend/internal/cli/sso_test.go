@@ -540,6 +540,261 @@ func TestSSOLoginFallsBackToBackgroundContext(t *testing.T) {
 	}
 }
 
+// okSSOGenerateConfigDeps は全段が成功するダミーを返す。
+// アカウント 1 件・ロール 1 件で完走できる最小構成にしている。各テストは検証したい
+// 段だけを差し替える。
+func okSSOGenerateConfigDeps() ssoGenerateConfigDeps {
+	return ssoGenerateConfigDeps{
+		getToken: func(context.Context, string, string) (*SSOTokenCache, error) {
+			return &SSOTokenCache{AccessToken: "token"}, nil
+		},
+		listAccounts: func(context.Context, string, string) ([]awsinternal.SSOAccountInfo, error) {
+			return []awsinternal.SSOAccountInfo{{AccountID: "111111111111", AccountName: "account-1"}}, nil
+		},
+		listRoles: func(context.Context, string, string, string) ([]string, error) {
+			return []string{"AdminAccess"}, nil
+		},
+		configPath:  func() (string, error) { return "/dummy/config", nil },
+		readConfig:  func(string) (string, error) { return "", nil },
+		writeConfig: func(string, string) error { return nil },
+	}
+}
+
+// newSSOGenerateConfigCmd は ssoGenerateConfigWith が読むフラグと標準入力を持つコマンドを
+// 返す。stdin にはアカウント選択・ロール選択の入力を改行区切りで渡す。
+func newSSOGenerateConfigCmd(t *testing.T, stdin string, out *bytes.Buffer) *cobra.Command {
+	t.Helper()
+
+	cmd := &cobra.Command{Use: "generate-config"}
+	cmd.Flags().String("url", "", "")
+	cmd.Flags().String("profile", "", "")
+	cmd.Flags().String("region", "", "")
+	for name, value := range map[string]string{
+		"url":     "example",
+		"profile": "test-profile",
+		"region":  "ap-northeast-1",
+	} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatalf("set %s flag: %v", name, err)
+		}
+	}
+
+	cmd.SetIn(strings.NewReader(stdin))
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	return cmd
+}
+
+// TestSSOGenerateConfigWith_NoValidAccountsSelected は問題 1 (アカウント選択の分岐) を
+// 検証する。範囲外の番号だけが入力された場合、selectIndices は 1 件も残さないため、
+// ssoGenerateConfigWith はロール取得に進む前に no valid accounts selected を返す。
+func TestSSOGenerateConfigWith_NoValidAccountsSelected(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	var out bytes.Buffer
+	cmd := newSSOGenerateConfigCmd(t, "9\n", &out)
+
+	err := ssoGenerateConfigWith(cmd, nil, okSSOGenerateConfigDeps())
+	if err == nil {
+		t.Fatal("ssoGenerateConfigWith() error = nil, want an error")
+	}
+	if got, want := err.Error(), "no valid accounts selected"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+}
+
+// TestSSOGenerateConfigWith_ListRolesFailureIsWrapped は問題 2 のうち、ロール取得の失敗が
+// 対象のアカウント ID を含む文言でラップされて伝播することを検証する。
+func TestSSOGenerateConfigWith_ListRolesFailureIsWrapped(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	base := &ssoStageError{stage: "list-roles"}
+	deps := okSSOGenerateConfigDeps()
+	deps.listRoles = func(context.Context, string, string, string) ([]string, error) {
+		return nil, base
+	}
+
+	var out bytes.Buffer
+	cmd := newSSOGenerateConfigCmd(t, "1\n", &out)
+
+	err := ssoGenerateConfigWith(cmd, nil, deps)
+	if err == nil {
+		t.Fatal("ssoGenerateConfigWith() error = nil, want an error")
+	}
+	if !errors.Is(err, base) {
+		t.Errorf("errors.Is() = false, want true; the chain is severed: %v", err)
+	}
+	if want := "list account roles for 111111111111: "; !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to contain %q", err.Error(), want)
+	}
+}
+
+// TestSSOGenerateConfigWith_AccountWithNoRolesIsSkipped は問題 2 のうち、ロールが 0 件の
+// アカウントを continue でスキップし、警告を表示することを検証する。唯一のアカウントが
+// これに当たるため、最終的にプロファイルが 1 件も無く no roles selected for any accounts
+// になることも併せて確認する (問題 3 の入口の 1 つ)。
+func TestSSOGenerateConfigWith_AccountWithNoRolesIsSkipped(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	deps := okSSOGenerateConfigDeps()
+	deps.listRoles = func(context.Context, string, string, string) ([]string, error) {
+		return []string{}, nil
+	}
+
+	var out bytes.Buffer
+	// ロール選択の入力は消費されないため、アカウント選択の 1 行だけで足りる。
+	cmd := newSSOGenerateConfigCmd(t, "1\n", &out)
+
+	err := ssoGenerateConfigWith(cmd, nil, deps)
+	if err == nil {
+		t.Fatal("ssoGenerateConfigWith() error = nil, want an error")
+	}
+	if got, want := err.Error(), "no roles selected for any accounts"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+	if want := "No roles found for account account-1 (111111111111)"; !strings.Contains(out.String(), want) {
+		t.Errorf("output = %q, want it to contain %q", out.String(), want)
+	}
+}
+
+// TestSSOGenerateConfigWith_SkippedAccountDoesNotBlockLaterAccounts は問題 2 の continue が
+// 後続のアカウントの処理を妨げないことを検証する。ロール 0 件のアカウントはロール選択の
+// プロンプトを出さずに次のアカウントへ進むため、continue を外すと 1 個目のアカウントが
+// 2 個目のアカウント用のロール選択の入力行を奪って読み、ロールを 1 つも選べずに
+// no roles selected for any accounts へ落ちる (2 個目のアカウントの入力が届かなくなる)。
+// あわせて account-2 の 2 件目のロール (ReadOnly) が選ばれることも確認し、
+// accounts[accountIndex] と roles[roleIndex] が呼び出しのたびに正しい要素を指すことも
+// 併せて検証する。
+func TestSSOGenerateConfigWith_SkippedAccountDoesNotBlockLaterAccounts(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	deps := okSSOGenerateConfigDeps()
+	deps.listAccounts = func(context.Context, string, string) ([]awsinternal.SSOAccountInfo, error) {
+		return []awsinternal.SSOAccountInfo{
+			{AccountID: "111111111111", AccountName: "account-1"},
+			{AccountID: "222222222222", AccountName: "account-2"},
+		}, nil
+	}
+	deps.listRoles = func(_ context.Context, _, _, accountID string) ([]string, error) {
+		if accountID == "111111111111" {
+			return []string{}, nil
+		}
+		return []string{"AdminAccess", "ReadOnly"}, nil
+	}
+	var gotContent string
+	deps.writeConfig = func(_, content string) error {
+		gotContent = content
+		return nil
+	}
+
+	var out bytes.Buffer
+	// 1 行目: アカウント選択 (all)。2 行目: ロール選択は account-2 の分だけ届く
+	// (account-1 はロール 0 件で continue し、ロール選択のプロンプトを出さないため)。
+	cmd := newSSOGenerateConfigCmd(t, "all\n2\n", &out)
+
+	if err := ssoGenerateConfigWith(cmd, nil, deps); err != nil {
+		t.Fatalf("ssoGenerateConfigWith() error = %v, want nil", err)
+	}
+	if want := "No roles found for account account-1 (111111111111)"; !strings.Contains(out.String(), want) {
+		t.Errorf("output = %q, want it to contain %q", out.String(), want)
+	}
+	if want := "[profile account-2-readonly]"; !strings.Contains(gotContent, want) {
+		t.Errorf("writeConfig content = %q, want it to contain %q", gotContent, want)
+	}
+	if strings.Contains(gotContent, "account-1") {
+		t.Errorf("writeConfig content = %q, want it not to contain account-1 (its only role list is empty)", gotContent)
+	}
+}
+
+// TestSSOGenerateConfigWith_NoRolesSelectedForAnyAccount は問題 3 を検証する。
+// アカウントにロールは存在するが、ロール選択で範囲外の番号だけを入力した場合、
+// selectedRoles が空になりプロファイルが 1 件も作られない。
+func TestSSOGenerateConfigWith_NoRolesSelectedForAnyAccount(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	var out bytes.Buffer
+	// 1 行目: アカウント選択。2 行目: ロール選択 (範囲外の番号)。
+	cmd := newSSOGenerateConfigCmd(t, "1\n9\n", &out)
+
+	err := ssoGenerateConfigWith(cmd, nil, okSSOGenerateConfigDeps())
+	if err == nil {
+		t.Fatal("ssoGenerateConfigWith() error = nil, want an error")
+	}
+	if got, want := err.Error(), "no roles selected for any accounts"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+}
+
+// TestSSOGenerateConfigWith_ExistingConfigReadFailureFallsBackToEmpty は問題 4 を検証する。
+// readConfig が失敗しても警告を表示するだけで処理を止めず、空文字列を既存設定として
+// 続行し、最終的に新しい設定の書き込みまで完走することを確認する。
+func TestSSOGenerateConfigWith_ExistingConfigReadFailureFallsBackToEmpty(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	readErr := &ssoStageError{stage: "read-config"}
+	deps := okSSOGenerateConfigDeps()
+	deps.readConfig = func(string) (string, error) {
+		return "", readErr
+	}
+
+	var gotPath, gotContent string
+	deps.writeConfig = func(path, content string) error {
+		gotPath = path
+		gotContent = content
+		return nil
+	}
+
+	var out bytes.Buffer
+	// 1 行目: アカウント選択。2 行目: ロール選択 (all)。
+	cmd := newSSOGenerateConfigCmd(t, "1\nall\n", &out)
+
+	if err := ssoGenerateConfigWith(cmd, nil, deps); err != nil {
+		t.Fatalf("ssoGenerateConfigWith() error = %v, want nil", err)
+	}
+
+	if want := "Warning: Reading existing config: sso stage read-config failed"; !strings.Contains(out.String(), want) {
+		t.Errorf("output = %q, want it to contain %q", out.String(), want)
+	}
+	if gotPath != "/dummy/config" {
+		t.Errorf("writeConfig path = %q, want %q", gotPath, "/dummy/config")
+	}
+	if want := "[profile account-1-adminaccess]"; !strings.Contains(gotContent, want) {
+		t.Errorf("writeConfig content = %q, want it to contain %q", gotContent, want)
+	}
+}
+
+// TestDefaultSSOGenerateConfigDepsIsFullyWired は ssoGenerateConfig の本番用の依存が
+// すべて埋まっていることを検証する。いずれかが nil のままだと ssoGenerateConfigWith が
+// nil 関数を呼んで panic する。他のテストは差し替えたダミーを通るため、この漏れを
+// 検知できない。
+func TestDefaultSSOGenerateConfigDepsIsFullyWired(t *testing.T) {
+	deps := defaultSSOGenerateConfigDeps()
+	if deps.getToken == nil {
+		t.Error("getToken is nil")
+	}
+	if deps.listAccounts == nil {
+		t.Error("listAccounts is nil")
+	}
+	if deps.listRoles == nil {
+		t.Error("listRoles is nil")
+	}
+	if deps.configPath == nil {
+		t.Error("configPath is nil")
+	}
+	if deps.readConfig == nil {
+		t.Error("readConfig is nil")
+	}
+	if deps.writeConfig == nil {
+		t.Error("writeConfig is nil")
+	}
+}
+
 // newSSOLoginCmd は ssoLoginWith が読むフラグだけを持つコマンドを返す。
 // profile と region は明示指定して config の解決結果に依存しないようにする。
 func newSSOLoginCmd(t *testing.T) *cobra.Command {
