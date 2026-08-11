@@ -163,7 +163,7 @@ func displayECSTasks(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("list ECS clusters: %w", err)
 		}
 
-		selected, err := util.Select(ecsSelectItems(arns, 1), "Select an ECS cluster:")
+		selected, err := util.Select(ctx, ecsSelectItems(arns, 1), "Select an ECS cluster:")
 		if err != nil {
 			return fmt.Errorf("select cluster: %w", err)
 		}
