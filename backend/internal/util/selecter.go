@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,10 +61,23 @@ func (m model) View() string {
 	return s
 }
 
+// selectRunner は対話式プログラムの実行を抽象化する。
+type selectRunner func(tea.Model) (tea.Model, error)
+
+// runTeaProgram は bubbletea のプログラムを組んで実行する本番の実装。
+func runTeaProgram(m tea.Model) (tea.Model, error) {
+	return tea.NewProgram(m).Run()
+}
+
 // Select は items を対話式リストで表示し、ユーザーが選択した要素を返す。
 func Select(items []Item, prompt string) (Item, error) {
+	return selectWith(items, prompt, runTeaProgram)
+}
+
+// selectWith は実行を差し替えられる Select のコア。
+func selectWith(items []Item, prompt string, run selectRunner) (Item, error) {
 	if len(items) == 0 {
-		return nil, fmt.Errorf("no items to select")
+		return nil, errors.New("no items to select")
 	}
 
 	initialModel := model{
@@ -72,15 +86,17 @@ func Select(items []Item, prompt string) (Item, error) {
 		prompt: prompt,
 	}
 
-	p := tea.NewProgram(initialModel)
-	m, err := p.Run()
+	m, err := run(initialModel)
 	if err != nil {
 		return nil, fmt.Errorf("run bubble tea program: %w", err)
 	}
 
-	finalModel := m.(model)
+	finalModel, ok := m.(model)
+	if !ok {
+		return nil, fmt.Errorf("unexpected select program result type %T", m)
+	}
 	if finalModel.selected == nil {
-		return nil, fmt.Errorf("no item selected")
+		return nil, errors.New("no item selected")
 	}
 
 	return finalModel.selected, nil

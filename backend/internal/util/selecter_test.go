@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -32,6 +33,90 @@ func TestSelect_EmptyItems(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no items to select") {
 		t.Errorf("expected error to contain 'no items to select', got %q", err.Error())
+	}
+}
+
+// fakeSelectRunnerError は run bubble tea program の失敗を模す。selectWith が %w で
+// ラップすることを errors.As で検証するための独自型。
+type fakeSelectRunnerError struct{}
+
+func (fakeSelectRunnerError) Error() string { return "fake tea program error" }
+
+func TestSelectWith_RunFailureIsWrapped(t *testing.T) {
+	items := []Item{TestItem{title: "Item 1", id: "1"}}
+
+	_, err := selectWith(items, "Select an item:", func(tea.Model) (tea.Model, error) {
+		return nil, fakeSelectRunnerError{}
+	})
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var target fakeSelectRunnerError
+	if !errors.As(err, &target) {
+		t.Errorf("errors.As(fakeSelectRunnerError) = false, want true; the chain is severed (run bubble tea program: %%w is not wrapping): %v", err)
+	}
+}
+
+func TestSelectWith_NoSelectionReturnsError(t *testing.T) {
+	items := []Item{TestItem{title: "Item 1", id: "1"}}
+
+	_, err := selectWith(items, "Select an item:", func(m tea.Model) (tea.Model, error) {
+		// ユーザーが q や Ctrl-C で終了した場合、model.selected は nil のまま Quit する。
+		return m, nil
+	})
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no item selected") {
+		t.Errorf("expected error to contain 'no item selected', got %q", err.Error())
+	}
+}
+
+func TestSelectWith_ReturnsSelectedItem(t *testing.T) {
+	items := []Item{
+		TestItem{title: "Item 1", id: "1"},
+		TestItem{title: "Item 2", id: "2"},
+	}
+
+	got, err := selectWith(items, "Select an item:", func(m tea.Model) (tea.Model, error) {
+		finalModel := m.(model)
+		finalModel.selected = items[1]
+		return finalModel, nil
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != items[1] {
+		t.Errorf("selected = %v, want %v", got, items[1])
+	}
+}
+
+// fakeTeaModel は tea.Model を実装するが util.model ではない型。selectWith の型アサーションが
+// panic せずエラーを返すことを検証するために使う。
+type fakeTeaModel struct{}
+
+func (fakeTeaModel) Init() tea.Cmd                       { return nil }
+func (fakeTeaModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return fakeTeaModel{}, nil }
+func (fakeTeaModel) View() string                        { return "" }
+
+func TestSelectWith_UnexpectedResultTypeReturnsErrorWithoutPanic(t *testing.T) {
+	items := []Item{TestItem{title: "Item 1", id: "1"}}
+
+	_, err := selectWith(items, "Select an item:", func(tea.Model) (tea.Model, error) {
+		return fakeTeaModel{}, nil
+	})
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unexpected select program result type") {
+		t.Errorf("expected error to contain 'unexpected select program result type', got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "fakeTeaModel") {
+		t.Errorf("expected error to contain the actual type name 'fakeTeaModel', got %q", err.Error())
 	}
 }
 

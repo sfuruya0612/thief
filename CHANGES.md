@@ -391,3 +391,5 @@
   - @sfuruya0612
 - Cost Explorer の金額パースを fmt.Sscanf から strconv.ParseFloat ベースの costAmount ヘルパに統一する (部分一致を受理しない厳密なパースにする)
   - @sfuruya0612
+- internal/util/selecter.go の Select について、対話式プログラムの実行 (`tea.NewProgram(...).Run()`) を関数値 `selectRunner` として切り出し、本番の実装 `runTeaProgram` を渡す薄いラッパーにする。テストが差し込む run で `p.Run()` の失敗ラップ (`run bubble tea program: %w`) が errors.As で元のエラーへ到達できること、未選択で終了した場合に `no item selected` を返すこと、選択成功時に選択された Item を返すことを検証できるようにする。あわせて `m.(model)` の型アサーションをカンマ ok 形式にし、bubbletea が model 以外を返した場合でも panic せずエラーを返すようにする (現行の呼び出し元は tea.NewProgram に model しか渡さないため、現時点の挙動は変わらない)。`no items to select` / `no item selected` は書式指定子の無い `fmt.Errorf` から `errors.New` に変える (呼び出し元 2 箇所 (internal/cli/ec2.go, internal/cli/ecs.go) がいずれも errors.Is で分岐しないためセンチネル化はせず、エラー文字列も変わらない)
+  - @sfuruya0612
