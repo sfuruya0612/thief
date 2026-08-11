@@ -301,16 +301,18 @@ func TestStartEC2SessionSelectsInstanceWhenFlagIsEmpty(t *testing.T) {
 	}
 }
 
-// TestStartEC2SessionPropagatesSetupErrors はセッション確立前の各段の失敗が、
-// チェーンを保ったまま伝播することを検証する。いずれの経路でも切断は呼ばない
-// (セッションがまだ存在しないため)。
+// TestStartEC2SessionPropagatesSetupErrors はセッション確立前後の各段の失敗が、
+// チェーンを保ったまま伝播することを検証する。startSession 自体の失敗はまだ
+// セッションが存在しないため切断を呼ばないが、それより後段 (plugin の探索など) の
+// 失敗は、既に AWS 側にセッションが確立済みのため必ず切断を試みる。
 func TestStartEC2SessionPropagatesSetupErrors(t *testing.T) {
 	base := errors.New("boom")
 
 	tests := []struct {
-		name    string
-		mutate  func(*ec2SessionDeps)
-		wantMsg string
+		name             string
+		mutate           func(*ec2SessionDeps)
+		wantMsg          string
+		wantTerminateIDs []string
 	}{
 		{
 			name: "select instance fails",
@@ -319,6 +321,8 @@ func TestStartEC2SessionPropagatesSetupErrors(t *testing.T) {
 			},
 			// selectEC2Instance は既にどの取得で失敗したかを述べるためラップしない。
 			wantMsg: "boom",
+			// セッションがまだ存在しないため切断は呼ばない。
+			wantTerminateIDs: nil,
 		},
 		{
 			name: "start session fails",
@@ -328,6 +332,8 @@ func TestStartEC2SessionPropagatesSetupErrors(t *testing.T) {
 				}
 			},
 			wantMsg: "start session: boom",
+			// セッションがまだ存在しないため切断は呼ばない。
+			wantTerminateIDs: nil,
 		},
 		{
 			name: "plugin lookup fails",
@@ -336,6 +342,9 @@ func TestStartEC2SessionPropagatesSetupErrors(t *testing.T) {
 			},
 			// lookupSessionManagerPlugin は PATH に無いことを述べるためラップしない。
 			wantMsg: "boom",
+			// startSession は既に成功しているため、この失敗でも切断を試みなければ
+			// セッションが AWS 側に残る (issue 0142 が問題にした症状)。
+			wantTerminateIDs: []string{"sess-1"},
 		},
 	}
 	for _, tt := range tests {
@@ -352,13 +361,55 @@ func TestStartEC2SessionPropagatesSetupErrors(t *testing.T) {
 			if msg := err.Error(); msg != tt.wantMsg {
 				t.Errorf("error = %q, want %q", msg, tt.wantMsg)
 			}
-			if len(rec.terminateIDs) != 0 {
-				t.Errorf("terminate called with %v, want no call", rec.terminateIDs)
+			if diff := cmp.Diff(tt.wantTerminateIDs, rec.terminateIDs); diff != "" {
+				t.Errorf("terminate call mismatch (-want +got):\n%s", diff)
 			}
 			if got := stderr.String(); got != "" {
 				t.Errorf("stderr = %q, want empty", got)
 			}
 		})
+	}
+}
+
+// TestStartEC2SessionTerminatesOnLookupPluginFailureAfterSessionEstablished は
+// TestStartEC2SessionPropagatesSetupErrors/plugin_lookup_fails の切断失敗経路を
+// 別途検証する。切断も失敗した場合、双方のエラーへ errors.Is で到達できる必要がある。
+func TestStartEC2SessionTerminatesOnLookupPluginFailureAfterSessionEstablished(t *testing.T) {
+	lookupErr := errors.New("session-manager-plugin: executable file not found in $PATH")
+	termErr := errors.New("terminate boom")
+
+	cmd, _ := newEC2SessionCmd(t, "i-1234567890abcdef0")
+	rec := &ec2SessionCall{}
+	deps := okEC2SessionDeps(rec)
+	deps.lookupPlugin = func() (string, error) { return "", lookupErr }
+	deps.terminateSession = func(_ context.Context, profile, region, sessionID string) error {
+		rec.terminateProfile = profile
+		rec.terminateRegion = region
+		rec.terminateIDs = append(rec.terminateIDs, sessionID)
+		return termErr
+	}
+
+	err := startEC2SessionWith(cmd, deps)
+	if !errors.Is(err, lookupErr) {
+		t.Errorf("errors.Is(err, lookupErr) = false, want true: %v", err)
+	}
+	if !errors.Is(err, termErr) {
+		t.Errorf("errors.Is(err, termErr) = false, want true: %v", err)
+	}
+	wantMsg := "session-manager-plugin: executable file not found in $PATH; terminate session: terminate boom"
+	if msg := err.Error(); msg != wantMsg {
+		t.Errorf("error = %q, want %q", msg, wantMsg)
+	}
+	// 切断先が正しいセッションであることまで確認する。誤って別の profile / region /
+	// sessionID を渡しても、上記の errors.Is とメッセージ比較だけでは検出できない。
+	if rec.terminateProfile != "test-profile" {
+		t.Errorf("terminate profile = %q, want %q", rec.terminateProfile, "test-profile")
+	}
+	if rec.terminateRegion != "ap-northeast-1" {
+		t.Errorf("terminate region = %q, want %q", rec.terminateRegion, "ap-northeast-1")
+	}
+	if diff := cmp.Diff([]string{"sess-1"}, rec.terminateIDs); diff != "" {
+		t.Errorf("terminate call mismatch (-want +got):\n%s", diff)
 	}
 }
 

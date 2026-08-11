@@ -168,48 +168,51 @@ func startEC2SessionWith(cmd *cobra.Command, deps ec2SessionDeps) error {
 		return fmt.Errorf("start session: %w", err)
 	}
 
-	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
-	if err != nil {
-		return fmt.Errorf("marshal session: %w", err)
-	}
-
-	paramsJSON, err := util.Parser(struct {
-		Target string
-	}{Target: instanceID})
-	if err != nil {
-		return fmt.Errorf("marshal start session input: %w", err)
-	}
-
-	plug, err := deps.lookupPlugin()
-	if err != nil {
-		return err
-	}
-
-	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", cfg.Region)
-	execErr := deps.execPlugin(plug, string(sessJSON), cfg.Region, "StartSession", cfg.Profile, string(paramsJSON), ssmEndpoint)
-
-	// 切断は ctx とは別の context で行う。session-manager-plugin の実行中の Ctrl-C は
+	// この時点で AWS 側に SSM セッションが確立している。以降のどの失敗経路
+	// (JSON の組み立て、plugin の探索、plugin の実行) で return する場合も、切断を
+	// 試みてからでなければセッションが AWS 側に残ってしまう。切断は ctx とは別の
+	// 短命 context で行う。session-manager-plugin の実行中の Ctrl-C は
 	// util.ExecCommand が握りつぶして子プロセスに処理を委ねるが、os/signal は登録済みの
 	// 全チャネルへ同じシグナルを配送するため、main の signal.NotifyContext にも届いて
 	// ctx はキャンセル済みになる。SIGTERM も util.ExecCommand が子プロセスへ転送して
 	// 委ねるが、同じ理由で ctx はキャンセル済みになる。キャンセル済みの context で
 	// TerminateSSMSession を呼ぶと必ず失敗し、セッションが AWS 側に残る。
 	//
-	// internal/session/bridge.go の cleanup が同じ理由で専用の短命 context を使っている。
+	// internal/session/bridge.go の cleanup と ecsExecuteCommandWith (ecs.go) が
+	// 同じ理由で専用の短命 context を使っている。
 	termCtx, cancelTerm := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
 	defer cancelTerm()
 
-	if execErr != nil {
-		// 実行が失敗しても SSM セッションは AWS 側に残るため、必ず切断を試みる。
-		// 切断も失敗した場合は 2 つの失敗を両方 %w で包む。Go 1.20 以降 fmt.Errorf は
-		// %w を複数取れるため、errors.Is / errors.As がどちらの側にも到達する。
-		//
-		// どちらの経路も execute command: で始める。実行の失敗の見え方が、無関係な
-		// 後処理である切断の成否によって変わらないようにするためである。
+	// 切断も失敗した場合は 2 つの失敗を両方 %w で包む。Go 1.20 以降 fmt.Errorf は
+	// %w を複数取れるため、errors.Is / errors.As がどちらの側にも到達する。
+	terminateThen := func(cause error) error {
 		if termErr := deps.terminateSession(termCtx, cfg.Profile, cfg.Region, session.SessionID); termErr != nil {
-			return fmt.Errorf("execute command: %w; terminate session: %w", execErr, termErr)
+			return fmt.Errorf("%w; terminate session: %w", cause, termErr)
 		}
-		return fmt.Errorf("execute command: %w", execErr)
+		return cause
+	}
+
+	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
+	if err != nil {
+		return terminateThen(fmt.Errorf("marshal session: %w", err))
+	}
+
+	paramsJSON, err := util.Parser(struct {
+		Target string
+	}{Target: instanceID})
+	if err != nil {
+		return terminateThen(fmt.Errorf("marshal start session input: %w", err))
+	}
+
+	plug, err := deps.lookupPlugin()
+	if err != nil {
+		return terminateThen(err)
+	}
+
+	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", cfg.Region)
+	execErr := deps.execPlugin(plug, string(sessJSON), cfg.Region, "StartSession", cfg.Profile, string(paramsJSON), ssmEndpoint)
+	if execErr != nil {
+		return terminateThen(fmt.Errorf("execute command: %w", execErr))
 	}
 
 	if err := deps.terminateSession(termCtx, cfg.Profile, cfg.Region, session.SessionID); err != nil {
