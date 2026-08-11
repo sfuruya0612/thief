@@ -310,6 +310,8 @@
   - @sfuruya0612
 - [FIX] `thief sso login` がブラウザの自動起動に失敗すると、その時点でエラーを返して終了し、承認用の URI と user code の表示に到達しない不具合を修正する (RFC 8628 §3.3.1 はブラウザ等による非テキストでの提示を MAY と定めており必須ではない一方、§3.3 のテキストでの提示は実質必須である。従来の実装はこの優先順位が逆転していた。`getSSOTokenWith` で表示 (`display`) をブラウザの起動 (`openBrowser`) より先に行うようにし、`openBrowser` の失敗はエラーとして返さず新設した `reportBrowserFailure` で標準エラー出力への警告に落として `waitForToken` へ進むようにする。`VerificationURIComplete` が空 (RFC 8628 §3.2 で OPTIONAL) の場合はブラウザの起動を試みない)
   - @sfuruya0612
+- [FIX] `thief ec2 session` が session-manager-plugin 起動前の marshal / plugin 探索の失敗経路で SSM セッションを切断せず AWS 側に Active のまま残す不具合を修正する (issue 0135 で `ecs.go` の `ecsExecuteCommandWith` に適用した `terminateThen` パターンを `ec2.go` の `startEC2SessionWith` にそのまま移植する。`termCtx`/`cancelTerm` の生成を `deps.startSession` 成功直後まで前倒しし、以降のどの失敗経路 (JSON の組み立て、`lookupSessionManagerPlugin`、`util.ExecCommand`) でも専用の短命 context で `TerminateSSMSession` を試みる。切断も失敗した場合は `fmt.Errorf("%w; terminate session: %w", cause, termErr)` で両方の情報を保持し、`errors.Is`/`errors.As` がどちらにも到達できるようにする)
+  - @sfuruya0612
 
 ### misc
 
