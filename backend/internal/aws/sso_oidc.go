@@ -223,7 +223,9 @@ func newSSOTokenPollPolicy(deviceAuth *SSODeviceAuthorization) ssoTokenPollPolic
 // WaitForSSOToken はユーザーのブラウザ承認が完了するまで CreateToken をポーリングし、
 // アクセストークンを返す。承認待ち (AuthorizationPending) は間隔を変えずに再試行し、
 // レート制限 (SlowDown) では RFC 8628 §3.5 に従って間隔を 5 秒増やして再試行する。
-// それ以外のエラーは即時失敗する。device code の有効期限を過ぎたら打ち切る。
+// 接続タイムアウト (Timeout() を実装するエラー) では同じく §3.5 に従って間隔を倍にして
+// 再試行する。それ以外のエラーは即時失敗する。device code の有効期限を過ぎたら打ち切る。
+// 呼び出し元の ctx が終了している場合は、接続タイムアウトの分類より優先してそちらを返す。
 func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistration, deviceAuth *SSODeviceAuthorization, grantType string) (*SSOToken, error) {
 	// deviceAuth は device code だけでなくポーリング方針の素にもなるため、この関数と
 	// newSSOTokenPollPolicy の両方で参照外しする。nil で来たら panic させずに返す。
@@ -242,9 +244,9 @@ func WaitForSSOToken(ctx context.Context, region string, reg *SSOClientRegistrat
 }
 
 // waitForSSOToken は生成済みクライアントでトークンをポーリングするコア。
-// 分岐 (SlowDown での間隔の増加、AuthorizationPending での再試行、それ以外での即時失敗、
-// 有効期限での打ち切り、ctx のキャンセル) を単体テストで検証できるよう、
-// クライアントの生成とポーリング方針から分離してある。
+// 分岐 (SlowDown での間隔の増加、AuthorizationPending での再試行、接続タイムアウトでの
+// 間隔の倍加、それ以外での即時失敗、有効期限での打ち切り、ctx のキャンセル) を
+// 単体テストで検証できるよう、クライアントの生成とポーリング方針から分離してある。
 //
 // 引数が deviceCode だけで SSODeviceAuthorization を丸ごと受け取らないのは、この関数が
 // 応答から読むのが device code だけだからである。interval と expires_in は
@@ -289,6 +291,7 @@ func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSO
 
 		var pending *ssooidctypes.AuthorizationPendingException
 		var slowDown *ssooidctypes.SlowDownException
+		var timeoutErr interface{ Timeout() bool }
 		switch {
 		case errors.As(err, &slowDown):
 			// RFC 8628 §3.5: "the interval MUST be increased by 5 seconds for this and
@@ -296,6 +299,28 @@ func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSO
 			interval += ssoTokenPollSlowDownIncrement
 		case errors.As(err, &pending):
 			// ユーザーのブラウザ承認待ち。間隔は変えずに再試行する。
+		case ctx.Err() != nil:
+			// 呼び出し元の ctx が終了しているときは、接続タイムアウトの分類だけでなく
+			// default (OAuth のエラーレスポンスによる即時失敗) より前にここで返す。
+			// net/http の Client.Timeout は内部で context.DeadlineExceeded と同じ形の
+			// エラーを使って実現されているため、err の型やメッセージだけでは呼び出し元の
+			// キャンセル/期限切れと SDK 内部の接続タイムアウトを区別できない (実測で確認
+			// 済み)。ctx.Err() を直接見ることで呼び出し元の終了だけを確実に検出し、
+			// Ctrl-C 等の中断がポーリング頻度を落とす分岐に飲み込まれて効かなくなることを
+			// 防ぐ。ctx が終了した後に届いた err (OAuth のエラーレスポンスを含む) は
+			// もはや利用者にとって意味を持たないため、ctx.Err() を優先して返してよい。
+			// これは打ち切り判定 (deadline 到達) でも ctx のキャンセルを優先する既存の
+			// 挙動 (waitForSSOToken の打ち切りチェック) と同じ考え方である。
+			return nil, ctx.Err()
+		case errors.As(err, &timeoutErr) && timeoutErr.Timeout():
+			// RFC 8628 §3.5: "On encountering a connection timeout, clients MUST
+			// unilaterally reduce their polling frequency before retrying." 接続タイムアウト
+			// (輸送層の失敗でレスポンスが返っていない状態) は SDK の再試行 (retry.Standard)
+			// を尽くした後にここへ返ってくる。SDK の再試行は同一リクエストの再送であり、
+			// このポーリングループが使う interval (試行間の待機) とは別の値なので、ここで
+			// 緩めない限り次のポーリングが直前と同じ間隔で再試行され MUST を満たさない。
+			// 倍加は同節が緩め方として RECOMMENDED とする方式である。
+			interval *= 2
 		default:
 			// RFC 8628 §3.5 は authorization_pending と slow_down 以外について
 			// "For any other error, the client MUST stop polling" と定める。したがって
