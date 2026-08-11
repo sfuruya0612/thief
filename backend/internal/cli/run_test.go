@@ -488,6 +488,8 @@ func TestNoRootContextOutsideDesignatedFunctions(t *testing.T) {
 	want := []string{
 		// 中断でコマンドの context がキャンセル済みでも SSM セッションの切断は通す。
 		"ec2.go:startEC2SessionWith",
+		// 中断でコマンドの context がキャンセル済みでも SSM セッションの切断は通す。
+		"ecs.go:ecsExecuteCommandWith",
 		// コマンドに context が載っていない場合のフォールバック。
 		"run.go:commandContext",
 		// 中断でコマンドの context がキャンセル済みでもシャットダウンの猶予を与える。

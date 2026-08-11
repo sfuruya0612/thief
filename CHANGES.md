@@ -302,6 +302,8 @@
   - @sfuruya0612
 - [FIX] SSO ログイン (`thief sso login`) のポーリングが接続タイムアウトでもポーリング間隔を緩めず即座に失敗する不具合を修正する (RFC 8628 §3.5 は接続タイムアウトを受けたときにポーリング頻度を自主的に落としてから再試行することを MUST として定めており、`waitForSSOToken` の分岐はこれを満たしていなかった。`CreateToken` から `interface{ Timeout() bool }` を実装する型 (実測では `*smithy.OperationError` に包まれた `*http.timeoutError`) で接続タイムアウトが返ってきたときに間隔を倍にして再試行するようにする。net/http の `Client.Timeout` は内部で `context.DeadlineExceeded` と同じ形のエラーを使うため、呼び出し元の ctx のキャンセル/期限切れと SDK 内部の接続タイムアウトを `err` の型だけでは区別できず、これを取り違えると Ctrl-C による中断が新しい分岐に飲み込まれて効かなくなる。そのため `ctx.Err() != nil` を接続タイムアウトと OAuth のエラーレスポンスによる即時失敗を含むそれ以外の分類より前に確認し、呼び出し元の終了を優先して返すようにする。既存の `authorization_pending` / `slow_down` の分岐、打ち切り判定、待機処理は変更しない)
   - @sfuruya0612
+- [FIX] `thief ecs execute-command` が session-manager-plugin の終了後に SSM セッションを切断せず AWS 側に Active のまま残す不具合を修正する (`ecs.go` の `ecsExecuteCommand` を薄いラッパーにし、新設した `ecsExecuteCommandWith` に `ec2.go` の `startEC2SessionWith` を参考にした `ecsExecSessionDeps` を導入する。ECS Exec のセッションが確立した後のどの失敗経路 (JSON の組み立て、plugin の探索、`util.ExecCommand` の実行) でも専用の短命 context で `TerminateSSMSession` を試みるようにする。切断の context はコマンドの context (`commandContext(cmd)`) とは分離する。util.ExecCommand の実行中に届いた Ctrl-C は main の signal.NotifyContext にも配送されてコマンドの context をキャンセル済みにするため、同じ context で切断すると必ず失敗しセッションが残り続ける。切断の失敗は元の失敗の情報を上書きしない。`TestNoRootContextOutsideDesignatedFunctions` の一覧に `ecs.go:ecsExecuteCommandWith` を追加する)
+  - @sfuruya0612
 
 ### misc
 

@@ -191,7 +191,32 @@ func displayECSTasks(cmd *cobra.Command, args []string) error {
 	return printRowsOrGroupBy(cfg, ecsTaskColumns, toRows(tasks))
 }
 
+// ecsExecSessionDeps は ecsExecuteCommand が ECS Exec セッションの確立と切断で呼ぶ
+// 外部処理をまとめる。ec2SessionDeps と同じ理由 (AWS 呼び出しと session-manager-plugin の
+// 起動を伴い、テストから実行できない) で差し替え可能にする。
+type ecsExecSessionDeps struct {
+	executeSession   func(ctx context.Context, profile, region, cluster, task, container, command string) (*awsinternal.ECSExecSession, error)
+	lookupPlugin     func() (string, error)
+	execPlugin       func(process string, args ...string) error
+	terminateSession func(ctx context.Context, profile, region, sessionID string) error
+}
+
+// defaultECSExecSessionDeps は本番で使う実装を返す。
+func defaultECSExecSessionDeps() ecsExecSessionDeps {
+	return ecsExecSessionDeps{
+		executeSession:   awsinternal.ExecuteECSCommandSession,
+		lookupPlugin:     lookupSessionManagerPlugin,
+		execPlugin:       util.ExecCommand,
+		terminateSession: awsinternal.TerminateSSMSession,
+	}
+}
+
 func ecsExecuteCommand(cmd *cobra.Command, args []string) error {
+	return ecsExecuteCommandWith(cmd, defaultECSExecSessionDeps())
+}
+
+// ecsExecuteCommandWith は ecsExecuteCommand の本体。
+func ecsExecuteCommandWith(cmd *cobra.Command, deps ecsExecSessionDeps) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
@@ -207,30 +232,53 @@ func ecsExecuteCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := commandContext(cmd)
-	session, err := awsinternal.ExecuteECSCommandSession(ctx, cfg.Profile, cfg.Region, cluster, task, container, command)
+	session, err := deps.executeSession(ctx, cfg.Profile, cfg.Region, cluster, task, container, command)
 	if err != nil {
 		return fmt.Errorf("execute command: %w", err)
 	}
 
+	// この時点で AWS 側に ECS Exec のセッションが確立している。以降のどの失敗経路
+	// (JSON の組み立て、plugin の探索、plugin の実行) で return する場合も、切断を
+	// 試みてからでなければセッションが AWS 側に残ってしまう。切断は ctx とは別の
+	// 短命 context で行う。理由は startEC2SessionWith (ec2.go) と同じで、
+	// util.ExecCommand の実行中に届いた Ctrl-C / SIGTERM は main の signal.NotifyContext
+	// にも配送されて ctx をキャンセル済みにするため、ctx のままでは TerminateSSMSession
+	// が必ず失敗し、セッションが AWS 側に残る。ec2TerminateTimeout は ec2.go の同じ
+	// 後始末と共有する (issues/0136 でこの種の重複を検討する)。
+	termCtx, cancelTerm := context.WithTimeout(context.Background(), ec2TerminateTimeout)
+	defer cancelTerm()
+
+	terminateThen := func(cause error) error {
+		if termErr := deps.terminateSession(termCtx, cfg.Profile, cfg.Region, session.SessionID); termErr != nil {
+			return fmt.Errorf("%w; terminate session: %w", cause, termErr)
+		}
+		return cause
+	}
+
 	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
 	if err != nil {
-		return fmt.Errorf("marshal session: %w", err)
+		return terminateThen(fmt.Errorf("marshal session: %w", err))
 	}
 
 	targetJSON, err := util.Parser(struct {
 		Target string `json:"Target"`
 	}{Target: session.Target()})
 	if err != nil {
-		return fmt.Errorf("marshal target: %w", err)
+		return terminateThen(fmt.Errorf("marshal target: %w", err))
 	}
 
-	plug, err := lookupSessionManagerPlugin()
+	plug, err := deps.lookupPlugin()
 	if err != nil {
-		return err
+		return terminateThen(err)
 	}
 
-	if err = util.ExecCommand(plug, string(sessJSON), cfg.Region, "StartSession", cfg.Profile, string(targetJSON), fmt.Sprintf("https://ecs.%s.amazonaws.com", cfg.Region)); err != nil {
-		return fmt.Errorf("execute session-manager-plugin command: %w", err)
+	execErr := deps.execPlugin(plug, string(sessJSON), cfg.Region, "StartSession", cfg.Profile, string(targetJSON), fmt.Sprintf("https://ecs.%s.amazonaws.com", cfg.Region))
+	if execErr != nil {
+		return terminateThen(fmt.Errorf("execute session-manager-plugin command: %w", execErr))
+	}
+
+	if err := deps.terminateSession(termCtx, cfg.Profile, cfg.Region, session.SessionID); err != nil {
+		return fmt.Errorf("terminate session: %w", err)
 	}
 
 	return nil
