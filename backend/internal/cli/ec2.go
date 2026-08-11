@@ -4,18 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
 )
-
-// ec2TerminateTimeout は SSM セッションの切断に与える猶予。
-// 中断でコマンドの context がキャンセル済みでも切断だけは通したいため、専用の
-// context を作る際の期限として使う。internal/session の cleanup と同じ 5 秒に揃える。
-const ec2TerminateTimeout = 5 * time.Second
 
 var ec2Columns = []util.Column{
 	{Header: "Name"},
@@ -202,7 +196,7 @@ func startEC2SessionWith(cmd *cobra.Command, deps ec2SessionDeps) error {
 	// TerminateSSMSession を呼ぶと必ず失敗し、セッションが AWS 側に残る。
 	//
 	// internal/session/bridge.go の cleanup が同じ理由で専用の短命 context を使っている。
-	termCtx, cancelTerm := context.WithTimeout(context.Background(), ec2TerminateTimeout)
+	termCtx, cancelTerm := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
 	defer cancelTerm()
 
 	if execErr != nil {

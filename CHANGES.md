@@ -307,6 +307,8 @@
 
 ### misc
 
+- SSM セッションの切断 (`TerminateSSMSession`) に与える猶予 5 秒が `internal/session/bridge.go` の `terminateTimeout`、`internal/api/handlers_session.go` の `sessionTerminateTimeout` (`internal/api/logtail.go` からも参照)、`internal/cli/ec2.go` の `ec2TerminateTimeout` (`internal/cli/ecs.go` からも参照) の 3 箇所に同じ値・同じ目的で別名定義され、5 箇所 (定義 3 箇所 + `logtail.go`/`ecs.go` からの参照 2 箇所) で使われていたのを、`internal/aws/ssm_session.go` の公開定数 `TerminateSessionGracePeriod` 1 箇所に統合する。5 箇所とも `context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)` を自分で組み立てる形は変えない (値は従来どおり 5 秒のまま、挙動は変えない)。統合後の値そのものを検証するテストがどこにも無かったため、`internal/aws/ssm_session_test.go` に値を固定するテストを追加する
+  - @sfuruya0612
 - internal/cli の本番コードが `context.Background` / `context.TODO` を呼ぶ場所を go/ast で列挙して 3 箇所 (commandContext のフォールバック、SSM セッションの切断、API サーバのシャットダウン) に固定するテストと、その列挙がサブディレクトリ・レシーバ付きメソッド・パッケージ変数の初期化式・関数リテラルを取りこぼさないことを固定するテストを追加する (コマンドが `commandContext(cmd)` の代わりに根の context を作り直しても、その場でシグナル連動が切れるだけでコンパイルも lint も通ってしまうため、増えたら落ちる検査を置く)。同じ列挙で `fmt.Scan` 系・`fmt.Fscan` 系・`io.ReadAll`・`os.Stdin` の参照を集め、context を見ない標準入力の読み取りを `promptSelection` と `readUpdateValue` の 2 箇所に固定するテストも追加する。あわせて ls 系のほぼ全コマンドが通る `runList` が `Fetch` へコマンドの context をそのまま渡すことを検証するテストと、TiDB Cloud のクライアントが受け取った context を Digest 認証の 2 往復の両方へ載せることを検証するテストを追加する (テストの追加のみで挙動は変えない)
   - @sfuruya0612
 - internal/aws/sso_oidc.go のデバイス認可のポーリングについて、関数の境界で自分の前提を検証するようにする。WaitForSSOToken は deviceAuth が nil なら参照外しせずエラーを返し、waitForSSOToken は間隔か猶予が正でない方針を渡されたら CreateToken を呼ぶ前にエラーを返す (間隔が 0 以下だと待機で時刻が進まず打ち切り判定が成立しないまま連打し続けるため、ここは無限ループの防波堤にあたる)。あわせて打ち切りのエラーをセンチネル化して呼び出し側が errors.Is で判別できるようにし、打ち切りと ctx のキャンセルが同時に成立している場合は ctx.Err() を優先して返すようにする。現行の呼び出し元は非 nil の応答と newSSOTokenPollPolicy が組んだ方針のみを渡し、ctx も context.Background() なので、いずれも現時点の挙動は変わらない

@@ -6,15 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/coder/websocket"
 	"golang.org/x/sync/errgroup"
-)
 
-// terminateTimeout はセッション終了時に TerminateSSMSession を呼ぶ際のタイムアウト。
-// ブリッジ終了処理はリクエストの ctx とは無関係に完了させる必要があるため、専用の短いタイムアウトを持つ。
-const terminateTimeout = 5 * time.Second
+	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+)
 
 // browserReadLimit はブラウザ側 WebSocket からの 1 メッセージあたりの読み取り上限バイト数。
 // リサイズ制御用の JSON は小さいため、この上限で十分。
@@ -95,7 +92,7 @@ func (b *Bridge) cleanup() {
 	if b.Terminate == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), terminateTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
 	defer cancel()
 	if err := b.Terminate(ctx); err != nil {
 		slog.Warn("failed to terminate ssm session", "err", err)

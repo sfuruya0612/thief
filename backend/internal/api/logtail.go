@@ -9,6 +9,8 @@ import (
 
 	"github.com/coder/websocket"
 	"golang.org/x/sync/errgroup"
+
+	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 )
 
 // logTailReadLimit はブラウザ側 WebSocket からの 1 メッセージあたりの読み取り上限バイト数。
@@ -94,7 +96,7 @@ func discardLogTailBrowserMessages(ctx context.Context, conn *websocket.Conn) er
 // すでにキャンセルされている可能性があるため、専用の短命 context を使う
 // (session/bridge.go の cleanup と同じ規約)。送信エラーはログに残すのみで処理は継続する。
 func notifyLogTailEnd(conn *websocket.Conn, reason string) {
-	ctx, cancel := context.WithTimeout(context.Background(), sessionTerminateTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
 	defer cancel()
 
 	payload, err := json.Marshal(logTailControlMessage{Type: "end", Reason: reason})

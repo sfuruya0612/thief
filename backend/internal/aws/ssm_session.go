@@ -3,10 +3,18 @@ package aws
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
+
+// TerminateSessionGracePeriod is the timeout callers must use for the short-lived
+// context passed to TerminateSSMSession specifically, not for cleanup in general.
+// It must be detached from the failed or interrupted operation's own context, since
+// that context may already be canceled (e.g. by a Ctrl-C that also reached the process's
+// signal-driven cancellation) by the time TerminateSSMSession is called.
+const TerminateSessionGracePeriod = 5 * time.Second
 
 // StartSessionResult は SSM Session Manager / ECS Exec のデータチャネル接続に必要な情報を保持する。
 // TokenValue は使い捨ての短命トークンだが、機密情報としてログには出力しないこと。
