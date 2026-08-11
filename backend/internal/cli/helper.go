@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -79,17 +81,29 @@ func readWithContext[T any](ctx context.Context, read func() (T, error)) (T, err
 	}
 }
 
-// promptSelection は対話式の選択の入力を 1 行分読む。
-// 読み取れなかった場合 (空行や EOF) は空文字を返し、選択なしとしての扱いを呼び出し側に委ねる。
+// promptSelection は対話式の選択の入力を 1 行分読む。カンマ区切りの列挙に空白を挟む書き方
+// (`1, 2`) を通すため、fmt.Fscanln (1 語しか読まない) ではなく bufio.Reader で行単位に読み、
+// 前後の空白を strings.TrimSpace で落とす。
+// 空行、空白のみの行、EOF は空文字を返し、選択なしとしての扱いを呼び出し側に委ねる
+// (EOF の場合でも、改行の前に読めていた分は入力として使う。"all" のように末尾改行が
+// 無い入力を尊重するため)。EOF 以外の読み取りエラーは呼び出し側へ伝播させる
+// (bufio.Reader は下層のエラーを内部に保持し以降の呼び出しでも返し続けるため、ここで
+// 空文字に握り潰すと、一度エラーが起きた後の選択がすべて理由なく空になり、この issue が
+// 解決しようとした「入力が黙って破棄される」症状をエラー系統で再現してしまう)。
 // ctx がキャンセルされた場合は入力を待たずにエラーを返す。
-func promptSelection(ctx context.Context, in io.Reader) (string, error) {
+//
+// r は呼び出し元が保持し、同じ入力に対する複数回の呼び出し (sso generate-config の
+// アカウント選択とロール選択など) で使い回す必要がある。呼び出しのたびに新しい
+// bufio.Reader を下層の io.Reader から作ると、bufio.Reader が内部で先読みした分が
+// 使い捨てられた Reader のバッファに閉じ込められたまま失われ、2 回目以降の呼び出しが
+// 実際にはまだ入力が残っているのに空扱いになる。
+func promptSelection(ctx context.Context, r *bufio.Reader) (string, error) {
 	return readWithContext(ctx, func() (string, error) {
-		var input string
-		if _, err := fmt.Fscanln(in, &input); err != nil {
-			// 空入力はそのまま扱う。
-			return "", nil
+		line, err := r.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", fmt.Errorf("read selection: %w", err)
 		}
-		return input, nil
+		return strings.TrimSpace(line), nil
 	})
 }
 

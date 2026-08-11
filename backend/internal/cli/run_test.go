@@ -515,10 +515,13 @@ func TestNoRootContextOutsideDesignatedFunctions(t *testing.T) {
 // この一覧に追記する。
 func TestNoContextBlindStdinReadOutsideDesignatedFunctions(t *testing.T) {
 	want := []string{
-		// 対話式の選択の 1 行読み取り。readWithContext の中で呼ぶ。
-		"helper.go:promptSelection",
 		// 値更新コマンドの標準入力の読み取り。readWithContext の中で呼ぶ。
 		"helper.go:readUpdateValue",
+		// アカウント選択とロール選択で使い回す *bufio.Reader の構築。構築そのものは
+		// ブロックしない。実際に読む ReadString は promptSelection (readWithContext の中) が
+		// 呼ぶ。呼び出しのたびに構築し直すと bufio.Reader の先読み分が失われるため、
+		// ssoGenerateConfig の 1 箇所で構築して両方の呼び出しへ使い回す。
+		"sso.go:ssoGenerateConfig",
 	}
 
 	got := contextBlindReadCallSites(t, ".")

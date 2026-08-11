@@ -304,6 +304,8 @@
   - @sfuruya0612
 - [FIX] `thief ecs execute-command` が session-manager-plugin の終了後に SSM セッションを切断せず AWS 側に Active のまま残す不具合を修正する (`ecs.go` の `ecsExecuteCommand` を薄いラッパーにし、新設した `ecsExecuteCommandWith` に `ec2.go` の `startEC2SessionWith` を参考にした `ecsExecSessionDeps` を導入する。ECS Exec のセッションが確立した後のどの失敗経路 (JSON の組み立て、plugin の探索、`util.ExecCommand` の実行) でも専用の短命 context で `TerminateSSMSession` を試みるようにする。切断の context はコマンドの context (`commandContext(cmd)`) とは分離する。util.ExecCommand の実行中に届いた Ctrl-C は main の signal.NotifyContext にも配送されてコマンドの context をキャンセル済みにするため、同じ context で切断すると必ず失敗しセッションが残り続ける。切断の失敗は元の失敗の情報を上書きしない。`TestNoRootContextOutsideDesignatedFunctions` の一覧に `ecs.go:ecsExecuteCommandWith` を追加する)
   - @sfuruya0612
+- [FIX] `thief sso generate-config` のアカウント選択・ロール選択で、カンマ区切りの入力に空白を挟む書き方 (`1, 2` や `1 , 2`) をすると選択が丸ごと空扱いになり、選ばれるはずのロールが `~/.aws/config` から黙って抜け落ちる不具合を修正する (`helper.go` の `promptSelection` が `fmt.Fscanln` で 1 語だけ読んでいたため、空白を含む入力は空白の手前で打ち切られていた。`bufio.Reader` で 1 行分読んでから `strings.TrimSpace` で前後の空白を落とす方式に変更する。各要素の空白除去を担う `selectIndices` は既に対応済みで変更していない。あわせて、`promptSelection` を呼ぶたびに `bufio.NewReader` を作り直すと、下層の Reader から先読みされた分が使い捨てられた Reader のバッファに閉じ込められたまま失われ、アカウント選択の直後に呼ぶロール選択が入力の残りを読めなくなる欠陥にも気付いたため、`sso.go` の `ssoGenerateConfig` で `*bufio.Reader` を 1 つだけ構築し、アカウント選択とロール選択の両方の呼び出しへ使い回す形に変更する。読み取りが EOF 以外のエラーを返した場合も、従来は空文字に握り潰していたのを `%w` でラップして呼び出し元へ伝播させ、選択コマンドがエラー終了せず黙って空選択のまま進む経路を無くす。`TestNoContextBlindStdinReadOutsideDesignatedFunctions` の一覧を `helper.go:promptSelection` から `sso.go:ssoGenerateConfig` に更新する (`*bufio.Reader` の構築箇所が移ったため))
+  - @sfuruya0612
 
 ### misc
 

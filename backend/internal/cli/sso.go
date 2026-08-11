@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -228,6 +229,13 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 
 	cmd.Printf("Found %d accounts from AWS SSO\n", len(accounts))
 
+	// アカウント選択とロール選択の両方で使い回す。呼ぶたびに bufio.Reader を作り直すと、
+	// 先読みされた分が使い捨てられた Reader のバッファに閉じ込められたまま失われる。
+	// *bufio.Reader はスレッドセーフではないため、promptSelection がエラーを返したら
+	// 以後この stdin へ読み取りを仕掛けてはならない (下の 2 箇所とも直後に return している
+	// のはこの前提を保つため)。
+	stdin := bufio.NewReader(cmd.InOrStdin())
+
 	// 選択肢としてアカウントを表示する。
 	cmd.Println("\nAvailable AWS accounts:")
 	for i, account := range accounts {
@@ -236,7 +244,7 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 
 	// 対話式のアカウント選択。
 	cmd.Print("\nSelect accounts to configure (comma-separated numbers, or 'all' for all accounts): ")
-	accountInput, err := promptSelection(ctx, cmd.InOrStdin())
+	accountInput, err := promptSelection(ctx, stdin)
 	if err != nil {
 		return err
 	}
@@ -270,7 +278,7 @@ func ssoGenerateConfig(cmd *cobra.Command, args []string) error {
 
 		// 対話式のロール選択。
 		cmd.Print("Select roles to configure (comma-separated numbers, or 'all' for all roles): ")
-		roleInput, err := promptSelection(ctx, cmd.InOrStdin())
+		roleInput, err := promptSelection(ctx, stdin)
 		if err != nil {
 			return err
 		}

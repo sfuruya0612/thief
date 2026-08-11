@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -207,15 +208,18 @@ func TestPromptSelection(t *testing.T) {
 		{name: "reads only the first line", input: "1,2\n3\n", want: "1,2"},
 		// 読み取れなかった入力は空として扱い、選択なしの判断を呼び出し側へ渡す。
 		{name: "empty line", input: "\n", want: ""},
+		{name: "whitespace only line", input: "   \n", want: ""},
 		{name: "eof", input: "", want: ""},
-		// 区切りの後ろに空白を挟むと 1 語で収まらず、選択そのものが空になる。
-		// fmt.Scanln を使っていた頃からの挙動であり、ここでは変えずに固定する。
-		// プロンプトの文言に沿った入力が通らない点は issue 0137 で別途扱う。
-		{name: "space inside the selection", input: "1, 2\n", want: ""},
+		{name: "no trailing newline with surrounding whitespace", input: "  1,2  ", want: "1,2"},
+		// カンマの後ろに空白を挟んだ書き方 (プロンプトの文言どおりの入力) を通す。
+		// 各要素の TrimSpace は selectIndices が担う。
+		{name: "space inside the selection", input: "1, 2\n", want: "1, 2"},
+		{name: "space around each element", input: "1 , 2\n", want: "1 , 2"},
+		{name: "all with surrounding whitespace", input: "  all  \n", want: "all"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := promptSelection(context.Background(), strings.NewReader(tt.input))
+			got, err := promptSelection(context.Background(), bufio.NewReader(strings.NewReader(tt.input)))
 			if err != nil {
 				t.Fatalf("promptSelection() error = %v", err)
 			}
@@ -223,6 +227,61 @@ func TestPromptSelection(t *testing.T) {
 				t.Errorf("promptSelection(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestPromptSelectionReusesTheSameReaderAcrossCalls は、sso generate-config がアカウント
+// 選択とロール選択で promptSelection を複数回呼ぶ際に、1 回目の呼び出しが先読みした分を
+// 2 回目以降の呼び出しでも読めることを検証する。
+//
+// bufio.Reader は下層の Reader から一度の Read で複数行分をまとめて読み込むことがある。
+// 呼び出しのたびに新しい bufio.Reader を作ると、その先読み分は使い捨てられた Reader の
+// 内部バッファに閉じ込められたまま失われ、2 回目の呼び出しはまだ入力が残っているのに
+// 空扱いになる (sso generate-config ではロール選択がこれに当たる)。
+func TestPromptSelectionReusesTheSameReaderAcrossCalls(t *testing.T) {
+	r := bufio.NewReader(strings.NewReader("1,2\n3\n"))
+
+	first, err := promptSelection(context.Background(), r)
+	if err != nil {
+		t.Fatalf("promptSelection() first call error = %v", err)
+	}
+	if first != "1,2" {
+		t.Fatalf("first call = %q, want %q", first, "1,2")
+	}
+
+	second, err := promptSelection(context.Background(), r)
+	if err != nil {
+		t.Fatalf("promptSelection() second call error = %v", err)
+	}
+	if second != "3" {
+		t.Errorf("second call = %q, want %q; the same *bufio.Reader must be reused across calls", second, "3")
+	}
+}
+
+// erroringReader は Read のたびに常に同じエラーを返す。
+type erroringReader struct {
+	err error
+}
+
+func (r erroringReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
+// TestPromptSelectionPropagatesNonEOFReadErrors は、EOF 以外の読み取りエラーが空文字へ
+// 握り潰されず呼び出し側へ伝わることを検証する。
+//
+// bufio.Reader は下層のエラーを内部に保持し以降の呼び出しでも返し続けるため、ここで
+// 空文字に握り潰すと、一度エラーが起きた後の選択がすべてエラーの表示無く空になる。
+func TestPromptSelectionPropagatesNonEOFReadErrors(t *testing.T) {
+	wantErr := errors.New("boom")
+	r := bufio.NewReader(erroringReader{err: wantErr})
+
+	got, err := promptSelection(context.Background(), r)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want it to wrap %v", err, wantErr)
+	}
+	if got != "" {
+		t.Errorf("value = %q, want the zero value", got)
 	}
 }
 
@@ -235,7 +294,7 @@ func TestPromptSelectionStopsWaitingWhenContextIsCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	got, err := promptSelection(ctx, newBlockingReader(t))
+	got, err := promptSelection(ctx, bufio.NewReader(newBlockingReader(t)))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want it to wrap %v", err, context.Canceled)
 	}
