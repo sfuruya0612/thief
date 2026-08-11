@@ -227,6 +227,35 @@ func ssoCreateTokenSlowDown() ssoCreateTokenStep {
 	return ssoCreateTokenStep{err: ssoOidcOperationError(&ssooidctypes.SlowDownException{})}
 }
 
+// fakeSSOConnectionTimeoutError は接続タイムアウトを模したエラー。
+//
+// 実機での接続タイムアウトは *smithy.OperationError → *retry.MaxAttemptsError → ... →
+// net.Error (Timeout() が true) という深い連鎖で返ってくることを issue 0133 の調査で
+// 実測済みである。waitForSSOToken の判定は Timeout() bool を持つ任意の型を
+// errors.As で拾うため、テストでは連鎖の深さそのものは無関係であり、この最小限の型で
+// 判定の分岐だけを検証すれば十分である。
+type fakeSSOConnectionTimeoutError struct{}
+
+func (fakeSSOConnectionTimeoutError) Error() string { return "fake connection timeout" }
+func (fakeSSOConnectionTimeoutError) Timeout() bool { return true }
+
+// ssoCreateTokenConnectionTimeout は接続タイムアウトを返す step を作る。
+// 本番同様 smithy.OperationError で包み、typed exception 以外もこの深さで届くことを
+// 前提にした実装だけが通るようにする。
+func ssoCreateTokenConnectionTimeout() ssoCreateTokenStep {
+	return ssoCreateTokenStep{err: ssoOidcOperationError(fakeSSOConnectionTimeoutError{})}
+}
+
+// fakeSSONonTimeoutNetError は interface{ Timeout() bool } を実装するが Timeout() が
+// false を返すエラーを模す (例：接続拒否のように net.Error ではあってもタイムアウトでは
+// ないエラー)。waitForSSOToken の分岐は `errors.As(err, &timeoutErr) && timeoutErr.Timeout()`
+// と Timeout() の戻り値そのものも見て判定するため、型が一致するだけで Timeout() の結果を
+// 見ずに倍加してしまう実装をこのケースで検出する。
+type fakeSSONonTimeoutNetError struct{}
+
+func (fakeSSONonTimeoutNetError) Error() string { return "fake non-timeout net error" }
+func (fakeSSONonTimeoutNetError) Timeout() bool { return false }
+
 // fakeSSOClock はテストの中だけで進む時計。after は要求された待ち時間を記録し、
 // その分だけ時刻を進めて即座に発火する。実際には待たないため、テストの実行時間が
 // ポーリング間隔にも device code の有効期限にも依存しない。
@@ -330,6 +359,22 @@ func TestWaitForSSOTokenPollIntervals(t *testing.T) {
 			wantIntervals: []time.Duration{testSSOPollInterval + 5*time.Second, testSSOPollInterval + 5*time.Second},
 		},
 		{
+			// RFC 8628 §3.5: "On encountering a connection timeout, clients MUST
+			// unilaterally reduce their polling frequency before retrying." 緩め方は
+			// 同節が RECOMMENDED とする倍加を採る。slow_down の固定 5 秒加算 (3 秒 → 8 秒) と
+			// 区別できるよう、初期間隔 3 秒からの倍加 (3 秒 → 6 秒 → 12 秒) で検証する。
+			name:          "connection timeout doubles the interval",
+			steps:         []ssoCreateTokenStep{ssoCreateTokenConnectionTimeout(), ssoCreateTokenConnectionTimeout(), ssoCreateTokenSuccess()},
+			wantIntervals: []time.Duration{testSSOPollInterval * 2, testSSOPollInterval * 4},
+		},
+		{
+			// 倍加された間隔がその後の承認待ちでも維持されることを、slow down と同じ形で
+			// 確かめる。
+			name:          "interval doubled by connection timeout is kept across pending",
+			steps:         []ssoCreateTokenStep{ssoCreateTokenConnectionTimeout(), ssoCreateTokenPending(), ssoCreateTokenSuccess()},
+			wantIntervals: []time.Duration{testSSOPollInterval * 2, testSSOPollInterval * 2},
+		},
+		{
 			name:          "success on the first call does not wait",
 			steps:         []ssoCreateTokenStep{ssoCreateTokenSuccess()},
 			wantIntervals: nil,
@@ -391,43 +436,110 @@ func TestWaitForSSOTokenSendsCreateTokenInput(t *testing.T) {
 	}
 }
 
-// TestWaitForSSOTokenFailsImmediatelyOnOtherError は承認待ちでもレート制限でもない
-// エラーで即座に失敗し、再試行しないことを検証する。
+// TestWaitForSSOTokenFailsImmediatelyOnOtherError は承認待ちでもレート制限でも
+// 接続タイムアウトでもないエラーで即座に失敗し、再試行しないことを検証する。issue 0133 で
+// 接続タイムアウトの分岐を追加した際、これらが誤ってタイムアウトの分岐に吸われないことが
+// 完了条件になっているため、OAuth のエラーレスポンス代表 3 種と、interface{ Timeout() bool }
+// を実装していても Timeout() が false を返すエラー (net.Error ではあっても接続タイムアウト
+// ではないもの。例：接続拒否) の計 4 種を確認する。
+//
+// checkAs はケースごとに、ラップ後もエラーチェーンから元の型が取り出せることを確認する。
+// errors.Is だけでは同一インスタンスかどうかしか分からず、ラップの過程で型情報が失われて
+// いないかは別に確認する必要がある。
 func TestWaitForSSOTokenFailsImmediatelyOnOtherError(t *testing.T) {
-	base := &ssooidctypes.InvalidGrantException{Message: aws.String("bad grant")}
-	clock := newFakeSSOClock()
-	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{
-		{err: ssoOidcOperationError(base)},
-		// 2 回目が呼ばれたら再試行してしまっている。steps に用意しておき、
-		// 呼び出し回数の検証で捕まえる。
-		ssoCreateTokenSuccess(),
-	}}
+	tests := []struct {
+		name    string
+		base    error
+		checkAs func(t *testing.T, err error)
+	}{
+		{
+			name: "access denied",
+			base: &ssooidctypes.AccessDeniedException{Message: aws.String("denied")},
+			checkAs: func(t *testing.T, err error) {
+				t.Helper()
+				var target *ssooidctypes.AccessDeniedException
+				if !errors.As(err, &target) {
+					t.Errorf("errors.As(*AccessDeniedException) = false, want true; the chain is severed: %v", err)
+				}
+			},
+		},
+		{
+			name: "expired token",
+			base: &ssooidctypes.ExpiredTokenException{Message: aws.String("expired")},
+			checkAs: func(t *testing.T, err error) {
+				t.Helper()
+				var target *ssooidctypes.ExpiredTokenException
+				if !errors.As(err, &target) {
+					t.Errorf("errors.As(*ExpiredTokenException) = false, want true; the chain is severed: %v", err)
+				}
+			},
+		},
+		{
+			name: "invalid grant",
+			base: &ssooidctypes.InvalidGrantException{Message: aws.String("bad grant")},
+			checkAs: func(t *testing.T, err error) {
+				t.Helper()
+				var target *ssooidctypes.InvalidGrantException
+				if !errors.As(err, &target) {
+					t.Errorf("errors.As(*InvalidGrantException) = false, want true; the chain is severed: %v", err)
+				}
+			},
+		},
+		{
+			// interface{ Timeout() bool } を実装していても Timeout() が false のエラーは
+			// 接続タイムアウトではないので、型が一致するだけで倍加してしまわないことを
+			// 確認する。waitForSSOToken の判定が `errors.As(...)` だけで `.Timeout()` の
+			// 戻り値を見ていない実装に壊れていたら、このケースは default に落ちずに
+			// 倍加へ進んでしまい、待機が発生してテストが失敗する。
+			name: "timeout-shaped error whose Timeout() is false",
+			base: fakeSSONonTimeoutNetError{},
+			checkAs: func(t *testing.T, err error) {
+				t.Helper()
+				var target interface{ Timeout() bool }
+				if !errors.As(err, &target) {
+					t.Fatalf("errors.As(interface{ Timeout() bool }) = false, want true; the chain is severed: %v", err)
+				}
+				if target.Timeout() {
+					t.Errorf("Timeout() = true, want false (this case exercises the non-timeout branch)")
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := newFakeSSOClock()
+			mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{
+				{err: ssoOidcOperationError(tt.base)},
+				// 2 回目が呼ばれたら再試行してしまっている。steps に用意しておき、
+				// 呼び出し回数の検証で捕まえる。
+				ssoCreateTokenSuccess(),
+			}}
 
-	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant",
-		testSSOTokenPollPolicy(clock))
-	if got != nil {
-		t.Errorf("token = %v, want nil on error", got)
-	}
-	if err == nil {
-		t.Fatal("waitForSSOToken() error = nil, want an error")
-	}
-	if !errors.Is(err, base) {
-		t.Errorf("errors.Is() = false, want true; the chain is severed: %v", err)
-	}
-	var target *ssooidctypes.InvalidGrantException
-	if !errors.As(err, &target) {
-		t.Errorf("errors.As() = false, want true; the chain is severed: %v", err)
-	}
-	// issue 0125 で変更した本番のラップ文言を固定する。register / start device authorization の
-	// 2 箇所は他のテストで固定しているが、create token だけが抜けていた。
-	if !strings.HasPrefix(err.Error(), "create sso oidc token: ") {
-		t.Errorf("error = %q, want it to start with %q", err.Error(), "create sso oidc token: ")
-	}
-	if len(mock.inputs) != 1 {
-		t.Errorf("CreateToken called %d times, want 1 (must not retry)", len(mock.inputs))
-	}
-	if len(clock.recorded) != 0 {
-		t.Errorf("waited %v, want no wait before failing", clock.recorded)
+			got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, "dc", "grant",
+				testSSOTokenPollPolicy(clock))
+			if got != nil {
+				t.Errorf("token = %v, want nil on error", got)
+			}
+			if err == nil {
+				t.Fatal("waitForSSOToken() error = nil, want an error")
+			}
+			if !errors.Is(err, tt.base) {
+				t.Errorf("errors.Is() = false, want true; the chain is severed: %v", err)
+			}
+			tt.checkAs(t, err)
+			// issue 0125 で変更した本番のラップ文言を固定する。register / start device
+			// authorization の 2 箇所は他のテストで固定しているが、create token だけが
+			// 抜けていた。
+			if !strings.HasPrefix(err.Error(), "create sso oidc token: ") {
+				t.Errorf("error = %q, want it to start with %q", err.Error(), "create sso oidc token: ")
+			}
+			if len(mock.inputs) != 1 {
+				t.Errorf("CreateToken called %d times, want 1 (must not retry)", len(mock.inputs))
+			}
+			if len(clock.recorded) != 0 {
+				t.Errorf("waited %v, want no wait before failing", clock.recorded)
+			}
+		})
 	}
 }
 
@@ -534,6 +646,96 @@ func TestWaitForSSOTokenSlowDownStaysBounded(t *testing.T) {
 		if d > policy.timeout {
 			t.Errorf("wait %d = %v, want <= %v (the device code lifetime)", i+1, d, policy.timeout)
 		}
+	}
+}
+
+// TestWaitForSSOTokenConnectionTimeoutStaysBounded は接続タイムアウトが続いても
+// 待ち時間が正のまま有効期限を超えて伸びないことを検証する。TestWaitForSSOTokenSlowDownStaysBounded
+// と対になる、issue 0133 の完了条件 (緩められた間隔が device code の有効期限を超えて伸びない
+// ことをテストで検証する) を接続タイムアウトの分岐について確かめるテストである。
+//
+// interval 5 秒 / expires_in 600 秒に対する内訳は次のとおりである。k 回目の接続タイムアウトの
+// あとの間隔は 5*2^k 秒になる (倍加のため slow down の等差増加とは異なり等比で増える)。
+// 次の待機を終える時刻が 600 秒に届くのは 6 回目の CreateToken の時点であり、そこで打ち切る。
+func TestWaitForSSOTokenConnectionTimeoutStaysBounded(t *testing.T) {
+	steps := make([]ssoCreateTokenStep, 200)
+	for i := range steps {
+		steps[i] = ssoCreateTokenConnectionTimeout()
+	}
+	clock := newFakeSSOClock()
+	mock := &mockSSOOidcCreateTokenAPI{steps: steps}
+	deviceAuth := awsSSODeviceAuthorization()
+	policy := withFakeClock(newSSOTokenPollPolicy(deviceAuth), clock)
+
+	got, err := waitForSSOToken(context.Background(), mock, &SSOClientRegistration{}, deviceAuth.DeviceCode, "grant", policy)
+	if got != nil {
+		t.Errorf("token = %v, want nil on timeout", got)
+	}
+	if !errors.Is(err, errSSOTokenTimeout) {
+		t.Fatalf("errors.Is(err, errSSOTokenTimeout) = false, want true; got %v", err)
+	}
+
+	// 5 秒から倍加していく内訳をリテラルで固定する。slow down の等差 (10s, 15s, 20s, ...) とは
+	// 区別できる等比の増え方であることが要点である。
+	wantIntervals := []time.Duration{
+		10 * time.Second, 20 * time.Second, 40 * time.Second, 80 * time.Second, 160 * time.Second,
+	}
+	if diff := cmp.Diff(wantIntervals, clock.recorded); diff != "" {
+		t.Errorf("poll intervals mismatch (-want +got):\n%s", diff)
+	}
+	if len(mock.inputs) != len(wantIntervals)+1 {
+		t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), len(wantIntervals)+1)
+	}
+
+	// 内訳の比較とは別に、待ち時間が満たすべき不変条件を明示しておく。オーバーフローや
+	// 上限の消失は「正である」「猶予以下である」のどちらかを必ず破る。
+	for i, d := range clock.recorded {
+		if d <= 0 {
+			t.Errorf("wait %d = %v, want a positive duration", i+1, d)
+		}
+		if d > policy.timeout {
+			t.Errorf("wait %d = %v, want <= %v (the device code lifetime)", i+1, d, policy.timeout)
+		}
+	}
+}
+
+// TestWaitForSSOTokenConnectionTimeoutDoesNotOverrideContextError は ctx が既に
+// 終了しているときに、CreateToken が接続タイムアウトの形のエラーを返しても
+// ctx.Err() を返すことを検証する。
+//
+// issue 0133 の調査結果のとおり、net/http の Client.Timeout は内部で
+// context.deadlineExceededError (Timeout() bool を実装する) を使って実現されているため、
+// err の型だけでは呼び出し元の ctx のキャンセル/期限切れと SDK 内部の接続タイムアウトを
+// 区別できない。この判定を誤ると、利用者の Ctrl-C による中断が「接続タイムアウトなので
+// 間隔を倍にして再試行する」分岐に飲み込まれ、中断が効かなくなる。
+//
+// TestWaitForSSOTokenPrefersContextErrorOverTimeout は打ち切り (deadline 到達) と
+// ctx のキャンセルが競合する、待機に入る前の判定を検証するテストであり、ここで検証する
+// 「CreateToken のエラーの型による分類」より前段の、別のコードパスを対象にしている。
+func TestWaitForSSOTokenConnectionTimeoutDoesNotOverrideContextError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	mock := &mockSSOOidcCreateTokenAPI{steps: []ssoCreateTokenStep{ssoCreateTokenConnectionTimeout()}}
+	policy := ssoTokenPollPolicy{
+		interval: testSSOPollInterval,
+		timeout:  testSSOPollTimeout,
+		now:      time.Now,
+		after: func(d time.Duration) <-chan time.Time {
+			t.Errorf("after(%v) was called; want ctx.Err() to be returned before waiting", d)
+			return time.After(0)
+		},
+	}
+
+	got, err := waitForSSOToken(ctx, mock, &SSOClientRegistration{}, "dc", "grant", policy)
+	if got != nil {
+		t.Errorf("token = %v, want nil on cancel", got)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("errors.Is(err, context.Canceled) = false, want true; got %v", err)
+	}
+	if len(mock.inputs) != 1 {
+		t.Errorf("CreateToken called %d times, want 1 (must not retry after a canceled ctx)", len(mock.inputs))
 	}
 }
 

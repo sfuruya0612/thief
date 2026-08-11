@@ -300,6 +300,8 @@
   - @sfuruya0612
 - [FIX] TopBar の Refresh が backend のリソースキャッシュ (TTL 1 時間) を貫通せず、押しても最大 1 時間前の表示のままになる不具合を修正する (`POST /api/cache/invalidate?view=<view>` を新設し、表示中 view のキャッシュを破棄してから再取得する。Cost Explorer 系・リージョン一覧・GCP プロジェクト一覧・DynamoDB の Query/Scan 結果は課金と設計上の理由で破棄対象から除外する)
   - @sfuruya0612
+- [FIX] SSO ログイン (`thief sso login`) のポーリングが接続タイムアウトでもポーリング間隔を緩めず即座に失敗する不具合を修正する (RFC 8628 §3.5 は接続タイムアウトを受けたときにポーリング頻度を自主的に落としてから再試行することを MUST として定めており、`waitForSSOToken` の分岐はこれを満たしていなかった。`CreateToken` から `interface{ Timeout() bool }` を実装する型 (実測では `*smithy.OperationError` に包まれた `*http.timeoutError`) で接続タイムアウトが返ってきたときに間隔を倍にして再試行するようにする。net/http の `Client.Timeout` は内部で `context.DeadlineExceeded` と同じ形のエラーを使うため、呼び出し元の ctx のキャンセル/期限切れと SDK 内部の接続タイムアウトを `err` の型だけでは区別できず、これを取り違えると Ctrl-C による中断が新しい分岐に飲み込まれて効かなくなる。そのため `ctx.Err() != nil` を接続タイムアウトと OAuth のエラーレスポンスによる即時失敗を含むそれ以外の分類より前に確認し、呼び出し元の終了を優先して返すようにする。既存の `authorization_pending` / `slow_down` の分岐、打ち切り判定、待機処理は変更しない)
+  - @sfuruya0612
 
 ### misc
 
