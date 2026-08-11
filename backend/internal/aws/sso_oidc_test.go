@@ -98,11 +98,16 @@ func (m *mockSSOOidcStartDeviceAuthorizationAPI) StartDeviceAuthorization(_ cont
 // 間隔と打ち切り期限を決める。写し漏らすと newSSOTokenPollPolicy が既定値に倒れ、
 // サーバの指示が黙って無視される。値は既定値 (5 秒 / 600 秒) のどちらとも異なるものを
 // 使う。既定値と同じにすると、写さずに既定へ倒す実装でもこのテストが通ってしまう。
+//
+// VerificationURI は §3.2 の verification_uri であり、§3.3 で利用者へ提示することが
+// 求められる。写し漏らすと提示する URI が空になる。start URL から組み立てた推測値
+// (start URL + "#/device") とは別物であることが分かるホスト名を使う。
 func TestStartSSODeviceAuthorizationSendsRegistrationAndStartURL(t *testing.T) {
 	mock := &mockSSOOidcStartDeviceAuthorizationAPI{
 		out: &ssooidc.StartDeviceAuthorizationOutput{
 			DeviceCode:              aws.String("dc"),
 			UserCode:                aws.String("uc"),
+			VerificationUri:         aws.String("https://device.sso/verify"),
 			VerificationUriComplete: aws.String("https://device.sso/verify?user_code=uc"),
 			Interval:                7,
 			ExpiresIn:               900,
@@ -133,6 +138,7 @@ func TestStartSSODeviceAuthorizationSendsRegistrationAndStartURL(t *testing.T) {
 	want := &SSODeviceAuthorization{
 		DeviceCode:              "dc",
 		UserCode:                "uc",
+		VerificationURI:         "https://device.sso/verify",
 		VerificationURIComplete: "https://device.sso/verify?user_code=uc",
 		Interval:                7,
 		ExpiresIn:               900,

@@ -55,8 +55,18 @@ type SSOClientRegistration struct {
 
 // SSODeviceAuthorization はデバイス認可フローの開始結果を保持する。
 type SSODeviceAuthorization struct {
-	DeviceCode              string
-	UserCode                string
+	DeviceCode string
+	UserCode   string
+
+	// VerificationURI は認可サーバが指示した利用者向けの検証 URI。
+	// RFC 8628 §3.2 の verification_uri に対応し、REQUIRED である。§3.3 は user_code と
+	// あわせてこれを利用者へ提示することを求めており、提示する URI はここで受け取った
+	// 値でなければならない。start URL から組み立てた推測値には仕様上の裏付けが無い。
+	VerificationURI string
+
+	// VerificationURIComplete は user_code を含む検証 URI。
+	// RFC 8628 §3.2 の verification_uri_complete に対応し、OPTIONAL である。
+	// §3.3.1 の非テキストでの提示 (ブラウザの自動起動) に使う。
 	VerificationURIComplete string
 
 	// Interval はサーバが指示したポーリング間隔 (秒)。RFC 8628 §3.2 の interval に対応する。
@@ -148,6 +158,7 @@ func startSSODeviceAuthorization(ctx context.Context, client ssoOidcStartDeviceA
 	return &SSODeviceAuthorization{
 		DeviceCode:              ptrStr(o.DeviceCode),
 		UserCode:                ptrStr(o.UserCode),
+		VerificationURI:         ptrStr(o.VerificationUri),
 		VerificationURIComplete: ptrStr(o.VerificationUriComplete),
 		Interval:                o.Interval,
 		ExpiresIn:               o.ExpiresIn,
