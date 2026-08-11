@@ -400,8 +400,8 @@ func selectIndices(cmd *cobra.Command, input string, max int, kind string) []int
 // 差し替え可能にしている理由はフィールドによって 2 つある。
 // registerClient / startDeviceAuth / waitForToken / openBrowser は AWS への接続かブラウザの
 // 起動を伴い、テストからは実行できない。エラーの伝播を検証するために差し替える。
-// display は標準出力へ書くだけでエラーを返さないが、テスト実行時の出力を汚さないために
-// 差し替える。
+// display / reportBrowserFailure は標準出力・標準エラー出力へ書くだけでエラーを返さないが、
+// テスト実行時の出力を汚さないために差し替える。
 // これらは元から自由関数であり、絞り込む対象の具象型が無い。internal/aws のように
 // SDK クライアントをコンシューマ定義インターフェースで受けるのではなく、関数値を
 // 持たせているのはそのためである。
@@ -410,7 +410,12 @@ type ssoTokenDeps struct {
 	startDeviceAuth func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, startURL string) (*awsinternal.SSODeviceAuthorization, error)
 	openBrowser     func(url string) error
 	waitForToken    func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, deviceAuth *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error)
-	display         func(verificationURI, userCode string)
+	display         func(verificationURI, userCode string, attemptingBrowser bool)
+	// reportBrowserFailure は openBrowser の失敗を利用者へ伝える。RFC 8628 §3.3.1 は
+	// ブラウザ等による非テキストでの提示を MAY と定めており、失敗はフローを止める理由に
+	// ならない。display で verification_uri と user_code は既に提示済みのため、ここでは
+	// 警告を出すだけで処理を継続する。
+	reportBrowserFailure func(err error)
 }
 
 // defaultSSOTokenDeps は本番で使う実装を返す。
@@ -420,8 +425,11 @@ func defaultSSOTokenDeps() ssoTokenDeps {
 		startDeviceAuth: awsinternal.StartSSODeviceAuthorization,
 		openBrowser:     openBrowser,
 		waitForToken:    awsinternal.WaitForSSOToken,
-		display: func(verificationURI, userCode string) {
-			writeSSOLoginPrompt(os.Stdout, verificationURI, userCode)
+		display: func(verificationURI, userCode string, attemptingBrowser bool) {
+			writeSSOLoginPrompt(os.Stdout, verificationURI, userCode, attemptingBrowser)
+		},
+		reportBrowserFailure: func(err error) {
+			writeSSOBrowserFailureWarning(os.Stderr, err)
 		},
 	}
 }
@@ -434,7 +442,7 @@ func getSSOToken(ctx context.Context, region, url string) (*SSOTokenCache, error
 // getSSOTokenWith は getSSOToken の本体。
 // awsinternal の 3 つの呼び出しは、どの API で失敗したかを示す文言で既にラップされて返る。
 // この層から足せる情報が無いため包み直さず、そのまま伝播させる。
-// openBrowser だけは exec の裸のエラーを返すため、何をしようとしたかをここで足す。
+// openBrowser の失敗はフローを中断しない (下記コメント参照)。
 func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps) (*SSOTokenCache, error) {
 	registration, err := deps.registerClient(ctx, region, ssoClientName, ssoClientType)
 	if err != nil {
@@ -446,14 +454,29 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 		return nil, err
 	}
 
-	if err := deps.openBrowser(deviceAuth.VerificationURIComplete); err != nil {
-		return nil, fmt.Errorf("open browser: %w", err)
-	}
-
 	// 提示する URI はサーバが返した verification_uri である (RFC 8628 §3.2 / §3.3)。
 	// start URL から組み立てた値を渡すと、サーバの指示と食い違ったときに
 	// ブラウザが開けなかった利用者の退路が塞がる。
-	deps.display(deviceAuth.VerificationURI, deviceAuth.UserCode)
+	// テキストでの提示 (§3.3、user_code は §3.3.1 で MUST) をブラウザの起動より先に行う。
+	// ブラウザの起動が失敗しても、利用者は既に verification_uri と user_code を見ている
+	// 状態になる。
+	// verification_uri_complete が空の場合はこの後ブラウザの起動を試みないため、
+	// その旨を display にも伝える (試みない場合に「開こうとしています」と出すと
+	// 実際の動作と矛盾する)。
+	attemptingBrowser := deviceAuth.VerificationURIComplete != ""
+	deps.display(deviceAuth.VerificationURI, deviceAuth.UserCode, attemptingBrowser)
+
+	// verification_uri_complete は RFC 8628 §3.2 で OPTIONAL である。空文字列を
+	// openBrowser に渡しても開く先が無く、失敗の文言も分かりにくいので試みない。
+	if attemptingBrowser {
+		if err := deps.openBrowser(deviceAuth.VerificationURIComplete); err != nil {
+			// ブラウザによる非テキストでの提示は RFC 8628 §3.3.1 で MAY であり、
+			// 失敗はフローを止める理由にならない。デバイス認可フローはそもそも
+			// ブラウザを開けない環境のために存在する仕組みである。exec の裸の
+			// エラーには文脈が無いため、何をしようとしたかをここで足して報告する。
+			deps.reportBrowserFailure(fmt.Errorf("open browser: %w", err))
+		}
+	}
 
 	// deviceAuth を丸ごと渡す。waitForToken は device code だけでなく、サーバが指示した
 	// interval と expires_in からポーリング間隔と打ち切り期限を決める (RFC 8628 §3.2 / §3.5)。
@@ -484,15 +507,23 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 // 書き出し先を引数で受け取るのは、内容をテストから読めるようにするためである。
 // 本番では os.Stdout を渡す。ここまでコマンドの出力先 (cmd.OutOrStdout) が届いて
 // いないのは、getSSOToken が cobra のコマンドを受け取らないためである。
-func writeSSOLoginPrompt(w io.Writer, verificationURI, userCode string) {
-	fmt.Fprintln(w, "Attempting to automatically open the SSO authorization page in your default browser.")
+//
+// attemptingBrowser はこの後ブラウザの起動を試みるかどうかを表す。verification_uri_complete
+// が空で試みない場合に「ブラウザを開こうとしています」と告げると、実際には何も起きず
+// 利用者を混乱させる。試みるかどうかは呼び出し元がこの関数を呼ぶ時点で既に確定している。
+func writeSSOLoginPrompt(w io.Writer, verificationURI, userCode string, attemptingBrowser bool) {
+	if attemptingBrowser {
+		fmt.Fprintln(w, "Attempting to automatically open the SSO authorization page in your default browser.")
+	}
 
 	// verification_uri は RFC 8628 §3.2 で REQUIRED である。欠けているのはサーバ側の
 	// 仕様違反であり、こちらで start URL から URI を組み立てて補うことはしない。
 	// 組み立てた値には仕様上の裏付けが無く、サーバの指示として見せることになる。
 	// ポーリングは続行できるため、欠けていることを伝えて URI の行だけを省く。
+	// この時点ではブラウザの起動を試みたかも成否も分からない (この関数はブラウザの
+	// 起動より先に呼ばれる) ため、ブラウザ側の状態には触れない。
 	if verificationURI == "" {
-		fmt.Fprintln(w, "warning: the authorization server did not return a verification URI; authorize in the browser page that was opened.")
+		fmt.Fprintln(w, "warning: the authorization server did not return a verification URI.")
 	} else {
 		fmt.Fprintln(w, "If the browser does not open or you wish to use a different device to authorize this request, open the following URL:")
 		fmt.Fprintln(w)
@@ -505,6 +536,18 @@ func writeSSOLoginPrompt(w io.Writer, verificationURI, userCode string) {
 	fmt.Fprintln(w, "Then enter the code:")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, userCode)
+}
+
+// writeSSOBrowserFailureWarning は openBrowser の失敗を w へ書き出す。
+//
+// ブラウザによる非テキストでの提示は RFC 8628 §3.3.1 で MAY であり、失敗はフローを
+// 止める理由にならない。writeSSOLoginPrompt で提示済みの verification_uri と
+// user_code を使って別の端末からでも承認できることを伝える。
+//
+// 書き出し先を引数で受け取るのは、内容をテストから読めるようにするためである。
+// 本番では os.Stderr を渡す。
+func writeSSOBrowserFailureWarning(w io.Writer, err error) {
+	fmt.Fprintf(w, "warning: %v; open the URL shown above manually to continue.\n", err)
 }
 
 func openBrowser(url string) error {

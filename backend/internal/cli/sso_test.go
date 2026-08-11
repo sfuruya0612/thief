@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -122,7 +123,7 @@ type ssoStageError struct{ stage string }
 
 func (e *ssoStageError) Error() string { return "sso stage " + e.stage + " failed" }
 
-// okSSOTokenDeps は 4 段すべてが成功するダミーを返す。
+// okSSOTokenDeps は各段が成功するダミーを返す。
 // 各テストはこのうち 1 段だけを失敗に差し替える。
 func okSSOTokenDeps() ssoTokenDeps {
 	return ssoTokenDeps{
@@ -136,26 +137,30 @@ func okSSOTokenDeps() ssoTokenDeps {
 		waitForToken: func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
 			return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
 		},
-		// 標準出力への表示はテストに不要なため差し替える。
-		display: func(string, string) {},
+		// 標準出力・標準エラー出力への書き込みはテストに不要なため差し替える。
+		display:              func(string, string, bool) {},
+		reportBrowserFailure: func(error) {},
 	}
 }
 
-// TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording は、デバイス認可フローの
-// 4 段それぞれで失敗したときに、getSSOToken の戻り値が次の 2 つを満たすことを検証する。
+// TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording は、デバイス認可フローのうち
+// 中断を伴う 3 段 (register client / start device authorization / wait for token) の
+// それぞれで失敗したときに、getSSOToken の戻り値が次の 2 つを満たすことを検証する。
 //
 //   - errors.Is と errors.As が元のエラーへ到達できること (%v で包むとチェーンが切れて到達できない)
 //   - 呼び出し先が既に述べた語句を、この層が重ねて述べていないこと
 //
 // 期待するメッセージを完全一致で固定しているのは、awsinternal 側の文言をそのまま
 // 伝播させることがこの層の仕様だからである。ラップを足せば文字列が伸びて落ちる。
+// openBrowser は失敗してもフローを中断しないため、このテーブルには含まない
+// (TestGetSSOTokenContinuesWhenBrowserFailsToOpen で別途検証する)。
 func TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording(t *testing.T) {
 	tests := []struct {
 		name string
 		// fail は okSSOTokenDeps の 1 段だけを、与えられたエラーを返すよう差し替える。
 		fail func(deps *ssoTokenDeps, err error)
-		// inner は呼び出し先が返すエラー。awsinternal の 3 つは自分でラップ済みの
-		// エラーを返すため、その形を再現する。openBrowser は exec の裸のエラーを返す。
+		// inner は呼び出し先が返すエラー。awsinternal 側は自分でラップ済みのエラーを返す
+		// ため、その形を再現する。
 		inner   func(base error) error
 		wantMsg string
 	}{
@@ -178,15 +183,6 @@ func TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording(t *testing.T) {
 			},
 			inner:   func(base error) error { return fmt.Errorf("start sso oidc device authorization: %w", base) },
 			wantMsg: "start sso oidc device authorization: sso stage register failed",
-		},
-		{
-			name: "open browser",
-			fail: func(deps *ssoTokenDeps, err error) {
-				deps.openBrowser = func(string) error { return err }
-			},
-			// exec のエラーには文脈が無いため、この層でだけラップを足す。
-			inner:   func(base error) error { return base },
-			wantMsg: "open browser: sso stage register failed",
 		},
 		{
 			name: "wait for token",
@@ -223,6 +219,93 @@ func TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording(t *testing.T) {
 				t.Errorf("getSSOTokenWith() error = %q, want %q", got, tt.wantMsg)
 			}
 		})
+	}
+}
+
+// TestGetSSOTokenContinuesWhenBrowserFailsToOpen は、ブラウザの起動が失敗しても
+// display が呼ばれ、waitForToken へ進み、その失敗が利用者へ報告されることを検証する。
+// RFC 8628 §3.3.1 はブラウザ等による非テキストでの提示を MAY と定めており、失敗は
+// フロー全体を中断する理由にならない。
+func TestGetSSOTokenContinuesWhenBrowserFailsToOpen(t *testing.T) {
+	deps := okSSOTokenDeps()
+	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
+		return &awsinternal.SSODeviceAuthorization{
+			DeviceCode:              "dc",
+			UserCode:                "uc",
+			VerificationURI:         "https://device.sso/verify",
+			VerificationURIComplete: "https://device.sso/verify?user_code=uc",
+		}, nil
+	}
+	browserErr := errors.New(`exec: "xdg-open": executable file not found in $PATH`)
+
+	// 呼び出し順を記録する。display はブラウザの起動より先に呼ばれるべきであり
+	// (利用者が既に verification_uri と user_code を見ている状態でブラウザの起動を
+	// 試みる)、順序が入れ替わるとこの並びで検出する。
+	var calls []string
+	deps.openBrowser = func(string) error {
+		calls = append(calls, "openBrowser")
+		return browserErr
+	}
+	deps.display = func(string, string, bool) { calls = append(calls, "display") }
+	deps.waitForToken = func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
+		calls = append(calls, "waitForToken")
+		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+	}
+	var reported error
+	deps.reportBrowserFailure = func(err error) { reported = err }
+
+	cache, err := getSSOTokenWith(context.Background(), "ap-northeast-1", "https://example.awsapps.com/start/", deps)
+	if err != nil {
+		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
+	}
+	if cache == nil {
+		t.Fatal("getSSOTokenWith() cache = nil, want non-nil")
+	}
+	if cache.AccessToken != "token" {
+		t.Errorf("AccessToken = %q, want %q", cache.AccessToken, "token")
+	}
+	if want := []string{"display", "openBrowser", "waitForToken"}; !slices.Equal(calls, want) {
+		t.Errorf("call order = %v, want %v", calls, want)
+	}
+	if reported == nil {
+		t.Fatal("reportBrowserFailure was not called")
+	}
+	if !errors.Is(reported, browserErr) {
+		t.Errorf("reportBrowserFailure error = %v, want it to wrap %v", reported, browserErr)
+	}
+	if wantPrefix := "open browser: "; !strings.HasPrefix(reported.Error(), wantPrefix) {
+		t.Errorf("reportBrowserFailure error = %q, want it to start with %q", reported.Error(), wantPrefix)
+	}
+}
+
+// TestGetSSOTokenSkipsBrowserWhenVerificationURICompleteIsEmpty は、
+// verification_uri_complete が空のときに openBrowser を呼ばないことを検証する。
+// RFC 8628 §3.2 でこの値は OPTIONAL であり、空文字列を渡しても開く先が無い。
+func TestGetSSOTokenSkipsBrowserWhenVerificationURICompleteIsEmpty(t *testing.T) {
+	deps := okSSOTokenDeps()
+	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
+		return &awsinternal.SSODeviceAuthorization{
+			DeviceCode:              "dc",
+			UserCode:                "uc",
+			VerificationURI:         "https://device.sso/verify",
+			VerificationURIComplete: "",
+		}, nil
+	}
+	var browserCalled, reportCalled bool
+	deps.openBrowser = func(string) error {
+		browserCalled = true
+		return nil
+	}
+	deps.reportBrowserFailure = func(error) { reportCalled = true }
+
+	if _, err := getSSOTokenWith(context.Background(), "ap-northeast-1", "https://example.awsapps.com/start/", deps); err != nil {
+		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
+	}
+	if browserCalled {
+		t.Error("openBrowser was called, want it not to be called when VerificationURIComplete is empty")
+	}
+	if reportCalled {
+		t.Error("reportBrowserFailure was called, want it not to be called when openBrowser was never attempted")
 	}
 }
 
@@ -282,11 +365,12 @@ func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 	}
 
 	var (
-		gotDeviceAuth  *awsinternal.SSODeviceAuthorization
-		gotGrantType   string
-		gotBrowserURL  string
-		gotDisplayURL  string
-		gotDisplayCode string
+		gotDeviceAuth     *awsinternal.SSODeviceAuthorization
+		gotGrantType      string
+		gotBrowserURL     string
+		gotDisplayURL     string
+		gotDisplayCode    string
+		gotAttemptBrowser bool
 	)
 	deps := okSSOTokenDeps()
 	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
@@ -296,15 +380,18 @@ func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 		gotBrowserURL = url
 		return nil
 	}
-	deps.display = func(url, userCode string) {
+	deps.display = func(url, userCode string, attemptingBrowser bool) {
 		gotDisplayURL = url
 		gotDisplayCode = userCode
+		gotAttemptBrowser = attemptingBrowser
 	}
 	deps.waitForToken = func(_ context.Context, _ string, _ *awsinternal.SSOClientRegistration, da *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error) {
 		gotDeviceAuth = da
 		gotGrantType = grantType
 		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
 	}
+	reportBrowserFailureCalled := false
+	deps.reportBrowserFailure = func(error) { reportBrowserFailureCalled = true }
 
 	if _, err := getSSOTokenWith(context.Background(), region, startURL, deps); err != nil {
 		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
@@ -332,6 +419,16 @@ func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 	if gotDisplayCode != deviceAuth.UserCode {
 		t.Errorf("display user code = %q, want %q", gotDisplayCode, deviceAuth.UserCode)
 	}
+	// VerificationURIComplete が非空なのでこの後ブラウザの起動を試みる。display に渡る
+	// attemptingBrowser は、この後の挙動と食い違ってはならない。
+	if !gotAttemptBrowser {
+		t.Error("display attemptingBrowser = false, want true (VerificationURIComplete is non-empty)")
+	}
+	// openBrowser が成功した (VerificationURIComplete が非空で、エラーを返さない) 場合に
+	// reportBrowserFailure を呼んでしまうと、成功しているのに利用者へ警告が出る。
+	if reportBrowserFailureCalled {
+		t.Error("reportBrowserFailure was called, want it not to be called when openBrowser succeeds")
+	}
 }
 
 // TestWriteSSOLoginPrompt は承認手順の表示内容を検証する。
@@ -348,31 +445,47 @@ func TestWriteSSOLoginPrompt(t *testing.T) {
 	tests := []struct {
 		name string
 		uri  string
+		// attemptingBrowser はこの後ブラウザの起動を試みるかどうか。
+		attemptingBrowser bool
 		// wantContains は出力に含まれていてほしい行。
 		wantContains []string
 		// wantOmits は出力に含まれてはならない断片。
 		wantOmits []string
 	}{
 		{
-			name:         "server returned a verification uri",
-			uri:          verificationURI,
-			wantContains: []string{verificationURI, userCode, "open the following URL:"},
+			name:              "server returned a verification uri",
+			uri:               verificationURI,
+			attemptingBrowser: true,
+			wantContains:      []string{verificationURI, userCode, "open the following URL:", "Attempting to automatically open"},
 			// 仕様上の裏付けが無い推測値を混ぜてはならない。
 			wantOmits: []string{"#/device", "warning:"},
 		},
 		{
 			// サーバの仕様違反。URI の行は省き、代わりに欠けていることを伝える。
 			// user_code は §3.3.1 の MUST であり必ず出す。
-			name:         "server omitted the verification uri",
-			uri:          "",
-			wantContains: []string{userCode, "warning: the authorization server did not return a verification URI"},
-			wantOmits:    []string{"#/device", "open the following URL:"},
+			name:              "server omitted the verification uri",
+			uri:               "",
+			attemptingBrowser: true,
+			wantContains:      []string{userCode, "warning: the authorization server did not return a verification URI"},
+			// display はブラウザの起動より先に呼ばれるため、この時点ではブラウザが
+			// 開けたかどうかは分からない。「開いたブラウザで承認する」という
+			// ブラウザ側の状態を前提にした文言を含めてはならない。
+			wantOmits: []string{"#/device", "open the following URL:", "authorize in the browser"},
+		},
+		{
+			// verification_uri_complete が空でこの後ブラウザの起動を試みない場合。
+			// 「開こうとしています」と出すと実際の動作と矛盾する。
+			name:              "not attempting to open a browser",
+			uri:               verificationURI,
+			attemptingBrowser: false,
+			wantContains:      []string{verificationURI, userCode, "open the following URL:"},
+			wantOmits:         []string{"Attempting to automatically open"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeSSOLoginPrompt(&buf, tt.uri, userCode)
+			writeSSOLoginPrompt(&buf, tt.uri, userCode, tt.attemptingBrowser)
 
 			got := buf.String()
 			for _, want := range tt.wantContains {
@@ -408,6 +521,32 @@ func TestDefaultSSOTokenDepsIsFullyWired(t *testing.T) {
 	}
 	if deps.display == nil {
 		t.Error("display is nil")
+	}
+	if deps.reportBrowserFailure == nil {
+		t.Error("reportBrowserFailure is nil")
+	}
+}
+
+// TestWriteSSOBrowserFailureWarning はブラウザの起動失敗を報告する文言を検証する。
+// verification_uri と user_code は writeSSOLoginPrompt で既に提示済みのため、ここでは
+// それを使って別の端末からでも承認できることを伝える。
+func TestWriteSSOBrowserFailureWarning(t *testing.T) {
+	err := errors.New(`exec: "xdg-open": executable file not found in $PATH`)
+
+	var buf bytes.Buffer
+	writeSSOBrowserFailureWarning(&buf, err)
+
+	got := buf.String()
+	if !strings.Contains(got, err.Error()) {
+		t.Errorf("output = %q, want it to contain %q", got, err.Error())
+	}
+	if !strings.HasPrefix(got, "warning:") {
+		t.Errorf("output = %q, want it to start with %q", got, "warning:")
+	}
+	// 別の端末からでも承認できることを伝える指示そのものがこの関数の存在理由であり、
+	// 単に失敗を告げるだけでは writeSSOLoginPrompt の警告と役割が重複する。
+	if want := "open the URL shown above manually"; !strings.Contains(got, want) {
+		t.Errorf("output = %q, want it to contain %q", got, want)
 	}
 }
 
