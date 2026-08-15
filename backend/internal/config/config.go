@@ -116,7 +116,7 @@ func Defaults() *Config {
 		Output:        "tab",
 		ListenAddr:    "127.0.0.1:8089",
 		WebOrigins:    defaultWebOrigins,
-		SnippetsDir:   "/tmp/thief",
+		SnippetsDir:   filepath.Join(".thief", "snippets"),
 		PriceCacheDir: "/tmp/thief/price",
 		Datadog: DatadogConfig{
 			Site: "datadoghq.com",
