@@ -1,6 +1,8 @@
 module github.com/sfuruya0612/thief/backend
 
-go 1.25.0
+go 1.26
+
+toolchain go1.26.6
 
 require (
 	cloud.google.com/go/bigquery v1.77.0

@@ -409,3 +409,5 @@
   - @sfuruya0612
 - `sso.go` の `ssoGenerateConfig` を `ssoLoginDeps` と同じ形の依存注入に切り替える。トークン取得・アカウント一覧取得・ロール一覧取得・設定ファイルパス解決・既存設定の読み取り・書き込みの 6 個を `ssoGenerateConfigDeps` にまとめ、本番用の配線を `defaultSSOGenerateConfigDeps` に、本体を `ssoGenerateConfigWith` に切り出す (`ssoGenerateConfig` は `ssoGenerateConfigWith` を呼ぶだけの薄いラッパーにする)。これにより、アカウントを 1 件も選ばなかった場合・ロール取得の失敗のラップ・ロールが 0 件のアカウントのスキップとそれが後続アカウントの処理を妨げないこと・ロールを 1 つも選ばなかった場合・既存設定の読み取り失敗時に空文字列へフォールバックする分岐をテストで固定できるようにし、`ssoGenerateConfigDeps` の全フィールドが埋まっていることを検証するテストも追加する。`TestNoContextBlindStdinReadOutsideDesignatedFunctions` の一覧を `sso.go:ssoGenerateConfig` から `sso.go:ssoGenerateConfigWith` に更新する (`*bufio.Reader` の構築箇所が移ったため)。挙動は変えない
   - @sfuruya0612
+- `mise.toml` の `[tools].go` を `1.25.12` から `1.26.6` に、`backend/go.mod` の `go` ディレクティブを `1.25.0` から `1.26` に更新し `toolchain go1.26.6` を追加する。`govulncheck ./...` が標準ライブラリ由来として報告していた 7 件の既知の脆弱性 (GO-2026-6218、GO-2026-6091、GO-2026-6090、GO-2026-6089、GO-2026-6088、GO-2026-5972、GO-2026-5026) を解消する。プロダクションコードのロジック変更は無い
+  - @sfuruya0612
