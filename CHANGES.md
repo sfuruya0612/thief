@@ -222,6 +222,8 @@
   - @sfuruya0612
 - [CHANGE] AWS / Google Cloud のサイドバーカテゴリを公式プロダクトカテゴリに揃える (CloudFormation → Management & Governance、ECR/ECS → Containers、Parameter Store → Management & Governance 等)
   - @sfuruya0612
+- [CHANGE] クエリスニペットのデフォルト保存先をサーバ起動時のカレントディレクトリ配下の `.thief/snippets` に変更する (`config.yaml` の `snippets-dir` または `THIEF_SNIPPETS_DIR` で保存先を明示している場合は影響しない。明示的な設定をしていない場合、従来の既定値 `/tmp/thief` 配下にあったスニペットは新しい保存先からは見えなくなる。従来の保存先を使い続けるには `THIEF_SNIPPETS_DIR=/tmp/thief` を設定する)
+  - @sfuruya0612
 - [CHANGE] Pricing 画面の Savings Plans (Compute / EC2 Instance / Database) を EC2 / RDS / ElastiCache / ECS のカードから独立した 3 サービスに分離する。EC2 等のカードは On-Demand / Reserved Instance のみを表示するようになり、SP の取得は Savings Plans API のレートを主として、ライセンスモデル (Windows/Linux 等) の付与は On-Demand の補助取得 (失敗しても縮退可) から行う。取得結果の `partial`/`missing_models` は `license_unresolved` に置き換わり、単価キャッシュは新スキーマ版のディレクトリに保存する (旧キャッシュは自動的に無効化される)
   - @sfuruya0612
 - [FIX] SSO ログイン (`thief sso login`) が承認用の URL として、認可サーバが返した値ではなく start URL に `#/device` を連結した推測値を表示していた不具合を修正する。RFC 8628 §3.2 は `verification_uri` を REQUIRED と定め、§3.3 はこれを利用者へ提示することを求めている。`#/device` の連結は AWS Identity Center の現在のホスト名の形に対する当て推量であり、仕様上の裏付けが無く、AWS が形式を変えた時点で黙って壊れる。`StartDeviceAuthorization` の応答から `verification_uri` を保持し、それをそのまま表示するようにする。ブラウザの自動起動が失敗した場合や別の端末で承認する場合に頼るのがこの URL であり、誤っていると承認そのものが行えない。サーバが `verification_uri` を返さなかった場合 (仕様違反の応答) は推測値へ倒さず、欠けていることを伝えて URL の行を省く。承認は開いたブラウザ側で続行できる。user code の表示は §3.3.1 の MUST であり、`verification_uri` の有無に関わらず維持する
