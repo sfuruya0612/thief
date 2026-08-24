@@ -53,9 +53,59 @@ description = "backend ユニットテスト (race)"
 dir = "backend"
 run = "go test -race -cover ./..."
 
+[tasks."backend:tools"]
+description = "go: 管理ツールのビルド時 Go バージョンを検査し、不一致なら再ビルド"
+dir = "backend"
+run = """
+#!/bin/sh
+# 旧ツールチェインでビルドされた go: ツールが残ると、go vet は通るのに
+# staticcheck だけ「file requires newer Go version」で失敗する分かりにくい事象になる。
+# lint の前にビルド時 Go バージョンをアクティブな Go 本体と比較し、不一致のツールだけ再ビルドする。
+set -eu
+goversion="$(go env GOVERSION)"
+# POSIX sh には pipefail が無くパイプ先頭の失敗を検知できないため、mise ls の結果は代入で受けて失敗時に止める
+ls_output="$(mise ls --current)"
+tools="$(printf '%s\n' "$ls_output" | awk '$1 ~ /^go:/ {print $1}')"
+for module in $tools; do
+  modpath="${module#go:}"
+  bin="${modpath##*/}"
+  # モジュールパス末尾がメジャーバージョン (v2 等) の場合、バイナリ名はその 1 つ手前のセグメント
+  if printf '%s' "$bin" | grep -Eq '^v[0-9]+$'; then
+    parent="${modpath%/*}"
+    bin="${parent##*/}"
+  fi
+  if ! toolpath="$(mise which "$bin" 2>/dev/null)"; then
+    # 未導入のツールは再ビルド対象にしない (導入は mise の [tools] 宣言による自動プロビジョニングに任せる)
+    echo "skip $bin: not installed"
+    continue
+  fi
+  # go version -m 自体の失敗は代入で止める。ビルド時バージョンは 1 行目 (<パス>: goX.Y.Z) の
+  # 末尾フィールドから取り、ツールのパスに空白が含まれても壊れないようにする
+  version_output="$(go version -m "$toolpath")"
+  built="$(printf '%s\n' "$version_output" | awk 'NR==1 {print $NF}')"
+  case "$built" in
+  go[0-9]*) ;;
+  *)
+    # go version -m の出力形式は安定した契約ではないため、パース不能なら誤判定のまま進めず止める
+    echo "error: cannot parse built Go version of $bin from 'go version -m $toolpath'" >&2
+    exit 1
+    ;;
+  esac
+  if [ "$built" = "$goversion" ]; then
+    echo "skip $bin: built with $built (matches active toolchain)"
+  else
+    echo "rebuild $bin: built with $built, active toolchain is $goversion"
+    # 再ビルドは [tools] の go: ツールがすべて "latest" 指定である前提で @latest 固定とする。
+    # 特定バージョンを pin した go: ツールを追加する場合はここも合わせて見直すこと。
+    mise install --force "${module}@latest" </dev/null
+  fi
+done
+"""
+
 [tasks."backend:lint"]
 description = "backend 静的解析"
 dir = "backend"
+depends = ["backend:tools"]
 run = """
 go vet ./...
 staticcheck ./...

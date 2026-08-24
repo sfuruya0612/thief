@@ -415,3 +415,5 @@
   - @sfuruya0612
 - Go ツールチェインのパッチ更新時に `mise.toml` の `[tools].go` と `backend/go.mod` の `toolchain` 行を同一バージョンへ同時に更新する運用ルールを `AGENTS.md` の「backend ビルドと CI」へ明文化し、両ファイルの値の近傍に相互参照のコメントを付ける (揃え忘れると mise 未経由のシェルで `GOTOOLCHAIN=auto` が古いパッチバージョンを解決し govulncheck の脆弱性検知が再発するため。値の一致を機械的に検証する仕組みは追加しない)
   - @sfuruya0612
+- `go:` 管理ツール (mockery / goimports / staticcheck / govulncheck) のビルド時 Go バージョンをアクティブな Go 本体と比較し、不一致のツールだけを `mise install --force` で再ビルドする mise タスク `backend:tools` を追加し、`backend:lint` の依存として lint 本体の前に走らせる (旧ツールチェインでビルドされたバイナリが残ると、go vet は通るのに staticcheck だけ「file requires newer Go version」等で失敗する分かりにくい事象になるため。全ツールが一致していれば再ビルドせず、ツールごとに skip / rebuild を標準出力に 1 行ずつ出す)
+  - @sfuruya0612
