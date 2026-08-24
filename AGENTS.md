@@ -226,6 +226,7 @@ backend/
 - ローカルでの最低限のチェック: `go build ./...` / `go vet ./...` / `go test -race ./...` / `gofmt -l .`。
 - バイナリビルドは `CGO_ENABLED=0` を基本とする(static link で配布が容易)。
 - バージョン情報は `-ldflags` で `main.version` に注入する。
+- **Go ツールチェインのパッチ更新**: `mise.toml` の `[tools].go` と `backend/go.mod` の `toolchain` 行は、同一バージョンへ同時に更新する。mise を経由しないシェル (CI 等) では `GOTOOLCHAIN=auto` が `go.mod` の `toolchain` 行を基準にツールチェインを解決するため、`mise.toml` だけを上げても govulncheck は旧ツールチェインの標準ライブラリを検査し、修正済みの脆弱性が再検出される (issue 0144 で実測)。逆に `toolchain` 行だけを上げると、mise 経由のシェルでも `go` コマンドは `toolchain` 行のバージョンで動き、`mise.toml` の pin が実際に使われるバージョンを表さなくなる。更新後は `mise install` でツールチェインを導入し、`mise run check` の通過を確認する。
 
 ### backend Coding Agent への指示
 
