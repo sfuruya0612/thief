@@ -2,6 +2,7 @@ module github.com/sfuruya0612/thief/backend
 
 go 1.26
 
+// mise.toml の [tools].go と同一バージョンに揃える (AGENTS.md「backend ビルドと CI」参照)
 toolchain go1.26.6
 
 require (

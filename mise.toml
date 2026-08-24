@@ -2,6 +2,7 @@
 GOPATH = "{{env.HOME}}/go"
 
 [tools]
+# backend/go.mod の toolchain 行と同一バージョンに揃える (AGENTS.md「backend ビルドと CI」参照)
 go = "1.26.6"
 prek = "latest"
 node = "26.4.0"
