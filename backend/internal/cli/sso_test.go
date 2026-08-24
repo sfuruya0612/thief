@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/spf13/cobra"
@@ -73,22 +74,6 @@ func TestAppendProfiles(t *testing.T) {
 	})
 }
 
-func TestGenerateSSOCacheKey(t *testing.T) {
-	// AWS CLI と同じ SHA-1 hex 形式であること。
-	got := generateSSOCacheKey("https://example.awsapps.com/start/")
-	if len(got) != 40 {
-		t.Errorf("cache key length = %d, want 40 (sha1 hex)", len(got))
-	}
-	// 同一入力に対して安定していること。
-	if got != generateSSOCacheKey("https://example.awsapps.com/start/") {
-		t.Error("cache key is not deterministic")
-	}
-	// 入力が違えばキーも変わること。
-	if got == generateSSOCacheKey("https://other.awsapps.com/start/") {
-		t.Error("different inputs should produce different keys")
-	}
-}
-
 func TestSelectIndices(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -123,19 +108,31 @@ type ssoStageError struct{ stage string }
 
 func (e *ssoStageError) Error() string { return "sso stage " + e.stage + " failed" }
 
+// okSession はテストが使うデバイス認可の中間状態を返す。
+func okSession() *ssoauth.Session {
+	return &ssoauth.Session{
+		Region:       "ap-northeast-1",
+		StartURL:     "https://example.awsapps.com/start/",
+		Registration: &awsinternal.SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"},
+		DeviceAuth: &awsinternal.SSODeviceAuthorization{
+			DeviceCode:              "dc",
+			UserCode:                "uc",
+			VerificationURI:         "https://device.sso/verify",
+			VerificationURIComplete: "https://device.sso/verify?user_code=uc",
+		},
+	}
+}
+
 // okSSOTokenDeps は各段が成功するダミーを返す。
-// 各テストはこのうち 1 段だけを失敗に差し替える。
+// 各テストはこのうち検証したい段だけを差し替える。
 func okSSOTokenDeps() ssoTokenDeps {
 	return ssoTokenDeps{
-		registerClient: func(context.Context, string, string, string) (*awsinternal.SSOClientRegistration, error) {
-			return &awsinternal.SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}, nil
-		},
-		startDeviceAuth: func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
-			return &awsinternal.SSODeviceAuthorization{DeviceCode: "dc", UserCode: "uc"}, nil
+		start: func(context.Context, string, string) (*ssoauth.Session, error) {
+			return okSession(), nil
 		},
 		openBrowser: func(string) error { return nil },
-		waitForToken: func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
-			return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+		wait: func(context.Context, *ssoauth.Session) (*ssoauth.TokenCache, error) {
+			return &ssoauth.TokenCache{AccessToken: "token"}, nil
 		},
 		// 標準出力・標準エラー出力への書き込みはテストに不要なため差し替える。
 		display:              func(string, string, bool) {},
@@ -143,14 +140,13 @@ func okSSOTokenDeps() ssoTokenDeps {
 	}
 }
 
-// TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording は、デバイス認可フローのうち
-// 中断を伴う 3 段 (register client / start device authorization / wait for token) の
-// それぞれで失敗したときに、getSSOToken の戻り値が次の 2 つを満たすことを検証する。
+// TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording は、合成の 2 段 (開始、待機) の
+// それぞれで失敗したときに、getSSOTokenWith の戻り値が次の 2 つを満たすことを検証する。
 //
 //   - errors.Is と errors.As が元のエラーへ到達できること (%v で包むとチェーンが切れて到達できない)
 //   - 呼び出し先が既に述べた語句を、この層が重ねて述べていないこと
 //
-// 期待するメッセージを完全一致で固定しているのは、awsinternal 側の文言をそのまま
+// 期待するメッセージを完全一致で固定しているのは、ssoauth 側の文言をそのまま
 // 伝播させることがこの層の仕様だからである。ラップを足せば文字列が伸びて落ちる。
 // openBrowser は失敗してもフローを中断しないため、このテーブルには含まない
 // (TestGetSSOTokenContinuesWhenBrowserFailsToOpen で別途検証する)。
@@ -159,45 +155,38 @@ func TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording(t *testing.T) {
 		name string
 		// fail は okSSOTokenDeps の 1 段だけを、与えられたエラーを返すよう差し替える。
 		fail func(deps *ssoTokenDeps, err error)
-		// inner は呼び出し先が返すエラー。awsinternal 側は自分でラップ済みのエラーを返す
-		// ため、その形を再現する。
+		// inner は呼び出し先が返すエラー。ssoauth 側は自分でラップ済みのエラーを返す
+		// ため、その形を再現する (start 段の最初の失敗は RegisterClient で起きるので
+		// その文言、wait 段は CreateToken ポーリングの文言になる)。
 		inner   func(base error) error
 		wantMsg string
 	}{
 		{
-			name: "register client",
+			name: "start",
 			fail: func(deps *ssoTokenDeps, err error) {
-				deps.registerClient = func(context.Context, string, string, string) (*awsinternal.SSOClientRegistration, error) {
+				deps.start = func(context.Context, string, string) (*ssoauth.Session, error) {
 					return nil, err
 				}
 			},
 			inner:   func(base error) error { return fmt.Errorf("register sso oidc client: %w", base) },
-			wantMsg: "register sso oidc client: sso stage register failed",
+			wantMsg: "register sso oidc client: sso stage start failed",
 		},
 		{
-			name: "start device authorization",
+			name: "wait",
 			fail: func(deps *ssoTokenDeps, err error) {
-				deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
-					return nil, err
-				}
-			},
-			inner:   func(base error) error { return fmt.Errorf("start sso oidc device authorization: %w", base) },
-			wantMsg: "start sso oidc device authorization: sso stage register failed",
-		},
-		{
-			name: "wait for token",
-			fail: func(deps *ssoTokenDeps, err error) {
-				deps.waitForToken = func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
+				deps.wait = func(context.Context, *ssoauth.Session) (*ssoauth.TokenCache, error) {
 					return nil, err
 				}
 			},
 			inner:   func(base error) error { return fmt.Errorf("create sso oidc token: %w", base) },
-			wantMsg: "create sso oidc token: sso stage register failed",
+			wantMsg: "create sso oidc token: sso stage wait failed",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			base := &ssoStageError{stage: "register"}
+			// base の stage は失敗させる合成の段 (ケース名) と揃える。全ケースで同じ値に
+			// すると、期待メッセージがどの段の失敗を指すのか読み取れなくなる。
+			base := &ssoStageError{stage: tt.name}
 			deps := okSSOTokenDeps()
 			tt.fail(&deps, tt.inner(base))
 
@@ -223,19 +212,11 @@ func TestGetSSOTokenKeepsErrorChainAndDoesNotRepeatWording(t *testing.T) {
 }
 
 // TestGetSSOTokenContinuesWhenBrowserFailsToOpen は、ブラウザの起動が失敗しても
-// display が呼ばれ、waitForToken へ進み、その失敗が利用者へ報告されることを検証する。
+// display が呼ばれ、トークン待機へ進み、その失敗が利用者へ報告されることを検証する。
 // RFC 8628 §3.3.1 はブラウザ等による非テキストでの提示を MAY と定めており、失敗は
 // フロー全体を中断する理由にならない。
 func TestGetSSOTokenContinuesWhenBrowserFailsToOpen(t *testing.T) {
 	deps := okSSOTokenDeps()
-	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
-		return &awsinternal.SSODeviceAuthorization{
-			DeviceCode:              "dc",
-			UserCode:                "uc",
-			VerificationURI:         "https://device.sso/verify",
-			VerificationURIComplete: "https://device.sso/verify?user_code=uc",
-		}, nil
-	}
 	browserErr := errors.New(`exec: "xdg-open": executable file not found in $PATH`)
 
 	// 呼び出し順を記録する。display はブラウザの起動より先に呼ばれるべきであり
@@ -247,9 +228,9 @@ func TestGetSSOTokenContinuesWhenBrowserFailsToOpen(t *testing.T) {
 		return browserErr
 	}
 	deps.display = func(string, string, bool) { calls = append(calls, "display") }
-	deps.waitForToken = func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
-		calls = append(calls, "waitForToken")
-		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+	deps.wait = func(context.Context, *ssoauth.Session) (*ssoauth.TokenCache, error) {
+		calls = append(calls, "wait")
+		return &ssoauth.TokenCache{AccessToken: "token"}, nil
 	}
 	var reported error
 	deps.reportBrowserFailure = func(err error) { reported = err }
@@ -264,7 +245,7 @@ func TestGetSSOTokenContinuesWhenBrowserFailsToOpen(t *testing.T) {
 	if cache.AccessToken != "token" {
 		t.Errorf("AccessToken = %q, want %q", cache.AccessToken, "token")
 	}
-	if want := []string{"display", "openBrowser", "waitForToken"}; !slices.Equal(calls, want) {
+	if want := []string{"display", "openBrowser", "wait"}; !slices.Equal(calls, want) {
 		t.Errorf("call order = %v, want %v", calls, want)
 	}
 	if reported == nil {
@@ -281,15 +262,28 @@ func TestGetSSOTokenContinuesWhenBrowserFailsToOpen(t *testing.T) {
 // TestGetSSOTokenSkipsBrowserWhenVerificationURICompleteIsEmpty は、
 // verification_uri_complete が空のときに openBrowser を呼ばないことを検証する。
 // RFC 8628 §3.2 でこの値は OPTIONAL であり、空文字列を渡しても開く先が無い。
+// display はこの場合も呼ばれ (user_code の提示は §3.3.1 で MUST)、この後ブラウザの
+// 起動を試みないことを attemptingBrowser = false で伝える。true のまま渡すと
+// 「開こうとしています」と表示しながら開かない、実際の動作と矛盾した案内になる。
 func TestGetSSOTokenSkipsBrowserWhenVerificationURICompleteIsEmpty(t *testing.T) {
+	sess := okSession()
+	sess.DeviceAuth.VerificationURIComplete = ""
+
 	deps := okSSOTokenDeps()
-	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
-		return &awsinternal.SSODeviceAuthorization{
-			DeviceCode:              "dc",
-			UserCode:                "uc",
-			VerificationURI:         "https://device.sso/verify",
-			VerificationURIComplete: "",
-		}, nil
+	deps.start = func(context.Context, string, string) (*ssoauth.Session, error) {
+		return sess, nil
+	}
+	var (
+		displayCalled     bool
+		gotDisplayURL     string
+		gotDisplayCode    string
+		gotAttemptBrowser bool
+	)
+	deps.display = func(url, userCode string, attemptingBrowser bool) {
+		displayCalled = true
+		gotDisplayURL = url
+		gotDisplayCode = userCode
+		gotAttemptBrowser = attemptingBrowser
 	}
 	var browserCalled, reportCalled bool
 	deps.openBrowser = func(string) error {
@@ -307,74 +301,44 @@ func TestGetSSOTokenSkipsBrowserWhenVerificationURICompleteIsEmpty(t *testing.T)
 	if reportCalled {
 		t.Error("reportBrowserFailure was called, want it not to be called when openBrowser was never attempted")
 	}
-}
-
-// TestGetSSOTokenBuildsCacheFromDeps は 4 段すべてが成功したときに、
-// 取得したトークンと登録情報がキャッシュへ写ることを検証する。
-// エラー経路のテストが使う okSSOTokenDeps が、そもそも成功経路を通ることの裏付けでもある。
-func TestGetSSOTokenBuildsCacheFromDeps(t *testing.T) {
-	const (
-		region   = "ap-northeast-1"
-		startURL = "https://example.awsapps.com/start/"
-	)
-
-	cache, err := getSSOTokenWith(context.Background(), region, startURL, okSSOTokenDeps())
-	if err != nil {
-		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
+	if !displayCalled {
+		t.Fatal("display was not called, want the verification uri and user code to be presented")
 	}
-	if cache.StartURL != startURL {
-		t.Errorf("StartURL = %q, want %q", cache.StartURL, startURL)
+	if gotDisplayURL != sess.DeviceAuth.VerificationURI {
+		t.Errorf("display verification uri = %q, want %q", gotDisplayURL, sess.DeviceAuth.VerificationURI)
 	}
-	if cache.Region != region {
-		t.Errorf("Region = %q, want %q", cache.Region, region)
+	if gotDisplayCode != sess.DeviceAuth.UserCode {
+		t.Errorf("display user code = %q, want %q", gotDisplayCode, sess.DeviceAuth.UserCode)
 	}
-	if cache.AccessToken != "token" {
-		t.Errorf("AccessToken = %q, want %q", cache.AccessToken, "token")
-	}
-	if cache.ClientID != "cid" {
-		t.Errorf("ClientID = %q, want %q", cache.ClientID, "cid")
-	}
-	if cache.ClientSecret != "secret" {
-		t.Errorf("ClientSecret = %q, want %q", cache.ClientSecret, "secret")
+	if gotAttemptBrowser {
+		t.Error("display attemptingBrowser = true, want false (VerificationURIComplete is empty)")
 	}
 }
 
-// TestGetSSOTokenPassesDeviceAuthorizationThrough は startDeviceAuth が返した応答が
-// 後続の 3 段へ正しく渡ることを検証する。
+// TestGetSSOTokenPassesSessionThrough は開始段が返した中間状態が後続へ正しく渡ることを
+// 検証する。
 //
-//   - waitForToken には応答を丸ごと渡す。awsinternal 側はこの Interval と ExpiresIn から
-//     ポーリング間隔と打ち切り期限を決める (RFC 8628 §3.2 / §3.5)。DeviceCode だけ取り出して
-//     詰め直すと、サーバの指示が捨てられて既定値 (5 秒 / 600 秒) に落ちる。見た目には
-//     動いてしまうため、渡った値の中身まで比較して検出する。
+//   - wait には start が返した Session を丸ごと渡す。ssoauth.Wait はこの中の
+//     DeviceAuth (Interval と ExpiresIn を含む) からポーリング間隔と打ち切り期限を
+//     決める (RFC 8628 §3.2 / §3.5)。別の値を詰め直すと、サーバの指示が捨てられる。
 //   - openBrowser には VerificationURIComplete を渡す。ここを取り違えるとユーザーコードが
 //     埋まっていない URL や device code がブラウザに渡り、承認に進めない。
 //   - display には VerificationURI と UserCode を渡す (RFC 8628 §3.2 / §3.3)。start URL から
 //     組み立てた値を渡すと、サーバの指示と食い違ったときに利用者の退路が塞がる。
-func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
-	const (
-		region   = "ap-northeast-1"
-		startURL = "https://example.awsapps.com/start/"
-	)
-	deviceAuth := &awsinternal.SSODeviceAuthorization{
-		DeviceCode:              "dc",
-		UserCode:                "uc",
-		VerificationURI:         "https://device.sso/verify",
-		VerificationURIComplete: "https://device.sso/verify?user_code=uc",
-		Interval:                7,
-		ExpiresIn:               900,
-	}
+func TestGetSSOTokenPassesSessionThrough(t *testing.T) {
+	const startURL = "https://example.awsapps.com/start/"
+	sess := okSession()
 
 	var (
-		gotDeviceAuth     *awsinternal.SSODeviceAuthorization
-		gotGrantType      string
+		gotSession        *ssoauth.Session
 		gotBrowserURL     string
 		gotDisplayURL     string
 		gotDisplayCode    string
 		gotAttemptBrowser bool
 	)
 	deps := okSSOTokenDeps()
-	deps.startDeviceAuth = func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
-		return deviceAuth, nil
+	deps.start = func(context.Context, string, string) (*ssoauth.Session, error) {
+		return sess, nil
 	}
 	deps.openBrowser = func(url string) error {
 		gotBrowserURL = url
@@ -385,39 +349,33 @@ func TestGetSSOTokenPassesDeviceAuthorizationThrough(t *testing.T) {
 		gotDisplayCode = userCode
 		gotAttemptBrowser = attemptingBrowser
 	}
-	deps.waitForToken = func(_ context.Context, _ string, _ *awsinternal.SSOClientRegistration, da *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error) {
-		gotDeviceAuth = da
-		gotGrantType = grantType
-		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+	deps.wait = func(_ context.Context, s *ssoauth.Session) (*ssoauth.TokenCache, error) {
+		gotSession = s
+		return &ssoauth.TokenCache{AccessToken: "token"}, nil
 	}
 	reportBrowserFailureCalled := false
 	deps.reportBrowserFailure = func(error) { reportBrowserFailureCalled = true }
 
-	if _, err := getSSOTokenWith(context.Background(), region, startURL, deps); err != nil {
+	if _, err := getSSOTokenWith(context.Background(), "ap-northeast-1", startURL, deps); err != nil {
 		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
 	}
 
-	// ポインタの同一性ではなく中身を比較する。無害な写しを取る実装を落としたいのではなく、
-	// Interval と ExpiresIn が欠けることを落としたい。
-	if diff := cmp.Diff(deviceAuth, gotDeviceAuth); diff != "" {
-		t.Errorf("waitForToken device authorization mismatch (-want +got):\n%s", diff)
+	if gotSession != sess {
+		t.Errorf("wait received %v, want the session returned by start", gotSession)
 	}
-	if gotGrantType != ssoGrantType {
-		t.Errorf("waitForToken grant type = %q, want %q", gotGrantType, ssoGrantType)
+	if gotBrowserURL != sess.DeviceAuth.VerificationURIComplete {
+		t.Errorf("openBrowser url = %q, want %q", gotBrowserURL, sess.DeviceAuth.VerificationURIComplete)
 	}
-	if gotBrowserURL != deviceAuth.VerificationURIComplete {
-		t.Errorf("openBrowser url = %q, want %q", gotBrowserURL, deviceAuth.VerificationURIComplete)
-	}
-	if gotDisplayURL != deviceAuth.VerificationURI {
-		t.Errorf("display verification uri = %q, want %q", gotDisplayURL, deviceAuth.VerificationURI)
+	if gotDisplayURL != sess.DeviceAuth.VerificationURI {
+		t.Errorf("display verification uri = %q, want %q", gotDisplayURL, sess.DeviceAuth.VerificationURI)
 	}
 	// start URL から組み立てた推測値が渡っていないことを明示的に見る。上の比較だけでは
 	// 期待値を書き換えれば通ってしまうため、捨てるべき値そのものを名指しで否定する。
 	if guessed := startURL + "#/device"; gotDisplayURL == guessed {
 		t.Errorf("display verification uri = %q; start URL から組み立てた推測値を渡している", guessed)
 	}
-	if gotDisplayCode != deviceAuth.UserCode {
-		t.Errorf("display user code = %q, want %q", gotDisplayCode, deviceAuth.UserCode)
+	if gotDisplayCode != sess.DeviceAuth.UserCode {
+		t.Errorf("display user code = %q, want %q", gotDisplayCode, sess.DeviceAuth.UserCode)
 	}
 	// VerificationURIComplete が非空なのでこの後ブラウザの起動を試みる。display に渡る
 	// attemptingBrowser は、この後の挙動と食い違ってはならない。
@@ -503,27 +461,81 @@ func TestWriteSSOLoginPrompt(t *testing.T) {
 }
 
 // TestDefaultSSOTokenDepsIsFullyWired は本番用の依存がすべて埋まっていることを検証する。
-// いずれかが nil のままだと getSSOToken が nil 関数を呼んで panic する。
+// いずれかが nil のままだと getSSOTokenWith が nil 関数を呼んで panic する。
 // エラー経路のテストは差し替えたダミーを通るため、この漏れを検知できない。
 func TestDefaultSSOTokenDepsIsFullyWired(t *testing.T) {
-	deps := defaultSSOTokenDeps()
-	if deps.registerClient == nil {
-		t.Error("registerClient is nil")
+	deps := defaultSSOTokenDeps(ssoauth.DefaultDeps())
+	if deps.start == nil {
+		t.Error("start is nil")
 	}
-	if deps.startDeviceAuth == nil {
-		t.Error("startDeviceAuth is nil")
+	if deps.wait == nil {
+		t.Error("wait is nil")
 	}
 	if deps.openBrowser == nil {
 		t.Error("openBrowser is nil")
-	}
-	if deps.waitForToken == nil {
-		t.Error("waitForToken is nil")
 	}
 	if deps.display == nil {
 		t.Error("display is nil")
 	}
 	if deps.reportBrowserFailure == nil {
 		t.Error("reportBrowserFailure is nil")
+	}
+}
+
+// TestSSOTokenDepsWithoutSavingDoesNotSaveCache は、generate-config 用の依存の組み立てが
+// キャッシュ保存を無効化していることを、実際の合成 (ssoauth.Start / ssoauth.Wait) を通して
+// 検証する。generate-config は従来からトークンをキャッシュへ保存しない (保存は sso login
+// の責務)。ssoauth.Wait は保存まで含むため、SaveCache の差し替えが失われると
+// ~/.aws/sso/cache への書き込みが復活し、外部挙動が変わる。
+func TestSSOTokenDepsWithoutSavingDoesNotSaveCache(t *testing.T) {
+	saveCalled := false
+	authDeps := ssoauth.Deps{
+		RegisterClient: func(context.Context, string, string, string) (*awsinternal.SSOClientRegistration, error) {
+			return &awsinternal.SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}, nil
+		},
+		StartDeviceAuth: func(context.Context, string, *awsinternal.SSOClientRegistration, string) (*awsinternal.SSODeviceAuthorization, error) {
+			// ブラウザの起動 (本物の openBrowser) に進まないよう VerificationURIComplete は
+			// 空にする。空のときブラウザを開かないことは
+			// TestGetSSOTokenSkipsBrowserWhenVerificationURICompleteIsEmpty が検証している。
+			return &awsinternal.SSODeviceAuthorization{
+				DeviceCode:      "dc",
+				UserCode:        "uc",
+				VerificationURI: "https://device.sso/verify",
+			}, nil
+		},
+		WaitForToken: func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
+			return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+		},
+		SaveCache: func(*ssoauth.TokenCache) error {
+			saveCalled = true
+			return nil
+		},
+	}
+
+	deps := ssoTokenDepsWithoutSaving(authDeps)
+	// 合成 (start / wait) は本物のまま使い、SaveCache が実行経路上で呼ばれないことを見る。
+	// 標準出力への書き込みはテストの出力を汚さないよう差し替える。openBrowser も
+	// ダミーに差し替える。本物のままだと、VerificationURIComplete が空なら呼ばれない
+	// という分岐が退行したときに、テストが実際に OS のブラウザを開いてしまう。
+	deps.display = func(string, string, bool) {}
+	browserCalled := false
+	deps.openBrowser = func(string) error {
+		browserCalled = true
+		return nil
+	}
+
+	cache, err := getSSOTokenWith(context.Background(), "ap-northeast-1", "https://example.awsapps.com/start/", deps)
+	if err != nil {
+		t.Fatalf("getSSOTokenWith() error = %v, want nil", err)
+	}
+	if cache == nil || cache.AccessToken != "token" {
+		t.Errorf("cache = %v, want a cache with AccessToken %q", cache, "token")
+	}
+	if saveCalled {
+		t.Error("SaveCache was called, want it not to be called (generate-config must not save the token cache)")
+	}
+	if browserCalled {
+		t.Error("openBrowser was called, want it not to be called when VerificationURIComplete is empty")
 	}
 }
 
@@ -550,51 +562,35 @@ func TestWriteSSOBrowserFailureWarning(t *testing.T) {
 	}
 }
 
-// TestDefaultSSOLoginDepsIsFullyWired は ssoLogin の本番用の依存がすべて埋まっていることを
-// 検証する。いずれかが nil のままだと ssoLoginWith が nil 関数を呼んで panic する。
-// ssoLoginWith のテストは差し替えたダミーを通るため、この漏れを検知できない。
-func TestDefaultSSOLoginDepsIsFullyWired(t *testing.T) {
-	deps := defaultSSOLoginDeps()
-	if deps.getToken == nil {
-		t.Error("getToken is nil")
-	}
-	if deps.saveCache == nil {
-		t.Error("saveCache is nil")
-	}
-}
-
 // ssoCtxKey は context に載せた値を取り出して同一性を確かめるためのキー。
 type ssoCtxKey struct{}
 
-// TestGetSSOTokenForwardsContextToEveryStage は、デバイス認可フローの各段が呼び出し元から
+// TestGetSSOTokenForwardsContextToBothStages は、合成の 2 段 (開始、待機) が呼び出し元から
 // 渡された context をそのまま受け取ることを検証する。
 //
-// waitForToken は RFC 8628 §3.5 に従いユーザの承認をポーリングで待つ。ここで context が
+// トークン待機は RFC 8628 §3.5 に従いユーザの承認をポーリングで待つ。ここで context が
 // 落ちていると Ctrl-C が届かず、承認されるかサーバ側の期限が切れるまで待ち続ける。
-// registerClient と startDeviceAuth も AWS への往復であり、同じ理由で context が必要になる。
-func TestGetSSOTokenForwardsContextToEveryStage(t *testing.T) {
+// 開始段も AWS への往復であり、同じ理由で context が必要になる。
+// ssoauth パッケージ内部の各段への転送は ssoauth 側のテストが検証する。
+func TestGetSSOTokenForwardsContextToBothStages(t *testing.T) {
 	want := context.WithValue(context.Background(), ssoCtxKey{}, "carried")
 
 	got := make(map[string]context.Context)
 	deps := okSSOTokenDeps()
-	deps.registerClient = func(ctx context.Context, _, _, _ string) (*awsinternal.SSOClientRegistration, error) {
-		got["registerClient"] = ctx
-		return &awsinternal.SSOClientRegistration{ClientID: "cid", ClientSecret: "secret"}, nil
+	deps.start = func(ctx context.Context, _, _ string) (*ssoauth.Session, error) {
+		got["start"] = ctx
+		return okSession(), nil
 	}
-	deps.startDeviceAuth = func(ctx context.Context, _ string, _ *awsinternal.SSOClientRegistration, _ string) (*awsinternal.SSODeviceAuthorization, error) {
-		got["startDeviceAuth"] = ctx
-		return &awsinternal.SSODeviceAuthorization{DeviceCode: "dc", UserCode: "uc"}, nil
-	}
-	deps.waitForToken = func(ctx context.Context, _ string, _ *awsinternal.SSOClientRegistration, _ *awsinternal.SSODeviceAuthorization, _ string) (*awsinternal.SSOToken, error) {
-		got["waitForToken"] = ctx
-		return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
+	deps.wait = func(ctx context.Context, _ *ssoauth.Session) (*ssoauth.TokenCache, error) {
+		got["wait"] = ctx
+		return &ssoauth.TokenCache{AccessToken: "token"}, nil
 	}
 
 	if _, err := getSSOTokenWith(want, "ap-northeast-1", "https://example.awsapps.com/start/", deps); err != nil {
 		t.Fatalf("getSSOTokenWith() error = %v", err)
 	}
 
-	for _, stage := range []string{"registerClient", "startDeviceAuth", "waitForToken"} {
+	for _, stage := range []string{"start", "wait"} {
 		ctx, ok := got[stage]
 		if !ok {
 			t.Errorf("%s was not called", stage)
@@ -607,11 +603,11 @@ func TestGetSSOTokenForwardsContextToEveryStage(t *testing.T) {
 }
 
 // TestSSOLoginPassesCommandContextToTokenRetrieval は sso login がコマンドに載った
-// context をトークン取得へ渡すことを検証する。
+// context をトークン取得へ渡し、成功時に aws sso login と同じ文言を出力することを検証する。
 //
 // デバイス認可フローはユーザがブラウザで承認するまで待つ。この CLI で利用者が
 // Ctrl-C を押す可能性が最も高い場所であり、context が届かなければ待ち続ける。
-// getSSOToken への引数を commandContext(cmd) から context.Background() に戻しても
+// getSSOTokenWith への引数を commandContext(cmd) から context.Background() に戻しても
 // コンパイルも lint も通るため、ここで落とす。
 func TestSSOLoginPassesCommandContextToTokenRetrieval(t *testing.T) {
 	// loadConfig の先の config.Load が $XDG_CONFIG_HOME/thief/config.yaml と
@@ -621,30 +617,34 @@ func TestSSOLoginPassesCommandContextToTokenRetrieval(t *testing.T) {
 
 	want := context.WithValue(context.Background(), ssoCtxKey{}, "carried")
 
-	cmd := newSSOLoginCmd(t)
+	var out bytes.Buffer
+	cmd := newSSOLoginCmd(t, &out)
 	cmd.SetContext(want)
 
 	var got context.Context
-	saved := 0
-	err := ssoLoginWith(cmd, ssoLoginDeps{
-		getToken: func(ctx context.Context, _, _ string) (*SSOTokenCache, error) {
-			got = ctx
-			return &SSOTokenCache{AccessToken: "token"}, nil
-		},
-		saveCache: func(*SSOTokenCache) error {
-			saved++
-			return nil
-		},
-	})
-	if err != nil {
+	waited := 0
+	deps := okSSOTokenDeps()
+	deps.start = func(ctx context.Context, _, _ string) (*ssoauth.Session, error) {
+		got = ctx
+		return okSession(), nil
+	}
+	deps.wait = func(context.Context, *ssoauth.Session) (*ssoauth.TokenCache, error) {
+		waited++
+		return &ssoauth.TokenCache{AccessToken: "token"}, nil
+	}
+	if err := ssoLoginWith(cmd, deps); err != nil {
 		t.Fatalf("ssoLoginWith() error = %v", err)
 	}
 
 	if got != want {
-		t.Fatalf("getToken received %v, want the context set on the command", got)
+		t.Fatalf("start received %v, want the context set on the command", got)
 	}
-	if saved != 1 {
-		t.Errorf("saveCache called %d times, want 1", saved)
+	if waited != 1 {
+		t.Errorf("wait called %d times, want 1", waited)
+	}
+	// aws sso login コマンドと同じ成功時の出力を保つ (外部挙動の一部)。
+	if want := "Successfully logged into Start URL: https://example.awsapps.com/start/\n"; out.String() != want {
+		t.Errorf("output = %q, want %q", out.String(), want)
 	}
 }
 
@@ -655,27 +655,52 @@ func TestSSOLoginFallsBackToBackgroundContext(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	cmd := newSSOLoginCmd(t)
+	var out bytes.Buffer
+	cmd := newSSOLoginCmd(t, &out)
 	if cmd.Context() != nil {
 		t.Fatal("cobra.Command.Context() != nil; フォールバックの前提が変わった")
 	}
 
 	var got context.Context
-	err := ssoLoginWith(cmd, ssoLoginDeps{
-		getToken: func(ctx context.Context, _, _ string) (*SSOTokenCache, error) {
-			got = ctx
-			return &SSOTokenCache{AccessToken: "token"}, nil
-		},
-		saveCache: func(*SSOTokenCache) error { return nil },
-	})
-	if err != nil {
+	deps := okSSOTokenDeps()
+	deps.start = func(ctx context.Context, _, _ string) (*ssoauth.Session, error) {
+		got = ctx
+		return okSession(), nil
+	}
+	if err := ssoLoginWith(cmd, deps); err != nil {
 		t.Fatalf("ssoLoginWith() error = %v", err)
 	}
 	if got == nil {
-		t.Fatal("getToken received a nil context, want non-nil")
+		t.Fatal("start received a nil context, want non-nil")
 	}
 	if err := got.Err(); err != nil {
-		t.Errorf("getToken ctx.Err() = %v, want nil", err)
+		t.Errorf("start ctx.Err() = %v, want nil", err)
+	}
+}
+
+// TestSSOLoginWrapsTokenErrors は sso login がトークン取得の失敗を get token: で包んで
+// 返すことを検証する。利用者は register sso oidc client などの段の文言だけでは、どの
+// コマンドの何の操作で失敗したかを読み取れない。
+func TestSSOLoginWrapsTokenErrors(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	base := &ssoStageError{stage: "register"}
+	deps := okSSOTokenDeps()
+	deps.start = func(context.Context, string, string) (*ssoauth.Session, error) {
+		return nil, fmt.Errorf("register sso oidc client: %w", base)
+	}
+
+	var out bytes.Buffer
+	err := ssoLoginWith(newSSOLoginCmd(t, &out), deps)
+	if err == nil {
+		t.Fatal("ssoLoginWith() error = nil, want an error")
+	}
+	if !errors.Is(err, base) {
+		t.Errorf("errors.Is() = false, want true; the chain is severed: %v", err)
+	}
+	if want := "get token: register sso oidc client: sso stage register failed"; err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
 	}
 }
 
@@ -684,8 +709,8 @@ func TestSSOLoginFallsBackToBackgroundContext(t *testing.T) {
 // 段だけを差し替える。
 func okSSOGenerateConfigDeps() ssoGenerateConfigDeps {
 	return ssoGenerateConfigDeps{
-		getToken: func(context.Context, string, string) (*SSOTokenCache, error) {
-			return &SSOTokenCache{AccessToken: "token"}, nil
+		getToken: func(context.Context, string, string) (*ssoauth.TokenCache, error) {
+			return &ssoauth.TokenCache{AccessToken: "token"}, nil
 		},
 		listAccounts: func(context.Context, string, string) ([]awsinternal.SSOAccountInfo, error) {
 			return []awsinternal.SSOAccountInfo{{AccountID: "111111111111", AccountName: "account-1"}}, nil
@@ -936,7 +961,7 @@ func TestDefaultSSOGenerateConfigDepsIsFullyWired(t *testing.T) {
 
 // newSSOLoginCmd は ssoLoginWith が読むフラグだけを持つコマンドを返す。
 // profile と region は明示指定して config の解決結果に依存しないようにする。
-func newSSOLoginCmd(t *testing.T) *cobra.Command {
+func newSSOLoginCmd(t *testing.T, out *bytes.Buffer) *cobra.Command {
 	t.Helper()
 
 	cmd := &cobra.Command{Use: "login"}
@@ -953,7 +978,7 @@ func newSSOLoginCmd(t *testing.T) *cobra.Command {
 		}
 	}
 
-	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetOut(out)
+	cmd.SetErr(out)
 	return cmd
 }

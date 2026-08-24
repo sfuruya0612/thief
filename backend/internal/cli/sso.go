@@ -4,9 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -16,31 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
-	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/config"
+	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
 )
-
-const (
-	ssoClientName = "thief"
-	ssoClientType = "public"
-	ssoGrantType  = "urn:ietf:params:oauth:grant-type:device_code"
-)
-
-// SSOTokenCache は ~/.aws/sso/cache に保存するトークンキャッシュの JSON 形状。
-// AWS CLI (aws sso login) と互換のフォーマットを維持する。
-type SSOTokenCache struct {
-	StartURL              string `json:"startUrl"`
-	Region                string `json:"region"`
-	AccessToken           string `json:"accessToken"`
-	ExpiresAt             string `json:"expiresAt"`
-	ClientID              string `json:"clientId"`
-	ClientSecret          string `json:"clientSecret"`
-	RegistrationExpiresAt string `json:"registrationExpiresAt"`
-}
 
 const ssoProfileTemplate = `
 [profile {{.Name}}]
@@ -114,32 +93,17 @@ func newSSOCmd() *cobra.Command {
 	return ssoCmd
 }
 
-// ssoLoginDeps は ssoLogin が呼ぶ外部処理をまとめる。
-// getToken はブラウザの起動と AWS への往復を伴い、saveCache は $HOME/.aws/sso/cache へ
-// 書き込むため、いずれもテストからは実行できない。コマンドに載った context が
-// トークン取得まで届いていることを検証するために差し替える。
-type ssoLoginDeps struct {
-	getToken  func(ctx context.Context, region, url string) (*SSOTokenCache, error)
-	saveCache func(cache *SSOTokenCache) error
-}
-
-// defaultSSOLoginDeps は本番で使う実装を返す。
-func defaultSSOLoginDeps() ssoLoginDeps {
-	return ssoLoginDeps{
-		getToken:  getSSOToken,
-		saveCache: saveSSOCacheFile,
-	}
-}
-
 // ssoLogin authenticates with AWS SSO and caches the credentials.
 func ssoLogin(cmd *cobra.Command, args []string) error {
-	return ssoLoginWith(cmd, defaultSSOLoginDeps())
+	return ssoLoginWith(cmd, defaultSSOTokenDeps(ssoauth.DefaultDeps()))
 }
 
 // ssoLoginWith は ssoLogin の本体。
+// デバイス認可フロー (開始、表示とブラウザ起動、トークン待機とキャッシュ保存) は
+// getSSOTokenWith が internal/ssoauth の 2 つの公開関数を合成して行う。
 // トークン取得へ渡す context はコマンドから取る。デバイス認可フローはユーザが
 // ブラウザで承認するまで待つため、Ctrl-C がここへ届かないと待ち続ける。
-func ssoLoginWith(cmd *cobra.Command, deps ssoLoginDeps) error {
+func ssoLoginWith(cmd *cobra.Command, deps ssoTokenDeps) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
@@ -153,14 +117,9 @@ func ssoLoginWith(cmd *cobra.Command, deps ssoLoginDeps) error {
 
 	startUrl := fmt.Sprintf("https://%s.awsapps.com/start/", url)
 
-	cache, err := deps.getToken(commandContext(cmd), region, startUrl)
-	if err != nil {
+	// トークンの取得と ~/.aws/sso/cache へのキャッシュ保存は ssoauth.Wait の中で行われる。
+	if _, err := getSSOTokenWith(commandContext(cmd), region, startUrl, deps); err != nil {
 		return fmt.Errorf("get token: %w", err)
-	}
-
-	// ~/.aws/sso/cache 配下にキャッシュファイルを作成する。
-	if err = deps.saveCache(cache); err != nil {
-		return fmt.Errorf("save cache file: %w", err)
 	}
 
 	// aws sso login コマンドと同じ出力にする。
@@ -170,7 +129,7 @@ func ssoLoginWith(cmd *cobra.Command, deps ssoLoginDeps) error {
 
 // ssoLogout removes all SSO credential cache files.
 func ssoLogout(cmd *cobra.Command, args []string) error {
-	cacheDir, err := getSSOCacheDir()
+	cacheDir, err := ssoauth.CacheDir()
 	if err != nil {
 		return fmt.Errorf("get cache directory: %w", err)
 	}
@@ -208,7 +167,7 @@ func ssoLogout(cmd *cobra.Command, args []string) error {
 // いずれもテストからは実行できないため、アカウント選択・ロール取得・既存設定の
 // 読み取り失敗時のフォールバックといった分岐を検証するために差し替える。
 type ssoGenerateConfigDeps struct {
-	getToken     func(ctx context.Context, region, url string) (*SSOTokenCache, error)
+	getToken     func(ctx context.Context, region, url string) (*ssoauth.TokenCache, error)
 	listAccounts func(ctx context.Context, region, accessToken string) ([]awsinternal.SSOAccountInfo, error)
 	listRoles    func(ctx context.Context, region, accessToken, accountID string) ([]string, error)
 	configPath   func() (string, error)
@@ -219,7 +178,7 @@ type ssoGenerateConfigDeps struct {
 // defaultSSOGenerateConfigDeps は本番で使う実装を返す。
 func defaultSSOGenerateConfigDeps() ssoGenerateConfigDeps {
 	return ssoGenerateConfigDeps{
-		getToken:     getSSOToken,
+		getToken:     getSSOTokenWithoutSaving,
 		listAccounts: awsinternal.ListSSOAccountInfos,
 		listRoles:    awsinternal.ListSSOAccountRoleNames,
 		configPath:   getAwsConfigPath,
@@ -396,21 +355,21 @@ func selectIndices(cmd *cobra.Command, input string, max int, kind string) []int
 	return selected
 }
 
-// ssoTokenDeps は getSSOToken がデバイス認可フローで呼ぶ外部処理をまとめる。
+// ssoTokenDeps は getSSOTokenWith がデバイス認可フローの合成で呼ぶ外部処理をまとめる。
 // 差し替え可能にしている理由はフィールドによって 2 つある。
-// registerClient / startDeviceAuth / waitForToken / openBrowser は AWS への接続かブラウザの
-// 起動を伴い、テストからは実行できない。エラーの伝播を検証するために差し替える。
+// start / wait は internal/ssoauth の公開関数 (AWS への接続とキャッシュ保存を伴う) で、
+// openBrowser はブラウザの起動を伴い、いずれもテストからは実行できない。エラーの伝播と
+// 合成の順序を検証するために差し替える。
 // display / reportBrowserFailure は標準出力・標準エラー出力へ書くだけでエラーを返さないが、
 // テスト実行時の出力を汚さないために差し替える。
 // これらは元から自由関数であり、絞り込む対象の具象型が無い。internal/aws のように
 // SDK クライアントをコンシューマ定義インターフェースで受けるのではなく、関数値を
 // 持たせているのはそのためである。
 type ssoTokenDeps struct {
-	registerClient  func(ctx context.Context, region, clientName, clientType string) (*awsinternal.SSOClientRegistration, error)
-	startDeviceAuth func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, startURL string) (*awsinternal.SSODeviceAuthorization, error)
-	openBrowser     func(url string) error
-	waitForToken    func(ctx context.Context, region string, reg *awsinternal.SSOClientRegistration, deviceAuth *awsinternal.SSODeviceAuthorization, grantType string) (*awsinternal.SSOToken, error)
-	display         func(verificationURI, userCode string, attemptingBrowser bool)
+	start       func(ctx context.Context, region, startURL string) (*ssoauth.Session, error)
+	wait        func(ctx context.Context, sess *ssoauth.Session) (*ssoauth.TokenCache, error)
+	openBrowser func(url string) error
+	display     func(verificationURI, userCode string, attemptingBrowser bool)
 	// reportBrowserFailure は openBrowser の失敗を利用者へ伝える。RFC 8628 §3.3.1 は
 	// ブラウザ等による非テキストでの提示を MAY と定めており、失敗はフローを止める理由に
 	// ならない。display で verification_uri と user_code は既に提示済みのため、ここでは
@@ -419,12 +378,17 @@ type ssoTokenDeps struct {
 }
 
 // defaultSSOTokenDeps は本番で使う実装を返す。
-func defaultSSOTokenDeps() ssoTokenDeps {
+// ssoauth 側の依存 (AWS への接続とキャッシュ保存) は authDeps で受け取る。sso login は
+// 保存まで行う ssoauth.DefaultDeps() を、generate-config は保存だけを無効化した依存を渡す。
+func defaultSSOTokenDeps(authDeps ssoauth.Deps) ssoTokenDeps {
 	return ssoTokenDeps{
-		registerClient:  awsinternal.RegisterSSOClient,
-		startDeviceAuth: awsinternal.StartSSODeviceAuthorization,
-		openBrowser:     openBrowser,
-		waitForToken:    awsinternal.WaitForSSOToken,
+		start: func(ctx context.Context, region, startURL string) (*ssoauth.Session, error) {
+			return ssoauth.Start(ctx, region, startURL, authDeps)
+		},
+		wait: func(ctx context.Context, sess *ssoauth.Session) (*ssoauth.TokenCache, error) {
+			return ssoauth.Wait(ctx, sess, authDeps)
+		},
+		openBrowser: openBrowser,
 		display: func(verificationURI, userCode string, attemptingBrowser bool) {
 			writeSSOLoginPrompt(os.Stdout, verificationURI, userCode, attemptingBrowser)
 		},
@@ -434,25 +398,35 @@ func defaultSSOTokenDeps() ssoTokenDeps {
 	}
 }
 
-// getSSOToken はデバイス認可フローでアクセストークンを取得する。
-func getSSOToken(ctx context.Context, region, url string) (*SSOTokenCache, error) {
-	return getSSOTokenWith(ctx, region, url, defaultSSOTokenDeps())
+// getSSOTokenWithoutSaving は generate-config 用にデバイス認可フローを実行し、取得した
+// トークンを返す。generate-config は従来からトークンをキャッシュへ保存しない (保存は
+// sso login の責務)。ssoauth.Wait は保存まで含むため、保存だけを何もしない実装に
+// 差し替えて従来の挙動を保つ。
+func getSSOTokenWithoutSaving(ctx context.Context, region, url string) (*ssoauth.TokenCache, error) {
+	return getSSOTokenWith(ctx, region, url, ssoTokenDepsWithoutSaving(ssoauth.DefaultDeps()))
 }
 
-// getSSOTokenWith は getSSOToken の本体。
-// awsinternal の 3 つの呼び出しは、どの API で失敗したかを示す文言で既にラップされて返る。
+// ssoTokenDepsWithoutSaving は authDeps の SaveCache を何もしない実装に差し替えてから
+// 合成の依存を組む。差し替えを関数として切り出しているのは、「generate-config は
+// キャッシュを保存しない」という外部挙動の不変条件をテストで直接検証できるように
+// するためである。
+func ssoTokenDepsWithoutSaving(authDeps ssoauth.Deps) ssoTokenDeps {
+	authDeps.SaveCache = func(*ssoauth.TokenCache) error { return nil }
+	return defaultSSOTokenDeps(authDeps)
+}
+
+// getSSOTokenWith は internal/ssoauth の 2 つの公開関数 (Start, Wait) と CLI 固有の
+// 提示手段 (display, openBrowser) を合成して、デバイス認可フロー全体を実行する。
+// sso login と sso generate-config の両方がこの合成を使う。
+// ssoauth の 2 つの呼び出しは、どの段で失敗したかを示す文言で既にラップされて返る。
 // この層から足せる情報が無いため包み直さず、そのまま伝播させる。
 // openBrowser の失敗はフローを中断しない (下記コメント参照)。
-func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps) (*SSOTokenCache, error) {
-	registration, err := deps.registerClient(ctx, region, ssoClientName, ssoClientType)
+func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps) (*ssoauth.TokenCache, error) {
+	sess, err := deps.start(ctx, region, url)
 	if err != nil {
 		return nil, err
 	}
-
-	deviceAuth, err := deps.startDeviceAuth(ctx, region, registration, url)
-	if err != nil {
-		return nil, err
-	}
+	deviceAuth := sess.DeviceAuth
 
 	// 提示する URI はサーバが返した verification_uri である (RFC 8628 §3.2 / §3.3)。
 	// start URL から組み立てた値を渡すと、サーバの指示と食い違ったときに
@@ -478,25 +452,7 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 		}
 	}
 
-	// deviceAuth を丸ごと渡す。waitForToken は device code だけでなく、サーバが指示した
-	// interval と expires_in からポーリング間隔と打ち切り期限を決める (RFC 8628 §3.2 / §3.5)。
-	// ここで DeviceCode だけ取り出すと、その指示が捨てられて既定値に落ちる。
-	token, err := deps.waitForToken(ctx, region, registration, deviceAuth, ssoGrantType)
-	if err != nil {
-		return nil, err
-	}
-
-	expireAt := time.Now().UTC().Add(time.Duration(token.ExpiresIn) * time.Second)
-
-	return &SSOTokenCache{
-		StartURL:              url,
-		Region:                region,
-		AccessToken:           token.AccessToken,
-		ExpiresAt:             expireAt.Format(time.RFC3339),
-		ClientID:              registration.ClientID,
-		ClientSecret:          registration.ClientSecret,
-		RegistrationExpiresAt: time.Unix(registration.ClientSecretExpiresAt, 0).UTC().Format(time.RFC3339),
-	}, nil
+	return deps.wait(ctx, sess)
 }
 
 // writeSSOLoginPrompt はデバイス認可の承認手順を w へ書き出す。
@@ -506,7 +462,7 @@ func getSSOTokenWith(ctx context.Context, region, url string, deps ssoTokenDeps)
 //
 // 書き出し先を引数で受け取るのは、内容をテストから読めるようにするためである。
 // 本番では os.Stdout を渡す。ここまでコマンドの出力先 (cmd.OutOrStdout) が届いて
-// いないのは、getSSOToken が cobra のコマンドを受け取らないためである。
+// いないのは、getSSOTokenWith が cobra のコマンドを受け取らないためである。
 //
 // attemptingBrowser はこの後ブラウザの起動を試みるかどうかを表す。verification_uri_complete
 // が空で試みない場合に「ブラウザを開こうとしています」と告げると、実際には何も起きず
@@ -563,40 +519,6 @@ func openBrowser(url string) error {
 	}
 
 	return cmd.Run()
-}
-
-func saveSSOCacheFile(cache *SSOTokenCache) error {
-	cacheDir, err := getSSOCacheDir()
-	if err != nil {
-		return fmt.Errorf("failed to get cache directory: %w", err)
-	}
-
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
-		return fmt.Errorf("failed to create sso cache directory: %w", err)
-	}
-
-	cacheKey := generateSSOCacheKey(cache.StartURL)
-	cacheFile := filepath.Join(cacheDir, cacheKey+".json")
-
-	jsonData, err := json.Marshal(cache)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cache data: %w", err)
-	}
-
-	if err := os.WriteFile(cacheFile, jsonData, 0600); err != nil {
-		return fmt.Errorf("failed to write cache file: %w", err)
-	}
-
-	return nil
-}
-
-func getSSOCacheDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	return filepath.Join(homeDir, ".aws", "sso", "cache"), nil
 }
 
 // getAwsConfigPath returns the path to the AWS config file.
@@ -665,11 +587,4 @@ func appendProfiles(existingConfig string, profiles []ProfileConfig) (string, er
 	}
 
 	return config.String(), nil
-}
-
-// generateSSOCacheKey は startUrl から AWS CLI 互換のキャッシュファイル名 (SHA-1) を生成する。
-func generateSSOCacheKey(cacheKey string) string {
-	hasher := sha1.New()
-	hasher.Write([]byte(cacheKey))
-	return hex.EncodeToString(hasher.Sum(nil))
 }

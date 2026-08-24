@@ -56,6 +56,8 @@
   - @sfuruya0612
 - [UPDATE] S3 バケット一覧取得で、バケットごとの属性 (リージョン / 暗号化 / 公開設定) の解決を逐次実行から errgroup による並列実行 (同時実行数 30) に変更し、バケット数が多い場合のロード時間を短縮する
   - @sfuruya0612
+- [UPDATE] CLI の SSO デバイス認可フロー (RFC 8628) とトークンキャッシュ保存を internal/cli から新設の共有パッケージ internal/ssoauth へ抽出し、「デバイス認可の開始」(Start) と「トークン待機とキャッシュ保存」(Wait) の 2 つの公開関数に分割する (API サーバからの利用に備えた内部構造の変更で、thief sso login / sso generate-config / sso logout の外部挙動は変えない。ただしキャッシュ保存失敗時のエラーメッセージだけは save cache file: ... から get token: save cache file: ... に変わる。Wait は Start を経ていない不完全な Session を panic ではなくエラーで拒否する)
+  - @sfuruya0612
 - [ADD] ElastiCache の Drawer の Overview にノードの AZ の行 (AZs) を追加し、一覧の AZs 列と同じノードごとの AZ を Drawer でも確認できるようにする
   - @sfuruya0612
 - [ADD] Kinesis の Drawer の Overview に Capacity mode の行を追加し、一覧の Mode 列と同じキャパシティモードを Drawer でも確認できるようにする
