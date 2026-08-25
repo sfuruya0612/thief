@@ -17,65 +17,6 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 )
 
-// TestWriteSSOLoginResult は aws sso login の実行結果 (成功 / タイムアウト / 一般エラー)
-// が正しい HTTP ステータスとエラーコードへ変換されることを検証する。
-func TestWriteSSOLoginResult(t *testing.T) {
-	tests := []struct {
-		name       string
-		runErr     error
-		ctxErr     error
-		wantStatus int
-		wantCode   string
-	}{
-		{
-			name:       "成功時は204",
-			runErr:     nil,
-			ctxErr:     nil,
-			wantStatus: http.StatusNoContent,
-		},
-		{
-			name:       "コンテキストタイムアウト時は504",
-			runErr:     errors.New("signal: killed"),
-			ctxErr:     context.DeadlineExceeded,
-			wantStatus: http.StatusGatewayTimeout,
-			wantCode:   "SSO_LOGIN_TIMEOUT",
-		},
-		{
-			name:       "aws cli の一般エラー時は500",
-			runErr:     errors.New("exit status 1"),
-			ctxErr:     nil,
-			wantStatus: http.StatusInternalServerError,
-			wantCode:   "SSO_LOGIN_FAILED",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			writeSSOLoginResult(w, tt.runErr, tt.ctxErr)
-
-			if w.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", w.Code, tt.wantStatus)
-			}
-
-			if tt.wantCode == "" {
-				if w.Body.Len() != 0 {
-					t.Fatalf("body = %q, want empty", w.Body.String())
-				}
-				return
-			}
-
-			var body ErrorResponse
-			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-				t.Fatalf("unmarshal body: %v (body=%s)", err, w.Body.String())
-			}
-			if body.Code != tt.wantCode {
-				t.Errorf("code = %q, want %q", body.Code, tt.wantCode)
-			}
-		})
-	}
-}
-
 // --- SSO デバイス認可 (start / complete) エンドポイント ---
 
 // newSSOLoginTestServer は新設エンドポイントのテスト用に、注入した ssoLoginDeps と
@@ -543,14 +484,21 @@ func TestDefaultSSOLoginDepsIsFullyWired(t *testing.T) {
 	}
 }
 
-// TestExistingSSOLoginRouteStillRegistered は既存の POST /sso/login が新設ルートの
-// 追加後も同じハンドラのまま登録されていることを検証する (issue 0148 の完了条件:
-// 旧エンドポイントは変更せず残す)。パターンの一致だけを確認し、ハンドラは呼ばない。
-func TestExistingSSOLoginRouteStillRegistered(t *testing.T) {
+// TestOldSSOLoginRouteRemoved は旧 POST /sso/login (aws sso login の exec 方式) が
+// 削除され、どのパターンにも一致せず 404 が返ることを検証する (issue 0149 の完了条件:
+// frontend の切り替えと同時に旧エンドポイントを削除する)。パターン文字列の否定比較
+// ではなく、未登録 (空パターン) と実際の応答を直接見る (別ハンドラの誤登録も検出する)。
+func TestOldSSOLoginRouteRemoved(t *testing.T) {
 	s := newSSOLoginTestServer(t, ssoLoginDeps{})
 	r := httptest.NewRequest(http.MethodPost, "/api/aws/profiles/dev/sso/login", nil)
-	_, pattern := s.mux.Handler(r)
-	if pattern != "POST /api/aws/profiles/{profile}/sso/login" {
-		t.Errorf("pattern = %q, want the existing sso/login route", pattern)
+
+	if _, pattern := s.mux.Handler(r); pattern != "" {
+		t.Errorf("pattern = %q, want no route registered for the old sso/login path", pattern)
+	}
+
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }

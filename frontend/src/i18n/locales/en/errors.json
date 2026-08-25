@@ -2,6 +2,8 @@
   "sso": {
     "expired": "The SSO session for <strong>{{profile}}</strong> has expired. Please log in again.",
     "pending": "Complete the authorization in your browser. It reflects automatically once done.",
+    "fallbackLink": "Open the <authLink>authorization page</authLink> to complete the authorization.",
+    "userCode": "Enter code {{code}}.",
     "failed": "Failed to log in again.",
     "loginButton": "SSO re-login",
     "loginButtonPending": "Logging in…"

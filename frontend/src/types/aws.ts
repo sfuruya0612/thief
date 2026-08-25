@@ -1130,3 +1130,22 @@ export interface PriceTableRow {
   licenseUnresolved: boolean;
   rates: PriceRateRow[];
 }
+
+// ============================================================
+// SSO ログイン (デバイス認可)
+// ============================================================
+// verification_uri_complete は RFC 8628 §3.2 で OPTIONAL のため空文字になりうる。
+// その場合は verification_uri と user_code をユーザに提示する。
+export interface SSOLoginStartRaw {
+  session_id: string;
+  verification_uri_complete: string;
+  verification_uri: string;
+  user_code: string;
+}
+
+export interface SSOLoginStartRow {
+  sessionId: string;
+  verificationUriComplete: string;
+  verificationUri: string;
+  userCode: string;
+}

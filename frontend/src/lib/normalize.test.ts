@@ -23,6 +23,7 @@ import {
   rdsParameterFromRaw,
   s3ObjectFromRaw,
   sqsFromRaw,
+  ssoLoginStartFromRaw,
   wafFromRaw,
   wafRuleFromRaw,
 } from './normalize';
@@ -73,6 +74,34 @@ describe('profileFromRaw', () => {
     });
     expect(row.authType).toBeUndefined();
     expect(row.ssoStatus).toBeUndefined();
+  });
+});
+
+describe('ssoLoginStartFromRaw', () => {
+  it('start 応答の snake_case を camelCase に変換する', () => {
+    const row = ssoLoginStartFromRaw({
+      session_id: 'sess-1',
+      verification_uri_complete: 'https://device.sso.example/?user_code=ABCD-EFGH',
+      verification_uri: 'https://device.sso.example/',
+      user_code: 'ABCD-EFGH',
+    });
+    expect(row).toEqual({
+      sessionId: 'sess-1',
+      verificationUriComplete: 'https://device.sso.example/?user_code=ABCD-EFGH',
+      verificationUri: 'https://device.sso.example/',
+      userCode: 'ABCD-EFGH',
+    });
+  });
+
+  it('verification_uri_complete が空 (RFC 8628 で OPTIONAL) でも空文字のまま変換する', () => {
+    const row = ssoLoginStartFromRaw({
+      session_id: 'sess-2',
+      verification_uri_complete: '',
+      verification_uri: 'https://device.sso.example/',
+      user_code: 'ABCD-EFGH',
+    });
+    expect(row.verificationUriComplete).toBe('');
+    expect(row.verificationUri).toBe('https://device.sso.example/');
   });
 });
 

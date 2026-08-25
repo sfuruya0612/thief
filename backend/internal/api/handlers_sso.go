@@ -5,49 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os/exec"
 	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 )
 
-// ssoLoginTimeout bounds how long `aws sso login` may run waiting for the
-// user to complete browser authorization.
+// ssoLoginTimeout は complete がブラウザでの認可完了を待つ上限。
 const ssoLoginTimeout = 5 * time.Minute
 
 // ssoLoginStartTimeout はデバイス認可の開始呼び出し (RegisterClient /
 // StartDeviceAuthorization) の上限。ブラウザでの認可を待たない純粋なネットワーク
 // 往復なので、complete より大幅に短い上限を置く。
 const ssoLoginStartTimeout = 30 * time.Second
-
-func (s *Server) handleSSOLogin(w http.ResponseWriter, r *http.Request) {
-	profile := r.PathValue("profile")
-	// r.Context() はレスポンス送出直後にキャンセルされるが、本ハンドラはブラウザでの
-	// 認可完了を待ってから応答するため、リクエストの生存期間とは無関係な独立 context を使う。
-	ctx, cancel := context.WithTimeout(context.Background(), ssoLoginTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "aws", "sso", "login", "--profile", profile)
-	err := cmd.Run()
-	writeSSOLoginResult(w, err, ctx.Err())
-}
-
-// writeSSOLoginResult は `aws sso login` の実行結果を HTTP レスポンスへ変換する。
-// フロントエンドはこの応答を受けてから profiles を再取得するため、ブラウザでの認可が
-// 実際に完了した (または失敗が確定した) 後にのみ 2xx / エラーを返す必要がある。
-func writeSSOLoginResult(w http.ResponseWriter, runErr, ctxErr error) {
-	switch {
-	case runErr == nil:
-		w.WriteHeader(http.StatusNoContent)
-	case errors.Is(ctxErr, context.DeadlineExceeded):
-		writeError(w, http.StatusGatewayTimeout, "SSO_LOGIN_TIMEOUT",
-			"sso login timed out waiting for browser authorization")
-	default:
-		writeError(w, http.StatusInternalServerError, "SSO_LOGIN_FAILED",
-			"sso login failed: "+runErr.Error())
-	}
-}
 
 // ssoLoginDeps は start / complete エンドポイントが呼ぶ外部処理をまとめる。
 // いずれも AWS への接続または ~/.aws 配下の読み書きを伴い、テストから実行できない
@@ -176,8 +146,8 @@ func (s *Server) handleSSOLoginComplete(w http.ResponseWriter, r *http.Request) 
 
 	// r.Context() はレスポンス送出直後にキャンセルされるが、本ハンドラはブラウザでの
 	// 認可完了を待ってから応答するため、リクエストの生存期間とは無関係な独立 context を
-	// 使う (現行 handleSSOLogin と同じ理由・同じ 5 分)。ポーリング自体の打ち切りは
-	// device code の有効期限 (expiresIn) からも決まり、早い方が効く。
+	// 使う。ポーリング自体の打ち切りは device code の有効期限 (expiresIn) からも
+	// 決まり、早い方が効く。
 	ctx, cancel := context.WithTimeout(context.Background(), ssoLoginTimeout)
 	defer cancel()
 

@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CostRow } from '../types/aws';
+import type { CostRow, SSOLoginStartRow } from '../types/aws';
+import { ApiError } from '../types/common';
 import type { AppView, BaseRow } from '../types/common';
 import type { QueryStatusRow } from '../types/query';
 import { gcpProjectFromRaw, gcsObjectFromRaw } from '../lib/normalizeGcp';
@@ -43,6 +44,7 @@ import {
   rdsClusterParameterGroupFromRaw,
   rdsParameterFromRaw,
   s3ObjectFromRaw,
+  ssoLoginStartFromRaw,
   wafRuleFromRaw,
 } from '../lib/normalize';
 import {
@@ -114,7 +116,8 @@ import {
   postBQQueryStart,
   postSnippet,
   postCacheInvalidate,
-  postSSOLogin,
+  postSSOLoginComplete,
+  postSSOLoginStart,
   type TiDBCostQueryOptions,
   updateSecretValue,
   updateSSMParameter,
@@ -587,11 +590,62 @@ export function useDynamoItems(
   });
 }
 
-// SSO 期限切れ (401 SSO_TOKEN_EXPIRED) から再ログインを起動するミューテーション
+// useSSOLogin のミューテーション入力。authWindow は Login ボタンの click ハンドラが
+// 同期的に window.open した空タブ (ポップアップブロック時は null)。onStarted は start
+// 応答の認可 URL をバナーのフォールバック表示へ渡すコールバック。
+export interface SSOLoginInput {
+  authWindow: Window | null;
+  onStarted?: (started: SSOLoginStartRow) => void;
+  // 開いておいた空タブを自動制御できないと判明したとき (start 応答時点でユーザが
+  // 手動で閉じていた場合) に呼ぶ。バナーはフォールバックリンクの表示に切り替える。
+  onTabUnavailable?: () => void;
+}
+
+// SSO 期限切れ (401 SSO_TOKEN_EXPIRED) からの再ログインで、デバイス認可フロー全体
+// (start で認可 URL を取得 → 認可タブを遷移 → complete でトークン取得を待機) を実行する
+// ミューテーション。認可タブを frontend 自身が window.open で開くことで、認可完了後に
+// タブを close() でき、フォーカスが opener である frontend のタブへ戻る (issue 0149)。
 export function useSSOLogin(profile: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => postSSOLogin(profile),
+    mutationFn: async ({ authWindow, onStarted, onTabUnavailable }: SSOLoginInput) => {
+      let started: SSOLoginStartRow;
+      try {
+        started = ssoLoginStartFromRaw(await postSSOLoginStart(profile));
+      } catch (err) {
+        // 認可ページへ遷移する前の失敗。ユーザが認可の途中ということはないので、
+        // 開いておいた空タブは閉じてよい。
+        authWindow?.close();
+        throw err;
+      }
+      onStarted?.(started);
+      if (authWindow && !authWindow.closed) {
+        if (started.verificationUriComplete) {
+          authWindow.location.replace(started.verificationUriComplete);
+        } else {
+          // RFC 8628 §3.2 で verification_uri_complete は OPTIONAL。無い場合は
+          // バナーに verification_uri と user_code を表示するため、空タブは閉じる。
+          authWindow.close();
+        }
+      } else if (authWindow) {
+        // start の応答待ちの間にユーザが空タブを手動で閉じた場合 (closed)。閉じた
+        // タブの location 操作はブラウザによって例外になりうるため触らず、バナーの
+        // フォールバックリンクからの認可継続に切り替える (セッションは backend が
+        // 保持しており、別タブで認可を完了すれば complete は成功する)。
+        onTabUnavailable?.();
+      }
+      try {
+        await postSSOLoginComplete(profile, started.sessionId);
+      } catch (err) {
+        // 認可拒否 (deny) はユーザが認可ページでの操作を終えているため認可タブを
+        // 閉じてよい。その他の失敗はまだ認可の途中かもしれないので閉じない。
+        if (err instanceof ApiError && err.code === 'SSO_LOGIN_ACCESS_DENIED') {
+          authWindow?.close();
+        }
+        throw err;
+      }
+      authWindow?.close();
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['aws'] });
     },
