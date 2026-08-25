@@ -31,12 +31,15 @@ const (
 	ssoTokenPollDefaultTimeout = 600 * time.Second
 )
 
-// デバイス認可フローのポーリングが返すセンチネルエラー。呼び出し側が文字列一致ではなく
-// errors.Is で判別できるようにしてある。パッケージ外に出す必要が生じていないので非公開。
-var (
-	// errSSOTokenTimeout は device code の有効期限までに承認が完了しなかったことを表す。
-	errSSOTokenTimeout = errors.New("timeout waiting for authentication")
+// ErrSSOTokenTimeout は device code の有効期限までに承認が完了しなかったことを表す。
+// API サーバの complete エンドポイントがタイムアウト (504) を他の失敗と区別するために
+// errors.Is で参照するので公開している。
+var ErrSSOTokenTimeout = errors.New("timeout waiting for authentication")
 
+// デバイス認可フローのポーリングが返すセンチネルエラーのうち、パッケージ外に出す必要が
+// 生じていない非公開のもの。呼び出し側が文字列一致ではなく errors.Is で判別できるように
+// してある。
+var (
 	// errNilSSODeviceAuthorization はデバイス認可の応答を受け取らずにポーリングを
 	// 要求されたことを表す。呼び出し側の誤りであり、参照外しで panic させずに返す。
 	errNilSSODeviceAuthorization = errors.New("nil sso device authorization")
@@ -341,7 +344,7 @@ func waitForSSOToken(ctx context.Context, client ssoOidcCreateTokenAPI, reg *SSO
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			return nil, errSSOTokenTimeout
+			return nil, ErrSSOTokenTimeout
 		}
 
 		select {

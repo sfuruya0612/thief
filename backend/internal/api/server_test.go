@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/cache"
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
+	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 )
 
 func newTestServer(t *testing.T) *Server {
@@ -24,6 +27,24 @@ func newTestServer(t *testing.T) *Server {
 		cfg:           cfg,
 		snippets:      snippet.NewStore(t.TempDir()),
 		resourceCache: c,
+		// NewServer と同様に SSO ログイン系のフィールドも初期化する (未初期化のまま
+		// start / complete ハンドラへ到達すると nil ストアで panic するため)。deps は
+		// 実 AWS へ接続する defaultSSOLoginDeps ではなく、呼ばれたらエラーを返す
+		// ダミーにする。SSO ログイン系のテストは newSSOLoginTestServer で差し替えること。
+		ssoLoginSessions: newSSOLoginSessionStore(),
+		ssoLogin:         unconfiguredSSOLoginDeps(),
+	}
+}
+
+// unconfiguredSSOLoginDeps は newTestServer の既定の ssoLoginDeps。テストが誤って
+// SSO ログイン系エンドポイントを叩いても実 AWS へ接続せず、エラー応答で気づける
+// ようにする。
+func unconfiguredSSOLoginDeps() ssoLoginDeps {
+	err := errors.New("sso login deps are not configured in newTestServer; use newSSOLoginTestServer")
+	return ssoLoginDeps{
+		resolveConfig: func(string) (*awsinternal.SSOConfig, error) { return nil, err },
+		start:         func(context.Context, string, string) (*ssoauth.Session, error) { return nil, err },
+		wait:          func(context.Context, *ssoauth.Session) (*ssoauth.TokenCache, error) { return nil, err },
 	}
 }
 

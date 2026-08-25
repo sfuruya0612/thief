@@ -10,9 +10,14 @@ import (
 )
 
 var (
-	ErrProfileNotFound       = errors.New("aws profile not found")
-	ErrInvalidProfile        = errors.New("invalid profile name")
-	ErrSSOTokenExpired       = errors.New("SSO token expired")
+	ErrProfileNotFound = errors.New("aws profile not found")
+	ErrInvalidProfile  = errors.New("invalid profile name")
+	ErrSSOTokenExpired = errors.New("SSO token expired")
+
+	// ErrSSONotConfigured は profile は存在するが SSO の設定 (sso_session または
+	// inline の sso_start_url と sso_region) が無い、または不完全なことを表す。
+	ErrSSONotConfigured = errors.New("profile has no sso configuration")
+
 	ErrInvalidPricingService = errors.New("invalid pricing service")
 )
 

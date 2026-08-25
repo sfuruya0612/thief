@@ -63,6 +63,7 @@ region = us-east-1
 					SSOAccountID: "222222222222",
 					SSORoleName:  "ReadOnlyAccess",
 					SSOStartURL:  "https://example.awsapps.com/start",
+					SSORegion:    "us-east-1",
 				},
 			},
 		},

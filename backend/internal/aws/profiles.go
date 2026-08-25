@@ -180,6 +180,7 @@ type profileSection struct {
 	SSORoleName    string
 	SSOSession     string // sso_session キー (新形式 SSO)
 	SSOStartURL    string // profile 直下の sso_start_url (レガシー SSO)
+	SSORegion      string // profile 直下の sso_region (レガシー SSO)
 	RoleArn        string
 	CredProcess    bool
 	HasAccessKeyID bool
@@ -247,6 +248,8 @@ func parseAWSConfig(content string) ([]profileSection, map[string]ssoSessionSect
 				currentProfile.SSOSession = value
 			case "sso_start_url":
 				currentProfile.SSOStartURL = value
+			case "sso_region":
+				currentProfile.SSORegion = value
 			case "role_arn":
 				currentProfile.RoleArn = value
 			case "credential_process":
