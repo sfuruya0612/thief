@@ -581,8 +581,8 @@ func TestWaitForSSOTokenPollsUntilDeviceCodeExpires(t *testing.T) {
 	if got != nil {
 		t.Errorf("token = %v, want nil on timeout", got)
 	}
-	if !errors.Is(err, errSSOTokenTimeout) {
-		t.Fatalf("errors.Is(err, errSSOTokenTimeout) = false, want true; got %v", err)
+	if !errors.Is(err, ErrSSOTokenTimeout) {
+		t.Fatalf("errors.Is(err, ErrSSOTokenTimeout) = false, want true; got %v", err)
 	}
 	if len(mock.inputs) != 120 {
 		t.Errorf("CreateToken called %d times, want %d", len(mock.inputs), 120)
@@ -620,8 +620,8 @@ func TestWaitForSSOTokenSlowDownStaysBounded(t *testing.T) {
 	if got != nil {
 		t.Errorf("token = %v, want nil on timeout", got)
 	}
-	if !errors.Is(err, errSSOTokenTimeout) {
-		t.Fatalf("errors.Is(err, errSSOTokenTimeout) = false, want true; got %v", err)
+	if !errors.Is(err, ErrSSOTokenTimeout) {
+		t.Fatalf("errors.Is(err, ErrSSOTokenTimeout) = false, want true; got %v", err)
 	}
 
 	// 5 秒ずつ増える内訳をリテラルで固定する。倍加なら 10s, 20s, 40s と伸びるため合わない。
@@ -671,8 +671,8 @@ func TestWaitForSSOTokenConnectionTimeoutStaysBounded(t *testing.T) {
 	if got != nil {
 		t.Errorf("token = %v, want nil on timeout", got)
 	}
-	if !errors.Is(err, errSSOTokenTimeout) {
-		t.Fatalf("errors.Is(err, errSSOTokenTimeout) = false, want true; got %v", err)
+	if !errors.Is(err, ErrSSOTokenTimeout) {
+		t.Fatalf("errors.Is(err, ErrSSOTokenTimeout) = false, want true; got %v", err)
 	}
 
 	// 5 秒から倍加していく内訳をリテラルで固定する。slow down の等差 (10s, 15s, 20s, ...) とは
@@ -810,7 +810,7 @@ func TestWaitForSSOTokenPrefersContextErrorOverTimeout(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("errors.Is(err, context.Canceled) = false, want true; got %v", err)
 	}
-	if errors.Is(err, errSSOTokenTimeout) {
+	if errors.Is(err, ErrSSOTokenTimeout) {
 		t.Errorf("error = %v, want the cancellation reason rather than the timeout", err)
 	}
 }
@@ -893,7 +893,7 @@ func TestSSOTokenPollSentinelMessages(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "timeout", err: errSSOTokenTimeout, want: "timeout waiting for authentication"},
+		{name: "timeout", err: ErrSSOTokenTimeout, want: "timeout waiting for authentication"},
 		{name: "nil device authorization", err: errNilSSODeviceAuthorization, want: "nil sso device authorization"},
 		{name: "invalid poll policy", err: errInvalidSSOTokenPollPolicy, want: "invalid sso token poll policy"},
 	}

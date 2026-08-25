@@ -33,14 +33,20 @@ type Server struct {
 	snippets      *snippet.Store
 	resourceCache *cache.Cache[any]
 	mux           *http.ServeMux
+
+	// SSO デバイス認可 (start / complete エンドポイント) の進行中セッションと外部依存。
+	ssoLoginSessions *ssoLoginSessionStore
+	ssoLogin         ssoLoginDeps
 }
 
 // NewServer initialises the API server. The BigQuery client is optional:
 // if projectID is empty or ADC fails, BigQuery endpoints return 503.
 func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	s := &Server{
-		cfg:           cfg,
-		resourceCache: cache.New[any](5 * time.Minute),
+		cfg:              cfg,
+		resourceCache:    cache.New[any](5 * time.Minute),
+		ssoLoginSessions: newSSOLoginSessionStore(),
+		ssoLogin:         defaultSSOLoginDeps(),
 	}
 
 	// BigQuery: try to initialise but don't fail server startup.
