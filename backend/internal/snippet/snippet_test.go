@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -37,13 +38,17 @@ func TestValidateName(t *testing.T) {
 	}{
 		{name: "ok", input: "monthly cost"},
 		{name: "ok japanese", input: "月次コスト集計"},
+		{name: "ok slash", input: "a/b"},
+		{name: "ok backslash", input: `a\b`},
+		{name: "ok traversal", input: "../evil"},
+		{name: "ok leading dot", input: ".hidden"},
+		{name: "ok percent", input: "50%off"},
+		{name: "ok nul", input: "a\x00b"},
+		{name: "ok max length", input: strings.Repeat("a", maxNameLength)},
 		{name: "empty", input: "", wantErr: ErrInvalidName},
-		{name: "too long", input: string(make([]byte, maxNameLength+1)), wantErr: ErrInvalidName},
-		{name: "leading dot", input: ".hidden", wantErr: ErrInvalidName},
-		{name: "slash", input: "a/b", wantErr: ErrInvalidName},
-		{name: "backslash", input: `a\b`, wantErr: ErrInvalidName},
-		{name: "traversal", input: "../evil", wantErr: ErrInvalidName},
-		{name: "nul", input: "a\x00b", wantErr: ErrInvalidName},
+		{name: "raw too long", input: strings.Repeat("a", maxNameLength+1), wantErr: ErrInvalidName},
+		// エンコードで 3 倍に膨らみ、生の長さは上限内でもエンコード後に超える
+		{name: "encoded too long", input: strings.Repeat("/", maxNameLength/3+1), wantErr: ErrInvalidName},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -51,6 +56,324 @@ func TestValidateName(t *testing.T) {
 				t.Fatalf("validateName(%q) = %v, want %v", tt.input, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestEncodeName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "plain", input: "monthly cost", want: "monthly cost"},
+		{name: "japanese", input: "月次コスト集計", want: "月次コスト集計"},
+		{name: "slash", input: "a/b", want: "a%2Fb"},
+		{name: "backslash", input: `a\b`, want: "a%5Cb"},
+		{name: "nul", input: "a\x00b", want: "a%00b"},
+		{name: "percent", input: "50%off", want: "50%25off"},
+		{name: "leading dot", input: ".hidden", want: "%2Ehidden"},
+		{name: "inner dot", input: "v1.2", want: "v1.2"},
+		{name: "traversal", input: "../evil", want: "%2E.%2Fevil"},
+		{
+			name:  "repro name",
+			input: "virtual_money_issue_refund / virtual_money_use_refund（取消・返金）",
+			want:  "virtual_money_issue_refund %2F virtual_money_use_refund（取消・返金）",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := encodeName(tt.input); got != tt.want {
+				t.Fatalf("encodeName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeFileName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "plain", input: "monthly cost", want: "monthly cost"},
+		{name: "canonical slash", input: "a%2Fb", want: "a/b"},
+		{name: "canonical percent", input: "50%25off", want: "50%off"},
+		{name: "canonical leading dot", input: "%2Ehidden", want: ".hidden"},
+		// 非正規形はデコードせずファイル名をそのまま名前とする
+		{name: "lowercase hex", input: "a%2fb", want: "a%2fb"},
+		{name: "undecodable percent", input: "bad%zz", want: "bad%zz"},
+		{name: "unencoded percent", input: "foo%20bar", want: "foo%20bar"},
+		{name: "over encoded", input: "%41", want: "%41"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := decodeFileName(tt.input); got != tt.want {
+				t.Fatalf("decodeFileName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestStoreRoundTripUnsafeNames はファイル名に使えない文字を含む名前の
+// Save / List / Delete のラウンドトリップを athena / bigquery の両サービスで検証する。
+func TestStoreRoundTripUnsafeNames(t *testing.T) {
+	names := []struct {
+		name     string
+		input    string
+		wantStem string
+	}{
+		{
+			name:     "slash",
+			input:    "virtual_money_issue_refund / virtual_money_use_refund（取消・返金）",
+			wantStem: "virtual_money_issue_refund %2F virtual_money_use_refund（取消・返金）",
+		},
+		{name: "backslash", input: `a\b`, wantStem: "a%5Cb"},
+		{name: "nul", input: "a\x00b", wantStem: "a%00b"},
+		{name: "percent", input: "50%off", wantStem: "50%25off"},
+		{name: "traversal", input: "../evil", wantStem: "%2E.%2Fevil"},
+		{name: "leading dot", input: ".hidden", wantStem: "%2Ehidden"},
+	}
+	for _, service := range []string{"athena", "bigquery"} {
+		for _, tt := range names {
+			t.Run(service+"/"+tt.name, func(t *testing.T) {
+				dir := t.TempDir()
+				s := NewStore(dir)
+				if _, err := s.Save(service, tt.input, "SELECT 1"); err != nil {
+					t.Fatalf("Save(%q): %v", tt.input, err)
+				}
+				// エンコード済みファイル名でサービスディレクトリ直下に保存される
+				if _, err := os.Stat(filepath.Join(dir, service, tt.wantStem+".sql")); err != nil {
+					t.Fatalf("encoded file: %v", err)
+				}
+				// 上書きも成立する
+				if _, err := s.Save(service, tt.input, "SELECT 2"); err != nil {
+					t.Fatalf("Save overwrite: %v", err)
+				}
+				got, err := s.List(service)
+				if err != nil {
+					t.Fatalf("List: %v", err)
+				}
+				if len(got) != 1 || got[0].Name != tt.input || got[0].SQL != "SELECT 2" {
+					t.Fatalf("List = %+v, want single %q with SELECT 2", got, tt.input)
+				}
+				if err := s.Delete(service, tt.input); err != nil {
+					t.Fatalf("Delete(%q): %v", tt.input, err)
+				}
+				got, err = s.List(service)
+				if err != nil {
+					t.Fatalf("List after delete: %v", err)
+				}
+				if len(got) != 0 {
+					t.Fatalf("List after delete = %+v, want empty", got)
+				}
+			})
+		}
+	}
+}
+
+// TestStoreListAndDeleteNonCanonicalFileNames は手動配置された非正規形のファイル名が
+// エラーにならず、ファイル名そのままの名前で一覧に載り、その名前で削除できることを
+// athena / bigquery の両サービスで検証する。
+func TestStoreListAndDeleteNonCanonicalFileNames(t *testing.T) {
+	stems := []string{"foo%20bar", "bad%zz", "a%2fb"}
+	for _, service := range []string{"athena", "bigquery"} {
+		t.Run(service, func(t *testing.T) {
+			base := t.TempDir()
+			dir := filepath.Join(base, service)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			for _, stem := range stems {
+				if err := os.WriteFile(filepath.Join(dir, stem+".sql"), []byte("SELECT 1"), 0o644); err != nil {
+					t.Fatalf("WriteFile(%s): %v", stem, err)
+				}
+			}
+			s := NewStore(base)
+			got, err := s.List(service)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(got) != len(stems) {
+				t.Fatalf("List returned %d snippets, want %d: %+v", len(got), len(stems), got)
+			}
+			byName := map[string]bool{}
+			for _, sn := range got {
+				byName[sn.Name] = true
+			}
+			for _, stem := range stems {
+				if !byName[stem] {
+					t.Fatalf("List does not contain %q: %+v", stem, got)
+				}
+				if err := s.Delete(service, stem); err != nil {
+					t.Fatalf("Delete(%q): %v", stem, err)
+				}
+			}
+			got, err = s.List(service)
+			if err != nil {
+				t.Fatalf("List after delete: %v", err)
+			}
+			if len(got) != 0 {
+				t.Fatalf("List after delete = %+v, want empty", got)
+			}
+		})
+	}
+}
+
+// TestStoreListDecodesCanonicalFileNames は手動配置のファイル名がたまたま正規形の
+// エンコード列である場合に、一覧の名前がデコード結果になり、その名前で削除できる
+// ことを athena / bigquery の両サービスで検証する (issue 0150 の修正方針が許容する
+// 表示名の差)。
+func TestStoreListDecodesCanonicalFileNames(t *testing.T) {
+	for _, service := range []string{"athena", "bigquery"} {
+		t.Run(service, func(t *testing.T) {
+			base := t.TempDir()
+			dir := filepath.Join(base, service)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "100%2Foff.sql"), []byte("SELECT 1"), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			s := NewStore(base)
+			got, err := s.List(service)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(got) != 1 || got[0].Name != "100/off" {
+				t.Fatalf("List = %+v, want single 100/off", got)
+			}
+			if err := s.Delete(service, "100/off"); err != nil {
+				t.Fatalf("Delete: %v", err)
+			}
+		})
+	}
+}
+
+// TestStoreListPercentCollision は正規形ファイル (50%25off.sql → 表示名 50%off) と
+// 非正規形ファイル (50%off.sql → 表示名 50%off) が同居して表示名が衝突した場合の
+// 挙動を athena / bigquery の両サービスで固定する。一覧は両方を同じ名前で返し、
+// その名前の Delete は正規形 → 非正規形の順に 1 回 1 ファイルずつ削除できる
+// (行き止まりにならない)。
+func TestStoreListPercentCollision(t *testing.T) {
+	for _, service := range []string{"athena", "bigquery"} {
+		t.Run(service, func(t *testing.T) {
+			base := t.TempDir()
+			dir := filepath.Join(base, service)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			for _, stem := range []string{"50%25off", "50%off"} {
+				if err := os.WriteFile(filepath.Join(dir, stem+".sql"), []byte("SELECT 1"), 0o644); err != nil {
+					t.Fatalf("WriteFile(%s): %v", stem, err)
+				}
+			}
+			s := NewStore(base)
+			got, err := s.List(service)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(got) != 2 || got[0].Name != "50%off" || got[1].Name != "50%off" {
+				t.Fatalf("List = %+v, want two entries named 50%%off", got)
+			}
+			// 1 回目はエンコード済みパス (正規形の 50%25off.sql) が消える
+			if err := s.Delete(service, "50%off"); err != nil {
+				t.Fatalf("Delete first: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "50%25off.sql")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("canonical file must be removed first: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "50%off.sql")); err != nil {
+				t.Fatalf("non-canonical file must survive first delete: %v", err)
+			}
+			// 2 回目は後方互換パス (非正規形の 50%off.sql) が消える
+			if err := s.Delete(service, "50%off"); err != nil {
+				t.Fatalf("Delete second: %v", err)
+			}
+			if err := s.Delete(service, "50%off"); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("Delete third = %v, want ErrNotFound", err)
+			}
+		})
+	}
+}
+
+// TestStoreDeleteLongName は List が長さ制限なしで一覧に載せた名前を
+// Delete がエンコード後の長さ検証なしで削除できることを athena / bigquery の
+// 両サービスで検証する (一覧に出た名前で削除できるラウンドトリップの一部)。
+func TestStoreDeleteLongName(t *testing.T) {
+	for _, service := range []string{"athena", "bigquery"} {
+		t.Run(service, func(t *testing.T) {
+			base := t.TempDir()
+			dir := filepath.Join(base, service)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			stem := strings.Repeat("a", maxNameLength+10)
+			if err := os.WriteFile(filepath.Join(dir, stem+".sql"), []byte("SELECT 1"), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			s := NewStore(base)
+			got, err := s.List(service)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(got) != 1 || got[0].Name != stem {
+				t.Fatalf("List = %+v, want single %q", got, stem)
+			}
+			if err := s.Delete(service, stem); err != nil {
+				t.Fatalf("Delete: %v", err)
+			}
+		})
+	}
+}
+
+// TestStoreDeleteDoesNotEscapeServiceDir は後方互換の削除パスがサービスディレクトリの
+// 外や隠しファイルへ届かないことを検証する。
+func TestStoreDeleteDoesNotEscapeServiceDir(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "athena")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// サービスディレクトリの 1 つ上 (ベースディレクトリ直下) のファイル
+	outside := filepath.Join(base, "evil.sql")
+	if err := os.WriteFile(outside, []byte("SELECT 1"), 0o644); err != nil {
+		t.Fatalf("WriteFile(outside): %v", err)
+	}
+	// サービスディレクトリ直下の隠しファイル
+	hidden := filepath.Join(dir, ".hidden.sql")
+	if err := os.WriteFile(hidden, []byte("SELECT 1"), 0o644); err != nil {
+		t.Fatalf("WriteFile(hidden): %v", err)
+	}
+	// バックスラッシュを字面に含む手動配置のファイル (POSIX では合法なファイル名)
+	backslash := filepath.Join(dir, `a\b.sql`)
+	if err := os.WriteFile(backslash, []byte("SELECT 1"), 0o644); err != nil {
+		t.Fatalf("WriteFile(backslash): %v", err)
+	}
+	s := NewStore(base)
+	if err := s.Delete("athena", "../evil"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete(../evil) = %v, want ErrNotFound", err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("outside file must survive: %v", err)
+	}
+	if err := s.Delete("athena", ".hidden"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete(.hidden) = %v, want ErrNotFound", err)
+	}
+	if _, err := os.Stat(hidden); err != nil {
+		t.Fatalf("hidden file must survive: %v", err)
+	}
+	// 後方互換の削除パスは `\` をパス区切りとして防御的に拒否する (issue 0150 の
+	// 境界条件の追記のとおり、`\` を字面に含む手動配置ファイルは API から削除できない)
+	if err := s.Delete("athena", `a\b`); !errors.Is(err, ErrNotFound) {
+		t.Fatalf(`Delete(a\b) = %v, want ErrNotFound`, err)
+	}
+	if _, err := os.Stat(backslash); err != nil {
+		t.Fatalf("backslash file must survive: %v", err)
+	}
+	// NUL を含む名前も後方互換パスへ流さない (流すと os.Remove が EINVAL を返し
+	// ErrNotFound にならないため、この期待値が拒否条件の欠落を検出する)
+	if err := s.Delete("athena", "x\x00y"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete(nul) = %v, want ErrNotFound", err)
 	}
 }
 
@@ -152,8 +475,13 @@ func TestStoreSaveOverwrites(t *testing.T) {
 
 func TestStoreSaveRejectsInvalidName(t *testing.T) {
 	s := NewStore(t.TempDir())
-	if _, err := s.Save("athena", "../evil", "SELECT 1"); !errors.Is(err, ErrInvalidName) {
-		t.Fatalf("Save(../evil) = %v, want ErrInvalidName", err)
+	if _, err := s.Save("athena", "", "SELECT 1"); !errors.Is(err, ErrInvalidName) {
+		t.Fatalf("Save(empty) = %v, want ErrInvalidName", err)
+	}
+	// エンコード後のファイル名がバイト長上限を超える名前は拒否する
+	long := strings.Repeat("/", maxNameLength/3+1)
+	if _, err := s.Save("athena", long, "SELECT 1"); !errors.Is(err, ErrInvalidName) {
+		t.Fatalf("Save(encoded too long) = %v, want ErrInvalidName", err)
 	}
 }
 
@@ -209,6 +537,9 @@ func TestStoreListSkipsNonSnippetEntries(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".tmp-123"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, ".hidden.sql"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 	if err := os.Mkdir(filepath.Join(dir, "sub.sql"), 0o755); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
@@ -245,9 +576,21 @@ func TestStoreDeleteMissingReturnsNotFound(t *testing.T) {
 	}
 }
 
-func TestStoreDeleteRejectsInvalidName(t *testing.T) {
+func TestStoreDeleteRejectsEmptyName(t *testing.T) {
 	s := NewStore(t.TempDir())
-	if err := s.Delete("athena", "../evil"); !errors.Is(err, ErrInvalidName) {
-		t.Fatalf("Delete(../evil) = %v, want ErrInvalidName", err)
+	if err := s.Delete("athena", ""); !errors.Is(err, ErrInvalidName) {
+		t.Fatalf("Delete(empty) = %v, want ErrInvalidName", err)
+	}
+}
+
+// TestStoreDeleteNameTooLongReturnsNotFound はファイル名長超過 (ENAMETOOLONG) になる
+// 巨大な名前の削除が、OS エラーのままの 500 相当ではなく ErrNotFound になることを
+// 検証する (存在しえない名前のため)。
+func TestStoreDeleteNameTooLongReturnsNotFound(t *testing.T) {
+	s := NewStore(t.TempDir())
+	// 5000 バイトは主要なファイルシステムの NAME_MAX (darwin / linux とも一般に 255)
+	// を確実に超え、os.Remove が ENAMETOOLONG を返す値
+	if err := s.Delete("athena", strings.Repeat("a", 5000)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete(huge name) = %v, want ErrNotFound", err)
 	}
 }
