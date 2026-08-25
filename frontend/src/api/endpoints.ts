@@ -22,6 +22,7 @@ import type {
   RDSParameterRaw,
   RegionRaw,
   S3ObjectRaw,
+  SSOLoginStartRaw,
   ValueRaw,
   WAFRuleRaw,
 } from '../types/aws';
@@ -165,9 +166,19 @@ export function getPricing(
   });
 }
 
-// SSO ログインを開始する (バックエンドが `aws sso login` を起動する)
-export function postSSOLogin(profile: string): Promise<void> {
-  return apiPost<void>(`/api/aws/profiles/${encodeURIComponent(profile)}/sso/login`);
+// SSO デバイス認可を開始し、認可 URL とログインセッション ID を得る
+export function postSSOLoginStart(profile: string): Promise<SSOLoginStartRaw> {
+  return apiPost<SSOLoginStartRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/sso/login/start`,
+  );
+}
+
+// デバイス認可のトークン取得を待機する。成功時は backend が AWS CLI 互換キャッシュへ
+// 保存済みで 204 を返す。ブラウザでの認可完了まで応答が返らない
+export function postSSOLoginComplete(profile: string, sessionId: string): Promise<void> {
+  return apiPost<void>(`/api/aws/profiles/${encodeURIComponent(profile)}/sso/login/complete`, {
+    session_id: sessionId,
+  });
 }
 
 // ============================================================

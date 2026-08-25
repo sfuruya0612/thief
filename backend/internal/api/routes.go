@@ -35,7 +35,6 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/s3/{bucket}/objects/upload", s.handleS3ObjectUpload)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/iam", s.handleIAM)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/sso", s.handleSSO)
-	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/login", s.handleSSOLogin)
 	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/login/start", s.handleSSOLoginStart)
 	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/login/complete", s.handleSSOLoginComplete)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ssm/parameters", s.handleSSMList)

@@ -85,6 +85,8 @@ import type {
   SQSRow,
   SSMParamRaw,
   SSMParamRow,
+  SSOLoginStartRaw,
+  SSOLoginStartRow,
   WAFRaw,
   WAFRow,
   WAFRuleRaw,
@@ -132,6 +134,15 @@ export function profileFromRaw(raw: ProfileRaw): Profile {
     authType: narrowEnum(raw.auth_type, PROFILE_AUTH_TYPES),
     ssoStatus: narrowEnum(raw.sso_status, PROFILE_SSO_STATUSES),
     ssoExpiresAt: raw.sso_expires_at,
+  };
+}
+
+export function ssoLoginStartFromRaw(raw: SSOLoginStartRaw): SSOLoginStartRow {
+  return {
+    sessionId: raw.session_id,
+    verificationUriComplete: raw.verification_uri_complete,
+    verificationUri: raw.verification_uri,
+    userCode: raw.user_code,
   };
 }
 
