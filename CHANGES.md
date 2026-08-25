@@ -58,6 +58,8 @@
   - @sfuruya0612
 - [UPDATE] CLI の SSO デバイス認可フロー (RFC 8628) とトークンキャッシュ保存を internal/cli から新設の共有パッケージ internal/ssoauth へ抽出し、「デバイス認可の開始」(Start) と「トークン待機とキャッシュ保存」(Wait) の 2 つの公開関数に分割する (API サーバからの利用に備えた内部構造の変更で、thief sso login / sso generate-config / sso logout の外部挙動は変えない。ただしキャッシュ保存失敗時のエラーメッセージだけは save cache file: ... から get token: save cache file: ... に変わる。Wait は Start を経ていない不完全な Session を panic ではなくエラーで拒否する)
   - @sfuruya0612
+- [UPDATE] 4xx / 5xx 応答の発生時に、応答ボディの写し (writeError 経由の JSON または http.Error 経由の text/plain、上限 2048 バイトで切り詰め) を添えたログを 4xx は Warn、5xx は Error でコンソール (標準エラー出力) に出力するようにする (従来の Info のアクセスログは 2xx / 3xx のみになり、4xx / 5xx では Warn / Error の 1 行に統合される。http.ServeMux 自体が返す 404 / 405 も対象になる)
+  - @sfuruya0612
 - [ADD] ElastiCache の Drawer の Overview にノードの AZ の行 (AZs) を追加し、一覧の AZs 列と同じノードごとの AZ を Drawer でも確認できるようにする
   - @sfuruya0612
 - [ADD] Kinesis の Drawer の Overview に Capacity mode の行を追加し、一覧の Mode 列と同じキャパシティモードを Drawer でも確認できるようにする
