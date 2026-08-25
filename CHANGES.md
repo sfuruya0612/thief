@@ -320,6 +320,8 @@
   - @sfuruya0612
 - [FIX] `thief ec2 session` が session-manager-plugin 起動前の marshal / plugin 探索の失敗経路で SSM セッションを切断せず AWS 側に Active のまま残す不具合を修正する (issue 0135 で `ecs.go` の `ecsExecuteCommandWith` に適用した `terminateThen` パターンを `ec2.go` の `startEC2SessionWith` にそのまま移植する。`termCtx`/`cancelTerm` の生成を `deps.startSession` 成功直後まで前倒しし、以降のどの失敗経路 (JSON の組み立て、`lookupSessionManagerPlugin`、`util.ExecCommand`) でも専用の短命 context で `TerminateSSMSession` を試みる。切断も失敗した場合は `fmt.Errorf("%w; terminate session: %w", cause, termErr)` で両方の情報を保持し、`errors.Is`/`errors.As` がどちらにも到達できるようにする)
   - @sfuruya0612
+- [FIX] スニペット名をパーセントエンコードしたファイル名へ変換して保存するようにし、スラッシュなどファイル名に使えない文字を含む名前のスニペットが 400 エラーで保存できない問題を修正する (エンコード規則に従わない手動配置の .sql ファイルは従来どおりファイル名のままの名前で一覧に載り、パス区切り文字を字面に含むファイル名を除きその名前で削除できる)
+  - @sfuruya0612
 
 ### misc
 

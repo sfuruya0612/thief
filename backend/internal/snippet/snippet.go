@@ -1,28 +1,37 @@
 // Package snippet はクエリスニペットのファイルベース永続化を提供する。
 // スニペットはベースディレクトリ配下のサービス別ディレクトリ (athena / bigquery) に
 // <name>.sql として保存されるため、手動で配置した .sql ファイルもそのまま一覧に載る。
+// ファイル名として安全でない文字を含む名前はパーセントエンコードしてファイル名に
+// する (encodeName / decodeFileName)。エンコード規則に従わない手動配置のファイル名は
+// そのまま名前として扱う。
 package snippet
 
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
 // ErrInvalidService はサービスキーが未対応の場合のエラー。
 var ErrInvalidService = errors.New("invalid snippet service")
 
-// ErrInvalidName は名前がファイル名として使用できない場合のエラー。
+// ErrInvalidName は名前が空、またはエンコード後のファイル名がバイト長上限を
+// 超える場合のエラー。文字種はエンコードで吸収するため制限しない。
 var ErrInvalidName = errors.New("invalid snippet name")
 
 // ErrNotFound は指定名のスニペットが存在しない場合のエラー。
 var ErrNotFound = errors.New("snippet not found")
 
-// maxNameLength はスニペット名の最大長 (ファイルシステムのファイル名長制限より十分小さい値)。
+// maxNameLength はエンコード後のファイル名 (拡張子 .sql を除く部分) の最大バイト長
+// (ファイルシステムのファイル名長制限より十分小さい値)。名前そのものではなく
+// エンコード後の長さに適用する。ファイルシステムの制限が対象とするのは
+// エンコード後のファイル名であるため。
 const maxNameLength = 128
 
 // services は保存を許可するサービスキー (= ベースディレクトリ直下のサブディレクトリ名)。
@@ -55,19 +64,56 @@ func validateService(service string) error {
 	return nil
 }
 
-// validateName はスニペット名がファイル名として安全か検証する。
-// パス区切り・NUL・先頭ドット (隠しファイル/相対パス) を拒否する。
+// validateName はスニペット名を検証する。ファイル名として使えない文字は
+// encodeName が置き換えるため文字種は制限せず、空でないことと、エンコード後の
+// ファイル名のバイト長上限だけを確認する。
 func validateName(name string) error {
-	if name == "" || len(name) > maxNameLength {
-		return fmt.Errorf("%w: must be 1-%d bytes", ErrInvalidName, maxNameLength)
+	if name == "" {
+		return fmt.Errorf("%w: must not be empty", ErrInvalidName)
 	}
-	if strings.HasPrefix(name, ".") {
-		return fmt.Errorf("%w: must not start with a dot", ErrInvalidName)
-	}
-	if strings.ContainsAny(name, "/\\\x00") {
-		return fmt.Errorf("%w: must not contain path separators", ErrInvalidName)
+	if len(encodeName(name)) > maxNameLength {
+		return fmt.Errorf("%w: encoded file name must be at most %d bytes", ErrInvalidName, maxNameLength)
 	}
 	return nil
+}
+
+// encodeName はスニペット名をファイル名 (拡張子 .sql を除く部分) へ変換する。
+// ファイル名として安全でない文字 (パス区切り `/` `\`、NUL)、エンコードに用いる
+// `%` 自体、および先頭のドット (隠しファイル / 相対パス) を大文字 16 進の
+// パーセントエンコードに置き換える。それ以外の文字 (全角文字を含む) は
+// エンコードせず、ファイル名の可読性を保つ。
+func encodeName(name string) string {
+	var sb strings.Builder
+	for i := 0; i < len(name); i++ {
+		b := name[i]
+		if b == '/' || b == '\\' || b == 0 || b == '%' || (i == 0 && b == '.') {
+			fmt.Fprintf(&sb, "%%%02X", b)
+			continue
+		}
+		sb.WriteByte(b)
+	}
+	return sb.String()
+}
+
+// decodeFileName はファイル名 (拡張子 .sql を除いた部分) をスニペット名へ戻す。
+// デコードは正規形 (デコード結果を encodeName で再エンコードすると元のファイル名に
+// 一致する) の場合に限って適用し、非正規形のファイル名 (デコードできない `%` 並び、
+// 16 進が小文字の `%2f` 形式、エンコードなしで `%` を含む手動配置のファイル名) は
+// エラーにせず、そのまま名前として扱う。この規則により、どのファイルでも
+// 一覧に出た名前で削除できるラウンドトリップが成り立つ。
+func decodeFileName(stem string) string {
+	decoded, err := url.PathUnescape(stem)
+	if err != nil || encodeName(decoded) != stem {
+		return stem
+	}
+	return decoded
+}
+
+// rawFileNameSafe は name をそのままファイル名として使ってよいか
+// (パス区切り・NUL を含まず、先頭がドットでない) を返す。
+// 手動配置された非正規形のファイル名への後方互換の削除パスにだけ使う。
+func rawFileNameSafe(name string) bool {
+	return !strings.ContainsAny(name, "/\\\x00") && !strings.HasPrefix(name, ".")
 }
 
 func (s *Store) dir(service string) string {
@@ -75,7 +121,7 @@ func (s *Store) dir(service string) string {
 }
 
 func (s *Store) path(service, name string) string {
-	return filepath.Join(s.baseDir, service, name+".sql")
+	return filepath.Join(s.baseDir, service, encodeName(name)+".sql")
 }
 
 // List は service のディレクトリ直下の .sql ファイルを更新日時の降順
@@ -93,10 +139,11 @@ func (s *Store) List(service string) ([]Snippet, error) {
 	}
 	snippets := make([]Snippet, 0, len(entries))
 	for _, e := range entries {
-		name := strings.TrimSuffix(e.Name(), ".sql")
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") || validateName(name) != nil {
+		// 隠しファイル (Save の一時ファイル .tmp-* を含む) と .sql 以外は一覧に載せない
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !strings.HasSuffix(e.Name(), ".sql") {
 			continue
 		}
+		name := decodeFileName(strings.TrimSuffix(e.Name(), ".sql"))
 		data, err := os.ReadFile(filepath.Join(s.dir(service), e.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("read snippet %s: %w", e.Name(), err)
@@ -160,15 +207,28 @@ func (s *Store) Save(service, name, sql string) (Snippet, error) {
 }
 
 // Delete は service 配下の name のスニペットを削除する。存在しない場合は ErrNotFound を返す。
+// まず名前をエンコードしたファイル名を探し、無ければ名前をそのままファイル名とみなす
+// 後方互換のパスも探す (List がそのまま名前として返す、手動配置された非正規形の
+// ファイル名に対応する)。エンコード後の長さ検証は行わない。一覧に載った名前は
+// エンコード後の長さにかかわらず削除できる必要があるため。
 func (s *Store) Delete(service, name string) error {
 	if err := validateService(service); err != nil {
 		return err
 	}
-	if err := validateName(name); err != nil {
-		return err
+	if name == "" {
+		return fmt.Errorf("%w: must not be empty", ErrInvalidName)
 	}
 	err := os.Remove(s.path(service, name))
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) && rawFileNameSafe(name) {
+		err = os.Remove(filepath.Join(s.dir(service), name+".sql"))
+	}
+	// ファイル名 (単一コンポーネント) が NAME_MAX を超える名前はファイルとして
+	// 存在しえないため、ENAMETOOLONG を存在しない場合と同じ ErrNotFound に写像する
+	// (500 にしない)。ENAMETOOLONG はパス全体の PATH_MAX 超過でも発生し、その場合は
+	// baseDir の設定不備を 404 が隠すことになるが、同じ baseDir では Save も
+	// 同様に失敗して保存自体ができないため、実在するファイルを 404 にする余地は
+	// 実質的にない。
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENAMETOOLONG) {
 		return fmt.Errorf("%w: %s", ErrNotFound, name)
 	}
 	if err != nil {
