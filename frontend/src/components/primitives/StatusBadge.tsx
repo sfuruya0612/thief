@@ -30,6 +30,12 @@ const MAP: Record<string, Entry> = {
   failed: { cls: 'err', label: 'failed' },
   archived: { cls: 'muted', label: 'archived' },
   'active-impaired': { cls: 'warn', label: 'active-impaired' },
+  // ECS コンテナインスタンスの状態 (issue 0157)。draining は ELB Target Health と
+  // ECS サービスの State 列にも現れ、muted (フォールバック) から warn に変わる。
+  draining: { cls: 'warn', label: 'draining' },
+  deregistering: { cls: 'warn', label: 'deregistering' },
+  'registration-failed': { cls: 'err', label: 'registration-failed' },
+  registering: { cls: 'info', label: 'registering' },
 };
 
 export interface StatusBadgeProps {

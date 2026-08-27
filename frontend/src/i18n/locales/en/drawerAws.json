@@ -17,5 +17,20 @@
     "save": "Save",
     "saving": "Saving…",
     "overwriteConfirm": "Overwrite the value of {{name}}. Are you sure?"
+  },
+  "ecsContainerInstances": {
+    "heading": "Container instances ({{n}})",
+    "empty": "No container instances",
+    "agentConnected": "Agent",
+    "connected": "connected",
+    "disconnected": "disconnected",
+    "ecsReported": "ECS reported",
+    "ecsReportedValue": "running {{running}} / pending {{pending}}",
+    "cpu": "CPU (remaining / registered)",
+    "memory": "Memory (remaining / registered)",
+    "tasks": "Tasks ({{n}})",
+    "noTasks": "No tasks",
+    "unknownInstance": "Unknown container instance",
+    "unknownInstanceHint": "Tasks whose container instance ARN is not in the list"
   }
 }

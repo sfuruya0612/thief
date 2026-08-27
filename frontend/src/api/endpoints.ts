@@ -9,6 +9,7 @@ import type {
   DynamoItemRaw,
   DynamoTableSchemaRaw,
   ECRImageRaw,
+  ECSContainerInstanceRaw,
   ECSContainerRaw,
   ECSServiceRaw,
   ECSTaskRaw,
@@ -339,6 +340,17 @@ export function getECSContainers(
 ): Promise<ECSContainerRaw[]> {
   return apiGetList<ECSContainerRaw>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/tasks/${encodeURIComponent(task)}/containers`,
+    { region },
+  );
+}
+
+export function getECSContainerInstances(
+  profile: string,
+  region: string,
+  cluster: string,
+): Promise<ECSContainerInstanceRaw[]> {
+  return apiGetList<ECSContainerInstanceRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/ecs/${encodeURIComponent(cluster)}/container-instances`,
     { region },
   );
 }

@@ -378,6 +378,7 @@ export interface ECSTaskRow {
   startedAt: string;
   stoppedAt: string;
   stoppedReason: string;
+  containerInstanceArn: string;
   containers: ECSTaskContainerDetailRow[];
 }
 
@@ -393,6 +394,34 @@ export interface ECSContainerRow {
   runtimeId: string;
   lastStatus: string;
   execEnabled: boolean;
+}
+
+// ECS コンテナインスタンス (ECS on EC2 の登録済み EC2)。Instances タブでタスクをグルーピングする。
+// registered_* / remaining_* は SDK の Resources に該当要素が無いとき backend が null を返す。
+export interface ECSContainerInstanceRaw {
+  arn: string;
+  ec2_instance_id: string;
+  status: string;
+  agent_connected: boolean;
+  running_tasks_count: number;
+  pending_tasks_count: number;
+  registered_cpu: number | null;
+  registered_memory: number | null;
+  remaining_cpu: number | null;
+  remaining_memory: number | null;
+}
+
+export interface ECSContainerInstanceRow {
+  arn: string;
+  ec2InstanceId: string;
+  status: string;
+  agentConnected: boolean;
+  runningTasksCount: number;
+  pendingTasksCount: number;
+  registeredCpu: number | null;
+  registeredMemory: number | null;
+  remainingCpu: number | null;
+  remainingMemory: number | null;
 }
 
 // ============================================================
