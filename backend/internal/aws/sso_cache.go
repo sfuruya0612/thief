@@ -2,6 +2,8 @@ package aws
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,6 +14,11 @@ import (
 // ssoCacheMaxFileSize は SSO キャッシュとして読み込む JSON の上限サイズ。
 // 正常なキャッシュは数 KB であり、これを超えるファイルは対象外として扱う。
 const ssoCacheMaxFileSize = 1 << 20 // 1MB
+
+// ssoCacheRemove は RemoveSSOTokenCache が使うファイル削除関数。走査と削除の間に
+// 別プロセスが同じファイルを消した状況 (fs.ErrNotExist) と削除失敗をテストで
+// 決定的に再現するために差し替え可能にしている。
+var ssoCacheRemove = os.Remove
 
 // ssoCacheStatus は 1 つの startUrl に対するローカルトークンの状態。
 type ssoCacheStatus struct {
@@ -48,14 +55,47 @@ func normalizeStartURL(u string) string {
 // 有効トークンを返す別実装であり、意図的に統合していない (別 issue で扱う)。
 func readSSOCacheStatuses(cacheDir string, now time.Time) (map[string]ssoCacheStatus, bool) {
 	statuses := make(map[string]ssoCacheStatus)
-	entries, err := os.ReadDir(cacheDir)
+	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry) {
+		st := ssoCacheStatus{Status: SSOStatusExpired}
+		if exp, err := time.Parse(time.RFC3339, ce.ExpiresAt); err != nil {
+			// botocore 旧形式 ("2020-06-14T05:26:13UTC") 等。有効と確認できない
+			// ため期限切れ扱いに落とす (安全側の degrade)。
+			slog.Warn("parse sso cache expiresAt failed", "file", fileName, "err", err)
+		} else {
+			st.ExpiresAt = exp
+			if exp.After(now) {
+				st.Status = SSOStatusValid
+			}
+		}
+
+		// 同一 startUrl に複数ファイルがある場合は期限が最も先のものを採用する。
+		key := normalizeStartURL(ce.StartURL)
+		if prev, ok := statuses[key]; ok && prev.ExpiresAt.After(st.ExpiresAt) {
+			return
+		}
+		statuses[key] = st
+	})
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			// 一度もログインしていない正常系。
 			return statuses, true
 		}
 		slog.Warn("read sso cache dir failed", "err", err)
 		return statuses, false
+	}
+	return statuses, true
+}
+
+// walkSSOCacheTokens は cacheDir の JSON を 1 パスで走査し、startUrl を持つ
+// トークンキャッシュごとに visit を呼ぶ。対象の判定規則 (.json のみ、1MB 超と
+// 読めないファイルと壊れた JSON は slog.Warn を出して対象外、startUrl を持たない
+// client registration は対象外) をここに集約し、状態の読み取り
+// (readSSOCacheStatuses) と削除 (RemoveSSOTokenCache) で同じファイル集合を扱う。
+// 返すエラーは os.ReadDir のものだけで、not-exist の扱いは呼び出し側に委ねる。
+func walkSSOCacheTokens(cacheDir string, visit func(fileName string, ce ssoCacheEntry)) error {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		return err
 	}
 
 	for _, entry := range entries {
@@ -81,25 +121,40 @@ func readSSOCacheStatuses(cacheDir string, now time.Time) (map[string]ssoCacheSt
 			// なのでログは出さない。
 			continue
 		}
-
-		st := ssoCacheStatus{Status: SSOStatusExpired}
-		if exp, err := time.Parse(time.RFC3339, ce.ExpiresAt); err != nil {
-			// botocore 旧形式 ("2020-06-14T05:26:13UTC") 等。有効と確認できない
-			// ため期限切れ扱いに落とす (安全側の degrade)。
-			slog.Warn("parse sso cache expiresAt failed", "file", entry.Name(), "err", err)
-		} else {
-			st.ExpiresAt = exp
-			if exp.After(now) {
-				st.Status = SSOStatusValid
-			}
-		}
-
-		// 同一 startUrl に複数ファイルがある場合は期限が最も先のものを採用する。
-		key := normalizeStartURL(ce.StartURL)
-		if prev, ok := statuses[key]; ok && prev.ExpiresAt.After(st.ExpiresAt) {
-			continue
-		}
-		statuses[key] = st
+		visit(entry.Name(), ce)
 	}
-	return statuses, true
+	return nil
+}
+
+// RemoveSSOTokenCache は cacheDir (~/.aws/sso/cache) のトークンキャッシュのうち、
+// 中身の startUrl が startURL と一致する (normalizeStartURL 後の比較) ファイルを
+// すべて削除する。他の startUrl のファイルと startUrl を持たない client
+// registration は残す。ログアウトの目的は対象ファイルが無い状態にすることなので、
+// 一致するファイルが無い場合、cacheDir 自体が無い場合、削除時に既に消えていた
+// 場合 (fs.ErrNotExist) はいずれも成功として nil を返す。一致が複数ある場合は
+// 1 件の削除失敗で止めずに残りも削除し、失敗を errors.Join でまとめて返す。
+// cacheDir の読み取りに not-exist 以外で失敗した場合は、対象を特定できていない
+// ためエラーを返す。
+func RemoveSSOTokenCache(cacheDir, startURL string) error {
+	want := normalizeStartURL(startURL)
+	var targets []string
+	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry) {
+		if normalizeStartURL(ce.StartURL) == want {
+			targets = append(targets, fileName)
+		}
+	})
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read sso cache dir: %w", err)
+	}
+
+	var errs []error
+	for _, name := range targets {
+		if err := ssoCacheRemove(filepath.Join(cacheDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("remove sso cache file %s: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
 }

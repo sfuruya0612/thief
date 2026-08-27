@@ -157,6 +157,18 @@ func CacheDir() (string, error) {
 	return filepath.Join(homeDir, ".aws", "sso", "cache"), nil
 }
 
+// Logout は startURL に対応するトークンキャッシュを CacheDir() から削除する
+// (aws.RemoveSSOTokenCache に委ねる薄い関数)。削除はローカルのキャッシュに限り、
+// AWS 側のサインインセッションは失効させない。同じ startURL を共有する他の
+// profile も未ログインになる (AWS CLI の aws sso logout と同じ範囲)。
+func Logout(startURL string) error {
+	cacheDir, err := CacheDir()
+	if err != nil {
+		return fmt.Errorf("failed to get cache directory: %w", err)
+	}
+	return awsinternal.RemoveSSOTokenCache(cacheDir, startURL)
+}
+
 // saveCacheFile はトークンキャッシュを ~/.aws/sso/cache/<sha1>.json に保存する。
 // ファイル名とパーミッション (ディレクトリ 0700、ファイル 0600) は AWS CLI と互換にする。
 func saveCacheFile(cache *TokenCache) error {

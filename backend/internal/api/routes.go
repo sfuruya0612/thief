@@ -37,6 +37,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/sso", s.handleSSO)
 	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/login/start", s.handleSSOLoginStart)
 	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/login/complete", s.handleSSOLoginComplete)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/sso/logout", s.handleSSOLogout)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ssm/parameters", s.handleSSMList)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ssm/parameters/value", s.handleSSMValue)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ssm/parameters/{name}", s.handleSSMGet)
