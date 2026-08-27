@@ -27,7 +27,11 @@
     "expiryLabel": "有効期限",
     "copyReauthTitle": "再認証コマンドをコピー",
     "copied": "コピーしました",
-    "copy": "コピー"
+    "copy": "コピー",
+    "logout": "SSO ログアウト",
+    "logoutPending": "ログアウト中…",
+    "logoutTitle": "この profile の SSO トークンキャッシュを削除します。同じ start URL を共有する他の profile も未ログインになります",
+    "logoutFailed": "ログアウトに失敗しました"
   },
   "addSessionPicker": {
     "loadError": "一覧の取得に失敗しました",

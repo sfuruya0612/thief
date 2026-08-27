@@ -27,7 +27,11 @@
     "expiryLabel": "Expires",
     "copyReauthTitle": "Copy re-auth command",
     "copied": "Copied",
-    "copy": "Copy"
+    "copy": "Copy",
+    "logout": "SSO logout",
+    "logoutPending": "Logging out…",
+    "logoutTitle": "Removes the SSO token cache for this profile. Other profiles sharing the same start URL are logged out too",
+    "logoutFailed": "Logout failed"
   },
   "addSessionPicker": {
     "loadError": "Failed to load list",
