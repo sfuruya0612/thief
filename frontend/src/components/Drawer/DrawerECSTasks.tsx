@@ -31,6 +31,19 @@ function execDisabledReason(task: ECSTaskTableRow, runtimeId: string, t: TFuncti
   return '';
 }
 
+// コンテナ単位の CPU / Memory は DescribeTasks が返す設定値の文字列で、未指定のとき SDK は
+// CPU に '0' を、Memory / MemoryReservation に nil (backend で空文字列) を返す。MiB の上限 0 は
+// 指定できない値なので、'0' も未指定として扱う
+function isUnsetResource(v: string): boolean {
+  return v === '' || v === '0';
+}
+
+// Memory 列は <hard> / <soft> の形式で、片方だけ設定されているときはその値だけを出す
+function formatContainerMemory(hard: string, soft: string): string {
+  const parts = [hard, soft].filter((v) => !isUnsetResource(v));
+  return parts.length === 0 ? '-' : parts.join(' / ');
+}
+
 // タスク選択時に Tasks タブ内へ表示する詳細ペイン
 function ECSTaskDetail({
   task,
@@ -81,13 +94,15 @@ function ECSTaskDetail({
       <h3>Containers ({task.containers.length})</h3>
       <table className="dt">
         <colgroup>
-          <col style={{ width: '18%' }} />
-          <col style={{ width: '26%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '12%' }} />
+          <col style={{ width: '16%' }} />
+          <col style={{ width: '20%' }} />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '10%' }} />
           <col style={{ width: '7%' }} />
-          <col style={{ width: '13%' }} />
-          <col style={{ width: '12%' }} />
+          <col style={{ width: '11%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '9%' }} />
         </colgroup>
         <thead>
           <tr>
@@ -95,6 +110,8 @@ function ECSTaskDetail({
             <th>Image</th>
             <th>Last status</th>
             <th>Health</th>
+            <th>CPU</th>
+            <th>Memory</th>
             <th>Exit code</th>
             <th>Reason</th>
             <th>Exec</th>
@@ -111,6 +128,8 @@ function ECSTaskDetail({
                   <StatusBadge state={c.lastStatus} />
                 </td>
                 <td>{c.healthStatus || '-'}</td>
+                <td>{isUnsetResource(c.cpu) ? '-' : c.cpu}</td>
+                <td>{formatContainerMemory(c.memory, c.memoryReservation)}</td>
                 <td>{c.exitCode ?? '-'}</td>
                 <td className="truncate">{c.reason || '-'}</td>
                 <td>
@@ -128,7 +147,7 @@ function ECSTaskDetail({
           })}
           {task.containers.length === 0 && (
             <tr>
-              <td colSpan={7} style={{ textAlign: 'center', padding: 20, color: 'var(--text-3)' }}>
+              <td colSpan={9} style={{ textAlign: 'center', padding: 20, color: 'var(--text-3)' }}>
                 No containers
               </td>
             </tr>

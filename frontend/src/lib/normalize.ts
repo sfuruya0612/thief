@@ -344,6 +344,9 @@ export function ecsTaskFromRaw(raw: ECSTaskRaw): ECSTaskRow {
       exitCode: c.exit_code,
       reason: c.reason,
       runtimeId: c.runtime_id,
+      cpu: c.cpu,
+      memory: c.memory,
+      memoryReservation: c.memory_reservation,
       execEnabled: c.exec_enabled,
     })),
   };

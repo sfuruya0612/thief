@@ -169,6 +169,9 @@ describe('ecsTaskFromRaw', () => {
           exit_code: undefined,
           reason: '',
           runtime_id: 'runtime-app',
+          cpu: '',
+          memory: '',
+          memory_reservation: '',
           exec_enabled: true,
         },
       ],
@@ -195,9 +198,49 @@ describe('ecsTaskFromRaw', () => {
           exitCode: undefined,
           reason: '',
           runtimeId: 'runtime-app',
+          // 空文字列 (backend で SDK の nil を写したもの) はそのまま写す
+          cpu: '',
+          memory: '',
+          memoryReservation: '',
           execEnabled: true,
         },
       ],
+    });
+  });
+
+  it('コンテナ単位の cpu / memory / memory_reservation を camelCase に写す', () => {
+    const row = ecsTaskFromRaw({
+      arn: 'arn:aws:ecs:ap-northeast-1:123:task/my-cluster/abc',
+      group: 'service:my-svc',
+      last_status: 'running',
+      desired_status: 'running',
+      launch_type: 'FARGATE',
+      enable_execute_command: false,
+      container_names: ['app'],
+      cpu: '256',
+      memory: '512',
+      started_at: '',
+      stopped_at: '',
+      stopped_reason: '',
+      containers: [
+        {
+          name: 'app',
+          image: 'app:latest',
+          last_status: 'running',
+          health_status: '',
+          reason: '',
+          runtime_id: '',
+          cpu: '128',
+          memory: '256',
+          memory_reservation: '64',
+          exec_enabled: false,
+        },
+      ],
+    });
+    expect(row.containers[0]).toMatchObject({
+      cpu: '128',
+      memory: '256',
+      memoryReservation: '64',
     });
   });
 

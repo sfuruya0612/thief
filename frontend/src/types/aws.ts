@@ -328,6 +328,9 @@ export interface ECSTaskContainerDetailRaw {
   exit_code?: number;
   reason: string;
   runtime_id: string;
+  cpu: string;
+  memory: string;
+  memory_reservation: string;
   exec_enabled: boolean;
 }
 
@@ -339,6 +342,9 @@ export interface ECSTaskContainerDetailRow {
   exitCode?: number;
   reason: string;
   runtimeId: string;
+  cpu: string;
+  memory: string;
+  memoryReservation: string;
   execEnabled: boolean;
 }
 

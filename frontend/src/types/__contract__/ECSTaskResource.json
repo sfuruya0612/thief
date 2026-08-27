@@ -22,6 +22,9 @@
       "exit_code": 16,
       "reason": "s17",
       "runtime_id": "s18",
+      "cpu": "s19",
+      "memory": "s20",
+      "memory_reservation": "s21",
       "exec_enabled": true
     }
   ]
