@@ -144,11 +144,21 @@ func (s *Store) List(service string) ([]Snippet, error) {
 			continue
 		}
 		name := decodeFileName(strings.TrimSuffix(e.Name(), ".sql"))
+		// ReadDir と ReadFile / Info は別のシステムコールのため、その間に別リクエストや
+		// 手動操作で削除されたファイルは fs.ErrNotExist になる。もう存在しないスニペット
+		// として一覧から外し、1 ファイルの消失で一覧全体を失敗させない。それ以外の
+		// エラー (権限不足など) は従来どおり返す。
 		data, err := os.ReadFile(filepath.Join(s.dir(service), e.Name()))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("read snippet %s: %w", e.Name(), err)
 		}
 		info, err := e.Info()
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("stat snippet %s: %w", e.Name(), err)
 		}
