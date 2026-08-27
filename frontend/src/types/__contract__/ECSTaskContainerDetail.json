@@ -6,5 +6,8 @@
   "exit_code": 5,
   "reason": "s6",
   "runtime_id": "s7",
+  "cpu": "s8",
+  "memory": "s9",
+  "memory_reservation": "s10",
   "exec_enabled": true
 }

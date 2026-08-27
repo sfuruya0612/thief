@@ -92,12 +92,16 @@ func TestECSTaskFromSDK(t *testing.T) {
 				StartedAt:            &startedAt,
 				Containers: []ecstypes.Container{
 					{
-						Name:         aws.String("app"),
-						Image:        aws.String("app:latest"),
-						LastStatus:   aws.String("RUNNING"),
-						HealthStatus: ecstypes.HealthStatusHealthy,
-						RuntimeId:    aws.String("runtime-app"),
+						Name:              aws.String("app"),
+						Image:             aws.String("app:latest"),
+						LastStatus:        aws.String("RUNNING"),
+						HealthStatus:      ecstypes.HealthStatusHealthy,
+						RuntimeId:         aws.String("runtime-app"),
+						Cpu:               aws.String("128"),
+						Memory:            aws.String("256"),
+						MemoryReservation: aws.String("128"),
 					},
+					// Cpu / Memory / MemoryReservation が nil のコンテナは空文字列になる
 					{Name: aws.String("sidecar")},
 				},
 			},
@@ -114,12 +118,15 @@ func TestECSTaskFromSDK(t *testing.T) {
 				StartedAt:            startedAt.Format(time.RFC3339),
 				Containers: []ECSTaskContainerDetail{
 					{
-						Name:         "app",
-						Image:        "app:latest",
-						LastStatus:   "running",
-						HealthStatus: "healthy",
-						RuntimeID:    "runtime-app",
-						ExecEnabled:  true,
+						Name:              "app",
+						Image:             "app:latest",
+						LastStatus:        "running",
+						HealthStatus:      "healthy",
+						RuntimeID:         "runtime-app",
+						CPU:               "128",
+						Memory:            "256",
+						MemoryReservation: "128",
+						ExecEnabled:       true,
 					},
 					{Name: "sidecar"},
 				},
@@ -148,6 +155,19 @@ func TestECSTaskFromSDK(t *testing.T) {
 					// EnableExecuteCommand が false のため、RuntimeID があっても ExecEnabled は false
 					{Name: "app", LastStatus: "stopped", ExitCode: &exitCode, Reason: "nonzero exit", RuntimeID: "runtime-app", ExecEnabled: false},
 				},
+			},
+		},
+		{
+			name: "container cpu zero and memory only are copied as is",
+			in: ecstypes.Task{
+				Containers: []ecstypes.Container{
+					{Name: aws.String("app"), Cpu: aws.String("0"), Memory: aws.String("512")},
+				},
+			},
+			want: ECSTaskResource{
+				ContainerNames: []string{"app"},
+				// "0" は未指定を表す SDK の値だが backend では変換せず frontend の表示で判定する
+				Containers: []ECSTaskContainerDetail{{Name: "app", CPU: "0", Memory: "512"}},
 			},
 		},
 		{

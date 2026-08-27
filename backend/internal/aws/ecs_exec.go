@@ -50,6 +50,12 @@ type ECSTaskContainerDetail struct {
 	ExitCode     *int32 `json:"exit_code,omitempty"`
 	Reason       string `json:"reason"`
 	RuntimeID    string `json:"runtime_id"`
+	// CPU / Memory / MemoryReservation は DescribeTasks の Container が返す設定値
+	// (タスク定義の指定値) をそのまま持つ。未指定の場合 SDK は CPU に "0"、Memory と
+	// MemoryReservation に nil を返す。nil は空文字列にする。
+	CPU               string `json:"cpu"`
+	Memory            string `json:"memory"`
+	MemoryReservation string `json:"memory_reservation"`
 	// ExecEnabled は Task.EnableExecuteCommand とコンテナの RuntimeID 有無から判定する
 	// (ListECSContainers の ExecEnabled と同じ判定)。RuntimeID が空の場合、
 	// タスクがまだ Exec 可能な状態まで起動していない。
@@ -171,14 +177,17 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 		names = append(names, ptrStr(c.Name))
 		runtimeID := ptrStr(c.RuntimeId)
 		containers = append(containers, ECSTaskContainerDetail{
-			Name:         ptrStr(c.Name),
-			Image:        ptrStr(c.Image),
-			LastStatus:   DisplayState(ptrStr(c.LastStatus)),
-			HealthStatus: DisplayState(string(c.HealthStatus)),
-			ExitCode:     c.ExitCode,
-			Reason:       ptrStr(c.Reason),
-			RuntimeID:    runtimeID,
-			ExecEnabled:  t.EnableExecuteCommand && runtimeID != "",
+			Name:              ptrStr(c.Name),
+			Image:             ptrStr(c.Image),
+			LastStatus:        DisplayState(ptrStr(c.LastStatus)),
+			HealthStatus:      DisplayState(string(c.HealthStatus)),
+			ExitCode:          c.ExitCode,
+			Reason:            ptrStr(c.Reason),
+			RuntimeID:         runtimeID,
+			CPU:               ptrStr(c.Cpu),
+			Memory:            ptrStr(c.Memory),
+			MemoryReservation: ptrStr(c.MemoryReservation),
+			ExecEnabled:       t.EnableExecuteCommand && runtimeID != "",
 		})
 	}
 	startedAt := ""
