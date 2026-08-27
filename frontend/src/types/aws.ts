@@ -361,6 +361,7 @@ export interface ECSTaskRaw {
   started_at: string;
   stopped_at: string;
   stopped_reason: string;
+  container_instance_arn: string;
   containers: ECSTaskContainerDetailRaw[];
 }
 

@@ -155,6 +155,14 @@ func (s *Server) handleECSTasks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleECSContainerInstances(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	cluster := r.PathValue("cluster")
+	s.serveCached(w, r, cacheKey("ecs-container-instances", profile, region, cluster), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListECSContainerInstances(r.Context(), profile, region, cluster)
+	})
+}
+
 func (s *Server) handleECSContainers(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	cluster := r.PathValue("cluster")

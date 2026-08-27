@@ -160,6 +160,7 @@ describe('ecsTaskFromRaw', () => {
       started_at: '2026-07-08T00:00:00Z',
       stopped_at: '',
       stopped_reason: '',
+      container_instance_arn: '',
       containers: [
         {
           name: 'app',
@@ -222,6 +223,7 @@ describe('ecsTaskFromRaw', () => {
       started_at: '',
       stopped_at: '',
       stopped_reason: '',
+      container_instance_arn: '',
       containers: [
         {
           name: 'app',
@@ -258,6 +260,7 @@ describe('ecsTaskFromRaw', () => {
       started_at: '',
       stopped_at: '',
       stopped_reason: '',
+      container_instance_arn: '',
       containers: undefined as unknown as never[],
     });
     expect(row.containerNames).toEqual([]);

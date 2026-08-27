@@ -44,6 +44,12 @@ type ecsTaskListClient interface {
 	DescribeTasks(ctx context.Context, params *ecs.DescribeTasksInput, optFns ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
 }
 
+// ecsContainerInstanceListClient は ListECSContainerInstances が使う ECS API の部分集合。
+type ecsContainerInstanceListClient interface {
+	ecs.ListContainerInstancesAPIClient
+	DescribeContainerInstances(ctx context.Context, params *ecs.DescribeContainerInstancesInput, optFns ...func(*ecs.Options)) (*ecs.DescribeContainerInstancesOutput, error)
+}
+
 // ListECSResources returns all ECS clusters for the given profile/region.
 func ListECSResources(ctx context.Context, profile, region string) ([]ECSResource, error) {
 	client, err := newECSClient(ctx, profile, region)

@@ -41,6 +41,7 @@ var knownCacheKeySegments = []struct {
 	{seg: "ecr", owner: "aws"},
 	{seg: "ecr-images", owner: "aws"},
 	{seg: "ecs", owner: "aws"},
+	{seg: "ecs-container-instances", owner: "aws"},
 	{seg: "ecs-containers", owner: "aws"},
 	{seg: "ecs-services", owner: "aws"},
 	{seg: "ecs-tasks", owner: "aws"},
@@ -80,8 +81,8 @@ var knownCacheKeySegments = []struct {
 
 // TestViewOwnsCacheKey は既知のキャッシュキー第 1 セグメント全種の分類を固定する。
 func TestViewOwnsCacheKey(t *testing.T) {
-	// 抽出コマンドの結果 (60 種) とテーブルのケース数が一致することを固定する。
-	const wantSegments = 60
+	// 抽出コマンドの結果 (61 種) とテーブルのケース数が一致することを固定する。
+	const wantSegments = 61
 	if len(knownCacheKeySegments) != wantSegments {
 		t.Fatalf("known segments = %d, want %d (update the table when cacheKey segments change)",
 			len(knownCacheKeySegments), wantSegments)
