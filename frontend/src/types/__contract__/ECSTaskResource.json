@@ -13,18 +13,19 @@
   "started_at": "s9",
   "stopped_at": "s10",
   "stopped_reason": "s11",
+  "container_instance_arn": "s12",
   "containers": [
     {
-      "name": "s12",
-      "image": "s13",
-      "last_status": "s14",
-      "health_status": "s15",
-      "exit_code": 16,
-      "reason": "s17",
-      "runtime_id": "s18",
-      "cpu": "s19",
-      "memory": "s20",
-      "memory_reservation": "s21",
+      "name": "s13",
+      "image": "s14",
+      "last_status": "s15",
+      "health_status": "s16",
+      "exit_code": 17,
+      "reason": "s18",
+      "runtime_id": "s19",
+      "cpu": "s20",
+      "memory": "s21",
+      "memory_reservation": "s22",
       "exec_enabled": true
     }
   ]

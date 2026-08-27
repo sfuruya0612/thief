@@ -23,6 +23,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs", s.handleECS)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/services", s.handleECSServices)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks", s.handleECSTasks)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/container-instances", s.handleECSContainerInstances)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks/{task}/containers", s.handleECSContainers)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2/{instance}/session", s.handleEC2Session)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks/{task}/exec", s.handleECSExec)

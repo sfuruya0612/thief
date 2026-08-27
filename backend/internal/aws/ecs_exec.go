@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -24,19 +25,52 @@ type ECSServiceResource struct {
 
 // ECSTaskResource represents a single ECS task.
 type ECSTaskResource struct {
-	ARN                  string                   `json:"arn"`
-	Group                string                   `json:"group"`
-	LastStatus           string                   `json:"last_status"`
-	DesiredStatus        string                   `json:"desired_status"`
-	LaunchType           string                   `json:"launch_type"`
-	EnableExecuteCommand bool                     `json:"enable_execute_command"`
-	ContainerNames       []string                 `json:"container_names"`
-	CPU                  string                   `json:"cpu"`
-	Memory               string                   `json:"memory"`
-	StartedAt            string                   `json:"started_at"`
-	StoppedAt            string                   `json:"stopped_at"`
-	StoppedReason        string                   `json:"stopped_reason"`
+	ARN                  string   `json:"arn"`
+	Group                string   `json:"group"`
+	LastStatus           string   `json:"last_status"`
+	DesiredStatus        string   `json:"desired_status"`
+	LaunchType           string   `json:"launch_type"`
+	EnableExecuteCommand bool     `json:"enable_execute_command"`
+	ContainerNames       []string `json:"container_names"`
+	CPU                  string   `json:"cpu"`
+	Memory               string   `json:"memory"`
+	StartedAt            string   `json:"started_at"`
+	StoppedAt            string   `json:"stopped_at"`
+	StoppedReason        string   `json:"stopped_reason"`
+	// ContainerInstanceArn はタスクが載っているコンテナインスタンス (EC2) の ARN。
+	// Fargate のタスクでは空文字列になる。
+	ContainerInstanceArn string                   `json:"container_instance_arn"`
 	Containers           []ECSTaskContainerDetail `json:"containers"`
+}
+
+// ecsDescribeContainerInstancesBatchSize は DescribeContainerInstances が 1 回に受け付ける
+// コンテナインスタンス数の上限 (API 仕様)。
+const ecsDescribeContainerInstancesBatchSize = 100
+
+// ecsResourceTypeInteger は ecstypes.Resource.Type の値のうち IntegerValue が有効なもの。
+const ecsResourceTypeInteger = "INTEGER"
+
+// ecsResourceNameCPU と ecsResourceNameMemory は ecstypes.Resource.Name のうち
+// コンテナインスタンスの CPU ユニットとメモリ (MiB) を表す値。
+const (
+	ecsResourceNameCPU    = "CPU"
+	ecsResourceNameMemory = "MEMORY"
+)
+
+// ECSContainerInstanceResource はクラスタに登録されたコンテナインスタンス (EC2) 1 台の情報。
+// RegisteredCPU / RegisteredMemory / RemainingCPU / RemainingMemory は該当する要素が
+// 無いとき nil (JSON では null) になる。0 は「残り 0」を意味するため未取得と区別する。
+type ECSContainerInstanceResource struct {
+	ARN               string `json:"arn"`
+	EC2InstanceID     string `json:"ec2_instance_id"`
+	Status            string `json:"status"`
+	AgentConnected    bool   `json:"agent_connected"`
+	RunningTasksCount int32  `json:"running_tasks_count"`
+	PendingTasksCount int32  `json:"pending_tasks_count"`
+	RegisteredCPU     *int32 `json:"registered_cpu"`
+	RegisteredMemory  *int32 `json:"registered_memory"`
+	RemainingCPU      *int32 `json:"remaining_cpu"`
+	RemainingMemory   *int32 `json:"remaining_memory"`
 }
 
 // ECSTaskContainerDetail はタスク詳細ペインに表示するコンテナ単位の情報。
@@ -135,6 +169,9 @@ func ListECSTasks(ctx context.Context, profile, region, cluster, service string)
 // ListTasksInput に載せる ServiceName を単体テストで固定できるよう、
 // クライアントの生成と分離してある。
 func listECSTasks(ctx context.Context, client ecsTaskListClient, cluster, service string) ([]ECSTaskResource, error) {
+	// DesiredStatus を指定しないため ECS の既定で desiredStatus が RUNNING のタスクだけが返る。
+	// コンテナインスタンス (EC2) ごとのタスク一覧を表示する Drawer のタブは、この既定に
+	// 依存して「動いているタスク」を表示している。ステータスの指定を追加するとタブの前提が崩れる。
 	input := &ecs.ListTasksInput{Cluster: aws.String(cluster)}
 	if service != "" {
 		input.ServiceName = aws.String(service)
@@ -211,8 +248,81 @@ func ecsTaskFromSDK(t ecstypes.Task) ECSTaskResource {
 		StartedAt:            startedAt,
 		StoppedAt:            stoppedAt,
 		StoppedReason:        ptrStr(t.StoppedReason),
+		ContainerInstanceArn: ptrStr(t.ContainerInstanceArn),
 		Containers:           containers,
 	}
+}
+
+// ListECSContainerInstances はクラスタに登録された全コンテナインスタンスを返す。
+// ListContainerInstances に Status フィルタを渡さないため、既定 (INACTIVE 以外) の
+// ACTIVE / DRAINING / REGISTERING / REGISTRATION_FAILED / DEREGISTERING がすべて含まれる。
+func ListECSContainerInstances(ctx context.Context, profile, region, cluster string) ([]ECSContainerInstanceResource, error) {
+	client, err := newECSClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return listECSContainerInstances(ctx, client, cluster)
+}
+
+func listECSContainerInstances(ctx context.Context, client ecsContainerInstanceListClient, cluster string) ([]ECSContainerInstanceResource, error) {
+	var arns []string
+	paginator := ecs.NewListContainerInstancesPaginator(client, &ecs.ListContainerInstancesInput{Cluster: aws.String(cluster)})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list ecs container instances: %w", err)
+		}
+		arns = append(arns, page.ContainerInstanceArns...)
+	}
+	resources := make([]ECSContainerInstanceResource, 0, len(arns))
+	// DescribeContainerInstancesInput.ContainerInstances は必須のため 0 件では呼ばない
+	for i := 0; i < len(arns); i += ecsDescribeContainerInstancesBatchSize {
+		end := min(i+ecsDescribeContainerInstancesBatchSize, len(arns))
+		out, err := client.DescribeContainerInstances(ctx, &ecs.DescribeContainerInstancesInput{
+			Cluster:            aws.String(cluster),
+			ContainerInstances: arns[i:end],
+		})
+		if err != nil {
+			return nil, fmt.Errorf("describe ecs container instances: %w", err)
+		}
+		// List と Describe の間に登録解除された等の個別の失敗は全体を失敗にせず、記録して除く
+		for _, f := range out.Failures {
+			slog.Warn("describe ecs container instance failed", "cluster", cluster, "arn", ptrStr(f.Arn), "reason", ptrStr(f.Reason))
+		}
+		for _, ci := range out.ContainerInstances {
+			resources = append(resources, ecsContainerInstanceFromSDK(ci))
+		}
+	}
+	return resources, nil
+}
+
+func ecsContainerInstanceFromSDK(ci ecstypes.ContainerInstance) ECSContainerInstanceResource {
+	return ECSContainerInstanceResource{
+		ARN:               ptrStr(ci.ContainerInstanceArn),
+		EC2InstanceID:     ptrStr(ci.Ec2InstanceId),
+		Status:            DisplayState(ptrStr(ci.Status)),
+		AgentConnected:    ci.AgentConnected,
+		RunningTasksCount: ci.RunningTasksCount,
+		PendingTasksCount: ci.PendingTasksCount,
+		RegisteredCPU:     ecsIntegerResource(ci.RegisteredResources, ecsResourceNameCPU),
+		RegisteredMemory:  ecsIntegerResource(ci.RegisteredResources, ecsResourceNameMemory),
+		RemainingCPU:      ecsIntegerResource(ci.RemainingResources, ecsResourceNameCPU),
+		RemainingMemory:   ecsIntegerResource(ci.RemainingResources, ecsResourceNameMemory),
+	}
+}
+
+// ecsIntegerResource は Resource の一覧から Name が name で Type が INTEGER の要素の
+// IntegerValue を返す。該当が無ければ nil。Resource は Type で有効な値フィールドが決まる
+// 構造のため、Type を確認せずに IntegerValue を読むとゼロ値の 0 を「残り 0」と誤る。
+func ecsIntegerResource(resources []ecstypes.Resource, name string) *int32 {
+	for _, r := range resources {
+		if ptrStr(r.Name) != name || ptrStr(r.Type) != ecsResourceTypeInteger {
+			continue
+		}
+		v := r.IntegerValue
+		return &v
+	}
+	return nil
 }
 
 // ListECSContainers returns all containers within the given ECS task.

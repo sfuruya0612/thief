@@ -1,0 +1,12 @@
+{
+  "arn": "s1",
+  "ec2_instance_id": "s2",
+  "status": "s3",
+  "agent_connected": true,
+  "running_tasks_count": 4,
+  "pending_tasks_count": 5,
+  "registered_cpu": 6,
+  "registered_memory": 7,
+  "remaining_cpu": 8,
+  "remaining_memory": 9
+}
