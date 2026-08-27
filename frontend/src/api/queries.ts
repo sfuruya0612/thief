@@ -35,6 +35,7 @@ import {
   dynamoTableSchemaFromRaw,
   ecrImageFromRaw,
   ecsContainerFromRaw,
+  ecsContainerInstanceFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
   elbListenerFromRaw,
@@ -83,6 +84,7 @@ import {
   getDynamoItems,
   getDynamoSchema,
   getECRImages,
+  getECSContainerInstances,
   getECSContainers,
   getECSServices,
   getECSTasks,
@@ -424,6 +426,17 @@ export function useECSContainers(profile: string, region: string, cluster: strin
     queryFn: async () =>
       (await getECSContainers(profile, region, cluster, task)).map(ecsContainerFromRaw),
     enabled: !!profile && !!cluster && !!task,
+  });
+}
+
+// ECS コンテナインスタンス一覧 (Instances タブ)。タスクとの突合は useECSTasks の結果と
+// containerInstanceArn で行うため、ここではインスタンスだけを取得する。
+export function useECSContainerInstances(profile: string, region: string, cluster: string) {
+  return useQuery({
+    queryKey: ['aws', 'ecs-container-instances', profile, region, cluster],
+    queryFn: async () =>
+      (await getECSContainerInstances(profile, region, cluster)).map(ecsContainerInstanceFromRaw),
+    enabled: !!profile && !!cluster,
   });
 }
 

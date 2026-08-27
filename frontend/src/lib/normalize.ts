@@ -43,6 +43,8 @@ import type {
   ECRImageRow,
   ECRRepoRaw,
   ECRRepoRow,
+  ECSContainerInstanceRaw,
+  ECSContainerInstanceRow,
   ECSContainerRaw,
   ECSContainerRow,
   ECSRaw,
@@ -336,6 +338,7 @@ export function ecsTaskFromRaw(raw: ECSTaskRaw): ECSTaskRow {
     startedAt: raw.started_at,
     stoppedAt: raw.stopped_at,
     stoppedReason: raw.stopped_reason,
+    containerInstanceArn: raw.container_instance_arn,
     containers: (raw.containers ?? []).map((c) => ({
       name: c.name,
       image: c.image,
@@ -358,6 +361,21 @@ export function ecsContainerFromRaw(raw: ECSContainerRaw): ECSContainerRow {
     runtimeId: raw.runtime_id,
     lastStatus: raw.last_status,
     execEnabled: raw.exec_enabled,
+  };
+}
+
+export function ecsContainerInstanceFromRaw(raw: ECSContainerInstanceRaw): ECSContainerInstanceRow {
+  return {
+    arn: raw.arn,
+    ec2InstanceId: raw.ec2_instance_id,
+    status: raw.status,
+    agentConnected: raw.agent_connected,
+    runningTasksCount: raw.running_tasks_count,
+    pendingTasksCount: raw.pending_tasks_count,
+    registeredCpu: raw.registered_cpu,
+    registeredMemory: raw.registered_memory,
+    remainingCpu: raw.remaining_cpu,
+    remainingMemory: raw.remaining_memory,
   };
 }
 

@@ -14,6 +14,7 @@ import { DrawerCFNTags } from './DrawerCFNTags';
 import { DrawerCloudFrontBehaviors } from './DrawerCloudFrontBehaviors';
 import { DrawerDynamoItems } from './DrawerDynamoItems';
 import { DrawerECRImages } from './DrawerECRImages';
+import { DrawerECSContainerInstances } from './DrawerECSContainerInstances';
 import { DrawerECSServices } from './DrawerECSServices';
 import { DrawerECSTasks } from './DrawerECSTasks';
 import { DrawerELBListeners } from './DrawerELBListeners';
@@ -35,7 +36,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   rds: ['Overview', 'Instance Parameters', 'Cluster Parameters', 'Tags'],
   cache: ['Overview', 'Parameters', 'Tags'],
   lambda: ['Overview', 'Tags'],
-  ecs: ['Overview', 'Services', 'Tasks', 'Terminal', 'Tags'],
+  ecs: ['Overview', 'Services', 'Tasks', 'Instances', 'Terminal', 'Tags'],
   s3: ['Overview', 'Objects', 'Tags'],
   iam: ['Overview', 'Tags'],
   elb: ['Overview', 'Listeners', 'Targets', 'Tags'],
@@ -310,6 +311,13 @@ export function Drawer({
                     setPendingExecTarget(target);
                     setTab('Terminal');
                   }}
+                />
+              )}
+              {tab === 'Instances' && service === 'ecs' && (
+                <DrawerECSContainerInstances
+                  profile={profile}
+                  region={region}
+                  cluster={resource.name}
                 />
               )}
               {tab === 'Objects' && service === 's3' && (

@@ -12,6 +12,7 @@ import {
   cwLogGroupFromRaw,
   dynamoFromRaw,
   dynamoTableSchemaFromRaw,
+  ecsContainerInstanceFromRaw,
   ecsServiceFromRaw,
   ecsTaskFromRaw,
   iamFromRaw,
@@ -190,6 +191,7 @@ describe('ecsTaskFromRaw', () => {
       startedAt: '2026-07-08T00:00:00Z',
       stoppedAt: '',
       stoppedReason: '',
+      containerInstanceArn: '',
       containers: [
         {
           name: 'app',
@@ -265,6 +267,81 @@ describe('ecsTaskFromRaw', () => {
     });
     expect(row.containerNames).toEqual([]);
     expect(row.containers).toEqual([]);
+  });
+
+  it('container_instance_arn を containerInstanceArn に写す (EC2 は ARN、Fargate は空文字列)', () => {
+    const base = {
+      arn: 'arn:task/c',
+      group: 'service:my-svc',
+      last_status: 'running',
+      desired_status: 'running',
+      enable_execute_command: false,
+      container_names: ['app'],
+      cpu: '256',
+      memory: '512',
+      started_at: '',
+      stopped_at: '',
+      stopped_reason: '',
+      containers: [],
+    };
+    const ec2 = ecsTaskFromRaw({
+      ...base,
+      launch_type: 'EC2',
+      container_instance_arn: 'arn:aws:ecs:ap-northeast-1:123:container-instance/my-cluster/ci-1',
+    });
+    expect(ec2.containerInstanceArn).toBe(
+      'arn:aws:ecs:ap-northeast-1:123:container-instance/my-cluster/ci-1',
+    );
+    const fargate = ecsTaskFromRaw({ ...base, launch_type: 'FARGATE', container_instance_arn: '' });
+    expect(fargate.containerInstanceArn).toBe('');
+  });
+});
+
+describe('ecsContainerInstanceFromRaw', () => {
+  it('snake_case を camelCase に変換し数値をそのまま写す', () => {
+    const row = ecsContainerInstanceFromRaw({
+      arn: 'arn:aws:ecs:ap-northeast-1:123:container-instance/my-cluster/ci-1',
+      ec2_instance_id: 'i-0123456789abcdef0',
+      status: 'active',
+      agent_connected: true,
+      running_tasks_count: 3,
+      pending_tasks_count: 1,
+      registered_cpu: 2048,
+      registered_memory: 3900,
+      remaining_cpu: 1024,
+      remaining_memory: 1500,
+    });
+    expect(row).toEqual({
+      arn: 'arn:aws:ecs:ap-northeast-1:123:container-instance/my-cluster/ci-1',
+      ec2InstanceId: 'i-0123456789abcdef0',
+      status: 'active',
+      agentConnected: true,
+      runningTasksCount: 3,
+      pendingTasksCount: 1,
+      registeredCpu: 2048,
+      registeredMemory: 3900,
+      remainingCpu: 1024,
+      remainingMemory: 1500,
+    });
+  });
+
+  it('registered_cpu などの null を null のまま保持する (0 や undefined にしない)', () => {
+    const row = ecsContainerInstanceFromRaw({
+      arn: 'arn:ci/2',
+      ec2_instance_id: 'i-2',
+      status: 'draining',
+      agent_connected: false,
+      running_tasks_count: 0,
+      pending_tasks_count: 0,
+      registered_cpu: null,
+      registered_memory: 3900,
+      remaining_cpu: 1024,
+      remaining_memory: null,
+    });
+    expect(row.registeredCpu).toBeNull();
+    expect(row.remainingMemory).toBeNull();
+    expect(row.registeredMemory).toBe(3900);
+    expect(row.agentConnected).toBe(false);
   });
 });
 

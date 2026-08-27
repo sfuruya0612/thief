@@ -44,6 +44,7 @@ import type {
   ECSTaskRaw,
   ECSTaskContainerDetailRaw,
   ECSContainerRaw,
+  ECSContainerInstanceRaw,
   CacheRaw,
   CacheParameterRaw,
   ELBRaw,
@@ -116,6 +117,7 @@ import ecsService from './__contract__/ECSServiceResource.json';
 import ecsTask from './__contract__/ECSTaskResource.json';
 import ecsTaskContainerDetail from './__contract__/ECSTaskContainerDetail.json';
 import ecsContainer from './__contract__/ECSContainerResource.json';
+import ecsContainerInstance from './__contract__/ECSContainerInstanceResource.json';
 import cache from './__contract__/ElastiCacheResource.json';
 import cacheParameter from './__contract__/ElastiCacheParameter.json';
 import elb from './__contract__/ELBResource.json';
@@ -237,6 +239,7 @@ export type ContractChecks = [
   Expect<Contract<typeof ecsTask, ECSTaskRaw>>,
   Expect<Contract<typeof ecsTaskContainerDetail, ECSTaskContainerDetailRaw>>,
   Expect<Contract<typeof ecsContainer, ECSContainerRaw>>,
+  Expect<Contract<typeof ecsContainerInstance, ECSContainerInstanceRaw>>,
   Expect<Contract<typeof cache, CacheRaw>>,
   Expect<Contract<typeof cacheParameter, CacheParameterRaw>>,
   Expect<Contract<typeof elb, ELBRaw>>,

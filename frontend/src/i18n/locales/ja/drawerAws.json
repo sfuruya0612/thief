@@ -23,5 +23,20 @@
     "save": "保存",
     "saving": "保存中…",
     "overwriteConfirm": "{{name}} の値を上書きします。よろしいですか？"
+  },
+  "ecsContainerInstances": {
+    "heading": "コンテナインスタンス ({{n}})",
+    "empty": "コンテナインスタンスがありません",
+    "agentConnected": "エージェント接続",
+    "connected": "接続中",
+    "disconnected": "切断",
+    "ecsReported": "ECS reported",
+    "ecsReportedValue": "実行中 {{running}} / 保留 {{pending}}",
+    "cpu": "CPU (残り / 登録)",
+    "memory": "Memory (残り / 登録)",
+    "tasks": "タスク ({{n}})",
+    "noTasks": "タスクがありません",
+    "unknownInstance": "不明なコンテナインスタンス",
+    "unknownInstanceHint": "一覧に無いコンテナインスタンス ARN を持つタスク"
   }
 }
