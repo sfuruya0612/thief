@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CostRow, SSOLoginStartRow } from '../types/aws';
 import { ApiError } from '../types/common';
@@ -5,6 +6,7 @@ import type { AppView, BaseRow } from '../types/common';
 import type { QueryStatusRow } from '../types/query';
 import { gcpProjectFromRaw, gcsObjectFromRaw } from '../lib/normalizeGcp';
 import { priceTableFromRaw } from '../lib/normalizePricing';
+import { createViewRefresher } from '../lib/refreshView';
 import {
   athenaExecutionFromRaw,
   athenaHistoryFromRaw,
@@ -118,6 +120,7 @@ import {
   postCacheInvalidate,
   postSSOLoginComplete,
   postSSOLoginStart,
+  postSSOLogout,
   type TiDBCostQueryOptions,
   updateSecretValue,
   updateSSMParameter,
@@ -650,6 +653,43 @@ export function useSSOLogin(profile: string) {
       void queryClient.invalidateQueries({ queryKey: ['aws'] });
     },
   });
+}
+
+// SSO ログアウト (POST .../sso/logout)。成功後は TopBar の Refresh と同じ処理列
+// (lib/refreshView.ts) で backend のリソースキャッシュを 'aws' について破棄してから
+// ['aws'] を無効化する。TanStack Query だけを無効化すると、再取得が TTL 内の backend
+// キャッシュを受け取り、トークンを削除済みでも AWS API が呼ばれず SSO_TOKEN_EXPIRED に
+// ならないため (issue 0154)。['aws', 'profiles'] は前方一致で同時に無効化される。
+export function useSSOLogout(profile: string) {
+  const queryClient = useQueryClient();
+  // TopBar の Refresh (App.tsx) とは別の refresher インスタンスで、再入ガードは共有しない。
+  // 同時に押されると backend の破棄と無効化が重複して走るが、どちらも冪等で害は無い
+  const refreshAws = useMemo(
+    () =>
+      createViewRefresher({
+        postCacheInvalidate,
+        invalidateQueries: async (queryKey) => {
+          await queryClient.invalidateQueries({ queryKey });
+        },
+      }),
+    [queryClient],
+  );
+  const mutation = useMutation({
+    mutationFn: () => postSSOLogout(profile),
+    // 無効化の完了まで isPending を維持し、ボタンの再押下を抑える。onSuccess が reject
+    // すると mutation は失敗扱いになるが、queryClient.invalidateQueries は既定
+    // (throwOnError 未指定) で再取得の失敗を reject に載せないため、ログアウト成功後に
+    // ここで失敗表示に転ぶ経路は無い
+    onSuccess: () => refreshAws('aws'),
+  });
+  // 同じコンポーネントが別の profile を表示するようになったら状態 (isPending /
+  // isError) を捨てる。捨てないと、前の profile の失敗や実行中の表示が、何も操作して
+  // いない次の profile のカードに出てしまう。reset は observer を切り離すだけで、
+  // 実行中の onSuccess (backend の破棄と ['aws'] の無効化) は最後まで走るが、対象が
+  // profile に依存しないので害は無い
+  const { reset } = mutation;
+  useEffect(() => () => reset(), [profile, reset]);
+  return mutation;
 }
 
 // ============================================================

@@ -697,6 +697,17 @@ textarea {
   margin-top: 7px;
   min-width: 0;
 }
+.session-card-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  min-width: 0;
+}
+.session-card-error {
+  font-size: 10px;
+  color: var(--err);
+}
 .session-card-reauth code {
   flex: 1;
   min-width: 0;

@@ -4,7 +4,7 @@
 // 発火させる (プロファイル数ぶんの STS 呼び出しを避ける)。
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProfileIdentity } from '../../api/queries';
+import { useProfileIdentity, useSSOLogout } from '../../api/queries';
 import {
   formatSsoExpiry,
   isExpiringSoon,
@@ -48,6 +48,11 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
   // (プロセス起動はせずコピー導線のみ。実行はユーザーのターミナルで行う)
   const needsReauth = badge?.tone === 'warn' || (expiry !== '' && expiring);
   const loginCmd = `aws sso login --profile ${profile}`;
+  // ログアウトはログイン済みと判定できる SSO profile だけに出す。ssoStatus が欠落
+  // (backend が判定不能で空のまま) の profile はログイン済みか分からないため出さない。
+  // 期限間近 (needsReauth) と同時に表示されるのは意図した挙動 (issue 0154)
+  const canLogout = meta?.authType === 'sso' && meta.ssoStatus === 'valid';
+  const logout = useSSOLogout(profile);
 
   return (
     <div>
@@ -68,6 +73,23 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
           </div>
         )}
       </div>
+      {canLogout && (
+        <div className="session-card-logout">
+          <button
+            className="btn sm ghost"
+            title={t('awsActiveSessionCard.logoutTitle')}
+            disabled={logout.isPending}
+            onClick={() => logout.mutate()}
+          >
+            {logout.isPending
+              ? t('awsActiveSessionCard.logoutPending')
+              : t('awsActiveSessionCard.logout')}
+          </button>
+          {logout.isError && (
+            <span className="session-card-error">{t('awsActiveSessionCard.logoutFailed')}</span>
+          )}
+        </div>
+      )}
       {needsReauth && (
         <div className="session-card-reauth">
           <code title={loginCmd}>{loginCmd}</code>
