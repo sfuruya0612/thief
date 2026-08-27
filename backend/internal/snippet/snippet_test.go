@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -549,6 +550,85 @@ func TestStoreListSkipsNonSnippetEntries(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "manual" || got[0].SQL != "SELECT 3" {
 		t.Errorf("List = %+v, want only manual", got)
+	}
+}
+
+func TestStoreListSkipsEntryRemovedAfterReadDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on windows")
+	}
+	base := t.TempDir()
+	dir := filepath.Join(base, "athena")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "alive.sql"), []byte("SELECT 1"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// 列挙 (ReadDir) には載るが読み取り (ReadFile) が fs.ErrNotExist になる状態を、
+	// 参照先の無いシンボリックリンクで決定的に再現する。ReadDir と ReadFile の間に
+	// 別リクエストがファイルを削除した場合と ReadFile が返すエラーが同じになる。
+	if err := os.Symlink(filepath.Join(dir, "missing-target.sql"), filepath.Join(dir, "gone.sql")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	got, err := NewStore(base).List("athena")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "alive" || got[0].SQL != "SELECT 1" {
+		t.Errorf("List = %+v, want only alive", got)
+	}
+}
+
+func TestStoreListReturnsEmptyWhenAllEntriesRemovedAfterReadDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on windows")
+	}
+	base := t.TempDir()
+	dir := filepath.Join(base, "athena")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// 列挙された全エントリが読み取り前に消えた場合も、エラーや nil ではなく
+	// 空スライスを返す (JSON では null ではなく [] になる)
+	if err := os.Symlink(filepath.Join(dir, "missing-target.sql"), filepath.Join(dir, "gone.sql")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	got, err := NewStore(base).List("athena")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("List = %#v, want empty non-nil slice", got)
+	}
+}
+
+func TestStoreListReturnsNonNotExistReadError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits do not restrict the owner on windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("root can read files regardless of permission bits")
+	}
+	base := t.TempDir()
+	dir := filepath.Join(base, "athena")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "alive.sql"), []byte("SELECT 1"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// 読み取り権限の無いファイルは fs.ErrNotExist ではなく fs.ErrPermission になり、
+	// 従来どおり一覧全体のエラーとして返る
+	if err := os.WriteFile(filepath.Join(dir, "locked.sql"), []byte("SELECT 2"), 0o000); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	got, err := NewStore(base).List("athena")
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("List err = %v, want fs.ErrPermission", err)
+	}
+	if got != nil {
+		t.Errorf("List = %+v, want nil on error", got)
 	}
 }
 
