@@ -482,6 +482,9 @@ func TestDefaultSSOLoginDepsIsFullyWired(t *testing.T) {
 	if deps.wait == nil {
 		t.Error("wait is nil")
 	}
+	if deps.logout == nil {
+		t.Error("logout is nil")
+	}
 }
 
 // TestOldSSOLoginRouteRemoved は旧 POST /sso/login (aws sso login の exec 方式) が
@@ -500,5 +503,159 @@ func TestOldSSOLoginRouteRemoved(t *testing.T) {
 	s.mux.ServeHTTP(w, r)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+// --- SSO ログアウト (logout) エンドポイント ---
+
+// postSSOLogout は logout エンドポイントへ POST し、レコーダを返す。
+func postSSOLogout(t *testing.T, s *Server, profile string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPost, "/api/aws/profiles/"+profile+"/sso/logout", nil)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, r)
+	return w
+}
+
+// TestSSOLogoutSucceeds は logout が profile の start URL を注入した関数値へ渡し、
+// 関数値が nil を返したとき (一致ファイルを削除した、一致が無い、キャッシュ
+// ディレクトリが無い、のいずれも nil) に 204 を返すことを検証する。
+func TestSSOLogoutSucceeds(t *testing.T) {
+	const startURL = "https://example.awsapps.com/start"
+	var got []string
+	s := newSSOLoginTestServer(t, ssoLoginDeps{
+		resolveConfig: func(profile string) (*awsinternal.SSOConfig, error) {
+			if profile != "dev" {
+				t.Errorf("resolveConfig profile = %q, want dev", profile)
+			}
+			return &awsinternal.SSOConfig{Region: "ap-northeast-1", StartURL: startURL}, nil
+		},
+		logout: func(startURL string) error {
+			got = append(got, startURL)
+			return nil
+		},
+	})
+
+	w := postSSOLogout(t, s, "dev")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body=%s)", w.Code, w.Body.String())
+	}
+	if w.Body.Len() != 0 {
+		t.Errorf("body = %q, want empty", w.Body.String())
+	}
+	if len(got) != 1 || got[0] != startURL {
+		t.Errorf("logout called with %v, want [%s]", got, startURL)
+	}
+}
+
+// TestSSOLogoutErrors は profile 名の検証、SSO 設定の解決、キャッシュ削除の各失敗が
+// 期待したステータスとエラーコードになることを検証する。
+func TestSSOLogoutErrors(t *testing.T) {
+	okResolve := func(profile string) (*awsinternal.SSOConfig, error) {
+		return &awsinternal.SSOConfig{Region: "ap-northeast-1", StartURL: "https://example.awsapps.com/start"}, nil
+	}
+	tests := []struct {
+		name       string
+		profile    string
+		deps       ssoLoginDeps
+		wantStatus int
+		wantCode   string
+		wantLogout bool
+	}{
+		{
+			name:    "invalid profile name",
+			profile: "bad%20name",
+			deps: ssoLoginDeps{
+				resolveConfig: okResolve,
+				logout:        func(string) error { return nil },
+			},
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "BAD_REQUEST",
+		},
+		{
+			name:    "profile not found",
+			profile: "dev",
+			deps: ssoLoginDeps{
+				resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
+					return nil, fmt.Errorf("wrap: %w", awsinternal.ErrProfileNotFound)
+				},
+				logout: func(string) error { return nil },
+			},
+			wantStatus: http.StatusNotFound,
+			wantCode:   "PROFILE_NOT_FOUND",
+		},
+		{
+			name:    "sso not configured",
+			profile: "dev",
+			deps: ssoLoginDeps{
+				resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
+					return nil, fmt.Errorf("wrap: %w", awsinternal.ErrSSONotConfigured)
+				},
+				logout: func(string) error { return nil },
+			},
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "SSO_NOT_CONFIGURED",
+		},
+		{
+			name:    "config read failure",
+			profile: "dev",
+			deps: ssoLoginDeps{
+				resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
+					return nil, errors.New("read config failed")
+				},
+				logout: func(string) error { return nil },
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "INTERNAL_ERROR",
+		},
+		{
+			name:    "cache removal failure",
+			profile: "dev",
+			deps: ssoLoginDeps{
+				resolveConfig: okResolve,
+				logout:        func(string) error { return errors.New("remove sso cache file a.json: permission denied") },
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "SSO_LOGOUT_FAILED",
+			wantLogout: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called := false
+			deps := tt.deps
+			inner := deps.logout
+			deps.logout = func(startURL string) error {
+				called = true
+				return inner(startURL)
+			}
+			s := newSSOLoginTestServer(t, deps)
+			w := postSSOLogout(t, s, tt.profile)
+			assertErrorCode(t, w, tt.wantStatus, tt.wantCode)
+			if called != tt.wantLogout {
+				t.Errorf("logout called = %v, want %v", called, tt.wantLogout)
+			}
+		})
+	}
+}
+
+// TestSSOLogoutRouteMethod は logout が POST だけに登録され、GET は 405 になることを
+// 検証する (削除操作を GET で誤って起動できないこと)。
+func TestSSOLogoutRouteMethod(t *testing.T) {
+	s := newSSOLoginTestServer(t, ssoLoginDeps{
+		resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
+			t.Fatal("resolveConfig must not be called for GET")
+			return nil, nil
+		},
+		logout: func(string) error {
+			t.Fatal("logout must not be called for GET")
+			return nil
+		},
+	})
+	r := httptest.NewRequest(http.MethodGet, "/api/aws/profiles/dev/sso/logout", nil)
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want 405", w.Code)
 	}
 }

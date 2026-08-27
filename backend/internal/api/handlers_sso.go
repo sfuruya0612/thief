@@ -19,13 +19,14 @@ const ssoLoginTimeout = 5 * time.Minute
 // 往復なので、complete より大幅に短い上限を置く。
 const ssoLoginStartTimeout = 30 * time.Second
 
-// ssoLoginDeps は start / complete エンドポイントが呼ぶ外部処理をまとめる。
+// ssoLoginDeps は start / complete / logout エンドポイントが呼ぶ外部処理をまとめる。
 // いずれも AWS への接続または ~/.aws 配下の読み書きを伴い、テストから実行できない
 // ため関数値で差し替える (internal/ssoauth の Deps と同じ理由)。
 type ssoLoginDeps struct {
 	resolveConfig func(profile string) (*awsinternal.SSOConfig, error)
 	start         func(ctx context.Context, region, startURL string) (*ssoauth.Session, error)
 	wait          func(ctx context.Context, sess *ssoauth.Session) (*ssoauth.TokenCache, error)
+	logout        func(startURL string) error
 }
 
 // defaultSSOLoginDeps は本番で使う実装を返す。wait は ssoauth.Wait を DefaultDeps で
@@ -40,6 +41,7 @@ func defaultSSOLoginDeps() ssoLoginDeps {
 		wait: func(ctx context.Context, sess *ssoauth.Session) (*ssoauth.TokenCache, error) {
 			return ssoauth.Wait(ctx, sess, ssoauth.DefaultDeps())
 		},
+		logout: ssoauth.Logout,
 	}
 }
 
@@ -176,4 +178,30 @@ func writeSSOLoginCompleteError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, http.StatusInternalServerError, "SSO_LOGIN_FAILED", err.Error())
 	}
+}
+
+// handleSSOLogout は profile の SSO 設定を解決し、その start URL のトークンキャッシュを
+// ローカルから削除して 204 を返す。一致するキャッシュが無い場合 (既に未ログイン) も
+// 冪等な操作として 204 を返す。同じ start URL を共有する他の profile も未ログインに
+// なる。AWS 側のセッション失効 (sso:Logout) は呼ばない。backend のリソースキャッシュ
+// には触れない (frontend が cache/invalidate で破棄する)。
+func (s *Server) handleSSOLogout(w http.ResponseWriter, r *http.Request) {
+	profile := r.PathValue("profile")
+	if err := awsinternal.ValidateProfileName(profile); err != nil {
+		writeBadRequest(w, err.Error())
+		return
+	}
+
+	cfg, err := s.ssoLogin.resolveConfig(profile)
+	if err != nil {
+		writeSSOLoginStartError(w, err)
+		return
+	}
+
+	if err := s.ssoLogin.logout(cfg.StartURL); err != nil {
+		writeError(w, http.StatusInternalServerError, "SSO_LOGOUT_FAILED", err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
