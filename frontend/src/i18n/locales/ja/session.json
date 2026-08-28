@@ -30,7 +30,7 @@
     "copy": "コピー",
     "logout": "SSO ログアウト",
     "logoutPending": "ログアウト中…",
-    "logoutTitle": "この profile の SSO トークンキャッシュを削除します。同じ start URL を共有する他の profile も未ログインになります",
+    "logoutTitle": "この profile の SSO セッションを AWS 側で失効し、トークンキャッシュを削除します。同じ start URL を共有する他の profile も未ログインになります",
     "logoutFailed": "ログアウトに失敗しました"
   },
   "addSessionPicker": {

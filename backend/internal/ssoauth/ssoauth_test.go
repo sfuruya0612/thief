@@ -1,10 +1,12 @@
 package ssoauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,7 +37,13 @@ func okDeps() Deps {
 		WaitForToken: func(context.Context, string, *awsinternal.SSOClientRegistration, *awsinternal.SSODeviceAuthorization, string) (*awsinternal.SSOToken, error) {
 			return &awsinternal.SSOToken{AccessToken: "token", ExpiresIn: 3600}, nil
 		},
-		SaveCache: func(*TokenCache) error { return nil },
+		SaveCache:   func(*TokenCache) error { return nil },
+		RevokeToken: func(context.Context, string, string) error { return nil },
+		ListTokens: func(string, string) ([]awsinternal.SSOCachedToken, error) {
+			return []awsinternal.SSOCachedToken{}, nil
+		},
+		RemoveTokenCache: func(string, string) error { return nil },
+		RemoveAllCache:   func(string) error { return nil },
 	}
 }
 
@@ -463,6 +471,18 @@ func TestDefaultDepsIsFullyWired(t *testing.T) {
 	if deps.SaveCache == nil {
 		t.Error("SaveCache is nil")
 	}
+	if deps.RevokeToken == nil {
+		t.Error("RevokeToken is nil")
+	}
+	if deps.ListTokens == nil {
+		t.Error("ListTokens is nil")
+	}
+	if deps.RemoveTokenCache == nil {
+		t.Error("RemoveTokenCache is nil")
+	}
+	if deps.RemoveAllCache == nil {
+		t.Error("RemoveAllCache is nil")
+	}
 }
 
 // TestSaveCacheFileWritesAWSCLICompatibleFile は saveCacheFile が AWS CLI 互換の
@@ -569,5 +589,481 @@ func TestCacheDirPointsUnderHome(t *testing.T) {
 	}
 	if want := filepath.Join(home, ".aws", "sso", "cache"); got != want {
 		t.Errorf("CacheDir() = %q, want %q", got, want)
+	}
+}
+
+// --- Logout / LogoutAll ---
+
+// logoutRecorder は Logout / LogoutAll のテストで Deps に差し込む記録用ダミー。
+// ファイルシステムは使わず、呼び出しの順序と引数を記録する。
+type logoutRecorder struct {
+	tokens     []awsinternal.SSOCachedToken
+	listErr    error
+	revokeErr  func(region, accessToken string) error
+	removeErr  error
+	calls      []string // 呼び出し順 ("list", "revoke:<region>:<token>", "removeToken", "removeAll")
+	listArgs   [][2]string
+	revokeCtxs []context.Context
+	removeArgs [][2]string
+}
+
+func (r *logoutRecorder) deps() Deps {
+	d := okDeps()
+	d.ListTokens = func(cacheDir, startURL string) ([]awsinternal.SSOCachedToken, error) {
+		r.calls = append(r.calls, "list")
+		r.listArgs = append(r.listArgs, [2]string{cacheDir, startURL})
+		if r.listErr != nil {
+			return nil, r.listErr
+		}
+		return r.tokens, nil
+	}
+	d.RevokeToken = func(ctx context.Context, region, accessToken string) error {
+		r.calls = append(r.calls, "revoke:"+region+":"+accessToken)
+		r.revokeCtxs = append(r.revokeCtxs, ctx)
+		if r.revokeErr != nil {
+			return r.revokeErr(region, accessToken)
+		}
+		return nil
+	}
+	d.RemoveTokenCache = func(cacheDir, startURL string) error {
+		r.calls = append(r.calls, "removeToken")
+		r.removeArgs = append(r.removeArgs, [2]string{cacheDir, startURL})
+		return r.removeErr
+	}
+	d.RemoveAllCache = func(cacheDir string) error {
+		r.calls = append(r.calls, "removeAll")
+		r.removeArgs = append(r.removeArgs, [2]string{cacheDir, ""})
+		return r.removeErr
+	}
+	return d
+}
+
+// captureDefaultLogs は既定の slog ロガーをバッファへ書くハンドラに差し替える。
+// 既定ロガーはプロセス全体で共有されるため、これを使うテストは t.Parallel を呼ばない。
+func captureDefaultLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// logoutTestHome は HOME を一時ディレクトリに差し替え、CacheDir() が返す値を返す。
+func logoutTestHome(t *testing.T) string {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	dir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error = %v", err)
+	}
+	return dir
+}
+
+const (
+	logoutStartURL = "https://example.awsapps.com/start/"
+	futureExpires  = "2999-01-01T00:00:00Z"
+	pastExpires    = "2000-01-01T00:00:00Z"
+)
+
+func cachedToken(fileName, region, token, expiresAt string) awsinternal.SSOCachedToken {
+	return awsinternal.SSOCachedToken{FileName: fileName, StartURL: logoutStartURL, Region: region, AccessToken: token, ExpiresAt: expiresAt}
+}
+
+func TestLogoutRevokesBeforeRemovingAndPassesCacheDirAndStartURL(t *testing.T) {
+	cacheDir := logoutTestHome(t)
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{cachedToken("a.json", "ap-northeast-1", "tok-a", futureExpires)}}
+	got, err := Logout(context.Background(), logoutStartURL, "us-east-1", rec.deps())
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{"list", "revoke:ap-northeast-1:tok-a", "removeToken"}, rec.calls); diff != "" {
+		t.Errorf("call order mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([][2]string{{cacheDir, logoutStartURL}}, rec.listArgs); diff != "" {
+		t.Errorf("ListTokens args mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([][2]string{{cacheDir, logoutStartURL}}, rec.removeArgs); diff != "" {
+		t.Errorf("RemoveTokenCache args mismatch (-want +got):\n%s", diff)
+	}
+	if got.Revoked != 1 || len(got.RevokeFailed) != 0 {
+		t.Errorf("result = %+v, want Revoked 1 and no failures", got)
+	}
+}
+
+func TestLogoutAllRevokesBeforeRemovingAllAndListsEveryToken(t *testing.T) {
+	cacheDir := logoutTestHome(t)
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{
+		cachedToken("b.json", "us-east-1", "tok-b", futureExpires),
+		cachedToken("a.json", "ap-northeast-1", "tok-a", futureExpires),
+	}}
+	got, err := LogoutAll(context.Background(), rec.deps())
+	if err != nil {
+		t.Fatalf("LogoutAll() error = %v", err)
+	}
+	// 失効はファイル名の辞書順に逐次呼ばれ、削除はその後。
+	if diff := cmp.Diff([]string{"list", "revoke:ap-northeast-1:tok-a", "revoke:us-east-1:tok-b", "removeAll"}, rec.calls); diff != "" {
+		t.Errorf("call order mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([][2]string{{cacheDir, ""}}, rec.listArgs); diff != "" {
+		t.Errorf("ListTokens args mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([][2]string{{cacheDir, ""}}, rec.removeArgs); diff != "" {
+		t.Errorf("RemoveAllCache args mismatch (-want +got):\n%s", diff)
+	}
+	if got.Revoked != 2 {
+		t.Errorf("Revoked = %d, want 2", got.Revoked)
+	}
+}
+
+func TestLogoutListFailureSkipsRevokeAndRemove(t *testing.T) {
+	logoutTestHome(t)
+	listErr := errors.New("read sso cache dir: boom")
+	for name, run := range map[string]func(Deps) (LogoutResult, error){
+		"Logout":    func(d Deps) (LogoutResult, error) { return Logout(context.Background(), logoutStartURL, "", d) },
+		"LogoutAll": func(d Deps) (LogoutResult, error) { return LogoutAll(context.Background(), d) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := &logoutRecorder{listErr: listErr}
+			got, err := run(rec.deps())
+			if !errors.Is(err, listErr) {
+				t.Fatalf("error = %v, want %v", err, listErr)
+			}
+			if diff := cmp.Diff(LogoutResult{}, got); diff != "" {
+				t.Errorf("result mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff([]string{"list"}, rec.calls); diff != "" {
+				t.Errorf("calls mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestLogoutCacheDirFailureSkipsList(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.UserHomeDir does not depend on HOME on windows")
+	}
+	t.Setenv("HOME", "")
+	for name, run := range map[string]func(Deps) (LogoutResult, error){
+		"Logout":    func(d Deps) (LogoutResult, error) { return Logout(context.Background(), logoutStartURL, "", d) },
+		"LogoutAll": func(d Deps) (LogoutResult, error) { return LogoutAll(context.Background(), d) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := &logoutRecorder{}
+			got, err := run(rec.deps())
+			if err == nil {
+				t.Fatal("error = nil, want cache directory error")
+			}
+			if diff := cmp.Diff(LogoutResult{}, got); diff != "" {
+				t.Errorf("result mismatch (-want +got):\n%s", diff)
+			}
+			if len(rec.calls) != 0 {
+				t.Errorf("calls = %v, want none", rec.calls)
+			}
+		})
+	}
+}
+
+func TestLogoutRegionSelection(t *testing.T) {
+	logoutTestHome(t)
+	tests := []struct {
+		name           string
+		token          awsinternal.SSOCachedToken
+		fallbackRegion string
+		wantCalls      []string
+		wantFailedErr  error
+	}{
+		{
+			name:           "cache region wins over fallback",
+			token:          cachedToken("a.json", "ap-northeast-1", "tok", futureExpires),
+			fallbackRegion: "us-east-1",
+			wantCalls:      []string{"list", "revoke:ap-northeast-1:tok", "removeToken"},
+		},
+		{
+			name:           "missing region uses fallback",
+			token:          cachedToken("a.json", "", "tok", futureExpires),
+			fallbackRegion: "us-east-1",
+			wantCalls:      []string{"list", "revoke:us-east-1:tok", "removeToken"},
+		},
+		{
+			name:          "missing region and fallback is recorded as failure",
+			token:         cachedToken("a.json", "", "tok", futureExpires),
+			wantCalls:     []string{"list", "removeToken"},
+			wantFailedErr: errRegionUnknown,
+		},
+		{
+			name:           "empty access token is recorded as failure",
+			token:          cachedToken("a.json", "ap-northeast-1", "", futureExpires),
+			fallbackRegion: "us-east-1",
+			wantCalls:      []string{"list", "removeToken"},
+			wantFailedErr:  errAccessTokenMissing,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{tt.token}}
+			got, err := Logout(context.Background(), logoutStartURL, tt.fallbackRegion, rec.deps())
+			if err != nil {
+				t.Fatalf("Logout() error = %v", err)
+			}
+			if diff := cmp.Diff(tt.wantCalls, rec.calls); diff != "" {
+				t.Errorf("calls mismatch (-want +got):\n%s", diff)
+			}
+			if tt.wantFailedErr == nil {
+				if got.Revoked != 1 || len(got.RevokeFailed) != 0 {
+					t.Errorf("result = %+v, want Revoked 1", got)
+				}
+				return
+			}
+			if got.Revoked != 0 || len(got.RevokeFailed) != 1 {
+				t.Fatalf("result = %+v, want exactly 1 failure", got)
+			}
+			if !errors.Is(got.RevokeFailed[0].Err, tt.wantFailedErr) {
+				t.Errorf("RevokeFailed[0].Err = %v, want %v", got.RevokeFailed[0].Err, tt.wantFailedErr)
+			}
+			if diff := cmp.Diff([]string{"a.json"}, got.RevokeFailed[0].FileNames); diff != "" {
+				t.Errorf("FileNames mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestLogoutGroupsEmptyAccessTokensIntoOneFailure は accessToken が空のファイルが複数
+// あるとき、空文字列を同一トークンとして 1 つの RevokeFailure にまとめ、全ファイル名を
+// 記録することを検証する (RevokeToken は呼ばれず、削除は行われる)。
+func TestLogoutGroupsEmptyAccessTokensIntoOneFailure(t *testing.T) {
+	logoutTestHome(t)
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{
+		cachedToken("b.json", "ap-northeast-1", "", futureExpires),
+		cachedToken("a.json", "ap-northeast-1", "", futureExpires),
+	}}
+	got, err := Logout(context.Background(), logoutStartURL, "", rec.deps())
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{"list", "removeToken"}, rec.calls); diff != "" {
+		t.Errorf("calls mismatch (-want +got):\n%s", diff)
+	}
+	if got.Revoked != 0 || len(got.RevokeFailed) != 1 {
+		t.Fatalf("result = %+v, want exactly 1 failure", got)
+	}
+	if !errors.Is(got.RevokeFailed[0].Err, errAccessTokenMissing) {
+		t.Errorf("Err = %v, want errAccessTokenMissing", got.RevokeFailed[0].Err)
+	}
+	if diff := cmp.Diff([]string{"a.json", "b.json"}, got.RevokeFailed[0].FileNames); diff != "" {
+		t.Errorf("FileNames mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestLogoutAllMissingRegionIsFailure(t *testing.T) {
+	logoutTestHome(t)
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{cachedToken("a.json", "", "tok", futureExpires)}}
+	got, err := LogoutAll(context.Background(), rec.deps())
+	if err != nil {
+		t.Fatalf("LogoutAll() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{"list", "removeAll"}, rec.calls); diff != "" {
+		t.Errorf("calls mismatch (-want +got):\n%s", diff)
+	}
+	if len(got.RevokeFailed) != 1 || !errors.Is(got.RevokeFailed[0].Err, errRegionUnknown) {
+		t.Errorf("RevokeFailed = %+v, want one errRegionUnknown", got.RevokeFailed)
+	}
+}
+
+func TestLogoutExpiresAtHandling(t *testing.T) {
+	logoutTestHome(t)
+	tests := []struct {
+		name       string
+		expiresAt  string
+		wantRevoke bool
+	}{
+		{name: "expired token is skipped", expiresAt: pastExpires, wantRevoke: false},
+		{name: "future token is revoked", expiresAt: futureExpires, wantRevoke: true},
+		{name: "missing expiresAt is revoked", expiresAt: "", wantRevoke: true},
+		{name: "unparseable expiresAt is revoked", expiresAt: "2020-06-14T05:26:13UTC", wantRevoke: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logs := captureDefaultLogs(t)
+			rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{cachedToken("a.json", "ap-northeast-1", "tok", tt.expiresAt)}}
+			got, err := Logout(context.Background(), logoutStartURL, "", rec.deps())
+			if err != nil {
+				t.Fatalf("Logout() error = %v", err)
+			}
+			wantCalls := []string{"list", "removeToken"}
+			wantRevoked := 0
+			if tt.wantRevoke {
+				wantCalls = []string{"list", "revoke:ap-northeast-1:tok", "removeToken"}
+				wantRevoked = 1
+			}
+			if diff := cmp.Diff(wantCalls, rec.calls); diff != "" {
+				t.Errorf("calls mismatch (-want +got):\n%s", diff)
+			}
+			if got.Revoked != wantRevoked || len(got.RevokeFailed) != 0 {
+				t.Errorf("result = %+v, want Revoked %d and no failures", got, wantRevoked)
+			}
+			want := fmt.Sprintf("level=INFO msg=\"sso logout completed\" revoked=%d revoke_failed=0", wantRevoked)
+			if !strings.Contains(logs.String(), want) {
+				t.Errorf("logs do not contain %q: %s", want, logs.String())
+			}
+		})
+	}
+}
+
+func TestLogoutDeduplicatesSameAccessTokenUsingFirstFileByName(t *testing.T) {
+	logoutTestHome(t)
+	// 辞書順で最初の a.json (region ap-northeast-1、有効期限あり) が代表になる。
+	// b.json は同じトークンだが region と expiresAt が食い違う。
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{
+		cachedToken("b.json", "us-east-1", "tok", pastExpires),
+		cachedToken("a.json", "ap-northeast-1", "tok", futureExpires),
+	}}
+	got, err := Logout(context.Background(), logoutStartURL, "", rec.deps())
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{"list", "revoke:ap-northeast-1:tok", "removeToken"}, rec.calls); diff != "" {
+		t.Errorf("calls mismatch (-want +got):\n%s", diff)
+	}
+	if got.Revoked != 1 {
+		t.Errorf("Revoked = %d, want 1 (unique access token)", got.Revoked)
+	}
+}
+
+func TestLogoutRevokeFailureContinuesToRemoveAndRecordsAllFileNames(t *testing.T) {
+	logoutTestHome(t)
+	logs := captureDefaultLogs(t)
+	revokeErr := errors.New("sso logout: UnauthorizedException")
+	rec := &logoutRecorder{
+		tokens: []awsinternal.SSOCachedToken{
+			cachedToken("a.json", "ap-northeast-1", "tok-shared", futureExpires),
+			cachedToken("b.json", "ap-northeast-1", "tok-shared", futureExpires),
+			cachedToken("c.json", "ap-northeast-1", "tok-ok", futureExpires),
+		},
+		revokeErr: func(_, accessToken string) error {
+			if accessToken == "tok-shared" {
+				return revokeErr
+			}
+			return nil
+		},
+	}
+	got, err := Logout(context.Background(), logoutStartURL, "", rec.deps())
+	if err != nil {
+		t.Fatalf("Logout() error = %v, want nil (revoke failure must not fail logout)", err)
+	}
+	if diff := cmp.Diff([]string{"list", "revoke:ap-northeast-1:tok-shared", "revoke:ap-northeast-1:tok-ok", "removeToken"}, rec.calls); diff != "" {
+		t.Errorf("calls mismatch (-want +got):\n%s", diff)
+	}
+	if got.Revoked != 1 {
+		t.Errorf("Revoked = %d, want 1", got.Revoked)
+	}
+	if len(got.RevokeFailed) != 1 {
+		t.Fatalf("RevokeFailed = %+v, want 1 entry", got.RevokeFailed)
+	}
+	if diff := cmp.Diff([]string{"a.json", "b.json"}, got.RevokeFailed[0].FileNames); diff != "" {
+		t.Errorf("FileNames mismatch (-want +got):\n%s", diff)
+	}
+	if !errors.Is(got.RevokeFailed[0].Err, revokeErr) {
+		t.Errorf("Err = %v, want %v", got.RevokeFailed[0].Err, revokeErr)
+	}
+	for _, want := range []string{
+		"level=WARN msg=\"sso token revoke failed\" files=\"[a.json b.json]\"",
+		"level=INFO msg=\"sso logout completed\" revoked=1 revoke_failed=1",
+	} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("logs do not contain %q: %s", want, logs.String())
+		}
+	}
+}
+
+func TestLogoutRevokeContextHasThirtySecondDeadline(t *testing.T) {
+	logoutTestHome(t)
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{cachedToken("a.json", "ap-northeast-1", "tok", futureExpires)}}
+	before := time.Now()
+	if _, err := Logout(context.Background(), logoutStartURL, "", rec.deps()); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if len(rec.revokeCtxs) != 1 {
+		t.Fatalf("RevokeToken called %d times, want 1", len(rec.revokeCtxs))
+	}
+	deadline, ok := rec.revokeCtxs[0].Deadline()
+	if !ok {
+		t.Fatal("RevokeToken ctx has no deadline, want 30s")
+	}
+	// before は Logout 呼び出しの直前に取るため、デッドラインは before + 30s より
+	// わずかに後になる。前後 5 秒の幅で判定する。
+	remaining := deadline.Sub(before)
+	if remaining > revokeTimeout+5*time.Second || remaining < revokeTimeout-5*time.Second {
+		t.Errorf("deadline is %v from start, want about %v", remaining, revokeTimeout)
+	}
+}
+
+func TestLogoutCancelledParentContextSkipsRevokeButRemoves(t *testing.T) {
+	logoutTestHome(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{
+		cachedToken("a.json", "ap-northeast-1", "tok-a", futureExpires),
+		cachedToken("b.json", "ap-northeast-1", "tok-b", futureExpires),
+	}}
+	got, err := Logout(ctx, logoutStartURL, "", rec.deps())
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{"list", "removeToken"}, rec.calls); diff != "" {
+		t.Errorf("calls mismatch (-want +got):\n%s", diff)
+	}
+	if len(got.RevokeFailed) != 2 {
+		t.Fatalf("RevokeFailed = %+v, want 2 entries", got.RevokeFailed)
+	}
+	for _, f := range got.RevokeFailed {
+		if !errors.Is(f.Err, context.Canceled) {
+			t.Errorf("Err = %v, want context.Canceled", f.Err)
+		}
+	}
+}
+
+func TestLogoutRemoveFailureReturnsErrorWithValidResult(t *testing.T) {
+	logoutTestHome(t)
+	removeErr := errors.New("remove sso cache file a.json: permission denied")
+	for name, run := range map[string]func(Deps) (LogoutResult, error){
+		"Logout":    func(d Deps) (LogoutResult, error) { return Logout(context.Background(), logoutStartURL, "", d) },
+		"LogoutAll": func(d Deps) (LogoutResult, error) { return LogoutAll(context.Background(), d) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := &logoutRecorder{
+				tokens: []awsinternal.SSOCachedToken{
+					cachedToken("a.json", "ap-northeast-1", "tok-a", futureExpires),
+					cachedToken("b.json", "ap-northeast-1", "", futureExpires),
+				},
+				removeErr: removeErr,
+			}
+			got, err := run(rec.deps())
+			if !errors.Is(err, removeErr) {
+				t.Fatalf("error = %v, want %v", err, removeErr)
+			}
+			if got.Revoked != 1 || len(got.RevokeFailed) != 1 {
+				t.Errorf("result = %+v, want Revoked 1 and 1 failure kept despite the removal error", got)
+			}
+		})
+	}
+}
+
+func TestLogoutWithNoTokensOnlyRemovesAndLogsZero(t *testing.T) {
+	logoutTestHome(t)
+	logs := captureDefaultLogs(t)
+	rec := &logoutRecorder{tokens: []awsinternal.SSOCachedToken{}}
+	got, err := Logout(context.Background(), logoutStartURL, "", rec.deps())
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{"list", "removeToken"}, rec.calls); diff != "" {
+		t.Errorf("calls mismatch (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(LogoutResult{}, got); diff != "" {
+		t.Errorf("result mismatch (-want +got):\n%s", diff)
+	}
+	if want := "level=INFO msg=\"sso logout completed\" revoked=0 revoke_failed=0"; !strings.Contains(logs.String(), want) {
+		t.Errorf("logs do not contain %q: %s", want, logs.String())
 	}
 }

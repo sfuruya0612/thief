@@ -55,7 +55,7 @@ func normalizeStartURL(u string) string {
 // 有効トークンを返す別実装であり、意図的に統合していない (別 issue で扱う)。
 func readSSOCacheStatuses(cacheDir string, now time.Time) (map[string]ssoCacheStatus, bool) {
 	statuses := make(map[string]ssoCacheStatus)
-	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry) {
+	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry, _ []byte) {
 		st := ssoCacheStatus{Status: SSOStatusExpired}
 		if exp, err := time.Parse(time.RFC3339, ce.ExpiresAt); err != nil {
 			// botocore 旧形式 ("2020-06-14T05:26:13UTC") 等。有効と確認できない
@@ -90,9 +90,11 @@ func readSSOCacheStatuses(cacheDir string, now time.Time) (map[string]ssoCacheSt
 // トークンキャッシュごとに visit を呼ぶ。対象の判定規則 (.json のみ、1MB 超と
 // 読めないファイルと壊れた JSON は slog.Warn を出して対象外、startUrl を持たない
 // client registration は対象外) をここに集約し、状態の読み取り
-// (readSSOCacheStatuses) と削除 (RemoveSSOTokenCache) で同じファイル集合を扱う。
+// (readSSOCacheStatuses)、削除 (RemoveSSOTokenCache)、列挙 (ListSSOTokenCache) で同じ
+// ファイル集合を扱う。visit には最小フィールドの ce に加えて生の JSON (data) も渡し、
+// accessToken のような秘密情報を必要とする呼び出し側だけがその場でデコードする。
 // 返すエラーは os.ReadDir のものだけで、not-exist の扱いは呼び出し側に委ねる。
-func walkSSOCacheTokens(cacheDir string, visit func(fileName string, ce ssoCacheEntry)) error {
+func walkSSOCacheTokens(cacheDir string, visit func(fileName string, ce ssoCacheEntry, data []byte)) error {
 	entries, err := os.ReadDir(cacheDir)
 	if err != nil {
 		return err
@@ -121,7 +123,7 @@ func walkSSOCacheTokens(cacheDir string, visit func(fileName string, ce ssoCache
 			// なのでログは出さない。
 			continue
 		}
-		visit(entry.Name(), ce)
+		visit(entry.Name(), ce, data)
 	}
 	return nil
 }
@@ -138,7 +140,7 @@ func walkSSOCacheTokens(cacheDir string, visit func(fileName string, ce ssoCache
 func RemoveSSOTokenCache(cacheDir, startURL string) error {
 	want := normalizeStartURL(startURL)
 	var targets []string
-	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry) {
+	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry, _ []byte) {
 		if normalizeStartURL(ce.StartURL) == want {
 			targets = append(targets, fileName)
 		}
@@ -154,6 +156,94 @@ func RemoveSSOTokenCache(cacheDir, startURL string) error {
 	for _, name := range targets {
 		if err := ssoCacheRemove(filepath.Join(cacheDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, fmt.Errorf("remove sso cache file %s: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// SSOCachedToken は ListSSOTokenCache が返す 1 ファイル分のトークンキャッシュ。
+// ExpiresAt はファイルの生値 (RFC 3339 を想定) のまま返し、解釈は呼び出し側が行う。
+// AccessToken は sso:Logout の呼び出しに必要なため含める。ログに出してはならない。
+type SSOCachedToken struct {
+	FileName    string
+	StartURL    string
+	Region      string
+	AccessToken string
+	ExpiresAt   string
+}
+
+// ssoCacheTokenSecrets は ListSSOTokenCache だけがデコードする、トークンキャッシュの
+// 秘密情報を含むフィールド。ssoCacheEntry に accessToken を足さず、状態の読み取り
+// (readSSOCacheStatuses) の経路で秘密情報を構造体に展開しない方針を保つ。
+type ssoCacheTokenSecrets struct {
+	Region      string `json:"region"`
+	AccessToken string `json:"accessToken"`
+}
+
+// ListSSOTokenCache は cacheDir (~/.aws/sso/cache) のトークンキャッシュのうち、中身の
+// startUrl が startURL と一致する (normalizeStartURL 後の比較) ファイルを返す。startURL
+// が空のときは全トークンを返す。対象の判定規則 (.json のみ、1MB 超と読めないファイルと
+// 壊れた JSON は slog.Warn を出して対象外、startUrl を持たない client registration は
+// 対象外) は walkSSOCacheTokens と共有する。cacheDir が無い場合は一度もログインして
+// いない正常系として空スライスと nil を返す。返り値の順序は os.ReadDir の順 (ファイル名
+// の辞書順)。
+func ListSSOTokenCache(cacheDir, startURL string) ([]SSOCachedToken, error) {
+	want := normalizeStartURL(startURL)
+	tokens := []SSOCachedToken{}
+	err := walkSSOCacheTokens(cacheDir, func(fileName string, ce ssoCacheEntry, data []byte) {
+		if want != "" && normalizeStartURL(ce.StartURL) != want {
+			return
+		}
+		// walkSSOCacheTokens が同じ data を ssoCacheEntry へデコードできているので JSON
+		// 自体は正しいが、ssoCacheEntry は region と accessToken の型を見ていないため、
+		// 型が食い違うファイル ("region": 123 など) ではここで失敗しうる。その場合は
+		// 壊れたファイルとして警告を出して対象外にする。
+		var secrets ssoCacheTokenSecrets
+		if err := json.Unmarshal(data, &secrets); err != nil {
+			slog.Warn("parse sso cache file failed", "file", fileName, "err", err)
+			return
+		}
+		tokens = append(tokens, SSOCachedToken{
+			FileName:    fileName,
+			StartURL:    ce.StartURL,
+			Region:      secrets.Region,
+			AccessToken: secrets.AccessToken,
+			ExpiresAt:   ce.ExpiresAt,
+		})
+	})
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return tokens, nil
+		}
+		return nil, fmt.Errorf("read sso cache dir: %w", err)
+	}
+	return tokens, nil
+}
+
+// RemoveAllSSOCache は cacheDir (~/.aws/sso/cache) 直下の通常ファイルを拡張子を問わず
+// すべて削除する (トークンキャッシュと client registration を含む)。thief と AWS CLI が
+// 書くのは直下の通常ファイルだけなので、サブディレクトリとシンボリックリンク等の通常
+// ファイル以外のエントリは削除せず slog.Warn を出して残す。cacheDir が無い場合と削除時に
+// 既に消えていた場合 (fs.ErrNotExist) は成功として nil を返し、cacheDir の読み取りが
+// それ以外で失敗した場合はエラーを返す。複数の削除失敗は errors.Join でまとめて返す
+// (RemoveSSOTokenCache と同じ規則)。
+func RemoveAllSSOCache(cacheDir string) error {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read sso cache dir: %w", err)
+	}
+
+	var errs []error
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			slog.Warn("sso cache entry skipped", "name", entry.Name(), "type", entry.Type().String())
+			continue
+		}
+		if err := ssoCacheRemove(filepath.Join(cacheDir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("remove sso cache file %s: %w", entry.Name(), err))
 		}
 	}
 	return errors.Join(errs...)

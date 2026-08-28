@@ -30,7 +30,7 @@
     "copy": "Copy",
     "logout": "SSO logout",
     "logoutPending": "Logging out…",
-    "logoutTitle": "Removes the SSO token cache for this profile. Other profiles sharing the same start URL are logged out too",
+    "logoutTitle": "Revokes the SSO session for this profile on AWS and removes its token cache. Other profiles sharing the same start URL are logged out too",
     "logoutFailed": "Logout failed"
   },
   "addSessionPicker": {

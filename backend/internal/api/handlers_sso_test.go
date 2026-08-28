@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -517,12 +518,14 @@ func postSSOLogout(t *testing.T, s *Server, profile string) *httptest.ResponseRe
 	return w
 }
 
-// TestSSOLogoutSucceeds は logout が profile の start URL を注入した関数値へ渡し、
-// 関数値が nil を返したとき (一致ファイルを削除した、一致が無い、キャッシュ
-// ディレクトリが無い、のいずれも nil) に 204 を返すことを検証する。
+// TestSSOLogoutSucceeds は logout が profile の start URL と sso_region、リクエストの
+// context を注入した関数値へ渡し、関数値がエラー無しで返したとき (失効と削除の完了、
+// 一致が無い、キャッシュディレクトリが無い、のいずれも) に 204 を返すことを検証する。
 func TestSSOLogoutSucceeds(t *testing.T) {
 	const startURL = "https://example.awsapps.com/start"
-	var got []string
+	type call struct{ startURL, region string }
+	var got []call
+	var gotCtx context.Context
 	s := newSSOLoginTestServer(t, ssoLoginDeps{
 		resolveConfig: func(profile string) (*awsinternal.SSOConfig, error) {
 			if profile != "dev" {
@@ -530,12 +533,47 @@ func TestSSOLogoutSucceeds(t *testing.T) {
 			}
 			return &awsinternal.SSOConfig{Region: "ap-northeast-1", StartURL: startURL}, nil
 		},
-		logout: func(startURL string) error {
-			got = append(got, startURL)
-			return nil
+		logout: func(ctx context.Context, startURL, fallbackRegion string) (ssoauth.LogoutResult, error) {
+			gotCtx = ctx
+			got = append(got, call{startURL, fallbackRegion})
+			return ssoauth.LogoutResult{Revoked: 1}, nil
 		},
 	})
 
+	type ctxKey struct{}
+	r := httptest.NewRequest(http.MethodPost, "/api/aws/profiles/dev/sso/logout", nil)
+	r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, "marker"))
+	w := httptest.NewRecorder()
+	s.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body=%s)", w.Code, w.Body.String())
+	}
+	if w.Body.Len() != 0 {
+		t.Errorf("body = %q, want empty", w.Body.String())
+	}
+	if len(got) != 1 || got[0] != (call{startURL, "ap-northeast-1"}) {
+		t.Errorf("logout called with %+v, want [{%s ap-northeast-1}]", got, startURL)
+	}
+	if gotCtx == nil || gotCtx.Value(ctxKey{}) != "marker" {
+		t.Error("logout ctx is not derived from the request context")
+	}
+}
+
+// TestSSOLogoutRevokeFailureStillSucceeds は AWS 側の失効に失敗したトークンがあっても
+// ローカルの削除が完了していれば 204 を返すことを検証する (失効の失敗は警告ログに留める)。
+func TestSSOLogoutRevokeFailureStillSucceeds(t *testing.T) {
+	logs := captureLogs(t)
+	s := newSSOLoginTestServer(t, ssoLoginDeps{
+		resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
+			return &awsinternal.SSOConfig{Region: "ap-northeast-1", StartURL: "https://example.awsapps.com/start"}, nil
+		},
+		logout: func(context.Context, string, string) (ssoauth.LogoutResult, error) {
+			return ssoauth.LogoutResult{Revoked: 1, RevokeFailed: []ssoauth.RevokeFailure{
+				{FileNames: []string{"a.json"}, Err: errors.New("sso logout: UnauthorizedException")},
+				{FileNames: []string{"b.json"}, Err: errors.New("region unknown")},
+			}}, nil
+		},
+	})
 	w := postSSOLogout(t, s, "dev")
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204 (body=%s)", w.Code, w.Body.String())
@@ -543,8 +581,23 @@ func TestSSOLogoutSucceeds(t *testing.T) {
 	if w.Body.Len() != 0 {
 		t.Errorf("body = %q, want empty", w.Body.String())
 	}
-	if len(got) != 1 || got[0] != startURL {
-		t.Errorf("logout called with %v, want [%s]", got, startURL)
+	var warns []recordedLog
+	for _, r := range logs.records {
+		if r.msg == "sso logout completed with revoke failures" {
+			warns = append(warns, r)
+		}
+	}
+	if len(warns) != 1 {
+		t.Fatalf("revoke failure warnings = %d, want 1 (records=%+v)", len(warns), logs.records)
+	}
+	if warns[0].level != slog.LevelWarn {
+		t.Errorf("level = %v, want WARN", warns[0].level)
+	}
+	want := map[string]string{"profile": "dev", "revoked": "1", "revoke_failed": "2"}
+	for k, v := range want {
+		if warns[0].attrs[k] != v {
+			t.Errorf("attr %s = %q, want %q", k, warns[0].attrs[k], v)
+		}
 	}
 }
 
@@ -553,6 +606,9 @@ func TestSSOLogoutSucceeds(t *testing.T) {
 func TestSSOLogoutErrors(t *testing.T) {
 	okResolve := func(profile string) (*awsinternal.SSOConfig, error) {
 		return &awsinternal.SSOConfig{Region: "ap-northeast-1", StartURL: "https://example.awsapps.com/start"}, nil
+	}
+	okLogout := func(context.Context, string, string) (ssoauth.LogoutResult, error) {
+		return ssoauth.LogoutResult{}, nil
 	}
 	tests := []struct {
 		name       string
@@ -567,7 +623,7 @@ func TestSSOLogoutErrors(t *testing.T) {
 			profile: "bad%20name",
 			deps: ssoLoginDeps{
 				resolveConfig: okResolve,
-				logout:        func(string) error { return nil },
+				logout:        okLogout,
 			},
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
@@ -579,7 +635,7 @@ func TestSSOLogoutErrors(t *testing.T) {
 				resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
 					return nil, fmt.Errorf("wrap: %w", awsinternal.ErrProfileNotFound)
 				},
-				logout: func(string) error { return nil },
+				logout: okLogout,
 			},
 			wantStatus: http.StatusNotFound,
 			wantCode:   "PROFILE_NOT_FOUND",
@@ -591,7 +647,7 @@ func TestSSOLogoutErrors(t *testing.T) {
 				resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
 					return nil, fmt.Errorf("wrap: %w", awsinternal.ErrSSONotConfigured)
 				},
-				logout: func(string) error { return nil },
+				logout: okLogout,
 			},
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "SSO_NOT_CONFIGURED",
@@ -603,7 +659,7 @@ func TestSSOLogoutErrors(t *testing.T) {
 				resolveConfig: func(string) (*awsinternal.SSOConfig, error) {
 					return nil, errors.New("read config failed")
 				},
-				logout: func(string) error { return nil },
+				logout: okLogout,
 			},
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
@@ -613,7 +669,10 @@ func TestSSOLogoutErrors(t *testing.T) {
 			profile: "dev",
 			deps: ssoLoginDeps{
 				resolveConfig: okResolve,
-				logout:        func(string) error { return errors.New("remove sso cache file a.json: permission denied") },
+				logout: func(context.Context, string, string) (ssoauth.LogoutResult, error) {
+					// 失効は済んでいても削除の失敗はエラーとして返す。
+					return ssoauth.LogoutResult{Revoked: 1}, errors.New("remove sso cache file a.json: permission denied")
+				},
 			},
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "SSO_LOGOUT_FAILED",
@@ -625,9 +684,9 @@ func TestSSOLogoutErrors(t *testing.T) {
 			called := false
 			deps := tt.deps
 			inner := deps.logout
-			deps.logout = func(startURL string) error {
+			deps.logout = func(ctx context.Context, startURL, fallbackRegion string) (ssoauth.LogoutResult, error) {
 				called = true
-				return inner(startURL)
+				return inner(ctx, startURL, fallbackRegion)
 			}
 			s := newSSOLoginTestServer(t, deps)
 			w := postSSOLogout(t, s, tt.profile)
@@ -647,9 +706,9 @@ func TestSSOLogoutRouteMethod(t *testing.T) {
 			t.Fatal("resolveConfig must not be called for GET")
 			return nil, nil
 		},
-		logout: func(string) error {
+		logout: func(context.Context, string, string) (ssoauth.LogoutResult, error) {
 			t.Fatal("logout must not be called for GET")
-			return nil
+			return ssoauth.LogoutResult{}, nil
 		},
 	})
 	r := httptest.NewRequest(http.MethodGet, "/api/aws/profiles/dev/sso/logout", nil)

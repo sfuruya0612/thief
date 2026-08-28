@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -403,5 +404,321 @@ func TestRemoveSSOTokenCache(t *testing.T) {
 			t.Fatalf("RemoveSSOTokenCache() = %v, want wrapping both %v and %v", err, errFirst, errSecond)
 		}
 		assertRemaining(t, dir, "first.json", "second.json")
+	})
+}
+
+// ssoCacheTestDir は files をファイル名 → 内容として一時ディレクトリに書き、そのパスを返す。
+func ssoCacheTestDir(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return dir
+}
+
+// ssoCacheRemainingFiles は dir 直下のエントリ名を辞書順で返す。
+func ssoCacheRemainingFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+func TestListSSOTokenCache(t *testing.T) {
+	const (
+		startA = "https://a.awsapps.com/start"
+		startB = "https://b.awsapps.com/start"
+	)
+	tokenJSON := func(startURL, region, token string) string {
+		return `{"startUrl": "` + startURL + `", "region": "` + region + `", "accessToken": "` + token + `", "expiresAt": "2027-01-01T00:00:00Z"}`
+	}
+	const regJSON = `{"clientId": "cid", "clientSecret": "REDACTED", "expiresAt": "2027-01-01T00:00:00Z"}`
+
+	t.Run("returns only tokens matching the start url", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{
+			"a.json":   tokenJSON(startA, "ap-northeast-1", "tok-a"),
+			"b.json":   tokenJSON(startB, "us-east-1", "tok-b"),
+			"reg.json": regJSON,
+		})
+		got, err := ListSSOTokenCache(dir, startA)
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		want := []SSOCachedToken{{FileName: "a.json", StartURL: startA, Region: "ap-northeast-1", AccessToken: "tok-a", ExpiresAt: "2027-01-01T00:00:00Z"}}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("tokens mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("no match returns empty non-nil slice", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{"b.json": tokenJSON(startB, "us-east-1", "tok-b")})
+		got, err := ListSSOTokenCache(dir, startA)
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		if got == nil || len(got) != 0 {
+			t.Errorf("ListSSOTokenCache() = %#v, want empty non-nil slice", got)
+		}
+	})
+
+	t.Run("empty start url returns every token in file name order", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{
+			"b.json":   tokenJSON(startB, "us-east-1", "tok-b"),
+			"a.json":   tokenJSON(startA, "ap-northeast-1", "tok-a"),
+			"reg.json": regJSON,
+		})
+		got, err := ListSSOTokenCache(dir, "")
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		want := []SSOCachedToken{
+			{FileName: "a.json", StartURL: startA, Region: "ap-northeast-1", AccessToken: "tok-a", ExpiresAt: "2027-01-01T00:00:00Z"},
+			{FileName: "b.json", StartURL: startB, Region: "us-east-1", AccessToken: "tok-b", ExpiresAt: "2027-01-01T00:00:00Z"},
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("tokens mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("client registration without startUrl is excluded even for empty start url", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{"reg.json": regJSON})
+		got, err := ListSSOTokenCache(dir, "")
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("ListSSOTokenCache() = %+v, want no tokens", got)
+		}
+	})
+
+	t.Run("trailing slash difference still matches", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{
+			"slash.json":   tokenJSON(startA+"/", "ap-northeast-1", "tok-1"),
+			"noslash.json": tokenJSON(startA, "ap-northeast-1", "tok-2"),
+		})
+		got, err := ListSSOTokenCache(dir, startA+"//")
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("ListSSOTokenCache() returned %d tokens, want 2: %+v", len(got), got)
+		}
+	})
+
+	t.Run("missing region and expiresAt are returned empty", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{
+			"a.json": `{"startUrl": "` + startA + `", "accessToken": "tok-a"}`,
+		})
+		got, err := ListSSOTokenCache(dir, startA)
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		want := []SSOCachedToken{{FileName: "a.json", StartURL: startA, AccessToken: "tok-a"}}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("tokens mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("unreadable oversized and broken files are skipped with a warning", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires extra privileges on windows")
+		}
+		dir := ssoCacheTestDir(t, map[string]string{
+			"a.json":      tokenJSON(startA, "ap-northeast-1", "tok-a"),
+			"broken.json": `{not json`,
+			"a.txt":       tokenJSON(startA, "ap-northeast-1", "tok-txt"),
+		})
+		big := make([]byte, ssoCacheMaxFileSize+1)
+		for i := range big {
+			big[i] = ' '
+		}
+		if err := os.WriteFile(filepath.Join(dir, "big.json"), big, 0o600); err != nil {
+			t.Fatalf("write big: %v", err)
+		}
+		// 読めないファイルは、リンク先の無いシンボリックリンクで再現する。パーミッション
+		// ビットは root や一部のマウントで効かないため使わない (他の unreadable 系テストが
+		// 通常ファイルを cacheDir にして os.ReadDir を失敗させるのと同じ理由)。
+		if err := os.Symlink(filepath.Join(dir, "missing-target.json"), filepath.Join(dir, "dangling.json")); err != nil {
+			t.Fatalf("symlink dangling: %v", err)
+		}
+		logs := captureDefaultLogs(t)
+		got, err := ListSSOTokenCache(dir, startA)
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v", err)
+		}
+		if len(got) != 1 || got[0].FileName != "a.json" {
+			t.Errorf("ListSSOTokenCache() = %+v, want only a.json", got)
+		}
+		for _, want := range []string{"skip oversized sso cache file", "read sso cache file failed", "parse sso cache file failed"} {
+			if !strings.Contains(logs.String(), want) {
+				t.Errorf("logs do not contain %q: %s", want, logs.String())
+			}
+		}
+	})
+
+	t.Run("missing cache dir returns empty slice and nil", func(t *testing.T) {
+		got, err := ListSSOTokenCache(filepath.Join(t.TempDir(), "nope"), startA)
+		if err != nil {
+			t.Fatalf("ListSSOTokenCache() error = %v, want nil", err)
+		}
+		if got == nil || len(got) != 0 {
+			t.Errorf("ListSSOTokenCache() = %#v, want empty non-nil slice", got)
+		}
+	})
+
+	t.Run("unreadable cache dir returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		file := filepath.Join(dir, "file")
+		if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		got, err := ListSSOTokenCache(file, startA)
+		if err == nil {
+			t.Fatal("ListSSOTokenCache() = nil error, want error for unreadable dir")
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			t.Errorf("ListSSOTokenCache() = %v, want an error other than not-exist", err)
+		}
+		if got != nil {
+			t.Errorf("ListSSOTokenCache() = %+v, want nil on error", got)
+		}
+	})
+}
+
+func TestRemoveAllSSOCache(t *testing.T) {
+	const tokenJSON = `{"startUrl": "https://a.awsapps.com/start", "accessToken": "REDACTED", "expiresAt": "2027-01-01T00:00:00Z"}`
+	const regJSON = `{"clientId": "cid", "clientSecret": "REDACTED", "expiresAt": "2027-01-01T00:00:00Z"}`
+
+	t.Run("removes every regular file regardless of extension", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{
+			"a.json":   tokenJSON,
+			"reg.json": regJSON,
+			"a.txt":    tokenJSON,
+			"noext":    "x",
+			"broken":   `{not json`,
+		})
+		if err := RemoveAllSSOCache(dir); err != nil {
+			t.Fatalf("RemoveAllSSOCache() = %v, want nil", err)
+		}
+		if got := ssoCacheRemainingFiles(t, dir); len(got) != 0 {
+			t.Errorf("remaining files = %v, want none", got)
+		}
+	})
+
+	t.Run("keeps subdirectories and symlinks with a warning", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires elevated privileges on windows")
+		}
+		dir := ssoCacheTestDir(t, map[string]string{"a.json": tokenJSON})
+		if err := os.Mkdir(filepath.Join(dir, "sub"), 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "sub", "nested.json"), []byte(tokenJSON), 0o600); err != nil {
+			t.Fatalf("write nested: %v", err)
+		}
+		if err := os.Symlink(filepath.Join(dir, "sub", "nested.json"), filepath.Join(dir, "link.json")); err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		logs := captureDefaultLogs(t)
+		if err := RemoveAllSSOCache(dir); err != nil {
+			t.Fatalf("RemoveAllSSOCache() = %v, want nil", err)
+		}
+		if diff := cmp.Diff([]string{"link.json", "sub"}, ssoCacheRemainingFiles(t, dir)); diff != "" {
+			t.Errorf("remaining files mismatch (-want +got):\n%s", diff)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "sub", "nested.json")); err != nil {
+			t.Errorf("nested file must be kept: %v", err)
+		}
+		assertWarnLogLines(t, logs.String(), "sso cache entry skipped", [][]string{
+			{"name=link.json"},
+			{"name=sub"},
+		})
+	})
+
+	t.Run("missing cache dir returns nil", func(t *testing.T) {
+		if err := RemoveAllSSOCache(filepath.Join(t.TempDir(), "nope")); err != nil {
+			t.Fatalf("RemoveAllSSOCache() = %v, want nil", err)
+		}
+	})
+
+	t.Run("empty cache dir returns nil", func(t *testing.T) {
+		if err := RemoveAllSSOCache(t.TempDir()); err != nil {
+			t.Fatalf("RemoveAllSSOCache() = %v, want nil", err)
+		}
+	})
+
+	t.Run("unreadable cache dir returns error", func(t *testing.T) {
+		// ディレクトリではなく通常ファイルを cacheDir に指定して ReadDir を失敗させる
+		// (RemoveSSOTokenCache のテストと同じ、permission に依存しない再現方法)。
+		dir := t.TempDir()
+		file := filepath.Join(dir, "file")
+		if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		err := RemoveAllSSOCache(file)
+		if err == nil {
+			t.Fatal("RemoveAllSSOCache() = nil, want error for unreadable dir")
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			t.Errorf("RemoveAllSSOCache() = %v, want an error other than not-exist", err)
+		}
+	})
+
+	t.Run("file removed by someone else before os.Remove is success", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{"a.json": tokenJSON})
+		orig := ssoCacheRemove
+		t.Cleanup(func() { ssoCacheRemove = orig })
+		ssoCacheRemove = func(name string) error {
+			if err := os.Remove(name); err != nil {
+				return err
+			}
+			return os.Remove(name)
+		}
+		if err := RemoveAllSSOCache(dir); err != nil {
+			t.Fatalf("RemoveAllSSOCache() = %v, want nil", err)
+		}
+	})
+
+	t.Run("continues after a failed removal and reports every failure", func(t *testing.T) {
+		dir := ssoCacheTestDir(t, map[string]string{
+			"first.json":  tokenJSON,
+			"second.json": tokenJSON,
+			"third.txt":   "x",
+		})
+		orig := ssoCacheRemove
+		t.Cleanup(func() { ssoCacheRemove = orig })
+		errFirst := errors.New("first removal failed")
+		errThird := errors.New("third removal failed")
+		ssoCacheRemove = func(name string) error {
+			switch filepath.Base(name) {
+			case "first.json":
+				return errFirst
+			case "third.txt":
+				return errThird
+			}
+			return os.Remove(name)
+		}
+		err := RemoveAllSSOCache(dir)
+		if !errors.Is(err, errFirst) || !errors.Is(err, errThird) {
+			t.Fatalf("RemoveAllSSOCache() = %v, want wrapping both %v and %v", err, errFirst, errThird)
+		}
+		for _, name := range []string{"first.json", "third.txt"} {
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("error %q does not name the failed file %s", err, name)
+			}
+		}
+		if diff := cmp.Diff([]string{"first.json", "third.txt"}, ssoCacheRemainingFiles(t, dir)); diff != "" {
+			t.Errorf("remaining files mismatch (-want +got):\n%s", diff)
+		}
 	})
 }

@@ -62,8 +62,8 @@ func newSSOCmd() *cobra.Command {
 
 	logoutCmd := &cobra.Command{
 		Use:   "logout",
-		Short: "Logout from SSO. Remove all cache files.",
-		Long:  "Sign out of AWS SSO by removing all cached credentials and tokens.",
+		Short: "Logout from SSO. Revoke sessions on AWS and remove all cache files.",
+		Long:  "Sign out of AWS SSO: revoke every cached access token on AWS (sso:Logout), then remove all cached credentials and tokens.",
 		RunE:  ssoLogout,
 	}
 
@@ -127,34 +127,36 @@ func ssoLoginWith(cmd *cobra.Command, deps ssoTokenDeps) error {
 	return nil
 }
 
-// ssoLogout removes all SSO credential cache files.
+// ssoLogout revokes every cached SSO access token on AWS and removes all SSO cache files.
 func ssoLogout(cmd *cobra.Command, args []string) error {
-	cacheDir, err := ssoauth.CacheDir()
-	if err != nil {
-		return fmt.Errorf("get cache directory: %w", err)
-	}
-
-	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
-		return fmt.Errorf("directory does not exist: %s", cacheDir)
-	}
-
-	err = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return fmt.Errorf("walk directory: %w", err)
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("delete file %s: %w", path, err)
-		}
-
-		return nil
+	return ssoLogoutWith(cmd, ssoLogoutDeps{
+		logoutAll: func(ctx context.Context) (ssoauth.LogoutResult, error) {
+			return ssoauth.LogoutAll(ctx, ssoauth.DefaultDeps())
+		},
 	})
+}
+
+// ssoLogoutDeps は ssoLogout が呼ぶ外部処理をまとめる。logoutAll は AWS への通信と
+// ~/.aws/sso/cache の削除を伴い、テストから実行できないため差し替える。
+type ssoLogoutDeps struct {
+	logoutAll func(ctx context.Context) (ssoauth.LogoutResult, error)
+}
+
+// ssoLogoutWith は ssoLogout の本体。失効はトークンごとに AWS への往復を伴うため、
+// Ctrl-C が届くようコマンドの context を渡す。失効に失敗したトークンがあっても
+// ローカルの削除は行われるので、警告を stderr に出して正常終了する。キャッシュの
+// 列挙または削除に失敗した場合だけエラーを返す (その場合も失効の失敗があれば先に
+// 警告を出す)。キャッシュディレクトリが無い場合は削除するものが無いので正常終了する。
+func ssoLogoutWith(cmd *cobra.Command, deps ssoLogoutDeps) error {
+	result, err := deps.logoutAll(commandContext(cmd))
+	if n := len(result.RevokeFailed); n > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to revoke %d SSO session(s) on AWS; the sign-in session may remain valid until it expires\n", n)
+	}
 	if err != nil {
-		return fmt.Errorf("error walking directory: %w", err)
+		// LogoutAll が返すのはキャッシュディレクトリの解決、列挙、削除のいずれかの失敗で、
+		// 削除の失敗は対象ファイル名まで含む。この層から足せる情報が無いため包み直さず、
+		// そのまま伝播させる。
+		return err
 	}
 
 	cmd.Println("Successfully signed out of all SSO profiles.")

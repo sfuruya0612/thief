@@ -182,9 +182,10 @@ export function postSSOLoginComplete(profile: string, sessionId: string): Promis
   });
 }
 
-// profile の start URL に一致する SSO トークンキャッシュを削除する (ローカルのみ、
-// AWS 側のセッションは失効させない)。同じ start URL を共有する他の profile も未ログインに
-// なる。成功時は 204 でボディなし
+// profile の start URL に一致する SSO トークンを AWS 側で失効 (sso:Logout) してから
+// ローカルのトークンキャッシュを削除する。同じ start URL を共有する他の profile も
+// 未ログインになる。失効に失敗してもキャッシュの削除が完了していれば成功扱い。
+// 成功時は 204 でボディなし
 export function postSSOLogout(profile: string): Promise<void> {
   return apiPost<void>(`/api/aws/profiles/${encodeURIComponent(profile)}/sso/logout`);
 }
