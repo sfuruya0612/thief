@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -565,9 +567,9 @@ func TestStoreListSkipsEntryRemovedAfterReadDir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "alive.sql"), []byte("SELECT 1"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	// 列挙 (ReadDir) には載るが読み取り (ReadFile) が fs.ErrNotExist になる状態を、
-	// 参照先の無いシンボリックリンクで決定的に再現する。ReadDir と ReadFile の間に
-	// 別リクエストがファイルを削除した場合と ReadFile が返すエラーが同じになる。
+	// 列挙 (ReadDir) には載るが読み取り (Open) が fs.ErrNotExist になる状態を、
+	// 参照先の無いシンボリックリンクで決定的に再現する。ReadDir と Open の間に
+	// 別リクエストがファイルを削除した場合と Open が返すエラーが同じになる。
 	if err := os.Symlink(filepath.Join(dir, "missing-target.sql"), filepath.Join(dir, "gone.sql")); err != nil {
 		t.Fatalf("Symlink: %v", err)
 	}
@@ -600,6 +602,96 @@ func TestStoreListReturnsEmptyWhenAllEntriesRemovedAfterReadDir(t *testing.T) {
 	}
 	if got == nil || len(got) != 0 {
 		t.Errorf("List = %#v, want empty non-nil slice", got)
+	}
+}
+
+func TestStoreListReturnsSQLAndUpdatedAtFromSameVersionUnderConcurrentOverwrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("renaming over a file that is open for reading is not guaranteed on windows")
+	}
+	base := t.TempDir()
+	dir := filepath.Join(base, "athena")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	target := filepath.Join(dir, "q.sql")
+	if err := os.WriteFile(target, []byte("0"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// Save と同じく一時ファイルの rename で上書きし、版ごとに本文 (連番) と更新日時
+	// (1 秒刻み) を一意にする。List が返す組が同じ版に属さなければ、本文と更新日時を
+	// 別々にパスから解決している (issue 0158 の TOCTOU) ことになる。
+	const versions = 1000
+	var mu sync.Mutex
+	modTimes := map[string]time.Time{"0": {}}
+	// 書き込み goroutine は停止要求 (stop) を見て抜け、終了時に必ず done へ結果を送る。
+	// 検証側は t.Fatalf の前に必ず stop を閉じて done を待つため、失敗時にも goroutine
+	// が t.TempDir のクリーンアップと競合しない。
+	stop := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		tmp := filepath.Join(dir, ".tmp-overwrite")
+		for i := 1; i <= versions; i++ {
+			select {
+			case <-stop:
+				done <- nil
+				return
+			default:
+			}
+			sql := strconv.Itoa(i)
+			ts := time.Unix(1_700_000_000+int64(i), 0)
+			if err := os.WriteFile(tmp, []byte(sql), 0o644); err != nil {
+				done <- err
+				return
+			}
+			if err := os.Chtimes(tmp, ts, ts); err != nil {
+				done <- err
+				return
+			}
+			mu.Lock()
+			modTimes[sql] = ts.UTC()
+			mu.Unlock()
+			if err := os.Rename(tmp, target); err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	// 検証側の失敗は goroutine を止めてから報告する
+	fatalf := func(format string, args ...any) {
+		t.Helper()
+		close(stop)
+		<-done
+		t.Fatalf(format, args...)
+	}
+	store := NewStore(base)
+	for {
+		// 書き込み側が途中でエラーになると modTimes が増えなくなるため、先に検知して抜ける
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("overwrite: %v", err)
+			}
+			return
+		default:
+		}
+		got, err := store.List("athena")
+		if err != nil {
+			fatalf("List: %v", err)
+		}
+		if len(got) != 1 {
+			fatalf("List returned %d snippets, want 1", len(got))
+		}
+		mu.Lock()
+		want, ok := modTimes[got[0].SQL]
+		mu.Unlock()
+		if !ok {
+			fatalf("List returned unknown sql %q", got[0].SQL)
+		}
+		if got[0].SQL != "0" && !want.Equal(got[0].UpdatedAt) {
+			fatalf("List returned sql %q with updated_at %v, want %v (sql and updated_at from different versions)", got[0].SQL, got[0].UpdatedAt, want)
+		}
 	}
 }
 

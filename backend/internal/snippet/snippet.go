@@ -9,6 +9,7 @@ package snippet
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -144,28 +145,21 @@ func (s *Store) List(service string) ([]Snippet, error) {
 			continue
 		}
 		name := decodeFileName(strings.TrimSuffix(e.Name(), ".sql"))
-		// ReadDir と ReadFile / Info は別のシステムコールのため、その間に別リクエストや
-		// 手動操作で削除されたファイルは fs.ErrNotExist になる。もう存在しないスニペット
-		// として一覧から外し、1 ファイルの消失で一覧全体を失敗させない。それ以外の
-		// エラー (権限不足など) は従来どおり返す。
-		data, err := os.ReadFile(filepath.Join(s.dir(service), e.Name()))
+		// ReadDir と Open は別のシステムコールのため、その間に別リクエストや手動操作で
+		// 削除されたファイルは fs.ErrNotExist になる。もう存在しないスニペットとして一覧
+		// から外し、1 ファイルの消失で一覧全体を失敗させない。それ以外のエラー (権限不足
+		// など) は従来どおり返す。
+		data, modTime, err := readSnippetFile(filepath.Join(s.dir(service), e.Name()))
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("read snippet %s: %w", e.Name(), err)
 		}
-		info, err := e.Info()
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("stat snippet %s: %w", e.Name(), err)
-		}
 		snippets = append(snippets, Snippet{
 			Name:      name,
 			SQL:       string(data),
-			UpdatedAt: info.ModTime().UTC(),
+			UpdatedAt: modTime.UTC(),
 		})
 	}
 	sort.Slice(snippets, func(i, j int) bool {
@@ -175,6 +169,27 @@ func (s *Store) List(service string) ([]Snippet, error) {
 		return snippets[i].Name < snippets[j].Name
 	})
 	return snippets, nil
+}
+
+// readSnippetFile は path を 1 回だけ開き、同じファイル記述子から本文と更新日時を取得する。
+// Save は一時ファイルの rename で上書きするため、開いた後に上書きが起きても記述子は
+// 旧版の inode を指し続け、本文と更新日時が別の版に属することはない (os.ReadFile と
+// DirEntry.Info のように別々にパスを解決すると、その間の上書きで組がずれる)。
+func readSnippetFile(path string) ([]byte, time.Time, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	return data, info.ModTime(), nil
 }
 
 // Save は service 配下に name のスニペットを作成または上書きし、保存結果を返す。
