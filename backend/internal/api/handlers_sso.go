@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -26,7 +27,7 @@ type ssoLoginDeps struct {
 	resolveConfig func(profile string) (*awsinternal.SSOConfig, error)
 	start         func(ctx context.Context, region, startURL string) (*ssoauth.Session, error)
 	wait          func(ctx context.Context, sess *ssoauth.Session) (*ssoauth.TokenCache, error)
-	logout        func(startURL string) error
+	logout        func(ctx context.Context, startURL, fallbackRegion string) (ssoauth.LogoutResult, error)
 }
 
 // defaultSSOLoginDeps は本番で使う実装を返す。wait は ssoauth.Wait を DefaultDeps で
@@ -41,7 +42,9 @@ func defaultSSOLoginDeps() ssoLoginDeps {
 		wait: func(ctx context.Context, sess *ssoauth.Session) (*ssoauth.TokenCache, error) {
 			return ssoauth.Wait(ctx, sess, ssoauth.DefaultDeps())
 		},
-		logout: ssoauth.Logout,
+		logout: func(ctx context.Context, startURL, fallbackRegion string) (ssoauth.LogoutResult, error) {
+			return ssoauth.Logout(ctx, startURL, fallbackRegion, ssoauth.DefaultDeps())
+		},
 	}
 }
 
@@ -180,11 +183,14 @@ func writeSSOLoginCompleteError(w http.ResponseWriter, err error) {
 	}
 }
 
-// handleSSOLogout は profile の SSO 設定を解決し、その start URL のトークンキャッシュを
-// ローカルから削除して 204 を返す。一致するキャッシュが無い場合 (既に未ログイン) も
-// 冪等な操作として 204 を返す。同じ start URL を共有する他の profile も未ログインに
-// なる。AWS 側のセッション失効 (sso:Logout) は呼ばない。backend のリソースキャッシュ
-// には触れない (frontend が cache/invalidate で破棄する)。
+// handleSSOLogout は profile の SSO 設定を解決し、その start URL のトークンを AWS 側で
+// 失効 (sso:Logout) してからローカルのトークンキャッシュを削除し、204 を返す。
+// 一致するキャッシュが無い場合 (既に未ログイン) も冪等な操作として 204 を返す。
+// 同じ start URL を共有する他の profile も未ログインになる。失効の失敗はローカルの
+// 削除を止めず、警告ログを出して 204 を返す (失効できなかったトークンはキャッシュから
+// 消えるので、ユーザから見たログアウトは成立している)。500 を返すのはキャッシュの
+// 列挙または削除に失敗した場合だけ。backend のリソースキャッシュには触れない
+// (frontend が cache/invalidate で破棄する)。
 func (s *Server) handleSSOLogout(w http.ResponseWriter, r *http.Request) {
 	profile := r.PathValue("profile")
 	if err := awsinternal.ValidateProfileName(profile); err != nil {
@@ -198,7 +204,12 @@ func (s *Server) handleSSOLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.ssoLogin.logout(cfg.StartURL); err != nil {
+	// キャッシュに region が無いトークンの失効先は profile の sso_region で補う。
+	result, err := s.ssoLogin.logout(r.Context(), cfg.StartURL, cfg.Region)
+	if len(result.RevokeFailed) > 0 {
+		slog.Warn("sso logout completed with revoke failures", "profile", profile, "revoked", result.Revoked, "revoke_failed", len(result.RevokeFailed))
+	}
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "SSO_LOGOUT_FAILED", err.Error())
 		return
 	}

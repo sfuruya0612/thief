@@ -86,3 +86,31 @@ func newSSOClient(ctx context.Context, profile, region string) (*sso.Client, err
 		return sso.NewFromConfig(cfg)
 	})
 }
+
+// ssoLogoutAPI は sso:Logout の呼び出しを抽象化する。
+// テストではモックを差し込み、実行時は *sso.Client がこれを満たす。
+type ssoLogoutAPI interface {
+	Logout(ctx context.Context, params *sso.LogoutInput, optFns ...func(*sso.Options)) (*sso.LogoutOutput, error)
+}
+
+// RevokeSSOToken は accessToken に対応する IAM Identity Center のサインインセッションを
+// sso:Logout で失効させる。sso:Logout はアクセストークンで認可される SSO Portal API で、
+// AWS 認証情報と IAM 権限は要らないため profile を空にしてクライアントを生成する
+// (ListSSOAccountInfos と同じ)。region はトークンを発行した IAM Identity Center の
+// インスタンスがある region を渡す。ローカルのトークンキャッシュには触れない。
+func RevokeSSOToken(ctx context.Context, region, accessToken string) error {
+	client, err := newSSOClient(ctx, "", region)
+	if err != nil {
+		return err
+	}
+	return revokeSSOToken(ctx, client, accessToken)
+}
+
+// revokeSSOToken は生成済みクライアントで sso:Logout を呼ぶコア。LogoutInput に載せる
+// AccessToken を単体テストで固定できるよう、クライアントの生成と分離してある。
+func revokeSSOToken(ctx context.Context, client ssoLogoutAPI, accessToken string) error {
+	if _, err := client.Logout(ctx, &sso.LogoutInput{AccessToken: aws.String(accessToken)}); err != nil {
+		return fmt.Errorf("sso logout: %w", err)
+	}
+	return nil
+}

@@ -142,7 +142,7 @@ describe('AwsActiveSessionCard', () => {
       expect(button).toBeEnabled();
       expect(button).toHaveAttribute(
         'title',
-        'この profile の SSO トークンキャッシュを削除します。同じ start URL を共有する他の profile も未ログインになります',
+        'この profile の SSO セッションを AWS 側で失効し、トークンキャッシュを削除します。同じ start URL を共有する他の profile も未ログインになります',
       );
     });
 

@@ -982,3 +982,141 @@ func newSSOLoginCmd(t *testing.T, out *bytes.Buffer) *cobra.Command {
 	cmd.SetErr(out)
 	return cmd
 }
+
+// --- sso logout ---
+
+// TestSSOLogoutWithPassesCommandContext は sso logout がコマンドに載った context を
+// logoutAll へ渡し、成功時に従来と同じ文言を stdout に出すことを検証する。
+// 失効はトークンごとに AWS への往復を伴うため、Ctrl-C が届かないと待ち続ける。
+func TestSSOLogoutWithPassesCommandContext(t *testing.T) {
+	want := context.WithValue(context.Background(), ssoCtxKey{}, "carried")
+	var out, errOut bytes.Buffer
+	cmd := &cobra.Command{Use: "logout"}
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetContext(want)
+
+	var got context.Context
+	err := ssoLogoutWith(cmd, ssoLogoutDeps{logoutAll: func(ctx context.Context) (ssoauth.LogoutResult, error) {
+		got = ctx
+		return ssoauth.LogoutResult{Revoked: 2}, nil
+	}})
+	if err != nil {
+		t.Fatalf("ssoLogoutWith() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("logoutAll received %v, want the context set on the command", got)
+	}
+	if want := "Successfully signed out of all SSO profiles.\n"; out.String() != want {
+		t.Errorf("stdout = %q, want %q", out.String(), want)
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("stderr = %q, want empty", errOut.String())
+	}
+}
+
+// TestSSOLogoutWithFallsBackToBackgroundContext は Execute 系を通らないコマンドでも
+// logoutAll が nil ではない context を受け取ることを検証する。
+func TestSSOLogoutWithFallsBackToBackgroundContext(t *testing.T) {
+	var out bytes.Buffer
+	cmd := &cobra.Command{Use: "logout"}
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if cmd.Context() != nil {
+		t.Fatalf("precondition: cmd.Context() = %v, want nil", cmd.Context())
+	}
+	var got context.Context
+	err := ssoLogoutWith(cmd, ssoLogoutDeps{logoutAll: func(ctx context.Context) (ssoauth.LogoutResult, error) {
+		got = ctx
+		return ssoauth.LogoutResult{}, nil
+	}})
+	if err != nil {
+		t.Fatalf("ssoLogoutWith() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("logoutAll received nil context")
+	}
+}
+
+// TestSSOLogoutWithRevokeFailureWarnsAndSucceeds は失効に失敗したトークンがあっても
+// 正常終了し、件数を含む警告を stderr に出すことを検証する。
+func TestSSOLogoutWithRevokeFailureWarnsAndSucceeds(t *testing.T) {
+	failures := []ssoauth.RevokeFailure{
+		{FileNames: []string{"a.json"}, Err: errors.New("sso logout: UnauthorizedException")},
+		{FileNames: []string{"b.json", "c.json"}, Err: errors.New("region unknown")},
+	}
+	var out, errOut bytes.Buffer
+	cmd := &cobra.Command{Use: "logout"}
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+
+	err := ssoLogoutWith(cmd, ssoLogoutDeps{logoutAll: func(context.Context) (ssoauth.LogoutResult, error) {
+		return ssoauth.LogoutResult{Revoked: 1, RevokeFailed: failures}, nil
+	}})
+	if err != nil {
+		t.Fatalf("ssoLogoutWith() error = %v, want nil", err)
+	}
+	if want := "Warning: failed to revoke 2 SSO session(s) on AWS; the sign-in session may remain valid until it expires\n"; errOut.String() != want {
+		t.Errorf("stderr = %q, want %q", errOut.String(), want)
+	}
+	if want := "Successfully signed out of all SSO profiles.\n"; out.String() != want {
+		t.Errorf("stdout = %q, want %q", out.String(), want)
+	}
+}
+
+// TestSSOLogoutWithRemovalErrorIsReturnedUnwrapped は削除の失敗をそのまま返し、
+// 成功の文言を出さないことを検証する。失効の失敗が併存する場合は警告を先に出す。
+func TestSSOLogoutWithRemovalErrorIsReturnedUnwrapped(t *testing.T) {
+	removeErr := errors.New("remove sso cache file a.json: permission denied")
+	tests := []struct {
+		name       string
+		result     ssoauth.LogoutResult
+		wantStderr string
+	}{
+		{name: "removal error only", result: ssoauth.LogoutResult{Revoked: 1}},
+		{
+			name:       "removal error after revoke failure",
+			result:     ssoauth.LogoutResult{RevokeFailed: []ssoauth.RevokeFailure{{FileNames: []string{"a.json"}, Err: errors.New("region unknown")}}},
+			wantStderr: "Warning: failed to revoke 1 SSO session(s) on AWS; the sign-in session may remain valid until it expires\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			cmd := &cobra.Command{Use: "logout"}
+			cmd.SetOut(&out)
+			cmd.SetErr(&errOut)
+			err := ssoLogoutWith(cmd, ssoLogoutDeps{logoutAll: func(context.Context) (ssoauth.LogoutResult, error) {
+				return tt.result, removeErr
+			}})
+			if err != removeErr { //nolint:errorlint // ラップしていないことの検証なので同一性で比べる
+				t.Fatalf("error = %v, want the removal error unwrapped", err)
+			}
+			if errOut.String() != tt.wantStderr {
+				t.Errorf("stderr = %q, want %q", errOut.String(), tt.wantStderr)
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want empty", out.String())
+			}
+		})
+	}
+}
+
+// TestSSOLogoutCommandDescribesRevocation は logout コマンドの説明が AWS 側の失効を
+// 含むことを検証する (キャッシュ削除だけの説明に戻さない)。
+func TestSSOLogoutCommandDescribesRevocation(t *testing.T) {
+	var logout *cobra.Command
+	for _, c := range newSSOCmd().Commands() {
+		if c.Use == "logout" {
+			logout = c
+		}
+	}
+	if logout == nil {
+		t.Fatal("logout subcommand not found")
+	}
+	for name, text := range map[string]string{"Short": logout.Short, "Long": logout.Long} {
+		if !strings.Contains(strings.ToLower(text), "revoke") {
+			t.Errorf("%s = %q, want it to mention revoke", name, text)
+		}
+	}
+}
