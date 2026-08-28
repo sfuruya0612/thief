@@ -766,3 +766,84 @@ func TestStoreDeleteNameTooLongReturnsNotFound(t *testing.T) {
 		t.Fatalf("Delete(huge name) = %v, want ErrNotFound", err)
 	}
 }
+
+func TestStoreSaveReturnsUpdatedAtMatchingList(t *testing.T) {
+	s := NewStore(t.TempDir())
+	saved, err := s.Save("athena", "q", "SELECT 1")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if saved.UpdatedAt.IsZero() {
+		t.Fatal("Save returned zero UpdatedAt")
+	}
+	if saved.UpdatedAt.Location() != time.UTC {
+		t.Errorf("Save returned UpdatedAt in %v, want UTC", saved.UpdatedAt.Location())
+	}
+	got, err := s.List("athena")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("List returned %d snippets, want 1", len(got))
+	}
+	// Save は rename 前の一時ファイルから、List は rename 後の q.sql から更新日時を
+	// 取るが、rename は inode を変えないため同じ値になる。
+	if !got[0].UpdatedAt.Equal(saved.UpdatedAt) {
+		t.Errorf("List UpdatedAt = %v, Save UpdatedAt = %v, want equal", got[0].UpdatedAt, saved.UpdatedAt)
+	}
+}
+
+func TestStoreSaveReturnsOwnUpdatedAtWhenOverwrittenBetweenRenameAndStat(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "athena")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	target := filepath.Join(dir, "q.sql")
+	// 別リクエストの後続の保存を、Save の rename の直後に q.sql を別の版 (本文 other、
+	// 更新日時は過去の 2023 年) で上書きする renameFile の差し替えで決定的に再現する。
+	// 確率的な同時実行では、macOS の rename(2) が同じ宛先への同時 rename で ENOENT を
+	// 返す (issue 0161) ため再現に使えない。
+	other := filepath.Join(dir, ".tmp-other")
+	otherTime := time.Unix(1_700_000_000, 0)
+	if err := os.WriteFile(other, []byte("other"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.Chtimes(other, otherTime, otherTime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	var tmpModTime time.Time
+	prev := renameFile
+	t.Cleanup(func() { renameFile = prev })
+	renameFile = func(oldpath, newpath string) error {
+		info, err := os.Stat(oldpath)
+		if err != nil {
+			return err
+		}
+		tmpModTime = info.ModTime()
+		if err := os.Rename(oldpath, newpath); err != nil {
+			return err
+		}
+		return os.Rename(other, newpath)
+	}
+	got, err := NewStore(base).Save("athena", "q", "mine")
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if got.SQL != "mine" {
+		t.Errorf("Save returned sql %q, want %q", got.SQL, "mine")
+	}
+	if got.UpdatedAt.Equal(otherTime) {
+		t.Fatalf("Save returned updated_at %v of the other version (taken from the path after rename)", got.UpdatedAt)
+	}
+	if !got.UpdatedAt.Equal(tmpModTime) {
+		t.Errorf("Save returned updated_at %v, want %v (mod time of the temp file it wrote)", got.UpdatedAt, tmpModTime)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "other" {
+		t.Errorf("q.sql = %q, want %q (the later version must win on disk)", data, "other")
+	}
+}

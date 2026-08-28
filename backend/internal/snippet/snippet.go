@@ -29,6 +29,13 @@ var ErrInvalidName = errors.New("invalid snippet name")
 // ErrNotFound は指定名のスニペットが存在しない場合のエラー。
 var ErrNotFound = errors.New("snippet not found")
 
+// renameFile は Save が一時ファイルを保存先へ置くときに使う rename 関数。rename の直後に
+// 別リクエストが同じ名前を上書きした状況をテストで決定的に再現するために差し替え可能に
+// している。本番コードからは代入しないこと。パッケージ全体で共有する変数なので、これを
+// 差し替えるテストと Save を呼ぶテストが t.Parallel で並列に走ると、代入 (書き込み) と
+// Save 内の呼び出し (読み取り) がこの変数へのデータ競合になる。
+var renameFile = os.Rename
+
 // maxNameLength はエンコード後のファイル名 (拡張子 .sql を除く部分) の最大バイト長
 // (ファイルシステムのファイル名長制限より十分小さい値)。名前そのものではなく
 // エンコード後の長さに適用する。ファイルシステムの制限が対象とするのは
@@ -214,19 +221,24 @@ func (s *Store) Save(service, name, sql string) (Snippet, error) {
 		tmp.Close()
 		return Snippet{}, fmt.Errorf("write snippet %s: %w", name, err)
 	}
+	// 更新日時は rename 前に、自分が書き込んだ一時ファイルの記述子から取る。rename は
+	// inode を変えないため保存先の更新日時と同じ値になり、rename 後にパスを再解決すると
+	// その間に別リクエストが同じ名前を上書きした版の更新日時を返してしまう (issue 0160)。
+	info, err := tmp.Stat()
+	if err != nil {
+		// 返すのは Stat のエラーで、後始末の Close の戻り値は使わない (記述子の解放だけが
+		// 目的で、報告すべき失敗は既に Stat が示しているため)。
+		tmp.Close()
+		return Snippet{}, fmt.Errorf("stat snippet %s: %w", name, err)
+	}
 	if err := tmp.Close(); err != nil {
 		return Snippet{}, fmt.Errorf("close snippet %s: %w", name, err)
 	}
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		return Snippet{}, fmt.Errorf("chmod snippet %s: %w", name, err)
 	}
-	p := s.path(service, name)
-	if err := os.Rename(tmp.Name(), p); err != nil {
+	if err := renameFile(tmp.Name(), s.path(service, name)); err != nil {
 		return Snippet{}, fmt.Errorf("rename snippet %s: %w", name, err)
-	}
-	info, err := os.Stat(p)
-	if err != nil {
-		return Snippet{}, fmt.Errorf("stat snippet %s: %w", name, err)
 	}
 	return Snippet{Name: name, SQL: sql, UpdatedAt: info.ModTime().UTC()}, nil
 }
