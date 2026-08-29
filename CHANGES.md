@@ -346,6 +346,8 @@
   - @sfuruya0612
 - [FIX] スニペット保存 (`POST /api/snippets/{service}`) の応答の `updated_at` が、保存の rename の直後に同じ名前を別リクエストが上書きすると、自分が保存した本文と別の版の更新時刻の組になる不整合を修正する (`Store.Save` が更新日時を rename 後の保存先のパスからではなく、rename 前に自分が書き込んだ一時ファイルの記述子から取るようにする。rename は inode を変えないため値は保存先の更新日時と同じで、パスの再解決による版のずれだけが無くなる)
   - @sfuruya0612
+- [FIX] macOS でスニペットの同時保存 (`POST /api/snippets/{service}`) が rename の `no such file or directory` で HTTP 500 になる不具合を修正する (macOS では保存先が別の rename で同時に置き換えられている間、ソースの一時ファイルが存在するのに rename が ENOENT を返すことがある。`Store.Save` の rename を、ENOENT かつソースの一時ファイルが存在する場合に限り、初回を含めて最大 16 回まで即時に試行するようにする。ソースが消えている場合と ENOENT 以外のエラーは従来どおり再試行せずに返すため、ディレクトリ欠落のような本物の ENOENT を再試行で隠さない。Linux では ENOENT が発生しないことを実測で確認しており、再試行の経路に入らないため挙動は変わらない)
+  - @sfuruya0612
 
 ### misc
 
