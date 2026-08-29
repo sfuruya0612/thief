@@ -29,12 +29,18 @@ var ErrInvalidName = errors.New("invalid snippet name")
 // ErrNotFound は指定名のスニペットが存在しない場合のエラー。
 var ErrNotFound = errors.New("snippet not found")
 
-// renameFile は Save が一時ファイルを保存先へ置くときに使う rename 関数。rename の直後に
-// 別リクエストが同じ名前を上書きした状況をテストで決定的に再現するために差し替え可能に
-// している。本番コードからは代入しないこと。パッケージ全体で共有する変数なので、これを
-// 差し替えるテストと Save を呼ぶテストが t.Parallel で並列に走ると、代入 (書き込み) と
-// Save 内の呼び出し (読み取り) がこの変数へのデータ競合になる。
+// renameFile は renameSnippetFile が一時ファイルを保存先へ置くときに使う rename 関数。
+// rename の直後に別リクエストが同じ名前を上書きした状況 (issue 0160) と、rename が ENOENT を
+// 返す状況 (issue 0161) をテストで決定的に再現するために差し替え可能にしている。本番コード
+// からは代入しないこと。パッケージ全体で共有する変数なので、これを差し替えるテストと Save を
+// 呼ぶテストが t.Parallel で並列に走ると、代入 (書き込み) と renameSnippetFile 内の呼び出し
+// (読み取り) がこの変数へのデータ競合になる。
 var renameFile = os.Rename
+
+// renameAttemptLimit は renameSnippetFile が rename を試みる回数の上限 (初回 + 再試行)。
+// 同一宛先への競合下で成功までに要した試行回数の実測値の最大が 5 回だったため、その約 3 倍の
+// 余裕を持たせた値にしている (issue 0161 の調査結果)。
+const renameAttemptLimit = 16
 
 // maxNameLength はエンコード後のファイル名 (拡張子 .sql を除く部分) の最大バイト長
 // (ファイルシステムのファイル名長制限より十分小さい値)。名前そのものではなく
@@ -199,8 +205,41 @@ func readSnippetFile(path string) ([]byte, time.Time, error) {
 	return data, info.ModTime(), nil
 }
 
+// renameSnippetFile は oldpath を newpath へ rename する。macOS (Darwin 25.5.0、APFS で実測)
+// では、宛先が同時に別の rename で置き換えられている間、ソースが存在するのに rename が ENOENT
+// を返すことがある (issue 0161)。この ENOENT は宛先側の解決に由来する一時的な失敗なので、
+// ソースが存在することを確認できる場合に限り renameAttemptLimit 回まで即時に再試行する。
+// バックオフを入れないのは、実測で即時再試行が収束しており、待機は通常経路の遅延になるため。
+//
+// ソースが存在しない場合 (保存先ディレクトリごと消えた場合を含む。一時ファイルは保存先と
+// 同じディレクトリに作るため、ディレクトリが消えていればソースも存在しない) と、ソースの
+// os.Stat が ENOENT 以外で失敗して存在を確認できない場合は、再試行せずそのまま返す。宛先側の
+// 一時的な失敗以外の ENOENT を再試行で隠さないためである。
+//
+// 上限に達した場合は試行回数を添えて返す。ディレクトリ欠落による ENOENT (初回で返る) と
+// 競合による ENOENT (上限まで再試行して返る) を、運用時にエラーメッセージで切り分けられる
+// ようにするため。
+func renameSnippetFile(oldpath, newpath string) error {
+	for attempt := 1; ; attempt++ {
+		err := renameFile(oldpath, newpath)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if _, serr := os.Stat(oldpath); serr != nil {
+			return err
+		}
+		if attempt >= renameAttemptLimit {
+			return fmt.Errorf("give up after %d rename attempts: %w", attempt, err)
+		}
+	}
+}
+
 // Save は service 配下に name のスニペットを作成または上書きし、保存結果を返す。
-// 一時ファイルへ書き込んでから rename することで部分書き込みを防ぐ。
+// 一時ファイルへ書き込んでから rename することで部分書き込みを防ぐ。rename は
+// renameSnippetFile 経由で行い、同時に同じ名前が置き換えられている間の ENOENT を吸収する。
 func (s *Store) Save(service, name, sql string) (Snippet, error) {
 	if err := validateService(service); err != nil {
 		return Snippet{}, err
@@ -237,7 +276,7 @@ func (s *Store) Save(service, name, sql string) (Snippet, error) {
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		return Snippet{}, fmt.Errorf("chmod snippet %s: %w", name, err)
 	}
-	if err := renameFile(tmp.Name(), s.path(service, name)); err != nil {
+	if err := renameSnippetFile(tmp.Name(), s.path(service, name)); err != nil {
 		return Snippet{}, fmt.Errorf("rename snippet %s: %w", name, err)
 	}
 	return Snippet{Name: name, SQL: sql, UpdatedAt: info.ModTime().UTC()}, nil

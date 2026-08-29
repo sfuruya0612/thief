@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -845,5 +846,274 @@ func TestStoreSaveReturnsOwnUpdatedAtWhenOverwrittenBetweenRenameAndStat(t *test
 	}
 	if string(data) != "other" {
 		t.Errorf("q.sql = %q, want %q (the later version must win on disk)", data, "other")
+	}
+}
+
+// TestStoreSaveSucceedsUnderConcurrentRenameToSameDestination は、保存先を別スレッドが
+// 同時に rename で置き換えている間も Save が失敗しないことを確認する (issue 0161)。
+// macOS では rename が宛先の解決に失敗して ENOENT を返すことがあり、修正前はこの
+// テストが Save のエラーで失敗した。ENOENT が起きない環境 (Linux で実測) では、競合下でも
+// Save が成功し続けることの確認になる。
+func TestStoreSaveSucceedsUnderConcurrentRenameToSameDestination(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	serviceDir := filepath.Join(dir, "athena")
+	if err := os.MkdirAll(serviceDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// 宛先を連続で置き換える writer 用の一時ファイルをあらかじめ用意する。writer 側を
+	// rename だけのループにすることで、Save の rename と競合する時間の割合を上げる。
+	const overwrites = 5000
+	others := make([]string, overwrites)
+	for i := range others {
+		others[i] = filepath.Join(serviceDir, ".tmp-overwrite-"+strconv.Itoa(i))
+		if err := os.WriteFile(others[i], []byte("other"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", others[i], err)
+		}
+	}
+
+	target := filepath.Join(serviceDir, "q.sql")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for _, p := range others {
+			// 競合を作ることが目的で、置き換えが成功したかは問わないため戻り値は使わない。
+			_ = os.Rename(p, target)
+		}
+	}()
+
+	var saveErr error
+	saves := 0
+loop:
+	for {
+		// writer の状態を見る前に Save を実行することで、writer が先に終わりきった環境でも
+		// 保存が 1 回は行われることを保証する (保存が 0 回だと何も検証できずに通ってしまう)。
+		if _, err := s.Save("athena", "q", "mine"); err != nil {
+			saveErr = err
+			break loop
+		}
+		saves++
+		select {
+		case <-done:
+			break loop
+		default:
+		}
+	}
+	// 一時ディレクトリの削除が writer の rename と競合しないよう、writer の終了を待つ。
+	<-done
+
+	if saveErr != nil {
+		t.Fatalf("Save under concurrent rename = %v (after %d successful saves), want nil", saveErr, saves)
+	}
+	// 保存先の本文が、Save か writer のどちらかが書いた本文そのものであること
+	// (部分書き込みや消失が無いこと) を確認する。
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read %s: %v", target, err)
+	}
+	if string(got) != "mine" && string(got) != "other" {
+		t.Errorf("q.sql = %q, want %q or %q", string(got), "mine", "other")
+	}
+}
+
+// TestStoreSaveAbsorbsRenameEnoentFromDestinationContention は、Save が rename を
+// renameSnippetFile 経由で呼び、宛先の競合に由来する ENOENT を吸収することを決定的に
+// 検証する (issue 0161)。
+//
+// この配線 (Save が renameSnippetFile を通ること) を検証するのはこのテストだけである。
+// renameSnippetFile を直接呼ぶ TestRenameSnippetFile 系は、Save の呼び出しが
+// renameFile の直接呼び出しへ戻る退行を検出できない。
+// TestStoreSaveSucceedsUnderConcurrentRenameToSameDestination は同じ退行を検出できるが、
+// カーネルが ENOENT を返すかどうかがタイミングに依存し、修正前のコードでも 10 回中 2 回は
+// 通過する (issue 0161 の実測)。
+//
+// renameFile はパッケージ全体で共有する変数のため、このテストでは t.Parallel を使わない。
+func TestStoreSaveAbsorbsRenameEnoentFromDestinationContention(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	calls := 0
+	prev := renameFile
+	t.Cleanup(func() { renameFile = prev })
+	renameFile = func(o, n string) error {
+		calls++
+		if calls == 1 {
+			// 宛先が同時に置き換えられている間に macOS が返す ENOENT と同じ形にする。
+			// ソースの一時ファイルは消さないので、再試行の条件を満たす。
+			return &os.LinkError{Op: "rename", Old: o, New: n, Err: syscall.ENOENT}
+		}
+		return prev(o, n)
+	}
+
+	got, err := s.Save("athena", "q", "mine")
+	if err != nil {
+		t.Fatalf("Save() = %v, want nil", err)
+	}
+	if calls != 2 {
+		t.Errorf("renameFile called %d times, want 2", calls)
+	}
+	if got.SQL != "mine" {
+		t.Errorf("Save().SQL = %q, want %q", got.SQL, "mine")
+	}
+
+	// 吸収された ENOENT の後に、保存先が実際に書かれていること (Save が成功を返しただけで
+	// 終わっていないこと) を読み出しで確認する。
+	list, err := s.List("athena")
+	if err != nil {
+		t.Fatalf("List() = %v, want nil", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("List() returned %d snippets, want 1", len(list))
+	}
+	if list[0].Name != "q" || list[0].SQL != "mine" {
+		t.Errorf("List()[0] = {Name: %q, SQL: %q}, want {Name: %q, SQL: %q}", list[0].Name, list[0].SQL, "q", "mine")
+	}
+}
+
+// TestRenameSnippetFile は rename の失敗に対する再試行の判別条件を、renameFile を
+// 差し替えて決定的に検証する (issue 0161)。renameFile はパッケージ全体で共有する変数の
+// ため、このテストでは t.Parallel を使わない。
+func TestRenameSnippetFile(t *testing.T) {
+	tests := []struct {
+		name string
+		// failures は rename が失敗を返す回数。これを超えた呼び出しは実際に rename する。
+		failures int
+		// errno は失敗時に返すエラー番号。
+		errno syscall.Errno
+		// removeSource は失敗を返す前にソースを削除するか (ソースが消えている状況の再現)。
+		removeSource bool
+		wantCalls    int
+		wantErr      error
+		// wantMsgContains はエラーメッセージに含まれるべき文字列 (空なら検査しない)。
+		wantMsgContains string
+		// wantRenamed は最終的にソースが保存先へ移動しているべきか。
+		wantRenamed bool
+	}{
+		{
+			name:        "succeeds on the first attempt",
+			wantCalls:   1,
+			wantRenamed: true,
+		},
+		{
+			name:        "retries enoent while the source exists",
+			failures:    3,
+			errno:       syscall.ENOENT,
+			wantCalls:   4,
+			wantRenamed: true,
+		},
+		{
+			name:            "gives up at the attempt limit",
+			failures:        renameAttemptLimit,
+			errno:           syscall.ENOENT,
+			wantCalls:       renameAttemptLimit,
+			wantErr:         os.ErrNotExist,
+			wantMsgContains: "give up after " + strconv.Itoa(renameAttemptLimit) + " rename attempts",
+		},
+		{
+			name:         "does not retry enoent when the source is gone",
+			failures:     1,
+			errno:        syscall.ENOENT,
+			removeSource: true,
+			wantCalls:    1,
+			wantErr:      os.ErrNotExist,
+		},
+		{
+			name:      "does not retry errors other than enoent",
+			failures:  1,
+			errno:     syscall.EACCES,
+			wantCalls: 1,
+			wantErr:   os.ErrPermission,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			oldpath := filepath.Join(dir, ".tmp-source")
+			newpath := filepath.Join(dir, "q.sql")
+			if err := os.WriteFile(oldpath, []byte("mine"), 0o644); err != nil {
+				t.Fatalf("write source: %v", err)
+			}
+
+			calls := 0
+			prev := renameFile
+			t.Cleanup(func() { renameFile = prev })
+			renameFile = func(o, n string) error {
+				calls++
+				if calls > tt.failures {
+					return prev(o, n)
+				}
+				if tt.removeSource {
+					if err := os.Remove(o); err != nil {
+						t.Fatalf("remove source: %v", err)
+					}
+				}
+				// os.Rename が返すのと同じ形のエラーにする (errors.Is が Errno まで辿れること
+				// 自体も検証の対象になる)。
+				return &os.LinkError{Op: "rename", Old: o, New: n, Err: tt.errno}
+			}
+
+			err := renameSnippetFile(oldpath, newpath)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("renameSnippetFile() = %v, want error matching %v", err, tt.wantErr)
+			}
+			if tt.wantMsgContains != "" && !strings.Contains(err.Error(), tt.wantMsgContains) {
+				t.Errorf("error message = %q, want it to contain %q", err.Error(), tt.wantMsgContains)
+			}
+			if calls != tt.wantCalls {
+				t.Errorf("renameFile called %d times, want %d", calls, tt.wantCalls)
+			}
+
+			got, readErr := os.ReadFile(newpath)
+			if !tt.wantRenamed {
+				if readErr == nil {
+					t.Errorf("%s exists with %q, want it not to be created", newpath, string(got))
+				}
+				return
+			}
+			if readErr != nil {
+				t.Fatalf("read %s: %v", newpath, readErr)
+			}
+			if string(got) != "mine" {
+				t.Errorf("%s = %q, want %q", newpath, string(got), "mine")
+			}
+		})
+	}
+}
+
+// TestRenameSnippetFileDoesNotRetryWhenSourceCannotBeStatted は、ソースの os.Stat が
+// fs.ErrNotExist 以外の理由で失敗し、ソースが存在するとは確認できない場合に再試行しない
+// ことを検証する (issue 0161 の修正方針)。存在の確認を「Stat が fs.ErrNotExist ではない」で
+// 代用すると、この経路で上限まで再試行してしまう。
+//
+// Stat を失敗させる理由には、ファイル名長の上限超過 (ENAMETOOLONG) を使う。ディレクトリの
+// 権限を落とす方法は root で実行した場合に Stat が成功してしまうため、実行ユーザに依存しない
+// こちらを選んだ。
+//
+// renameFile はパッケージ全体で共有する変数のため、このテストでは t.Parallel を使わない
+// (TestRenameSnippetFile と同じ理由)。
+func TestRenameSnippetFileDoesNotRetryWhenSourceCannotBeStatted(t *testing.T) {
+	dir := t.TempDir()
+	// 単一コンポーネントの長さが NAME_MAX (macOS と Linux はいずれも 255) を超えるパス。
+	oldpath := filepath.Join(dir, strings.Repeat("a", 512))
+	newpath := filepath.Join(dir, "q.sql")
+	if _, err := os.Stat(oldpath); err == nil || errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("os.Stat(oldpath) = %v, want a failure other than fs.ErrNotExist", err)
+	}
+
+	calls := 0
+	prev := renameFile
+	t.Cleanup(func() { renameFile = prev })
+	renameFile = func(o, n string) error {
+		calls++
+		return &os.LinkError{Op: "rename", Old: o, New: n, Err: syscall.ENOENT}
+	}
+
+	err := renameSnippetFile(oldpath, newpath)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("renameSnippetFile() = %v, want error matching %v", err, os.ErrNotExist)
+	}
+	if calls != 1 {
+		t.Errorf("renameFile called %d times, want 1", calls)
 	}
 }
