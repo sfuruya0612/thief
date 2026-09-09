@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -136,12 +137,29 @@ func TestCostDateRange(t *testing.T) {
 	})
 }
 
+// dimensionPage は fakeCostExplorer が GetDimensionValues の応答を引くキー。
+// 次元と、要求で受け取った NextPageToken (1 ページ目は空文字) の組で 1 ページを表す。
+type dimensionPage struct {
+	dim   cetypes.Dimension
+	token string
+}
+
 // fakeCostExplorer は costExplorerAPI の手書きフェイク。受け取った入力を記録し、
 // あらかじめ設定した出力またはエラーを返す。
+// GetDimensionValues は次元ごとの goroutine から同時に呼ばれるため、記録は mu で保護する。
 type fakeCostExplorer struct {
 	gotInput *costexplorer.GetCostAndUsageInput
 	out      *costexplorer.GetCostAndUsageOutput
 	err      error
+
+	// dimPages は GetDimensionValues の応答。キーに無いページを要求されたら空の応答を返す。
+	dimPages map[dimensionPage]*costexplorer.GetDimensionValuesOutput
+	// dimErrs は次元ごとに注入するエラー。特定の次元だけを失敗させるために使う。
+	dimErrs map[cetypes.Dimension]error
+
+	mu sync.Mutex
+	// gotDimInputs は GetDimensionValues が受け取った入力を次元ごとに呼び出し順で保持する。
+	gotDimInputs map[cetypes.Dimension][]*costexplorer.GetDimensionValuesInput
 }
 
 func (f *fakeCostExplorer) GetCostAndUsage(_ context.Context, p *costexplorer.GetCostAndUsageInput, _ ...func(*costexplorer.Options)) (*costexplorer.GetCostAndUsageOutput, error) {
@@ -152,13 +170,78 @@ func (f *fakeCostExplorer) GetCostAndUsage(_ context.Context, p *costexplorer.Ge
 	return f.out, nil
 }
 
+func (f *fakeCostExplorer) GetDimensionValues(_ context.Context, p *costexplorer.GetDimensionValuesInput, _ ...func(*costexplorer.Options)) (*costexplorer.GetDimensionValuesOutput, error) {
+	f.mu.Lock()
+	if f.gotDimInputs == nil {
+		f.gotDimInputs = make(map[cetypes.Dimension][]*costexplorer.GetDimensionValuesInput)
+	}
+	f.gotDimInputs[p.Dimension] = append(f.gotDimInputs[p.Dimension], p)
+	f.mu.Unlock()
+
+	if err := f.dimErrs[p.Dimension]; err != nil {
+		return nil, err
+	}
+	out, ok := f.dimPages[dimensionPage{dim: p.Dimension, token: ptrStr(p.NextPageToken)}]
+	if !ok {
+		return &costexplorer.GetDimensionValuesOutput{}, nil
+	}
+	return out, nil
+}
+
+// dimensionInputs は記録した GetDimensionValues の入力を、指定した次元について呼び出し順で返す。
+func (f *fakeCostExplorer) dimensionInputs(dim cetypes.Dimension) []*costexplorer.GetDimensionValuesInput {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gotDimInputs[dim]
+}
+
+// dimensionCallCount は GetDimensionValues の総呼び出し回数を返す。
+func (f *fakeCostExplorer) dimensionCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, inputs := range f.gotDimInputs {
+		n += len(inputs)
+	}
+	return n
+}
+
+// plainValues は Attributes を持たない次元値の一覧を組み立てる。
+func plainValues(values ...string) []cetypes.DimensionValuesWithAttributes {
+	out := make([]cetypes.DimensionValuesWithAttributes, 0, len(values))
+	for _, v := range values {
+		out = append(out, cetypes.DimensionValuesWithAttributes{Value: aws.String(v)})
+	}
+	return out
+}
+
+// accountValue は LINKED_ACCOUNT の次元値 (Value がアカウント ID、Attributes の description が
+// アカウント名) を組み立てる。属性名は実装の定数と独立に書き下し、定数の変更をテストが検出できる
+// ようにする。Attributes の照合が LINKED_ACCOUNT に限られることを確認するケースでは、
+// SERVICE / USAGE_TYPE の値に description 属性を付ける目的でも使う。
+func accountValue(id, name string) cetypes.DimensionValuesWithAttributes {
+	return cetypes.DimensionValuesWithAttributes{
+		Value:      aws.String(id),
+		Attributes: map[string]string{"description": name},
+	}
+}
+
+// singlePage は次元ごとに 1 ページで完結する GetDimensionValues の応答を組み立てる。
+func singlePage(byDim map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes) map[dimensionPage]*costexplorer.GetDimensionValuesOutput {
+	pages := make(map[dimensionPage]*costexplorer.GetDimensionValuesOutput, len(byDim))
+	for dim, values := range byDim {
+		pages[dimensionPage{dim: dim}] = &costexplorer.GetDimensionValuesOutput{DimensionValues: values}
+	}
+	return pages
+}
+
 // dimensionExpr はテストの期待値として単一次元の EQUALS フィルタ式を組み立てる。
 // 実装の costDimensionFilter とは独立に書き下すことで、実装の変更をテストが検出できるようにする。
-func dimensionExpr(key cetypes.Dimension, value string) cetypes.Expression {
+func dimensionExpr(key cetypes.Dimension, values ...string) cetypes.Expression {
 	return cetypes.Expression{
 		Dimensions: &cetypes.DimensionValues{
 			Key:          key,
-			Values:       []string{value},
+			Values:       values,
 			MatchOptions: []cetypes.MatchOption{cetypes.MatchOptionEquals},
 		},
 	}
@@ -169,73 +252,151 @@ func expressionCmpOpts() cmp.Option {
 	return cmpopts.IgnoreUnexported(cetypes.Expression{}, cetypes.DimensionValues{})
 }
 
+// テスト全体で使う次元値。testServiceEC2 と testServiceCompute は「ec2」というキーワードが
+// 前者にだけ部分一致する組であり、大文字小文字を区別しない部分一致の検出に使う。
+const (
+	testServiceEC2     = "AmazonEC2"
+	testServiceCompute = "Amazon Elastic Compute Cloud - Compute"
+	testUsageType      = "APN1-BoxUsage:t3.medium"
+	testUsageTypeEC2   = "APN1-EC2-Other"
+	testAccountID      = "123456789012"
+	testAccountName    = "prod-ec2-platform"
+)
+
 func TestGetCostFilter(t *testing.T) {
-	const (
-		testService = "AmazonEC2"
-		testAccount = "123456789012"
-	)
-	serviceExpr := dimensionExpr(cetypes.DimensionService, testService)
-	accountExpr := dimensionExpr(cetypes.DimensionLinkedAccount, testAccount)
-	blankServiceExpr := dimensionExpr(cetypes.DimensionService, " ")
+	serviceExpr := dimensionExpr(cetypes.DimensionService, testServiceEC2)
+	accountExpr := dimensionExpr(cetypes.DimensionLinkedAccount, testAccountID)
 
 	tests := []struct {
-		name        string
-		opts        CostQueryOptions
-		wantFilter  *cetypes.Expression
-		wantGroupBy string
+		name string
+		opts CostQueryOptions
+		// dimPages が nil のケースは GetDimensionValues が呼ばれないことを wantDimCalls=0 で固定する。
+		dimPages     map[dimensionPage]*costexplorer.GetDimensionValuesOutput
+		wantFilter   *cetypes.Expression
+		wantGroupBy  string
+		wantDimCalls int
 	}{
 		{
-			name:        "ServiceFilter のみ指定した場合は SERVICE の単一 Dimensions になる",
-			opts:        CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", ServiceFilter: testService},
-			wantFilter:  &serviceExpr,
-			wantGroupBy: CostGroupByService,
+			name:         "Keyword 未指定の場合は GetDimensionValues を呼ばず Filter を設定しない",
+			opts:         CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31"},
+			wantFilter:   nil,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 0,
 		},
 		{
-			name:        "AccountFilter のみ指定した場合は LINKED_ACCOUNT の単一 Dimensions になる",
-			opts:        CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", AccountFilter: testAccount},
-			wantFilter:  &accountExpr,
-			wantGroupBy: CostGroupByService,
+			// 空白のみの Keyword は TrimSpace 後に空になるため絞り込みなしとして扱う。
+			// 空白を絞り込み条件として扱うと、全次元の値に部分一致して無意味な Or が組み上がる。
+			name:         "空白のみの Keyword は絞り込みなしとして扱う",
+			opts:         CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "   "},
+			wantFilter:   nil,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 0,
 		},
 		{
-			name: "両方指定した場合は And に 2 要素を持つ Expression になる",
-			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", ServiceFilter: testService, AccountFilter: testAccount},
+			name: "SERVICE だけに一致した場合は SERVICE の単一 Dimensions がルートになる",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "AmazonEC2"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2, "AmazonS3"),
+				cetypes.DimensionUsageType:     plainValues(testUsageType),
+				cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+			}),
+			wantFilter:   &serviceExpr,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
+		},
+		{
+			// 一致の無い次元 (USAGE_TYPE) が Or に含まれないことを固定する。含まれると
+			// Values が空の Dimensions を AWS に送ることになる。
+			name: "2 次元に一致した場合は Or に 2 要素を持ち一致の無い次元を含まない",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "ec2"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2, testServiceCompute),
+				cetypes.DimensionUsageType:     plainValues("APN1-DataTransfer-Out-Bytes"),
+				cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+			}),
 			wantFilter: &cetypes.Expression{
-				And: []cetypes.Expression{serviceExpr, accountExpr},
+				Or: []cetypes.Expression{
+					serviceExpr,
+					dimensionExpr(cetypes.DimensionLinkedAccount, testAccountID),
+				},
 			},
-			wantGroupBy: CostGroupByService,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
 		},
 		{
-			name:        "両方未指定の場合は Filter を設定しない",
-			opts:        CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31"},
-			wantFilter:  nil,
-			wantGroupBy: CostGroupByService,
+			name: "3 次元すべてに一致した場合は Or が 3 要素になる",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "ec2"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2),
+				cetypes.DimensionUsageType:     plainValues(testUsageTypeEC2, "APN1-DataTransfer-Out-Bytes"),
+				cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+			}),
+			wantFilter: &cetypes.Expression{
+				Or: []cetypes.Expression{
+					serviceExpr,
+					dimensionExpr(cetypes.DimensionUsageType, testUsageTypeEC2),
+					accountExpr,
+				},
+			},
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
 		},
 		{
-			name: "GroupBy=LINKED_ACCOUNT と AccountFilter は同時に指定できる",
-			opts: CostQueryOptions{
-				StartDate:        "2026-07-01",
-				EndDate:          "2026-07-31",
-				GroupByDimension: CostGroupByLinkedAccount,
-				AccountFilter:    testAccount,
-			},
-			wantFilter:  &accountExpr,
-			wantGroupBy: CostGroupByLinkedAccount,
+			// アカウント名 (Attributes の description) にだけ一致する場合、Values には
+			// 名前ではなく Value (アカウント ID) が入る。Cost Explorer の LINKED_ACCOUNT の
+			// Filter が受け付けるのはアカウント ID であるため。
+			name: "アカウント名だけに一致した場合は Values にアカウント ID が入る",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "platform"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2),
+				cetypes.DimensionUsageType:     plainValues(testUsageType),
+				cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+			}),
+			wantFilter:   &accountExpr,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
 		},
 		{
-			// 直前の GroupBy=LINKED_ACCOUNT ケースと対称に、ServiceFilter 側でも GroupBy と Filter が
-			// 独立に効くことを固定する。ただし costGroupByDimension は SERVICE を case に列挙せず
-			// default で返すため、この経路は先頭の「ServiceFilter のみ」ケース (GroupByDimension が
-			// 空文字) と同一の分岐を通り、生成される入力も一致する。したがって検出力は先頭ケースと
-			// 重複しており、単独で落ちる実装上の欠陥は存在しない。仕様の回帰固定として残す。
-			name: "GroupBy=SERVICE と ServiceFilter は同時に指定できる",
-			opts: CostQueryOptions{
-				StartDate:        "2026-07-01",
-				EndDate:          "2026-07-31",
-				GroupByDimension: CostGroupByService,
-				ServiceFilter:    testService,
-			},
-			wantFilter:  &serviceExpr,
-			wantGroupBy: CostGroupByService,
+			// Attributes が nil の LINKED_ACCOUNT 値でも panic せず、Value だけを照合する。
+			// nil マップの索引が ok=false を返すことに依存した経路。
+			name: "Attributes が nil の LINKED_ACCOUNT 値は Value だけを照合する",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "1234"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2),
+				cetypes.DimensionUsageType:     plainValues(testUsageType),
+				cetypes.DimensionLinkedAccount: plainValues(testAccountID),
+			}),
+			wantFilter:   &accountExpr,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
+		},
+		{
+			// Attributes の照合は LINKED_ACCOUNT に限る。SERVICE の値に description 属性が
+			// 付いていてキーワードに一致しても、SERVICE の値としては一致扱いにしない。
+			// 全次元で Attributes を照合する実装に変わるとこのケースだけが落ちる。
+			name: "LINKED_ACCOUNT 以外の次元では Attributes を照合しない",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "platform"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       {accountValue(testServiceEC2, testAccountName)},
+				cetypes.DimensionUsageType:     {accountValue(testUsageType, testAccountName)},
+				cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+			}),
+			wantFilter:   &accountExpr,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
+		},
+		{
+			// 照合が大文字小文字を区別しないこと、かつ部分一致であって別名解決ではないことを
+			// 同時に固定する。「ec2」は AmazonEC2 に一致し、同じ EC2 を指す正式名称である
+			// 「Amazon Elastic Compute Cloud - Compute」には一致しない。
+			name: "照合は大文字小文字を区別しない部分一致で行う",
+			opts: CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "eC2"},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService: plainValues(testServiceCompute, testServiceEC2),
+			}),
+			wantFilter:   &serviceExpr,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
 		},
 		{
 			// costGroupByDimension が未知の値を SERVICE にフォールバックすることを固定する。
@@ -247,54 +408,63 @@ func TestGetCostFilter(t *testing.T) {
 				StartDate:        "2026-07-01",
 				EndDate:          "2026-07-31",
 				GroupByDimension: "BOGUS_DIMENSION",
-				ServiceFilter:    testService,
+				Keyword:          "AmazonEC2",
 			},
-			wantFilter:  &serviceExpr,
-			wantGroupBy: CostGroupByService,
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService: plainValues(testServiceEC2),
+			}),
+			wantFilter:   &serviceExpr,
+			wantGroupBy:  CostGroupByService,
+			wantDimCalls: 3,
 		},
 		{
-			// GroupBy と Filter は独立した概念であり、絞り込む次元と集計する次元は一致しなくてよい。
-			// GroupBy をデフォルト (SERVICE) 以外にしたうえで ServiceFilter を指定し、
-			// GroupBy の値が Filter に混入しないこと、および ServiceFilter が GroupBy を
-			// 上書きしないことの両方を確認する。
-			name: "GroupBy=USAGE_TYPE と ServiceFilter は同時に指定できる",
+			// GroupBy と Keyword は独立した概念であり、絞り込む次元と集計する次元は一致しなくてよい。
+			// Usage type を表示したままサービス名で絞り込めることが本 issue の要望そのものである。
+			name: "GroupBy=USAGE_TYPE のまま Keyword がサービス名に一致する",
 			opts: CostQueryOptions{
 				StartDate:        "2026-07-01",
 				EndDate:          "2026-07-31",
 				GroupByDimension: CostGroupByUsageType,
-				ServiceFilter:    testService,
+				Keyword:          "AmazonEC2",
 			},
-			wantFilter:  &serviceExpr,
-			wantGroupBy: CostGroupByUsageType,
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService: plainValues(testServiceEC2),
+			}),
+			wantFilter:   &serviceExpr,
+			wantGroupBy:  CostGroupByUsageType,
+			wantDimCalls: 3,
 		},
 		{
-			name: "GroupBy=REGION と ServiceFilter/AccountFilter の両方は同時に指定できる",
+			name: "GroupBy=REGION のまま Keyword がサービス名とアカウント ID の両方に一致する",
 			opts: CostQueryOptions{
 				StartDate:        "2026-07-01",
 				EndDate:          "2026-07-31",
 				GroupByDimension: CostGroupByRegion,
-				ServiceFilter:    testService,
-				AccountFilter:    testAccount,
+				Keyword:          "2",
 			},
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2),
+				cetypes.DimensionUsageType:     plainValues("APN1-DataTransfer-Out-Bytes"),
+				cetypes.DimensionLinkedAccount: plainValues(testAccountID),
+			}),
 			wantFilter: &cetypes.Expression{
-				And: []cetypes.Expression{serviceExpr, accountExpr},
+				Or: []cetypes.Expression{serviceExpr, accountExpr},
 			},
-			wantGroupBy: CostGroupByRegion,
-		},
-		{
-			// 空文字判定のみで絞り込みの有無を決めるため、空白のみの文字列は
-			// 「絞り込みあり」として Cost Explorer に渡る。前後の空白除去は入力側 (frontend) の責務。
-			name:        "空白のみの ServiceFilter は絞り込みありとして扱う",
-			opts:        CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", ServiceFilter: " "},
-			wantFilter:  &blankServiceExpr,
-			wantGroupBy: CostGroupByService,
+			wantGroupBy:  CostGroupByRegion,
+			wantDimCalls: 3,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fake := &fakeCostExplorer{out: &costexplorer.GetCostAndUsageOutput{}}
+			fake := &fakeCostExplorer{
+				out:      &costexplorer.GetCostAndUsageOutput{},
+				dimPages: tt.dimPages,
+			}
 			if _, err := getCost(context.Background(), fake, tt.opts); err != nil {
 				t.Fatalf("getCost() error = %v, want nil", err)
+			}
+			if got := fake.dimensionCallCount(); got != tt.wantDimCalls {
+				t.Errorf("GetDimensionValues call count = %d, want %d", got, tt.wantDimCalls)
 			}
 			if fake.gotInput == nil {
 				t.Fatal("GetCostAndUsage was not called")
@@ -316,6 +486,112 @@ func TestGetCostFilter(t *testing.T) {
 				t.Errorf("Metrics mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestGetCostKeywordNoMatch(t *testing.T) {
+	fake := &fakeCostExplorer{
+		out: &costexplorer.GetCostAndUsageOutput{},
+		dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+			cetypes.DimensionService:       plainValues(testServiceEC2),
+			cetypes.DimensionUsageType:     plainValues(testUsageType),
+			cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+		}),
+	}
+	opts := CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "no-such-value"}
+
+	got, err := getCost(context.Background(), fake, opts)
+	if err != nil {
+		t.Fatalf("getCost() error = %v, want nil", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("resources = %v, want empty", got)
+	}
+	// 結果が空になることが確定しているため、課金される GetCostAndUsage を呼ばない。
+	if fake.gotInput != nil {
+		t.Error("GetCostAndUsage was called, want not called")
+	}
+}
+
+func TestGetCostKeywordPaging(t *testing.T) {
+	const (
+		start = "2026-07-01"
+		end   = "2026-07-31"
+		token = "page-2"
+	)
+	fake := &fakeCostExplorer{
+		out: &costexplorer.GetCostAndUsageOutput{},
+		dimPages: map[dimensionPage]*costexplorer.GetDimensionValuesOutput{
+			{dim: cetypes.DimensionService}: {
+				DimensionValues: plainValues("AmazonS3"),
+				NextPageToken:   aws.String(token),
+			},
+			// 2 ページ目にだけ一致する値を置き、全ページが照合対象になることを固定する。
+			{dim: cetypes.DimensionService, token: token}: {
+				DimensionValues: plainValues(testServiceEC2),
+			},
+		},
+	}
+	opts := CostQueryOptions{StartDate: start, EndDate: end, Keyword: "AmazonEC2"}
+
+	if _, err := getCost(context.Background(), fake, opts); err != nil {
+		t.Fatalf("getCost() error = %v, want nil", err)
+	}
+	if fake.gotInput == nil {
+		t.Fatal("GetCostAndUsage was not called")
+	}
+	wantFilter := dimensionExpr(cetypes.DimensionService, testServiceEC2)
+	if diff := cmp.Diff(&wantFilter, fake.gotInput.Filter, expressionCmpOpts()); diff != "" {
+		t.Errorf("Filter mismatch (-want +got):\n%s", diff)
+	}
+
+	// SERVICE への呼び出しが 2 ページ分、呼び出し順で記録されていることを確認する。
+	inputs := fake.dimensionInputs(cetypes.DimensionService)
+	if len(inputs) != 2 {
+		t.Fatalf("SERVICE call count = %d, want 2", len(inputs))
+	}
+	if got := ptrStr(inputs[0].NextPageToken); got != "" {
+		t.Errorf("1 ページ目の NextPageToken = %q, want empty", got)
+	}
+	if got := ptrStr(inputs[1].NextPageToken); got != token {
+		t.Errorf("2 ページ目の NextPageToken = %q, want %q", got, token)
+	}
+	// GetDimensionValues の期間は GetCostAndUsage と同じ costDateRange の結果を使う。
+	if inputs[0].TimePeriod == nil {
+		t.Fatal("TimePeriod is nil")
+	}
+	if got := ptrStr(inputs[0].TimePeriod.Start); got != start {
+		t.Errorf("TimePeriod.Start = %q, want %q", got, start)
+	}
+	if got := ptrStr(inputs[0].TimePeriod.End); got != end {
+		t.Errorf("TimePeriod.End = %q, want %q", got, end)
+	}
+	// SortBy を指定すると NextPageToken が使えず全ページを辿れない。
+	if len(inputs[0].SortBy) != 0 {
+		t.Errorf("SortBy = %v, want empty", inputs[0].SortBy)
+	}
+}
+
+func TestGetCostDimensionValuesError(t *testing.T) {
+	wantErr := errors.New("access denied")
+	fake := &fakeCostExplorer{
+		out: &costexplorer.GetCostAndUsageOutput{},
+		dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+			cetypes.DimensionService:   plainValues(testServiceEC2),
+			cetypes.DimensionUsageType: plainValues(testUsageTypeEC2),
+		}),
+		// 3 次元のうち LINKED_ACCOUNT だけを失敗させる。部分的に取得できた次元だけで
+		// 絞り込むと、一致の無い次元が「一致無し」なのか「取得失敗」なのか区別できなくなる。
+		dimErrs: map[cetypes.Dimension]error{cetypes.DimensionLinkedAccount: wantErr},
+	}
+	opts := CostQueryOptions{StartDate: "2026-07-01", EndDate: "2026-07-31", Keyword: "ec2"}
+
+	_, err := getCost(context.Background(), fake, opts)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("err = %v, want wrapped %v", err, wantErr)
+	}
+	if fake.gotInput != nil {
+		t.Error("GetCostAndUsage was called, want not called")
 	}
 }
 

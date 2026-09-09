@@ -192,6 +192,8 @@
   - @sfuruya0612
 - [ADD] ECS クラスタの Drawer に、コンテナインスタンス (ECS on EC2 の EC2) ごとに稼働タスクを一覧する `Instances` タブを `Tasks` の次に追加する (タブ順は Overview / Services / Tasks / Instances / Terminal / Tags になる。コンテナインスタンスごとに EC2 インスタンス ID、状態、エージェント接続、ECS が報告する実行中 / 保留タスク数、CPU と Memory の残り / 登録量を表示し、その下にタスクの Group / Last status / CPU / Memory / Started at を並べる。Fargate のタスクは表示しない。コンテナインスタンスが 0 件のときは空表示を出し、一覧に無いコンテナインスタンスの ARN を持つタスクは末尾の「不明なコンテナインスタンス」(英語 UI では `Unknown container instance`) の見出しにまとめる (0 件でも該当タスクがあれば空表示と併記する)。タスク一覧は Tasks タブと同じキャッシュを共有するため取得は 1 回で済む。あわせて状態バッジに `draining` / `deregistering` (warn)、`registration-failed` (err)、`registering` (info) の配色を追加したため、ELB Target Health と ECS サービスの `draining` の表示が muted から warn に変わる)
   - @sfuruya0612
+- [CHANGE] Cost Explorer の絞り込みを、Service と Linked account の 2 つの入力から、Service / Usage type / Linked account を横断する 1 つのキーワード入力に変更する (`GET /api/aws/profiles/{profile}/cost` のクエリパラメータ `service` と `account` を廃止し `keyword` を追加する。backend は `GetDimensionValues` で 3 次元の値を並列に取得し、大文字小文字を区別しない部分一致で照合したうえで EQUALS の Or フィルタを組み立てる。Linked account はアカウント ID とアカウント名 (次元値の description 属性) の両方を照合対象とする。`GetCostAndUsage` の Filter が EQUALS と CASE_SENSITIVE しか受け付けないため、部分一致の判定は backend 側で行う。どの次元にも一致しなかった場合は結果が空と確定するため、課金される `GetCostAndUsage` を呼ばずに空の結果を返す)
+  - @sfuruya0612
 - [CHANGE] CLI `sso logout` を、SSO キャッシュディレクトリ (`~/.aws/sso/cache`) が無い場合にエラー終了ではなく正常終了 (削除するものが無い) にする
   - @sfuruya0612
 - [CHANGE] CLI `sso logout` がキャッシュディレクトリ直下の通常ファイルだけを削除し、サブディレクトリ配下のファイルは削除しないようにする (これまではディレクトリを再帰的に辿って全ファイルを削除していた。AWS CLI はサブディレクトリを作らないため、通常の利用では削除対象は変わらない)

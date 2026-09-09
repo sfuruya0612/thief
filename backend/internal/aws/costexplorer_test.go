@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,6 +24,12 @@ type recordingCostExplorer struct {
 func (m *recordingCostExplorer) GetCostAndUsage(_ context.Context, params *costexplorer.GetCostAndUsageInput, _ ...func(*costexplorer.Options)) (*costexplorer.GetCostAndUsageOutput, error) {
 	m.inputs = append(m.inputs, *params)
 	return &costexplorer.GetCostAndUsageOutput{}, nil
+}
+
+// GetDimensionValues は costExplorerAPI を満たすためだけに置く。ここで検証する 4 経路は
+// キーワードによる次元値の解決を行わないため、呼ばれた場合はエラーを返して気付けるようにする。
+func (m *recordingCostExplorer) GetDimensionValues(_ context.Context, _ *costexplorer.GetDimensionValuesInput, _ ...func(*costexplorer.Options)) (*costexplorer.GetDimensionValuesOutput, error) {
+	return nil, errors.New("GetDimensionValues is not expected on this path")
 }
 
 // costInputCmpOpts は cetypes の構造体が持つ埋め込みの非公開シリアライズマーカーを比較対象から除く。

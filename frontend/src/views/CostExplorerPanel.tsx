@@ -106,20 +106,17 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
   const [endDate, setEndDate] = useState(initialRange.end);
   const [metric, setMetric] = useState<CostMetricType>('unblended');
 
-  // サービス名と AWS アカウント ID の絞り込みは Cost Explorer 側 (GetCostAndUsage の Filter)
-  // で行う。GetCostAndUsage はリクエストごとに課金される API のため、入力中の値 (serviceInput /
-  // accountInput) と API に渡す確定値 (serviceApplied / accountApplied) を分離し、Enter の押下か
-  // フォーカス離脱で確定させたときにのみ API を呼び出す。
-  const [serviceInput, setServiceInput] = useState('');
-  const [serviceApplied, setServiceApplied] = useState('');
-  const [accountInput, setAccountInput] = useState('');
-  const [accountApplied, setAccountApplied] = useState('');
+  // 絞り込みは 1 つのキーワードで行い、backend が Service / Usage type / Linked account の
+  // 3 次元を横断して部分一致で解決する。GetCostAndUsage はリクエストごとに課金される API の
+  // ため、入力中の値 (keywordInput) と API に渡す確定値 (keywordApplied) を分離し、Enter の
+  // 押下かフォーカス離脱で確定させたときにのみ API を呼び出す。
+  const [keywordInput, setKeywordInput] = useState('');
+  const [keywordApplied, setKeywordApplied] = useState('');
 
   const { data, isLoading, error } = useCost(profile, region, {
     granularity,
     groupBy,
-    service: serviceApplied,
-    account: accountApplied,
+    keyword: keywordApplied,
     startDate,
     endDate,
   });
@@ -166,19 +163,11 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
 
       <div className="facets">
         <CostFilterInput
-          value={serviceInput}
-          onChange={setServiceInput}
-          onCommit={setServiceApplied}
-          placeholder="filter by service name…"
-          title="Filter by service name (press Enter to apply)"
-        />
-
-        <CostFilterInput
-          value={accountInput}
-          onChange={setAccountInput}
-          onCommit={setAccountApplied}
-          placeholder="filter by account ID…"
-          title="Filter by AWS account ID (press Enter to apply)"
+          value={keywordInput}
+          onChange={setKeywordInput}
+          onCommit={setKeywordApplied}
+          placeholder="filter by service / usage type / account…"
+          title="Filter by service name, usage type, account ID or name (press Enter to apply)"
         />
 
         <input

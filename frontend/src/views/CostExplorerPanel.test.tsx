@@ -59,58 +59,54 @@ describe('CostExplorerPanel', () => {
     await waitFor(() => expect(screen.getByText('AmazonEC2')).toBeInTheDocument());
     const callsBeforeInput = getCostSpy.mock.calls.length;
 
-    fireEvent.change(screen.getByPlaceholderText('filter by service name…'), {
+    fireEvent.change(screen.getByPlaceholderText('filter by service / usage type / account…'), {
       target: { value: 'AmazonEC2' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('filter by account ID…'), {
-      target: { value: '123456789012' },
     });
 
     // 入力値は state に反映されるが、確定前なので API は呼ばれない
     await waitFor(() =>
-      expect(screen.getByPlaceholderText('filter by service name…')).toHaveValue('AmazonEC2'),
+      expect(screen.getByPlaceholderText('filter by service / usage type / account…')).toHaveValue(
+        'AmazonEC2',
+      ),
     );
     expect(getCostSpy.mock.calls.length).toBe(callsBeforeInput);
   });
 
-  it('Enter の押下でサービス名フィルタが確定し getCost が service 付きで呼ばれる', async () => {
+  it('Enter の押下でキーワードが確定し getCost が keyword 付きで呼ばれる', async () => {
     const getCostSpy = vi.spyOn(endpoints, 'getCost').mockResolvedValue(SAMPLE);
     renderPanel();
 
     await waitFor(() => expect(getCostSpy).toHaveBeenCalled());
 
-    const serviceInput = screen.getByPlaceholderText('filter by service name…');
+    const keywordInput = screen.getByPlaceholderText('filter by service / usage type / account…');
     // 前後の空白は確定時に除去される
-    fireEvent.change(serviceInput, { target: { value: '  AmazonEC2  ' } });
-    fireEvent.keyDown(serviceInput, { key: 'Enter' });
+    fireEvent.change(keywordInput, { target: { value: '  AmazonEC2  ' } });
+    fireEvent.keyDown(keywordInput, { key: 'Enter' });
 
     await waitFor(() => {
       const lastCall = getCostSpy.mock.calls.at(-1);
-      expect(lastCall?.[2]?.service).toBe('AmazonEC2');
+      expect(lastCall?.[2]?.keyword).toBe('AmazonEC2');
     });
-    // サービス名の確定がアカウント ID 側の確定値を巻き込まないこと
-    expect(getCostSpy.mock.calls.at(-1)?.[2]?.account).toBe('');
     // 入力欄の表示値も trim 後の値に揃うこと。表示だけ空白付きで残ると、実際に絞り込みへ
     // 使われる値と画面の表示が食い違って見える。
-    expect(serviceInput).toHaveValue('AmazonEC2');
+    expect(keywordInput).toHaveValue('AmazonEC2');
   });
 
-  it('フォーカス離脱でアカウント ID フィルタが確定し getCost が account 付きで呼ばれる', async () => {
+  it('フォーカス離脱でキーワードが確定し getCost が keyword 付きで呼ばれる', async () => {
     const getCostSpy = vi.spyOn(endpoints, 'getCost').mockResolvedValue(SAMPLE);
     renderPanel();
 
     await waitFor(() => expect(getCostSpy).toHaveBeenCalled());
 
-    const accountInput = screen.getByPlaceholderText('filter by account ID…');
-    fireEvent.change(accountInput, { target: { value: '123456789012' } });
-    fireEvent.blur(accountInput);
+    // アカウント ID のようにサービス名以外の次元へ向けた値も、同じ 1 つの入力欄から渡す。
+    const keywordInput = screen.getByPlaceholderText('filter by service / usage type / account…');
+    fireEvent.change(keywordInput, { target: { value: '123456789012' } });
+    fireEvent.blur(keywordInput);
 
     await waitFor(() => {
       const lastCall = getCostSpy.mock.calls.at(-1);
-      expect(lastCall?.[2]?.account).toBe('123456789012');
+      expect(lastCall?.[2]?.keyword).toBe('123456789012');
     });
-    // アカウント ID の確定がサービス名側の確定値を巻き込まないこと
-    expect(getCostSpy.mock.calls.at(-1)?.[2]?.service).toBe('');
   });
 
   it('Enter で確定した直後にフォーカス離脱しても getCost は再呼び出しされない', async () => {
@@ -119,18 +115,18 @@ describe('CostExplorerPanel', () => {
 
     await waitFor(() => expect(getCostSpy).toHaveBeenCalled());
 
-    const serviceInput = screen.getByPlaceholderText('filter by service name…');
-    fireEvent.change(serviceInput, { target: { value: 'AmazonEC2' } });
-    fireEvent.keyDown(serviceInput, { key: 'Enter' });
+    const keywordInput = screen.getByPlaceholderText('filter by service / usage type / account…');
+    fireEvent.change(keywordInput, { target: { value: 'AmazonEC2' } });
+    fireEvent.keyDown(keywordInput, { key: 'Enter' });
 
-    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.service).toBe('AmazonEC2'));
+    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.keyword).toBe('AmazonEC2'));
     const callsAfterEnter = getCostSpy.mock.calls.length;
 
     // Enter と blur の両方が確定を発火させるため、Enter 直後の blur では同じ値で確定が 2 回走る。
     // 確定値が変わらなければ queryKey も変わらないので、有償 API の再呼び出しは起きてはならない。
-    fireEvent.blur(serviceInput);
+    fireEvent.blur(keywordInput);
 
-    await waitFor(() => expect(serviceInput).toHaveValue('AmazonEC2'));
+    await waitFor(() => expect(keywordInput).toHaveValue('AmazonEC2'));
     expect(getCostSpy.mock.calls.length).toBe(callsAfterEnter);
   });
 
@@ -140,16 +136,16 @@ describe('CostExplorerPanel', () => {
 
     await waitFor(() => expect(getCostSpy).toHaveBeenCalled());
 
-    const serviceInput = screen.getByPlaceholderText('filter by service name…');
-    fireEvent.change(serviceInput, { target: { value: 'AmazonEC2' } });
-    fireEvent.keyDown(serviceInput, { key: 'Enter' });
-    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.service).toBe('AmazonEC2'));
+    const keywordInput = screen.getByPlaceholderText('filter by service / usage type / account…');
+    fireEvent.change(keywordInput, { target: { value: 'AmazonEC2' } });
+    fireEvent.keyDown(keywordInput, { key: 'Enter' });
+    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.keyword).toBe('AmazonEC2'));
 
     // 空文字での確定は絞り込み解除として扱う (パラメータを省略するのではなく空文字を送る)
-    fireEvent.change(serviceInput, { target: { value: '' } });
-    fireEvent.keyDown(serviceInput, { key: 'Enter' });
+    fireEvent.change(keywordInput, { target: { value: '' } });
+    fireEvent.keyDown(keywordInput, { key: 'Enter' });
 
-    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.service).toBe(''));
+    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.keyword).toBe(''));
   });
 
   it('Group by の変更は確定済みのフィルタを巻き込まない', async () => {
@@ -158,27 +154,19 @@ describe('CostExplorerPanel', () => {
 
     await waitFor(() => expect(getCostSpy).toHaveBeenCalled());
 
-    const serviceInput = screen.getByPlaceholderText('filter by service name…');
-    fireEvent.change(serviceInput, { target: { value: 'AmazonEC2' } });
-    fireEvent.keyDown(serviceInput, { key: 'Enter' });
-    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.service).toBe('AmazonEC2'));
-
-    const accountInput = screen.getByPlaceholderText('filter by account ID…');
-    fireEvent.change(accountInput, { target: { value: '123456789012' } });
-    fireEvent.blur(accountInput);
-    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.account).toBe('123456789012'));
+    const keywordInput = screen.getByPlaceholderText('filter by service / usage type / account…');
+    fireEvent.change(keywordInput, { target: { value: 'AmazonEC2' } });
+    fireEvent.keyDown(keywordInput, { key: 'Enter' });
+    await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.keyword).toBe('AmazonEC2'));
 
     // 集計軸の切り替えは絞り込み条件とは独立した state であり、GetCostAndUsage には
     // GroupBy と Filter の両方が同時に渡り続けなければならない
     fireEvent.change(screen.getByTitle('Group by'), { target: { value: 'USAGE_TYPE' } });
 
     await waitFor(() => expect(getCostSpy.mock.calls.at(-1)?.[2]?.groupBy).toBe('USAGE_TYPE'));
-    const lastCall = getCostSpy.mock.calls.at(-1);
-    expect(lastCall?.[2]?.service).toBe('AmazonEC2');
-    expect(lastCall?.[2]?.account).toBe('123456789012');
+    expect(getCostSpy.mock.calls.at(-1)?.[2]?.keyword).toBe('AmazonEC2');
     // 入力欄の表示値も維持されること
-    expect(serviceInput).toHaveValue('AmazonEC2');
-    expect(accountInput).toHaveValue('123456789012');
+    expect(keywordInput).toHaveValue('AmazonEC2');
   });
 
   it('開始日/終了日を変更すると getCost が新しい startDate/endDate で呼ばれる', async () => {
@@ -232,13 +220,10 @@ describe('CostExplorerPanel', () => {
     const initialStart = (screen.getByTitle('Start date') as HTMLInputElement).value;
     const initialEnd = (screen.getByTitle('End date') as HTMLInputElement).value;
 
-    // 9 つの state を全て初期値以外へ変更する
-    const serviceInput = screen.getByPlaceholderText('filter by service name…');
-    fireEvent.change(serviceInput, { target: { value: 'AmazonEC2' } });
-    fireEvent.keyDown(serviceInput, { key: 'Enter' });
-    const accountInput = screen.getByPlaceholderText('filter by account ID…');
-    fireEvent.change(accountInput, { target: { value: '123456789012' } });
-    fireEvent.blur(accountInput);
+    // 7 つの state を全て初期値以外へ変更する
+    const keywordInput = screen.getByPlaceholderText('filter by service / usage type / account…');
+    fireEvent.change(keywordInput, { target: { value: 'AmazonEC2' } });
+    fireEvent.keyDown(keywordInput, { key: 'Enter' });
     fireEvent.change(screen.getByTitle('Start date'), { target: { value: '2026-06-01' } });
     fireEvent.change(screen.getByTitle('End date'), { target: { value: '2026-07-15' } });
     fireEvent.change(screen.getByTitle('Granularity'), { target: { value: 'MONTHLY' } });
@@ -248,8 +233,7 @@ describe('CostExplorerPanel', () => {
     // 変更が state に反映されたことを確認してからリージョンを切り替える
     await waitFor(() => {
       const lastCall = getCostSpy.mock.calls.at(-1);
-      expect(lastCall?.[2]?.service).toBe('AmazonEC2');
-      expect(lastCall?.[2]?.account).toBe('123456789012');
+      expect(lastCall?.[2]?.keyword).toBe('AmazonEC2');
       expect(lastCall?.[2]?.granularity).toBe('MONTHLY');
     });
     expect(screen.getByTitle('Cost metric')).toHaveValue('netAmortized');
@@ -258,23 +242,23 @@ describe('CostExplorerPanel', () => {
 
     // 再マウントにより入力値と確定値の両方が初期値へ戻る
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('filter by service name…')).toHaveValue('');
+      expect(screen.getByPlaceholderText('filter by service / usage type / account…')).toHaveValue(
+        '',
+      );
     });
-    expect(screen.getByPlaceholderText('filter by account ID…')).toHaveValue('');
     expect(screen.getByTitle('Start date')).toHaveValue(initialStart);
     expect(screen.getByTitle('End date')).toHaveValue(initialEnd);
     expect(screen.getByTitle('Granularity')).toHaveValue('DAILY');
     expect(screen.getByTitle('Group by')).toHaveValue('SERVICE');
     expect(screen.getByTitle('Cost metric')).toHaveValue('unblended');
 
-    // UI に表示されない確定値 (serviceApplied / accountApplied) のリセットは、
-    // 新しいリージョンでの getCost の呼び出し引数で検証する (それ以外の state は
-    // フォーム要素の値に直接束縛されているため上の検証で足りる)
+    // UI に表示されない確定値 (keywordApplied) のリセットは、新しいリージョンでの
+    // getCost の呼び出し引数で検証する (それ以外の state はフォーム要素の値に
+    // 直接束縛されているため上の検証で足りる)
     await waitFor(() => {
       const lastCall = getCostSpy.mock.calls.at(-1);
       expect(lastCall?.[1]).toBe('us-east-1');
-      expect(lastCall?.[2]?.service).toBe('');
-      expect(lastCall?.[2]?.account).toBe('');
+      expect(lastCall?.[2]?.keyword).toBe('');
     });
   });
 
