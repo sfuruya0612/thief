@@ -27,8 +27,7 @@ func TestCostCacheKeyDistinctPerField(t *testing.T) {
 		IncludeToday:     false,
 		Granularity:      "DAILY",
 		GroupByDimension: "SERVICE",
-		ServiceFilter:    "AmazonEC2",
-		AccountFilter:    "111111111111",
+		Keyword:          "AmazonEC2",
 		StartDate:        "2026-07-01",
 		EndDate:          "2026-07-31",
 		Months:           3,
@@ -45,10 +44,8 @@ func TestCostCacheKeyDistinctPerField(t *testing.T) {
 		{name: "include today", mutate: func(o *awsinternal.CostQueryOptions) { o.IncludeToday = true }},
 		{name: "granularity", mutate: func(o *awsinternal.CostQueryOptions) { o.Granularity = "MONTHLY" }},
 		{name: "group by dimension", mutate: func(o *awsinternal.CostQueryOptions) { o.GroupByDimension = "LINKED_ACCOUNT" }},
-		{name: "service filter", mutate: func(o *awsinternal.CostQueryOptions) { o.ServiceFilter = "AmazonS3" }},
-		{name: "service filter cleared", mutate: func(o *awsinternal.CostQueryOptions) { o.ServiceFilter = "" }},
-		{name: "account filter", mutate: func(o *awsinternal.CostQueryOptions) { o.AccountFilter = "222222222222" }},
-		{name: "account filter cleared", mutate: func(o *awsinternal.CostQueryOptions) { o.AccountFilter = "" }},
+		{name: "keyword", mutate: func(o *awsinternal.CostQueryOptions) { o.Keyword = "AmazonS3" }},
+		{name: "keyword cleared", mutate: func(o *awsinternal.CostQueryOptions) { o.Keyword = "" }},
 		{name: "start date", mutate: func(o *awsinternal.CostQueryOptions) { o.StartDate = "2026-06-01" }},
 		{name: "end date", mutate: func(o *awsinternal.CostQueryOptions) { o.EndDate = "2026-08-31" }},
 		{name: "months", mutate: func(o *awsinternal.CostQueryOptions) { o.Months = 6 }},
@@ -85,29 +82,30 @@ func TestCostCacheKeyDistinctPerField(t *testing.T) {
 	}
 }
 
-// TestCostCacheKeyEscapesFilterSeparator は、絞り込み条件に区切り文字 ":" が含まれていても
-// service と account の境界が保たれることを確認する。両者はキャッシュキー上で隣接するため、
-// エスケープしないと ("a:b", "c") と ("a", "b:c") が同一キーへ衝突する。
+// TestCostCacheKeyEscapesFilterSeparator は、キーワードに区切り文字 ":" が含まれていても
+// 隣接する要素との境界が保たれることを確認する。キーワードはキャッシュキー上で開始日と
+// 隣接し、どちらもクエリパラメータ由来の自由入力であるため、エスケープしないと
+// ("a:b", "c") と ("a", "b:c") が同一キーへ衝突する。
 func TestCostCacheKeyEscapesFilterSeparator(t *testing.T) {
 	const (
 		profile = "prod"
 		region  = "ap-northeast-1"
 	)
-	key := func(service, account string) string {
+	key := func(keyword, start string) string {
 		opts := awsinternal.CostQueryOptions{
 			Granularity:      "DAILY",
 			GroupByDimension: "SERVICE",
-			ServiceFilter:    service,
-			AccountFilter:    account,
+			Keyword:          keyword,
+			StartDate:        start,
 		}
 		return costCacheKey(profile, region, opts)
 	}
 
 	if a, b := key("a:b", "c"), key("a", "b:c"); a == b {
-		t.Errorf("service=%q/account=%q and service=%q/account=%q share key %q", "a:b", "c", "a", "b:c", a)
+		t.Errorf("keyword=%q/start=%q and keyword=%q/start=%q share key %q", "a:b", "c", "a", "b:c", a)
 	}
 	if a, b := key("a:b", ""), key("a", "b"); a == b {
-		t.Errorf("service=%q/account=%q and service=%q/account=%q share key %q", "a:b", "", "a", "b", a)
+		t.Errorf("keyword=%q/start=%q and keyword=%q/start=%q share key %q", "a:b", "", "a", "b", a)
 	}
 }
 
@@ -125,16 +123,14 @@ func TestHandleCostUsesFilterAwareCacheKey(t *testing.T) {
 
 	type filterCase struct {
 		name    string
-		service string
-		account string
+		keyword string
 	}
 	cases := []filterCase{
-		{name: "service and account", service: "AmazonEC2", account: "111111111111"},
-		{name: "different service", service: "AmazonS3", account: "111111111111"},
-		{name: "different account", service: "AmazonEC2", account: "222222222222"},
-		{name: "no filter", service: "", account: ""},
-		{name: "colon in service", service: "a:b", account: "c"},
-		{name: "colon in account", service: "a", account: "b:c"},
+		{name: "service keyword", keyword: "AmazonEC2"},
+		{name: "different keyword", keyword: "AmazonS3"},
+		{name: "account keyword", keyword: "111111111111"},
+		{name: "no filter", keyword: ""},
+		{name: "colon in keyword", keyword: "a:b"},
 	}
 
 	s := newTestServer(t)
@@ -147,8 +143,7 @@ func TestHandleCostUsesFilterAwareCacheKey(t *testing.T) {
 		opts := awsinternal.CostQueryOptions{
 			Granularity:      "DAILY",
 			GroupByDimension: "SERVICE",
-			ServiceFilter:    c.service,
-			AccountFilter:    c.account,
+			Keyword:          c.keyword,
 			StartDate:        "2026-07-01",
 			EndDate:          "2026-07-31",
 		}
@@ -161,8 +156,7 @@ func TestHandleCostUsesFilterAwareCacheKey(t *testing.T) {
 			q.Set("region", region)
 			q.Set("granularity", "DAILY")
 			q.Set("group_by", "SERVICE")
-			q.Set("service", c.service)
-			q.Set("account", c.account)
+			q.Set("keyword", c.keyword)
 			q.Set("start", "2026-07-01")
 			q.Set("end", "2026-07-31")
 
@@ -186,6 +180,50 @@ func TestHandleCostUsesFilterAwareCacheKey(t *testing.T) {
 				t.Errorf("body = %v, want [%s]", body, marker(c))
 			}
 		})
+	}
+}
+
+// TestHandleCostIgnoresLegacyFilterParams は handleCost が廃止した service / account の
+// クエリパラメータを読まないことを確認する。読んでいればキャッシュキーが keyword だけで
+// 組んだキーと一致せず、X-Cache-Status が HIT にならない。
+func TestHandleCostIgnoresLegacyFilterParams(t *testing.T) {
+	const (
+		profile = "prod"
+		region  = "ap-northeast-1"
+		keyword = "AmazonEC2"
+	)
+
+	s := newTestServer(t)
+	opts := awsinternal.CostQueryOptions{
+		Granularity:      "DAILY",
+		GroupByDimension: "SERVICE",
+		Keyword:          keyword,
+		StartDate:        "2026-07-01",
+		EndDate:          "2026-07-31",
+	}
+	s.resourceCache.Set(costCacheKey(profile, region, opts), []string{"cached"}, time.Minute)
+
+	q := url.Values{}
+	q.Set("region", region)
+	q.Set("granularity", "DAILY")
+	q.Set("group_by", "SERVICE")
+	q.Set("keyword", keyword)
+	// 廃止済みのパラメータ。読まれていれば絞り込み条件が変わる値を入れる。
+	q.Set("service", "AmazonS3")
+	q.Set("account", "222222222222")
+	q.Set("start", "2026-07-01")
+	q.Set("end", "2026-07-31")
+
+	r := httptest.NewRequest(http.MethodGet, "/api/aws/"+profile+"/cost?"+q.Encode(), nil)
+	r.SetPathValue("profile", profile)
+	w := httptest.NewRecorder()
+	s.handleCost(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("X-Cache-Status"); got != "HIT" {
+		t.Fatalf("X-Cache-Status = %q, want HIT (handleCost still reads service/account)", got)
 	}
 }
 

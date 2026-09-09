@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
 	cetypes "github.com/aws/aws-sdk-go-v2/service/costexplorer/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // CostResource represents a line item in Cost Explorer results.
@@ -45,21 +47,20 @@ const (
 // CostQueryOptions は GetCost の検索条件を表す。ゼロ値は以下のデフォルトとして扱う。
 //   - Granularity: 空文字は DAILY
 //   - GroupByDimension: 空文字は SERVICE
-//   - ServiceFilter: 空文字は絞り込みなし (Dimension SERVICE の EQUALS フィルタ)
-//   - AccountFilter: 空文字は絞り込みなし (Dimension LINKED_ACCOUNT の EQUALS フィルタ)。
-//     値は AWS Cost Explorer が返す生のアカウント ID を前提とする (名前解決や整形は行わない)。
+//   - Keyword: 空文字 (前後の空白を除いた結果が空の場合を含む) は絞り込みなし。
+//     指定した場合は SERVICE / USAGE_TYPE / LINKED_ACCOUNT の 3 次元の値一覧に対して
+//     大文字小文字を区別しない部分一致で照合し、一致した値だけを EQUALS で絞り込む。
+//     LINKED_ACCOUNT はアカウント ID とアカウント名 (Attributes の description) の両方を照合する。
 //   - StartDate/EndDate: 両方指定時のみ有効な期間として使う (YYYY-MM-DD)。指定時は Months を無視する。
 //   - Months: StartDate/EndDate 未指定時のみ使う。0 以下は 1 (取得期間を遡る月数)
 //
-// ServiceFilter / AccountFilter はそれぞれ単一値のみを受け付ける (OR や複数値指定には対応しない)。
-// GroupByDimension (結果のグルーピング次元) と各フィルタ (絞り込み条件) は独立した概念であり、
-// GroupByDimension=LINKED_ACCOUNT と AccountFilter を同時に指定してもよい。
+// GroupByDimension (結果のグルーピング次元) と Keyword (絞り込み条件) は独立した概念であり、
+// GroupByDimension=USAGE_TYPE のまま Keyword がサービス名に一致してもよい。
 type CostQueryOptions struct {
 	IncludeToday     bool
 	Granularity      string
 	GroupByDimension string
-	ServiceFilter    string
-	AccountFilter    string
+	Keyword          string
 	StartDate        string
 	EndDate          string
 	Months           int
@@ -69,7 +70,20 @@ type CostQueryOptions struct {
 // テストでは手書きフェイクを差し込む。
 type costExplorerAPI interface {
 	GetCostAndUsage(ctx context.Context, params *costexplorer.GetCostAndUsageInput, optFns ...func(*costexplorer.Options)) (*costexplorer.GetCostAndUsageOutput, error)
+	GetDimensionValues(ctx context.Context, params *costexplorer.GetDimensionValuesInput, optFns ...func(*costexplorer.Options)) (*costexplorer.GetDimensionValuesOutput, error)
 }
+
+// costKeywordDimensions は Keyword の照合対象となる次元。Filter に並べる Or の要素順もこの順序に従う。
+// REGION を含めないのは、要望が Service / Usage type / Linked account の 3 次元を対象としているため。
+var costKeywordDimensions = []cetypes.Dimension{
+	cetypes.DimensionService,
+	cetypes.DimensionUsageType,
+	cetypes.DimensionLinkedAccount,
+}
+
+// costAccountNameAttribute は GetDimensionValues が LINKED_ACCOUNT の応答で
+// アカウント名を格納する Attributes のキー。
+const costAccountNameAttribute = "description"
 
 func costGranularity(g string) cetypes.Granularity {
 	if g == "MONTHLY" {
@@ -122,28 +136,107 @@ func costDateRange(opts CostQueryOptions) (start, end string) {
 }
 
 // costDimensionFilter は単一次元の完全一致 (EQUALS) フィルタ式を組み立てる。
-func costDimensionFilter(key cetypes.Dimension, value string) cetypes.Expression {
+func costDimensionFilter(key cetypes.Dimension, values []string) cetypes.Expression {
 	return cetypes.Expression{
 		Dimensions: &cetypes.DimensionValues{
 			Key:          key,
-			Values:       []string{value},
+			Values:       values,
 			MatchOptions: []cetypes.MatchOption{cetypes.MatchOptionEquals},
 		},
 	}
 }
 
-// costFilter は ServiceFilter / AccountFilter から GetCostAndUsage に渡す Filter を組み立てる。
-// 両方が空文字なら nil (絞り込みなし) を返す。片方のみ指定されている場合は Dimensions を直接
-// 持つ単一の Expression を返し、両方指定されている場合は And に 2 要素を格納した Expression を
-// 返す。cetypes.Expression は 1 つのフィルタ機構のみを持つ想定であるため、トップレベルの
-// Expression に Dimensions と And を同時に設定しない。
-func costFilter(opts CostQueryOptions) *cetypes.Expression {
-	var exprs []cetypes.Expression
-	if opts.ServiceFilter != "" {
-		exprs = append(exprs, costDimensionFilter(cetypes.DimensionService, opts.ServiceFilter))
+// costDimensionValues は 1 次元の値一覧を NextPageToken が空になるまで取得する。
+// SortBy は指定しない (SortBy を指定すると NextPageToken が使えず全ページを辿れないため)。
+func costDimensionValues(ctx context.Context, client costExplorerAPI, dim cetypes.Dimension, start, end string) ([]cetypes.DimensionValuesWithAttributes, error) {
+	var values []cetypes.DimensionValuesWithAttributes
+	var token *string
+	for {
+		out, err := client.GetDimensionValues(ctx, &costexplorer.GetDimensionValuesInput{
+			Dimension: dim,
+			TimePeriod: &cetypes.DateInterval{
+				Start: aws.String(start),
+				End:   aws.String(end),
+			},
+			NextPageToken: token,
+		})
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, out.DimensionValues...)
+		if out.NextPageToken == nil || *out.NextPageToken == "" {
+			return values, nil
+		}
+		token = out.NextPageToken
 	}
-	if opts.AccountFilter != "" {
-		exprs = append(exprs, costDimensionFilter(cetypes.DimensionLinkedAccount, opts.AccountFilter))
+}
+
+// costMatchDimensionValues は値一覧のうち、キーワードに大文字小文字を区別せず部分一致した値を返す。
+// lowerKeyword は小文字化済みのキーワードを受け取る。LINKED_ACCOUNT は Value (アカウント ID) に
+// 加えて Attributes["description"] (アカウント名) も照合し、どちらかが一致したら Value を返す。
+// Attributes が nil または description キーを持たない場合は Value だけを照合する。
+// Value が空の値は Filter の値として意味を持たないため除く。
+func costMatchDimensionValues(dim cetypes.Dimension, values []cetypes.DimensionValuesWithAttributes, lowerKeyword string) []string {
+	var matched []string
+	for _, v := range values {
+		value := ptrStr(v.Value)
+		if value == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(value), lowerKeyword) {
+			matched = append(matched, value)
+			continue
+		}
+		if dim != cetypes.DimensionLinkedAccount {
+			continue
+		}
+		// nil マップの索引はゼロ値と ok=false を返すため、Attributes が nil でも panic しない。
+		if name, ok := v.Attributes[costAccountNameAttribute]; ok && strings.Contains(strings.ToLower(name), lowerKeyword) {
+			matched = append(matched, value)
+		}
+	}
+	return matched
+}
+
+// costResolveKeyword は costKeywordDimensions の各次元の値一覧を取得し、キーワードに部分一致した
+// 値を次元ごとに返す。戻り値のスライスは costKeywordDimensions と同じ順序と長さを持つ。
+// 3 次元の取得は互いに独立しているため errgroup で並列に実行し、各 goroutine は自分の index に
+// のみ書き込む (データオーナーシップを goroutine ごとに分離するためロックは不要)。
+// いずれかの次元が失敗したら部分的な結果を使わずエラーを返す。一致しなかった次元が
+// 「一致無し」なのか「取得失敗」なのかを結果から区別できなくなるため。
+func costResolveKeyword(ctx context.Context, client costExplorerAPI, keyword, start, end string) ([][]string, error) {
+	lowerKeyword := strings.ToLower(keyword)
+	matched := make([][]string, len(costKeywordDimensions))
+
+	g, gctx := errgroup.WithContext(ctx)
+	for i, dim := range costKeywordDimensions {
+		g.Go(func() error {
+			values, err := costDimensionValues(gctx, client, dim, start, end)
+			if err != nil {
+				return err
+			}
+			matched[i] = costMatchDimensionValues(dim, values, lowerKeyword)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("get dimension values: %w", err)
+	}
+	return matched, nil
+}
+
+// costKeywordFilter は次元ごとの一致値から GetCostAndUsage に渡す Filter を組み立てる。
+// 一致が 1 次元だけならその Dimensions をルートに持つ Expression を、2 次元以上なら Or に
+// まとめた Expression を返す。一致が無い次元は式に含めない。3 次元とも一致が無ければ nil を返す。
+// cetypes.Expression は 1 つのフィルタ機構のみを持つ想定であるため、トップレベルの Expression に
+// Dimensions と Or を同時に設定しない。
+func costKeywordFilter(matched [][]string) *cetypes.Expression {
+	var exprs []cetypes.Expression
+	for i, values := range matched {
+		if len(values) == 0 {
+			continue
+		}
+		exprs = append(exprs, costDimensionFilter(costKeywordDimensions[i], values))
 	}
 	switch len(exprs) {
 	case 0:
@@ -153,8 +246,32 @@ func costFilter(opts CostQueryOptions) *cetypes.Expression {
 		single := exprs[0]
 		return &single
 	default:
-		return &cetypes.Expression{And: exprs}
+		return &cetypes.Expression{Or: exprs}
 	}
+}
+
+// costFilter は Keyword から GetCostAndUsage に渡す Filter を組み立てる。
+// 戻り値の filter は nil でも意味が 2 つあるため、絞り込みの結果が空に確定したかを skip で返す。
+//   - キーワードが空 (前後の空白を除いた結果が空の場合を含む): GetDimensionValues を呼ばず
+//     (nil, false, nil) を返す。絞り込みなしで全件を取得する
+//   - キーワードがどの次元にも一致しない: (nil, true, nil) を返す。結果が空になることが確定して
+//     いるため、呼び出し側は課金される GetCostAndUsage を呼ばない
+func costFilter(ctx context.Context, client costExplorerAPI, keyword, start, end string) (filter *cetypes.Expression, skip bool, err error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return nil, false, nil
+	}
+
+	matched, err := costResolveKeyword(ctx, client, keyword, start, end)
+	if err != nil {
+		return nil, false, err
+	}
+
+	f := costKeywordFilter(matched)
+	if f == nil {
+		return nil, true, nil
+	}
+	return f, false, nil
 }
 
 // GetCost returns cost grouped by the given dimension for the given date range.
@@ -173,6 +290,14 @@ func GetCost(ctx context.Context, profile, region string, opts CostQueryOptions)
 func getCost(ctx context.Context, client costExplorerAPI, opts CostQueryOptions) ([]CostResource, error) {
 	start, end := costDateRange(opts)
 
+	filter, skip, err := costFilter(ctx, client, opts.Keyword, start, end)
+	if err != nil {
+		return nil, err
+	}
+	if skip {
+		return nil, nil
+	}
+
 	input := &costexplorer.GetCostAndUsageInput{
 		TimePeriod: &cetypes.DateInterval{
 			Start: aws.String(start),
@@ -183,7 +308,7 @@ func getCost(ctx context.Context, client costExplorerAPI, opts CostQueryOptions)
 		GroupBy: []cetypes.GroupDefinition{
 			{Type: cetypes.GroupDefinitionTypeDimension, Key: aws.String(costGroupByDimension(opts.GroupByDimension))},
 		},
-		Filter: costFilter(opts),
+		Filter: filter,
 	}
 
 	out, err := client.GetCostAndUsage(ctx, input)

@@ -20,43 +20,49 @@ afterEach(() => {
 });
 
 describe('getCost', () => {
-  it('service と account が空文字でもクエリパラメータとして送る', async () => {
+  it('keyword が空文字でもクエリパラメータとして送る', async () => {
     const fetchMock = stubFetch();
 
-    await getCost('test-profile', 'ap-northeast-1', { service: '', account: '' });
+    await getCost('test-profile', 'ap-northeast-1', { keyword: '' });
 
     // 空文字は「絞り込み解除」を表す確定値であり、パラメータ自体を省略する挙動とは
     // 区別される。client.ts の buildUrl が undefined のみを省く実装であることに依存する。
     const url = requestedUrl(fetchMock);
-    expect(url.searchParams.has('service')).toBe(true);
-    expect(url.searchParams.has('account')).toBe(true);
-    expect(url.searchParams.get('service')).toBe('');
-    expect(url.searchParams.get('account')).toBe('');
-    expect(url.search).toContain('service=');
-    expect(url.search).toContain('account=');
+    expect(url.searchParams.has('keyword')).toBe(true);
+    expect(url.searchParams.get('keyword')).toBe('');
+    expect(url.search).toContain('keyword=');
   });
 
-  it('service と account を渡さない場合はクエリパラメータを付けない', async () => {
+  it('keyword を渡さない場合はクエリパラメータを付けない', async () => {
     const fetchMock = stubFetch();
 
     await getCost('test-profile', 'ap-northeast-1');
 
     const url = requestedUrl(fetchMock);
+    expect(url.searchParams.has('keyword')).toBe(false);
+  });
+
+  it('旧来の service / account はクエリパラメータとして送らない', async () => {
+    const fetchMock = stubFetch();
+
+    await getCost('test-profile', 'ap-northeast-1', { keyword: 'AmazonEC2' });
+
+    // backend は service / account を読まなくなった。送り続けると絞り込みが効いていない
+    // ことに気付けないため、送らないことを固定する。
+    const url = requestedUrl(fetchMock);
     expect(url.searchParams.has('service')).toBe(false);
     expect(url.searchParams.has('account')).toBe(false);
   });
 
-  it('service と account の値は URL エンコードして送る', async () => {
+  it('keyword の値は URL エンコードして送る', async () => {
     const fetchMock = stubFetch();
 
     await getCost('test-profile', 'ap-northeast-1', {
-      service: 'Amazon Elastic Compute Cloud - Compute',
-      account: '123456789012',
+      keyword: 'Amazon Elastic Compute Cloud - Compute',
     });
 
     const url = requestedUrl(fetchMock);
-    expect(url.searchParams.get('service')).toBe('Amazon Elastic Compute Cloud - Compute');
-    expect(url.searchParams.get('account')).toBe('123456789012');
+    expect(url.searchParams.get('keyword')).toBe('Amazon Elastic Compute Cloud - Compute');
     // 生の空白がクエリ文字列にそのまま現れないこと (URLSearchParams による符号化)
     expect(url.search).not.toContain('Cloud - Compute');
   });
