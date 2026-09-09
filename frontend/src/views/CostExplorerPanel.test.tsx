@@ -14,15 +14,18 @@ vi.mock('../components/charts/CostChart', () => ({
   CostChart: () => <div data-testid="cost-chart-stub" />,
 }));
 
+// account_name は Group by が Linked account のときだけ backend が返すため、既定は空文字にする。
 function raw(
   timePeriod: string,
   service: string,
   unblended: number,
   netAmortized: number,
+  accountName = '',
 ): CostRaw {
   return {
     time_period: timePeriod,
     service,
+    account_name: accountName,
     unblended_amount: unblended,
     net_amortized_amount: netAmortized,
     unit: 'USD',
@@ -291,5 +294,28 @@ describe('CostExplorerPanel', () => {
       .getAllByRole('columnheader')
       .map((el) => el.textContent);
     expect(headers).toEqual(['Group', 'Total', '2026-07-01', '2026-07-02']);
+  });
+
+  it('useCost が accountName 付きの行を返すとクロス表の Group 列が "Account Name (Account ID)" になる', async () => {
+    // Group by が Linked account のとき backend は service にアカウント ID、account_name に
+    // アカウント名を返す。名前が登録されていないアカウントは account_name が空文字で ID だけが出る。
+    vi.spyOn(endpoints, 'getCost').mockResolvedValue([
+      raw('2026-07-01', '123456789012', 10, 12, 'prod-platform'),
+      raw('2026-07-01', '210987654321', 1, 2),
+    ]);
+    renderPanel();
+
+    await waitFor(() =>
+      expect(screen.getByText('prod-platform (123456789012)')).toBeInTheDocument(),
+    );
+    const table = document.querySelector('table.cost-cross-table');
+    expect(table).not.toBeNull();
+    const groups = within(table as HTMLElement)
+      .getAllByRole('row')
+      .slice(1) // 先頭はヘッダ行
+      .map((tr) => within(tr).getAllByRole('cell')[0].textContent);
+    expect(groups).toEqual(['prod-platform (123456789012)', '210987654321']);
+    // Group 列の見出しは Group by に依らず変えない
+    expect(within(table as HTMLElement).getAllByRole('columnheader')[0]).toHaveTextContent('Group');
   });
 });

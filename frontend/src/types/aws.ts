@@ -934,6 +934,9 @@ export interface RegionRow {
 export interface CostRaw {
   time_period: string;
   service: string;
+  // Group by が LINKED_ACCOUNT のときだけ service (アカウント ID) に対応するアカウント名。
+  // 他の次元と、名前が取得できなかった ID では空文字。
+  account_name: string;
   unblended_amount: number;
   net_amortized_amount: number;
   unit: string;
@@ -945,6 +948,8 @@ export interface CostRow {
   id: string;
   timePeriod: string;
   service: string;
+  // 表示用のアカウント名。id には含めない (表示名の有無や変更で行の識別子を揺らさない)。
+  accountName: string;
   unblendedAmount: number;
   netAmortizedAmount: number;
   unit: string;

@@ -121,6 +121,7 @@ NextPageToken "next_page_token,omitempty"
 == CostResource
 TimePeriod "time_period"
 Service "service"
+AccountName "account_name"
 UnblendedAmount "unblended_amount"
 NetAmortizedAmount "net_amortized_amount"
 Unit "unit"

@@ -217,6 +217,7 @@ export function useCost(profile: string, region: string, opts?: CostQueryOptions
         id: `${r.time_period}/${r.service}`,
         timePeriod: r.time_period,
         service: r.service,
+        accountName: r.account_name,
         unblendedAmount: r.unblended_amount,
         netAmortizedAmount: r.net_amortized_amount,
         unit: r.unit,
