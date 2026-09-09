@@ -675,3 +675,237 @@ func TestGetCostError(t *testing.T) {
 		t.Fatalf("err = %v, want wrapped %v", err, wantErr)
 	}
 }
+
+// linkedAccountOutput は 1 期間に、指定した Keys を持つ Groups を並べた GetCostAndUsage の応答を
+// 組み立てる。keys の要素が nil の Group は Keys 無し (Service が空文字になる) を表す。
+// Metrics は置かない (金額の変換は TestGetCostResults が担う)。
+func linkedAccountOutput(period string, keys ...[]string) *costexplorer.GetCostAndUsageOutput {
+	groups := make([]cetypes.Group, 0, len(keys))
+	for _, k := range keys {
+		groups = append(groups, cetypes.Group{Keys: k})
+	}
+	return &costexplorer.GetCostAndUsageOutput{
+		ResultsByTime: []cetypes.ResultByTime{
+			{
+				TimePeriod: &cetypes.DateInterval{Start: aws.String(period), End: aws.String(period)},
+				Groups:     groups,
+			},
+		},
+	}
+}
+
+func TestGetCostLinkedAccountNames(t *testing.T) {
+	const (
+		start          = "2026-07-01"
+		end            = "2026-07-31"
+		token          = "page-2"
+		otherAccountID = "210987654321"
+		otherName      = "dev-sandbox"
+	)
+	linkedOpts := CostQueryOptions{StartDate: start, EndDate: end, GroupByDimension: CostGroupByLinkedAccount}
+	accessDenied := errors.New("access denied")
+	accountPage := func(values ...cetypes.DimensionValuesWithAttributes) map[dimensionPage]*costexplorer.GetDimensionValuesOutput {
+		return singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+			cetypes.DimensionLinkedAccount: values,
+		})
+	}
+
+	tests := []struct {
+		name     string
+		opts     CostQueryOptions
+		out      *costexplorer.GetCostAndUsageOutput
+		dimPages map[dimensionPage]*costexplorer.GetDimensionValuesOutput
+		dimErrs  map[cetypes.Dimension]error
+		want     []CostResource
+		wantErr  error
+		// wantAccountCalls は LINKED_ACCOUNT に対する GetDimensionValues の呼び出し回数 (ページ数を含む)。
+		wantAccountCalls int
+	}{
+		{
+			name:     "ID に対応する名前がある場合は AccountName に description が入る",
+			opts:     linkedOpts,
+			out:      linkedAccountOutput(start, []string{testAccountID}),
+			dimPages: accountPage(accountValue(testAccountID, testAccountName)),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: testAccountName},
+			},
+			wantAccountCalls: 1,
+		},
+		{
+			name:     "GetDimensionValues の結果に無い ID は AccountName が空文字",
+			opts:     linkedOpts,
+			out:      linkedAccountOutput(start, []string{testAccountID}, []string{otherAccountID}),
+			dimPages: accountPage(accountValue(testAccountID, testAccountName)),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: testAccountName},
+				{TimePeriod: start, Service: otherAccountID, AccountName: ""},
+			},
+			wantAccountCalls: 1,
+		},
+		{
+			name:     "Attributes が nil の値は panic せず AccountName が空文字",
+			opts:     linkedOpts,
+			out:      linkedAccountOutput(start, []string{testAccountID}),
+			dimPages: accountPage(plainValues(testAccountID)...),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: ""},
+			},
+			wantAccountCalls: 1,
+		},
+		{
+			name:     "description が空文字の値は AccountName が空文字",
+			opts:     linkedOpts,
+			out:      linkedAccountOutput(start, []string{testAccountID}),
+			dimPages: accountPage(accountValue(testAccountID, "")),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: ""},
+			},
+			wantAccountCalls: 1,
+		},
+		{
+			name: "NextPageToken で 2 ページに分かれた結果は 2 ページ目の名前も入る",
+			opts: linkedOpts,
+			out:  linkedAccountOutput(start, []string{testAccountID}, []string{otherAccountID}),
+			dimPages: map[dimensionPage]*costexplorer.GetDimensionValuesOutput{
+				{dim: cetypes.DimensionLinkedAccount}: {
+					DimensionValues: []cetypes.DimensionValuesWithAttributes{accountValue(testAccountID, testAccountName)},
+					NextPageToken:   aws.String(token),
+				},
+				{dim: cetypes.DimensionLinkedAccount, token: token}: {
+					DimensionValues: []cetypes.DimensionValuesWithAttributes{accountValue(otherAccountID, otherName)},
+				},
+			},
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: testAccountName},
+				{TimePeriod: start, Service: otherAccountID, AccountName: otherName},
+			},
+			wantAccountCalls: 2,
+		},
+		{
+			// Value が空文字の次元値を対応表に入れると、Keys 無しで Service が空文字の CostResource に
+			// 空文字キーの名前が付いてしまう。
+			name: "Value が空文字の次元値は対応表に入らず Keys 無しの CostResource は AccountName が空文字のまま",
+			opts: linkedOpts,
+			out:  linkedAccountOutput(start, []string{testAccountID}, nil),
+			dimPages: accountPage(
+				accountValue(testAccountID, testAccountName),
+				accountValue("", "name-for-empty-id"),
+			),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: testAccountName},
+				{TimePeriod: start, Service: "", AccountName: ""},
+			},
+			wantAccountCalls: 1,
+		},
+		{
+			// 同じ ID が重複する応答は想定しないが、実装の書き方で挙動が変わらないよう後勝ちで固定する。
+			name: "同じ Value が 1 ページ目と 2 ページ目に異なる description で現れたら 2 ページ目が勝つ",
+			opts: linkedOpts,
+			out:  linkedAccountOutput(start, []string{testAccountID}),
+			dimPages: map[dimensionPage]*costexplorer.GetDimensionValuesOutput{
+				{dim: cetypes.DimensionLinkedAccount}: {
+					DimensionValues: []cetypes.DimensionValuesWithAttributes{accountValue(testAccountID, "old-name")},
+					NextPageToken:   aws.String(token),
+				},
+				{dim: cetypes.DimensionLinkedAccount, token: token}: {
+					DimensionValues: []cetypes.DimensionValuesWithAttributes{accountValue(testAccountID, "new-name")},
+				},
+			},
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: "new-name"},
+			},
+			wantAccountCalls: 2,
+		},
+		{
+			// 名前が引けないときに ID だけで縮退させると、失敗が画面から見えなくなる。
+			name:             "GetDimensionValues がエラーを返したら getCost はラップしたエラーを返し CostResource を返さない",
+			opts:             linkedOpts,
+			out:              linkedAccountOutput(start, []string{testAccountID}),
+			dimErrs:          map[cetypes.Dimension]error{cetypes.DimensionLinkedAccount: accessDenied},
+			wantErr:          accessDenied,
+			wantAccountCalls: 1,
+		},
+		{
+			// キーワード解決の取得結果は名前取得に再利用しないため、LINKED_ACCOUNT への呼び出しは
+			// キーワード解決の 1 回と名前取得の 1 回の計 2 回になる。
+			name: "キーワードが空でない場合は LINKED_ACCOUNT が 2 回呼ばれ AccountName が入る",
+			opts: CostQueryOptions{StartDate: start, EndDate: end, GroupByDimension: CostGroupByLinkedAccount, Keyword: testAccountID},
+			out:  linkedAccountOutput(start, []string{testAccountID}),
+			dimPages: singlePage(map[cetypes.Dimension][]cetypes.DimensionValuesWithAttributes{
+				cetypes.DimensionService:       plainValues(testServiceEC2),
+				cetypes.DimensionUsageType:     plainValues(testUsageType),
+				cetypes.DimensionLinkedAccount: {accountValue(testAccountID, testAccountName)},
+			}),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: testAccountName},
+			},
+			wantAccountCalls: 2,
+		},
+		{
+			name:     "GroupByDimension が空文字 (SERVICE) なら GetDimensionValues を呼ばず AccountName は空文字",
+			opts:     CostQueryOptions{StartDate: start, EndDate: end},
+			out:      linkedAccountOutput(start, []string{testAccountID}),
+			dimPages: accountPage(accountValue(testAccountID, testAccountName)),
+			want: []CostResource{
+				{TimePeriod: start, Service: testAccountID, AccountName: ""},
+			},
+			wantAccountCalls: 0,
+		},
+		{
+			name:     "GroupByDimension が USAGE_TYPE なら GetDimensionValues を呼ばず AccountName は空文字",
+			opts:     CostQueryOptions{StartDate: start, EndDate: end, GroupByDimension: CostGroupByUsageType},
+			out:      linkedAccountOutput(start, []string{testUsageType}),
+			dimPages: accountPage(accountValue(testUsageType, testAccountName)),
+			want: []CostResource{
+				{TimePeriod: start, Service: testUsageType, AccountName: ""},
+			},
+			wantAccountCalls: 0,
+		},
+		{
+			// 名前を引く相手がいないため、リクエストごとに課金される GetDimensionValues を呼ばない。
+			name:             "LINKED_ACCOUNT でも Groups が 1 つも無ければ GetDimensionValues を呼ばない",
+			opts:             linkedOpts,
+			out:              linkedAccountOutput(start),
+			dimPages:         accountPage(accountValue(testAccountID, testAccountName)),
+			want:             nil,
+			wantAccountCalls: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeCostExplorer{out: tt.out, dimPages: tt.dimPages, dimErrs: tt.dimErrs}
+
+			got, err := getCost(context.Background(), fake, tt.opts)
+
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("err = %v, want wrapped %v", err, tt.wantErr)
+				}
+				if got != nil {
+					t.Errorf("resources = %v, want nil", got)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("getCost() error = %v, want nil", err)
+				}
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("mismatch (-want +got):\n%s", diff)
+				}
+			}
+
+			inputs := fake.dimensionInputs(cetypes.DimensionLinkedAccount)
+			if len(inputs) != tt.wantAccountCalls {
+				t.Fatalf("LINKED_ACCOUNT call count = %d, want %d", len(inputs), tt.wantAccountCalls)
+			}
+			// 名前取得の期間は GetCostAndUsage と同じ costDateRange の結果を使う。
+			for i, in := range inputs {
+				if in.TimePeriod == nil {
+					t.Fatalf("inputs[%d].TimePeriod is nil", i)
+				}
+				if s, e := ptrStr(in.TimePeriod.Start), ptrStr(in.TimePeriod.End); s != start || e != end {
+					t.Errorf("inputs[%d].TimePeriod = (%q, %q), want (%q, %q)", i, s, e, start, end)
+				}
+			}
+		})
+	}
+}

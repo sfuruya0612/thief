@@ -14,10 +14,14 @@ import (
 )
 
 // CostResource represents a line item in Cost Explorer results.
-// GroupKey は GroupByDimension で指定した次元の値 (デフォルトはサービス名) を保持する。
+// Service は GroupByDimension で指定した次元の値 (デフォルトはサービス名) を保持する。
+// AccountName は GroupByDimension が LINKED_ACCOUNT のときだけ、Service (アカウント ID) に
+// 対応するアカウント名を保持する。他の次元では常に空文字。名前が取得できなかった ID も空文字。
+// 表示用の文字列であり、ResourceID() と ResourceName() には含めない (識別子を表示名で揺らさない)。
 type CostResource struct {
 	TimePeriod         string  `json:"time_period"`
 	Service            string  `json:"service"`
+	AccountName        string  `json:"account_name"`
 	UnblendedAmount    float64 `json:"unblended_amount"`
 	NetAmortizedAmount float64 `json:"net_amortized_amount"`
 	Unit               string  `json:"unit"`
@@ -198,6 +202,40 @@ func costMatchDimensionValues(dim cetypes.Dimension, values []cetypes.DimensionV
 	return matched
 }
 
+// costAccountNames は LINKED_ACCOUNT の値一覧を取得し、アカウント ID (Value) からアカウント名
+// (Attributes["description"]) への対応表を返す。Value が空文字の値は対応表に入れない
+// (costMatchDimensionValues と同じ扱い。入れると Keys が空で Service が空文字の CostResource に
+// 名前が付く)。同じ Value が複数回 (複数ページにまたがる場合を含む) 現れたら、後に処理した値の
+// description で上書きする。Attributes が nil または description キーを持たない値は空文字になる
+// (nil マップの索引はゼロ値を返すため panic しない)。
+// キーワード解決 (costResolveKeyword) の取得結果は再利用しない。絞り込みと表示名の取得を
+// 結合すると、片方の変更が他方の挙動を変えるため。
+func costAccountNames(ctx context.Context, client costExplorerAPI, start, end string) (map[string]string, error) {
+	values, err := costDimensionValues(ctx, client, cetypes.DimensionLinkedAccount, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("get linked account names: %w", err)
+	}
+	names := make(map[string]string, len(values))
+	for _, v := range values {
+		id := ptrStr(v.Value)
+		if id == "" {
+			continue
+		}
+		names[id] = v.Attributes[costAccountNameAttribute]
+	}
+	return names, nil
+}
+
+// costHasGroups は GetCostAndUsage の結果に Groups が 1 つ以上あるかを返す。
+func costHasGroups(results []cetypes.ResultByTime) bool {
+	for _, result := range results {
+		if len(result.Groups) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // costResolveKeyword は costKeywordDimensions の各次元の値一覧を取得し、キーワードに部分一致した
 // 値を次元ごとに返す。戻り値のスライスは costKeywordDimensions と同じ順序と長さを持つ。
 // 3 次元の取得は互いに独立しているため errgroup で並列に実行し、各 goroutine は自分の index に
@@ -316,6 +354,20 @@ func getCost(ctx context.Context, client costExplorerAPI, opts CostQueryOptions)
 		return nil, fmt.Errorf("get cost and usage: %w", err)
 	}
 
+	// Group by が LINKED_ACCOUNT のとき Keys[0] はアカウント ID なので、表示用のアカウント名を
+	// GetDimensionValues から引く。Groups が 1 つも無ければ名前を引く相手がいないため、リクエスト
+	// ごとに課金される GetDimensionValues を呼ばない。他の次元では呼ばず、nil マップの索引で
+	// AccountName は常に空文字になる。
+	// GetCostAndUsage と並列にしない案は、Groups が空のときに呼び出しを省けなくなるため採らない。
+	// 名前の取得に失敗したら ID だけで縮退せずエラーを返す (costResolveKeyword と同じ扱い)。
+	var accountNames map[string]string
+	if costGroupByDimension(opts.GroupByDimension) == CostGroupByLinkedAccount && costHasGroups(out.ResultsByTime) {
+		accountNames, err = costAccountNames(ctx, client, start, end)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var resources []CostResource
 	for _, result := range out.ResultsByTime {
 		period := ""
@@ -343,6 +395,7 @@ func getCost(ctx context.Context, client costExplorerAPI, opts CostQueryOptions)
 			resources = append(resources, CostResource{
 				TimePeriod:         period,
 				Service:            service,
+				AccountName:        accountNames[service],
 				UnblendedAmount:    unblended,
 				NetAmortizedAmount: netAmortized,
 				Unit:               unit,
