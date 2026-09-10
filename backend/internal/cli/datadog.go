@@ -56,7 +56,7 @@ func newDatadogCmd() *cobra.Command {
 		},
 	}
 
-	datadogCmd.AddCommand(historicalCmd, estimatedCmd)
+	datadogCmd.AddCommand(historicalCmd, estimatedCmd, newDatadogAuthCmd())
 	return datadogCmd
 }
 

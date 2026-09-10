@@ -16,6 +16,24 @@ import (
 
 type contextKey struct{}
 
+// Datadog の OAuth 2.0 ログイン (Authorization Code + PKCE + Dynamic Client Registration)
+// で API サーバが待ち受けるコールバックの既定値。連結した
+// "http://127.0.0.1:8089/api/datadog/auth/callback" が redirect_uri になる。
+//
+// CLI (thief datadog auth login) は Dynamic Client Registration の初回登録で、CLI 用の
+// ループバック URI と併せてこの URI も登録する。CLI とサーバのどちらが先にログインしても
+// 同じクライアント登録を再利用でき、再登録による client_id の再発行で互いのトークンを
+// 無効化し合うことを避けるためである。
+//
+// 定数を internal/datadogauth ではなく config パッケージに置くのは、datadogauth が
+// 保存先の解決で config.Dir() を呼ぶ一方向の依存 (datadogauth → config) を持つためである。
+// datadogauth 側に置くと、この値を設定の既定値として使う config パッケージが datadogauth を
+// import することになり、循環 import で go build が失敗する。
+const (
+	DefaultDatadogOAuthRedirectBase = "http://127.0.0.1:8089"
+	DatadogOAuthCallbackPath        = "/api/datadog/auth/callback"
+)
+
 // Config holds all application configuration.
 type Config struct {
 	Profile  string `yaml:"profile"`

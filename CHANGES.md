@@ -60,6 +60,8 @@
   - @sfuruya0612
 - [UPDATE] 4xx / 5xx 応答の発生時に、応答ボディの写し (writeError 経由の JSON または http.Error 経由の text/plain、上限 2048 バイトで切り詰め) を添えたログを 4xx は Warn、5xx は Error でコンソール (標準エラー出力) に出力するようにする (従来の Info のアクセスログは 2xx / 3xx のみになり、4xx / 5xx では Warn / Error の 1 行に統合される。http.ServeMux 自体が返す 404 / 405 も対象になる)
   - @sfuruya0612
+- [ADD] Datadog CLI に OAuth 2.0 (Authorization Code + PKCE + Dynamic Client Registration) によるブラウザログインを追加する (`thief datadog auth login`/`logout`/`refresh`。トークンは `~/.config/thief/datadog/` にファイル権限 0600 で保存する。既存の `DD_API_KEY`/`DD_APP_KEY` 静的キー方式と `thief datadog historical`/`estimated` の挙動は変えない)
+  - @sfuruya0612
 - [ADD] Cost Explorer の Group by が Linked account のとき、クロス表の Group 列とグラフの系列名を Account Name (Account ID) の形で表示するようにする (backend は `GetCostAndUsage` の結果に Groups が 1 つ以上あるときだけ `GetDimensionValues` を LINKED_ACCOUNT について 1 回呼び、`GET /api/aws/profiles/{profile}/cost` の応答の各要素に `account_name` を追加する。名前が登録されていないアカウントと、Group by が Service / Usage type / Region のときは `account_name` が空文字になり、表示は従来どおり ID または次元値だけになる。行の識別子である `service` と frontend の `id` は変えない。名前の取得に失敗したときは ID だけで表示せずエラーを返す)
   - @sfuruya0612
 - [ADD] SSO ログアウト (`POST /api/aws/profiles/{profile}/sso/logout` と CLI `sso logout`) がローカルのトークンキャッシュを削除する前に、キャッシュ内の各アクセストークンを AWS 側で失効 (`sso:Logout`) するようにする (これまではローカルの削除だけで、AWS 側のサインインセッションは有効期限まで残っていた。同じアクセストークンを持つキャッシュファイルは 1 回だけ失効を呼び、期限切れのトークンは失効を呼ばない。失効はファイル名の辞書順に 1 件ずつ、1 件あたり 30 秒の上限で行う。失効の失敗はローカルの削除を止めず、API は警告ログを出して 204 を返し、CLI は失敗件数を標準エラー出力に警告として出して正常終了する。キャッシュに region が無いトークンは、API では profile の sso_region を使い、CLI では失効できないものとして警告に数える)
