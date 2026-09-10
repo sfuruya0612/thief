@@ -515,6 +515,10 @@ func TestNoRootContextOutsideDesignatedFunctions(t *testing.T) {
 // この一覧に追記する。
 func TestNoContextBlindStdinReadOutsideDesignatedFunctions(t *testing.T) {
 	want := []string{
+		// Datadog OAuth ログインで認可コードの貼り付けを読む *bufio.Reader の構築。
+		// 構築そのものはブロックしない。実際に読む ReadString は readDatadogAuthCode が
+		// readWithContext の中で呼ぶ。
+		"datadog_auth.go:readDatadogAuthCode",
 		// 値更新コマンドの標準入力の読み取り。readWithContext の中で呼ぶ。
 		"helper.go:readUpdateValue",
 		// アカウント選択とロール選択で使い回す *bufio.Reader の構築。構築そのものは
