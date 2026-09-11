@@ -903,6 +903,18 @@ func TestDatadogAuthLoginEndToEnd(t *testing.T) {
 	}
 }
 
+// TestDatadogCLIRedirectURIMatchesCallbackAddr は、CLI が実際に待ち受けるアドレスと、
+// API サーバと共有している redirect_uri の定数が食い違わないことを守る。定数は config
+// パッケージにあり (internal/api は internal/cli を import できないため)、待ち受け側だけを
+// 変えて定数を直し忘れうる。食い違うと、登録済みの redirect_uri と異なる URI で認可要求を
+// 出すことになり、認可サーバに拒否される。
+func TestDatadogCLIRedirectURIMatchesCallbackAddr(t *testing.T) {
+	want := "http://" + datadogAuthCallbackAddr + datadogAuthCallbackPath
+	if datadogCLIRedirectURI != want {
+		t.Errorf("datadogCLIRedirectURI = %q, want %q", datadogCLIRedirectURI, want)
+	}
+}
+
 func boolToCount(b bool) int {
 	if b {
 		return 1

@@ -23,6 +23,21 @@ func NewContext(ctx context.Context, apiKey, appKey string) context.Context {
 	return ctx
 }
 
+// NewOAuthContext returns a context carrying an OAuth 2.0 bearer access token.
+// The SDK turns it into an "Authorization: Bearer <token>" header. It is
+// deliberately exclusive with NewContext: a request must present either the
+// static API/App keys or the OAuth token, never both.
+func NewOAuthContext(ctx context.Context, accessToken string) context.Context {
+	return context.WithValue(ctx, datadog.ContextAccessToken, accessToken)
+}
+
+// HasOAuthToken reports whether ctx carries an OAuth access token (i.e. it was
+// built by NewOAuthContext rather than NewContext).
+func HasOAuthToken(ctx context.Context) bool {
+	tok, ok := ctx.Value(datadog.ContextAccessToken).(string)
+	return ok && tok != ""
+}
+
 // UsageMeteringV2API wraps the Datadog v2 usage metering API.
 type UsageMeteringV2API struct {
 	api *datadogV2.UsageMeteringApi

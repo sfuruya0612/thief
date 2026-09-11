@@ -1,5 +1,7 @@
 package api
 
+import "github.com/sfuruya0612/thief/backend/internal/config"
+
 func (s *Server) registerRoutes() {
 	// 接続確認
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
@@ -113,6 +115,12 @@ func (s *Server) registerRoutes() {
 	// Datadog
 	s.mux.HandleFunc("GET /api/datadog/cost/historical", s.handleDatadogHistorical)
 	s.mux.HandleFunc("GET /api/datadog/cost/estimated", s.handleDatadogEstimated)
+
+	// Datadog OAuth 2.0 ログイン (callback は認可サーバがブラウザを遷移させる先)
+	s.mux.HandleFunc("POST /api/datadog/auth/login/start", s.handleDatadogAuthLoginStart)
+	s.mux.HandleFunc("GET "+config.DatadogOAuthCallbackPath, s.handleDatadogAuthCallback)
+	s.mux.HandleFunc("GET /api/datadog/auth/login/status", s.handleDatadogAuthLoginStatus)
+	s.mux.HandleFunc("POST /api/datadog/auth/logout", s.handleDatadogAuthLogout)
 
 	// TiDB
 	s.mux.HandleFunc("GET /api/tidb/projects", s.handleTiDBProjects)

@@ -29,9 +29,15 @@ type contextKey struct{}
 // 保存先の解決で config.Dir() を呼ぶ一方向の依存 (datadogauth → config) を持つためである。
 // datadogauth 側に置くと、この値を設定の既定値として使う config パッケージが datadogauth を
 // import することになり、循環 import で go build が失敗する。
+// DefaultDatadogOAuthCLIRedirectURI は CLI (thief datadog auth login) 用の redirect_uri。
+// CLI とサーバのどちらが初回登録を行っても同じ URI 一覧を登録できるよう、両者から参照できる
+// config パッケージに置く (internal/api は internal/cli を import できない。internal/cli が
+// thief server のために internal/api を import しており逆向きは循環になる)。
 const (
 	DefaultDatadogOAuthRedirectBase = "http://127.0.0.1:8089"
 	DatadogOAuthCallbackPath        = "/api/datadog/auth/callback"
+
+	DefaultDatadogOAuthCLIRedirectURI = "http://127.0.0.1:8400/callback"
 )
 
 // Config holds all application configuration.
@@ -83,6 +89,12 @@ type DatadogConfig struct {
 	View       string   `yaml:"view"`
 	StartMonth string   `yaml:"-"`
 	EndMonth   string   `yaml:"-"`
+
+	// OAuthRedirectBase は API サーバの OAuth コールバックへブラウザが到達する URL の
+	// スキームとホスト部。redirect_uri は OAuthRedirectBase + DatadogOAuthCallbackPath で
+	// 組み立てる。ListenAddr (bind アドレス) と分けているのは、リバースプロキシ配下など
+	// bind 先とブラウザから到達可能な URL が一致しない構成があるためである。
+	OAuthRedirectBase string `yaml:"oauth-redirect-base"`
 }
 
 // TiDBConfig holds TiDB Cloud-specific configuration.
@@ -112,10 +124,11 @@ type fileConfig struct {
 		ProjectID string `yaml:"project-id"`
 	} `yaml:"bigquery"`
 	Datadog struct {
-		Site   string `yaml:"site"`
-		APIKey string `yaml:"api-key"`
-		AppKey string `yaml:"app-key"`
-		View   string `yaml:"view"`
+		Site              string `yaml:"site"`
+		APIKey            string `yaml:"api-key"`
+		AppKey            string `yaml:"app-key"`
+		View              string `yaml:"view"`
+		OAuthRedirectBase string `yaml:"oauth-redirect-base"`
 	} `yaml:"datadog"`
 	TiDB struct {
 		PublicKey  string `yaml:"public-key"`
@@ -137,8 +150,9 @@ func Defaults() *Config {
 		SnippetsDir:   filepath.Join(".thief", "snippets"),
 		PriceCacheDir: "/tmp/thief/price",
 		Datadog: DatadogConfig{
-			Site: "datadoghq.com",
-			View: "summary",
+			Site:              "datadoghq.com",
+			View:              "summary",
+			OAuthRedirectBase: DefaultDatadogOAuthRedirectBase,
 		},
 	}
 }
@@ -193,6 +207,9 @@ func applyFile(cfg *Config, fc fileConfig) {
 	if fc.Datadog.View != "" {
 		cfg.Datadog.View = fc.Datadog.View
 	}
+	if fc.Datadog.OAuthRedirectBase != "" {
+		cfg.Datadog.OAuthRedirectBase = fc.Datadog.OAuthRedirectBase
+	}
 	if fc.TiDB.PublicKey != "" {
 		cfg.TiDB.PublicKey = fc.TiDB.PublicKey
 	}
@@ -242,6 +259,9 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("DATADOG_APP_KEY"); v != "" {
 		cfg.Datadog.AppKey = redacted(v)
+	}
+	if v := os.Getenv("THIEF_DATADOG_OAUTH_REDIRECT_BASE"); v != "" {
+		cfg.Datadog.OAuthRedirectBase = v
 	}
 	if v := os.Getenv("TIDB_PUBLIC_KEY"); v != "" {
 		cfg.TiDB.PublicKey = v

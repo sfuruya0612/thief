@@ -13,6 +13,7 @@ import (
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/cache"
 	"github.com/sfuruya0612/thief/backend/internal/config"
+	"github.com/sfuruya0612/thief/backend/internal/datadogauth"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 )
@@ -33,6 +34,33 @@ func newTestServer(t *testing.T) *Server {
 		// ダミーにする。SSO ログイン系のテストは newSSOLoginTestServer で差し替えること。
 		ssoLoginSessions: newSSOLoginSessionStore(),
 		ssoLogin:         unconfiguredSSOLoginDeps(),
+		// Datadog の OAuth も同様に初期化する。deps は実 Datadog や実ファイルへ
+		// 触れないダミーで、Datadog 認証を伴うテストは newDatadogAuthTestServer で
+		// 差し替えること。
+		ddLoginSessions: newDatadogLoginSessionStore(),
+		ddAuth:          unconfiguredDatadogAuthDeps(),
+	}
+}
+
+// unconfiguredDatadogAuthDeps は newTestServer の既定の datadogAuthDeps。テストが誤って
+// Datadog 認証系の経路を通っても実 Datadog へ接続せず、エラー応答で気づけるようにする。
+func unconfiguredDatadogAuthDeps() datadogAuthDeps {
+	err := errors.New("datadog auth deps are not configured in newTestServer; use newDatadogAuthTestServer")
+	return datadogAuthDeps{
+		loadToken:  func(string) (*datadogauth.TokenSet, bool, error) { return nil, false, err },
+		saveToken:  func(string, *datadogauth.TokenSet) error { return err },
+		loadClient: func(string) (*datadogauth.ClientCredentials, bool, error) { return nil, false, err },
+		refreshToken: func(context.Context, string, string, string) (*datadogauth.TokenSet, error) {
+			return nil, err
+		},
+		prepareLogin: func(context.Context, datadogauth.PrepareParams) (*datadogauth.Login, error) {
+			return nil, err
+		},
+		completeLogin: func(context.Context, *datadogauth.Login, string, string) (*datadogauth.TokenSet, error) {
+			return nil, err
+		},
+		logout: func(string) error { return err },
+		now:    time.Now,
 	}
 }
 
