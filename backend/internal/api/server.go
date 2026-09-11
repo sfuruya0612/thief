@@ -15,6 +15,7 @@ import (
 	ddclient "github.com/sfuruya0612/thief/backend/internal/datadog"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	tidbclient "github.com/sfuruya0612/thief/backend/internal/tidb"
+	"golang.org/x/sync/singleflight"
 )
 
 const cacheTTL = time.Hour
@@ -28,7 +29,6 @@ type Server struct {
 	cfg           *config.Config
 	bq            *bqclient.Client
 	ddV2          *ddclient.UsageMeteringV2API
-	ddCtx         context.Context
 	tidb          *tidbclient.Client
 	snippets      *snippet.Store
 	resourceCache *cache.Cache[any]
@@ -37,6 +37,14 @@ type Server struct {
 	// SSO デバイス認可 (start / complete エンドポイント) の進行中セッションと外部依存。
 	ssoLoginSessions *ssoLoginSessionStore
 	ssoLogin         ssoLoginDeps
+
+	// Datadog の OAuth (login/start・callback・status・logout エンドポイント) の
+	// 進行中セッションと外部依存。認証コンテキストはリクエストのたびに
+	// datadogAuthContext がトークンファイルから組み立てるため、Server では保持しない。
+	ddLoginSessions *datadogLoginSessionStore
+	ddAuth          datadogAuthDeps
+	// ddRefresh は同一プロセス内で重なったトークンのリフレッシュを 1 回に集約する。
+	ddRefresh singleflight.Group
 }
 
 // NewServer initialises the API server. The BigQuery client is optional:
@@ -47,6 +55,8 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		resourceCache:    cache.New[any](5 * time.Minute),
 		ssoLoginSessions: newSSOLoginSessionStore(),
 		ssoLogin:         defaultSSOLoginDeps(),
+		ddLoginSessions:  newDatadogLoginSessionStore(),
+		ddAuth:           defaultDatadogAuthDeps(),
 	}
 
 	// BigQuery: try to initialise but don't fail server startup.
@@ -58,10 +68,10 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		// non-fatal: BQ endpoints will return 503 if s.bq == nil
 	}
 
-	// Datadog
+	// Datadog. 認証は起動時に固定せず、リクエストごとに datadogAuthContext が解決する
+	// (OAuth トークンの更新と CLI 側のログイン / ログアウトを稼働中に反映するため)。
 	ddCfg := ddclient.NewConfiguration(cfg.Datadog.Site)
 	s.ddV2 = ddclient.NewUsageMeteringV2API(ddCfg)
-	s.ddCtx = ddclient.NewContext(ctx, cfg.DatadogAPIKey(), cfg.DatadogAppKey())
 
 	// TiDB
 	s.tidb = tidbclient.NewClient(cfg.TiDB.PublicKey, cfg.TiDBPrivateKey())

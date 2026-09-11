@@ -26,8 +26,12 @@ const (
 	datadogAuthCallbackAddr = "127.0.0.1:8400"
 	// datadogAuthCallbackPath は CLI のコールバックのパス。
 	datadogAuthCallbackPath = "/callback"
-	// datadogCLIRedirectURI は CLI 用の redirect_uri。
-	datadogCLIRedirectURI = "http://" + datadogAuthCallbackAddr + datadogAuthCallbackPath
+	// datadogCLIRedirectURI は CLI 用の redirect_uri。API サーバ (internal/api) も
+	// Dynamic Client Registration の初回登録でこの URI を登録するため、値の定義は
+	// 両方から参照できる config パッケージに置く (internal/api は internal/cli を
+	// import できない)。datadogAuthCallbackAddr / Path との一致は
+	// TestDatadogCLIRedirectURIMatchesCallbackAddr が守る。
+	datadogCLIRedirectURI = config.DefaultDatadogOAuthCLIRedirectURI
 	// datadogAuthLoginTimeout はログイン 1 回の上限。ブラウザでの承認を待つ間に
 	// 無期限で止まらないようにする。
 	datadogAuthLoginTimeout = 5 * time.Minute

@@ -60,6 +60,8 @@
   - @sfuruya0612
 - [UPDATE] 4xx / 5xx 応答の発生時に、応答ボディの写し (writeError 経由の JSON または http.Error 経由の text/plain、上限 2048 バイトで切り詰め) を添えたログを 4xx は Warn、5xx は Error でコンソール (標準エラー出力) に出力するようにする (従来の Info のアクセスログは 2xx / 3xx のみになり、4xx / 5xx では Warn / Error の 1 行に統合される。http.ServeMux 自体が返す 404 / 405 も対象になる)
   - @sfuruya0612
+- [ADD] API サーバの Datadog コスト取得 (`GET /api/datadog/cost/historical`/`estimated`) を OAuth トークン優先・静的キー (`DD_API_KEY`/`DD_APP_KEY`) フォールバックの非破壊的な認証方式にする (`POST /api/datadog/auth/login/start`/`GET /api/datadog/auth/callback`/`GET /api/datadog/auth/login/status`/`POST /api/datadog/auth/logout` の 4 エンドポイントを追加し、frontend からの非同期ブラウザログインに対応する。OAuth トークンが未ログイン・期限切れでリフレッシュも失敗・破損している場合は `slog.Warn` を出した上で静的キーへ自動フォールバックし、静的キーも無ければ明確なエラーを返す。frontend の UI 変更は対象外)
+  - @sfuruya0612
 - [ADD] Datadog CLI に OAuth 2.0 (Authorization Code + PKCE + Dynamic Client Registration) によるブラウザログインを追加する (`thief datadog auth login`/`logout`/`refresh`。トークンは `~/.config/thief/datadog/` にファイル権限 0600 で保存する。既存の `DD_API_KEY`/`DD_APP_KEY` 静的キー方式と `thief datadog historical`/`estimated` の挙動は変えない)
   - @sfuruya0612
 - [ADD] Cost Explorer の Group by が Linked account のとき、クロス表の Group 列とグラフの系列名を Account Name (Account ID) の形で表示するようにする (backend は `GetCostAndUsage` の結果に Groups が 1 つ以上あるときだけ `GetDimensionValues` を LINKED_ACCOUNT について 1 回呼び、`GET /api/aws/profiles/{profile}/cost` の応答の各要素に `account_name` を追加する。名前が登録されていないアカウントと、Group by が Service / Usage type / Region のときは `account_name` が空文字になり、表示は従来どおり ID または次元値だけになる。行の識別子である `service` と frontend の `id` は変えない。名前の取得に失敗したときは ID だけで表示せずエラーを返す)
