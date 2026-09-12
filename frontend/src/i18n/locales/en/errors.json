@@ -7,5 +7,14 @@
     "failed": "Failed to log in again.",
     "loginButton": "SSO re-login",
     "loginButtonPending": "Logging in…"
+  },
+  "datadog": {
+    "credentialsMissing": "No usable Datadog credentials. Please log in again.",
+    "pending": "Complete the authorization in your browser. It reflects automatically once done.",
+    "fallbackLink": "Open the <authLink>authorization page</authLink> to complete the authorization.",
+    "failed": "Failed to log in to Datadog again.",
+    "redirectNotRegistered": "The redirect URI is not registered. Changing the OAuth redirect base requires registering the client again; logging in again does not fix it.",
+    "loginButton": "Datadog re-login",
+    "loginButtonPending": "Logging in…"
   }
 }

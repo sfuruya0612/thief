@@ -91,6 +91,67 @@ func TestWriteAWSError(t *testing.T) {
 	}
 }
 
+// TestWriteDatadogCostError は、資格情報が 1 つも無い場合だけを再ログイン可能な 401 に
+// 分類し、それ以外 (スコープ不足の 403 や静的キーの拒否を含む) を 500 のままにすることを
+// 確認する。401 の範囲が広がると、再ログインでは解決しない失敗でバナーを出すことになる。
+func TestWriteDatadogCostError(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "資格情報が無い場合は 401 DATADOG_NO_CREDENTIALS",
+			err:        ErrDatadogNoCredentials,
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "DATADOG_NO_CREDENTIALS",
+		},
+		{
+			name:       "%w でラップされていても 401 DATADOG_NO_CREDENTIALS",
+			err:        fmt.Errorf("%w: no Datadog OAuth token is stored; run 'thief datadog auth login', and DATADOG_API_KEY / DATADOG_APP_KEY are not both set", ErrDatadogNoCredentials),
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "DATADOG_NO_CREDENTIALS",
+		},
+		{
+			// datadogCall が静的キーへ倒せずそのまま返す 403 (OAuth のスコープ不足)。
+			// 再ログインしても同じスコープのトークンが出るだけなので 500 のままとする。
+			name:       "OAuth スコープ不足の 403 は 500 INTERNAL_ERROR",
+			err:        forbiddenDatadogError(),
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "INTERNAL_ERROR",
+		},
+		{
+			name:       "その他のエラーは 500 INTERNAL_ERROR",
+			err:        errors.New("get datadog historical cost: boom"),
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "INTERNAL_ERROR",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			writeDatadogCostError(rec, tt.err)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			var body ErrorResponse
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body.Code != tt.wantCode {
+				t.Errorf("code = %q, want %q", body.Code, tt.wantCode)
+			}
+			if body.Error == "" {
+				t.Errorf("error message is empty; want non-empty")
+			}
+		})
+	}
+}
+
 func TestWriteGCPError(t *testing.T) {
 	const disabledMsg = "Cloud Resource Manager API has not been used in project gumi-green-1222 before or it is disabled."
 

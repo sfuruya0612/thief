@@ -2,8 +2,10 @@
 import { useMemo, useState } from 'react';
 import { useDatadogEstimated, useDatadogHistorical } from '../../api/queries';
 import { MonthlyCostPanel } from '../../components/MonthlyCostPanel';
+import { DatadogAuthBanner } from '../../components/DatadogAuthBanner';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { aggregateDatadogCost, type DatadogCostGroupBy } from '../../lib/costAggregateDatadog';
+import { isDatadogAuthError } from '../../lib/datadogAuthError';
 import { defaultMonthRange, lastMonthsRange } from '../../lib/monthRange';
 import type { DatadogCostRow } from '../../types/nonaws';
 
@@ -78,7 +80,7 @@ export function DatadogView() {
         </div>
       </div>
 
-      {error && <ErrorBanner error={error} />}
+      {error && (isDatadogAuthError(error) ? <DatadogAuthBanner /> : <ErrorBanner error={error} />)}
 
       <MonthlyCostPanel
         rows={allRows}

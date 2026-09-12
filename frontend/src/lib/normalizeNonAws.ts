@@ -8,6 +8,11 @@ import type {
   BQTableRow,
   DatadogCostRaw,
   DatadogCostRow,
+  DatadogLoginStartRaw,
+  DatadogLoginStartRow,
+  DatadogLoginStatus,
+  DatadogLoginStatusRaw,
+  DatadogLoginStatusRow,
   TiDBClusterRaw,
   TiDBClusterRow,
   TiDBCostRaw,
@@ -58,6 +63,24 @@ export function datadogCostFromRaw(raw: DatadogCostRaw, index: number): DatadogC
     productName: raw.product_name,
     chargeType: raw.charge_type,
     cost: raw.cost,
+  };
+}
+
+export function datadogLoginStartFromRaw(raw: DatadogLoginStartRaw): DatadogLoginStartRow {
+  return {
+    state: raw.state,
+    authorizationUrl: raw.authorization_url,
+  };
+}
+
+// backend が返す進行状態を union 型へ縮小する。未知の値は判定できないため failed として
+// 扱い、ポーリングが止まらなくなる (pending とみなし続ける) 事態を避ける。
+export function datadogLoginStatusFromRaw(raw: DatadogLoginStatusRaw): DatadogLoginStatusRow {
+  const status: DatadogLoginStatus =
+    raw.status === 'pending' || raw.status === 'succeeded' ? raw.status : 'failed';
+  return {
+    status,
+    errorMessage: raw.error_message ?? '',
   };
 }
 

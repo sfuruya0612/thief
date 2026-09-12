@@ -7,5 +7,14 @@
     "failed": "再ログインに失敗しました。",
     "loginButton": "SSO 再ログイン",
     "loginButtonPending": "ログイン中…"
+  },
+  "datadog": {
+    "credentialsMissing": "Datadog の認証情報が使えません。再ログインしてください。",
+    "pending": "ブラウザで認可を完了してください。完了すると自動的に反映されます。",
+    "fallbackLink": "<authLink>認可ページ</authLink> を開いて認可を完了してください。",
+    "failed": "Datadog の再ログインに失敗しました。",
+    "redirectNotRegistered": "リダイレクト URI が登録されていません。設定 (OAuth redirect base) の変更後はクライアントの再登録が必要です。再ログインでは解決しません。",
+    "loginButton": "Datadog 再ログイン",
+    "loginButtonPending": "ログイン中…"
   }
 }

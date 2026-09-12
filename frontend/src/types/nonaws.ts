@@ -77,6 +77,33 @@ export interface DatadogCostRow {
   cost: number;
 }
 
+// Datadog OAuth ログイン (backend の datadogLoginStartResponse /
+// datadogLoginStatusResponse をミラーする)。state は認可要求の state であり、
+// login/status で進行状態を引くためのキーでもある。
+export interface DatadogLoginStartRaw {
+  state: string;
+  authorization_url: string;
+}
+
+export interface DatadogLoginStartRow {
+  state: string;
+  authorizationUrl: string;
+}
+
+// status は backend の datadogLoginStatus ("pending" / "succeeded" / "failed")。
+// error_message は failed のときだけ入る (成功時は省略される)。
+export interface DatadogLoginStatusRaw {
+  status: string;
+  error_message?: string;
+}
+
+export type DatadogLoginStatus = 'pending' | 'succeeded' | 'failed';
+
+export interface DatadogLoginStatusRow {
+  status: DatadogLoginStatus;
+  errorMessage: string;
+}
+
 // ============================================================
 // TiDB
 // ============================================================

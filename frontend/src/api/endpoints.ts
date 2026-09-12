@@ -39,6 +39,8 @@ import type {
   BQFieldRaw,
   BQTableRaw,
   DatadogCostRaw,
+  DatadogLoginStartRaw,
+  DatadogLoginStatusRaw,
   TiDBClusterRaw,
   TiDBCostRaw,
   TiDBProjectRaw,
@@ -752,6 +754,20 @@ export function getDatadogEstimated(
     end_month: endMonth,
     view,
   });
+}
+
+// Datadog の OAuth 認可を開始し、state とブラウザに開かせる認可 URL を得る。
+// 登録済みクライアントに今回の redirect_uri が無い場合は 409
+// DATADOG_REDIRECT_URI_NOT_REGISTERED を返す (再登録が必要な構成変更を示す)。
+// Datadog は単一サイト運用のため、AWS の profile に相当する引数は持たない。
+export function postDatadogLoginStart(): Promise<DatadogLoginStartRaw> {
+  return apiPost<DatadogLoginStartRaw>('/api/datadog/auth/login/start');
+}
+
+// login/start が返した state の進行状態を取得する。セッションはメモリ保持かつ TTL 付きの
+// ため、失効やサーバ再起動の後は 404 DATADOG_LOGIN_SESSION_NOT_FOUND を返す。
+export function getDatadogLoginStatus(state: string): Promise<DatadogLoginStatusRaw> {
+  return apiGet<DatadogLoginStatusRaw>('/api/datadog/auth/login/status', { state });
 }
 
 // ============================================================
