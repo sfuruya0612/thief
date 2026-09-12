@@ -62,4 +62,25 @@ describe('useSessionTabs', () => {
     act(() => result.current.openSession('prof-a'));
     expect(readRaw().region).toBe('us-east-1');
   });
+
+  it('datadogOrgSessions スコープはミラー先を持たず他スコープの旧フィールドも触らない', () => {
+    // Datadog には旧形式の単一選択フィールドが無い。ミラー処理を無条件に行うと
+    // 未定義のキー (undefined) を書いてしまい、他スコープの復元を壊しうる。
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ activeProfile: 'prof-a' }));
+    const { result } = renderHook(() => useSessionTabs('datadogOrgSessions'));
+    act(() => result.current.openSession('abc123'));
+
+    const raw = readRaw();
+    expect(raw.datadogOrgSessions).toEqual({ open: ['abc123'], active: 'abc123' });
+    expect(raw.activeProfile).toBe('prof-a');
+    expect(raw.gcpProject).toBeUndefined();
+  });
+
+  it('datadogOrgSessions で全タブを閉じても保存に失敗しない', () => {
+    const { result } = renderHook(() => useSessionTabs('datadogOrgSessions'));
+    act(() => result.current.openSession('abc123'));
+    act(() => result.current.closeSession('abc123'));
+
+    expect(readRaw().datadogOrgSessions).toEqual({ open: [], active: '' });
+  });
 });

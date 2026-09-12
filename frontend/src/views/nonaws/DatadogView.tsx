@@ -22,9 +22,14 @@ function groupValueOf(r: DatadogCostRow, groupBy: DatadogCostGroupBy): string {
   return r[groupBy];
 }
 
+export interface DatadogViewProps {
+  // 表示対象の組織 (小文字の public_id)。コスト取得と再ログインの対象を決める。
+  orgId: string;
+}
+
 // Datadog の cost API は月単位でしか取得できないため、AWS Cost Explorer の日付範囲では
 // なく年月 (YYYY-MM) の範囲で期間を指定する。estimated は当月/前月のみ有効。
-export function DatadogView() {
+export function DatadogView({ orgId }: DatadogViewProps) {
   const [mode, setMode] = useState<Mode>('historical');
 
   const initialRange = useMemo(defaultMonthRange, []);
@@ -37,12 +42,12 @@ export function DatadogView() {
     data: historical,
     error: historicalError,
     isLoading: historicalLoading,
-  } = useDatadogHistorical(startMonth, endMonth);
+  } = useDatadogHistorical(orgId, startMonth, endMonth);
   const {
     data: estimated,
     error: estimatedError,
     isLoading: estimatedLoading,
-  } = useDatadogEstimated(startMonth, endMonth);
+  } = useDatadogEstimated(orgId, startMonth, endMonth);
 
   const error = mode === 'historical' ? historicalError : estimatedError;
   const isLoading = mode === 'historical' ? historicalLoading : estimatedLoading;
@@ -80,7 +85,12 @@ export function DatadogView() {
         </div>
       </div>
 
-      {error && (isDatadogAuthError(error) ? <DatadogAuthBanner /> : <ErrorBanner error={error} />)}
+      {error &&
+        (isDatadogAuthError(error) ? (
+          <DatadogAuthBanner org={orgId} />
+        ) : (
+          <ErrorBanner error={error} />
+        ))}
 
       <MonthlyCostPanel
         rows={allRows}

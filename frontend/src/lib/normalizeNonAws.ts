@@ -13,6 +13,8 @@ import type {
   DatadogLoginStatus,
   DatadogLoginStatusRaw,
   DatadogLoginStatusRow,
+  DatadogOrgRaw,
+  DatadogOrgRow,
   TiDBClusterRaw,
   TiDBClusterRow,
   TiDBCostRaw,
@@ -63,6 +65,15 @@ export function datadogCostFromRaw(raw: DatadogCostRaw, index: number): DatadogC
     productName: raw.product_name,
     chargeType: raw.charge_type,
     cost: raw.cost,
+  };
+}
+
+// 表示名が空の組織は id を表示名として使う。タブのラベルが空になるのを防ぐ。
+export function datadogOrgFromRaw(raw: DatadogOrgRaw): DatadogOrgRow {
+  return {
+    id: raw.id,
+    name: raw.name || raw.id,
+    loggedIn: raw.logged_in,
   };
 }
 

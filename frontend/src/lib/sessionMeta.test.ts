@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { GcpProject } from '../types/gcp';
 import type { Profile } from '../types/common';
+import type { DatadogOrgRow } from '../types/nonaws';
 import {
   awsPickerItems,
+  datadogOrgPickerItems,
   formatSsoExpiry,
   gcpPickerItems,
   isExpiringSoon,
@@ -178,5 +180,36 @@ describe('gcpPickerItems', () => {
   it('バッジは常に null', () => {
     const items = gcpPickerItems(projects, []);
     expect(items.every((i) => i.badge === null)).toBe(true);
+  });
+});
+
+describe('datadogOrgPickerItems', () => {
+  const orgs: DatadogOrgRow[] = [
+    { id: 'abc123', name: 'Parent Org', loggedIn: true },
+    { id: 'sub456', name: 'Sub Org', loggedIn: false },
+    { id: 'sub789', name: 'sub789', loggedIn: false },
+  ];
+
+  it('表示名を name、補足を id にする (同じなら meta を出さない)', () => {
+    const items = datadogOrgPickerItems(orgs, []);
+    expect(items[0]).toMatchObject({ id: 'abc123', name: 'Parent Org', meta: 'abc123' });
+    expect(items[2].meta).toBeUndefined();
+  });
+
+  it('未ログインの組織にだけ未ログインバッジを出す', () => {
+    const items = datadogOrgPickerItems(orgs, []);
+    expect(items[0].badge).toBeNull();
+    expect(items[1].badge).toEqual({ label: '未ログイン', tone: 'warn' });
+  });
+
+  it('開設済みの組織は disabled になる', () => {
+    const items = datadogOrgPickerItems(orgs, ['sub456']);
+    expect(items.map((i) => i.disabled)).toEqual([false, true, false]);
+  });
+
+  it('id と表示名の両方を検索対象にする', () => {
+    const items = datadogOrgPickerItems(orgs, []);
+    expect(items[1].searchText).toContain('sub456');
+    expect(items[1].searchText).toContain('sub org');
   });
 });

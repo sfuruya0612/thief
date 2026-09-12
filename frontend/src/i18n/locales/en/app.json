@@ -7,6 +7,10 @@
     "gcp": {
       "title": "Open a project",
       "hint": "Select a project to connect from “＋ Add project” in the tab bar above"
+    },
+    "datadog": {
+      "title": "Open an organization",
+      "hint": "Select an organization to show from “＋ Add organization” in the tab bar above"
     }
   },
   "connectionWaiting": {

@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { datadogLoginStartFromRaw, datadogLoginStatusFromRaw } from './normalizeNonAws';
+import {
+  datadogLoginStartFromRaw,
+  datadogLoginStatusFromRaw,
+  datadogOrgFromRaw,
+} from './normalizeNonAws';
+
+describe('datadogOrgFromRaw', () => {
+  it('logged_in を camelCase に変換する', () => {
+    expect(datadogOrgFromRaw({ id: 'abc123', name: 'Parent Org', logged_in: true })).toEqual({
+      id: 'abc123',
+      name: 'Parent Org',
+      loggedIn: true,
+    });
+  });
+
+  it('未ログインの組織をそのまま通す', () => {
+    expect(datadogOrgFromRaw({ id: 'sub456', name: 'Sub Org', logged_in: false }).loggedIn).toBe(
+      false,
+    );
+  });
+
+  it('表示名が空なら id を表示名にする (タブのラベルが空になるのを防ぐ)', () => {
+    expect(datadogOrgFromRaw({ id: 'sub456', name: '', logged_in: false }).name).toBe('sub456');
+  });
+});
 
 describe('datadogLoginStartFromRaw', () => {
   it('state / authorization_url を camelCase に変換する', () => {

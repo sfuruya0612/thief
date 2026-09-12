@@ -61,7 +61,7 @@ describe('useDatadogLoginStart', () => {
       wrapper: wrapperFor(newQueryClient()),
     });
 
-    result.current.mutate({ authWindow: authWindow as unknown as Window });
+    result.current.mutate({ org: 'suborg1', authWindow: authWindow as unknown as Window });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(authWindow.location.replace).toHaveBeenCalledWith(startBody.authorization_url);
@@ -69,6 +69,9 @@ describe('useDatadogLoginStart', () => {
       state: startBody.state,
       authorizationUrl: startBody.authorization_url,
     });
+    // ログイン対象の組織が login/start へ届くこと。届かないと、どの組織のタブから
+    // 始めても親組織のトークンだけが更新される。
+    expect(mockedStart).toHaveBeenCalledWith('suborg1');
   });
 
   it('start が失敗した場合は開いた空タブを閉じてエラーにする', async () => {
@@ -80,7 +83,7 @@ describe('useDatadogLoginStart', () => {
       wrapper: wrapperFor(newQueryClient()),
     });
 
-    result.current.mutate({ authWindow: authWindow as unknown as Window });
+    result.current.mutate({ org: 'suborg1', authWindow: authWindow as unknown as Window });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(authWindow.close).toHaveBeenCalledTimes(1);
@@ -95,7 +98,11 @@ describe('useDatadogLoginStart', () => {
       wrapper: wrapperFor(newQueryClient()),
     });
 
-    result.current.mutate({ authWindow: authWindow as unknown as Window, onTabUnavailable });
+    result.current.mutate({
+      org: '',
+      authWindow: authWindow as unknown as Window,
+      onTabUnavailable,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(onTabUnavailable).toHaveBeenCalledTimes(1);

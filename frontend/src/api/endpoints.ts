@@ -41,6 +41,7 @@ import type {
   DatadogCostRaw,
   DatadogLoginStartRaw,
   DatadogLoginStatusRaw,
+  DatadogOrgRaw,
   TiDBClusterRaw,
   TiDBCostRaw,
   TiDBProjectRaw,
@@ -732,12 +733,23 @@ export function getAthenaQueryHistory(
 // ============================================================
 // Datadog
 // ============================================================
+// 組織一覧 (親組織と Sub Organization)。org 単位のタブはこの一覧から作る。
+// refresh=true を渡すとバックエンドのキャッシュを無視して Datadog から取り直す。
+export function getDatadogOrgs(opts?: { refresh?: boolean }): Promise<DatadogOrgRaw[]> {
+  return apiGetList<DatadogOrgRaw>('/api/datadog/orgs', {
+    refresh: opts?.refresh ? true : undefined,
+  });
+}
+
+// org は対象組織の public_id (小文字)。空文字は親組織を指すため、クエリからは落とす。
 export function getDatadogHistorical(
+  org: string,
   startMonth?: string,
   endMonth?: string,
   view?: string,
 ): Promise<DatadogCostRaw[]> {
   return apiGetList<DatadogCostRaw>('/api/datadog/cost/historical', {
+    org: org || undefined,
     start_month: startMonth,
     end_month: endMonth,
     view,
@@ -745,11 +757,13 @@ export function getDatadogHistorical(
 }
 
 export function getDatadogEstimated(
+  org: string,
   startMonth?: string,
   endMonth?: string,
   view?: string,
 ): Promise<DatadogCostRaw[]> {
   return apiGetList<DatadogCostRaw>('/api/datadog/cost/estimated', {
+    org: org || undefined,
     start_month: startMonth,
     end_month: endMonth,
     view,
@@ -759,9 +773,12 @@ export function getDatadogEstimated(
 // Datadog の OAuth 認可を開始し、state とブラウザに開かせる認可 URL を得る。
 // 登録済みクライアントに今回の redirect_uri が無い場合は 409
 // DATADOG_REDIRECT_URI_NOT_REGISTERED を返す (再登録が必要な構成変更を示す)。
-// Datadog は単一サイト運用のため、AWS の profile に相当する引数は持たない。
-export function postDatadogLoginStart(): Promise<DatadogLoginStartRaw> {
-  return apiPost<DatadogLoginStartRaw>('/api/datadog/auth/login/start');
+// Datadog は単一サイト運用のためサイトの指定は持たず、org で対象組織を指定する。
+// トークンは org ごとに別のファイルへ保存される。
+export function postDatadogLoginStart(org: string): Promise<DatadogLoginStartRaw> {
+  return apiPost<DatadogLoginStartRaw>('/api/datadog/auth/login/start', undefined, {
+    org: org || undefined,
+  });
 }
 
 // login/start が返した state の進行状態を取得する。セッションはメモリ保持かつ TTL 付きの

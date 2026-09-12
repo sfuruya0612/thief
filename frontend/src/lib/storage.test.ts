@@ -83,4 +83,22 @@ describe('loadPersisted のセッションマイグレーション', () => {
     localStorage.setItem(STORAGE_KEY, '{not json');
     expect(loadPersisted()).toEqual({});
   });
+
+  it('datadogOrgSessions は引き継ぐ旧形式が無いため生成しない', () => {
+    setRaw({ activeProfile: 'a', gcpProject: 'proj-x' });
+    expect(loadPersisted().datadogOrgSessions).toBeUndefined();
+  });
+
+  it('破損した datadogOrgSessions を正規化する', () => {
+    setRaw({ datadogOrgSessions: { open: ['abc123', 42, 'abc123', ''], active: 'zzz' } });
+    expect(loadPersisted().datadogOrgSessions).toEqual({ open: ['abc123'], active: 'abc123' });
+  });
+
+  it('正常な datadogOrgSessions をそのまま読み出す', () => {
+    setRaw({ datadogOrgSessions: { open: ['abc123', 'sub456'], active: 'sub456' } });
+    expect(loadPersisted().datadogOrgSessions).toEqual({
+      open: ['abc123', 'sub456'],
+      active: 'sub456',
+    });
+  });
 });
