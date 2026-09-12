@@ -69,6 +69,10 @@ type datadogAuthDisk struct {
 	saves    int
 	refreshs int
 
+	// orgs は読み書きで渡された org を現れた順に記録する。保存先が org ごとに
+	// 分かれていることを、疑似ディスク側から確かめるために使う。
+	orgs []string
+
 	// refresh はリフレッシュの結果を決める。nil の場合は失敗しない既定の実装を使う。
 	refresh func(disk *datadogAuthDisk) (*datadogauth.TokenSet, error)
 }
@@ -76,10 +80,11 @@ type datadogAuthDisk struct {
 func (d *datadogAuthDisk) deps(t *testing.T) datadogAuthDeps {
 	t.Helper()
 	return datadogAuthDeps{
-		loadToken: func(string) (*datadogauth.TokenSet, bool, error) {
+		loadToken: func(_, org string) (*datadogauth.TokenSet, bool, error) {
 			d.mu.Lock()
 			defer d.mu.Unlock()
 			d.loads++
+			d.orgs = append(d.orgs, org)
 			if d.loadErr != nil {
 				return nil, false, d.loadErr
 			}
@@ -88,19 +93,21 @@ func (d *datadogAuthDisk) deps(t *testing.T) datadogAuthDeps {
 			}
 			return d.token, true, nil
 		},
-		saveToken: func(_ string, tok *datadogauth.TokenSet) error {
+		saveToken: func(_, org string, tok *datadogauth.TokenSet) error {
 			d.mu.Lock()
 			defer d.mu.Unlock()
 			d.saves++
+			d.orgs = append(d.orgs, org)
 			if d.saveErr != nil {
 				return d.saveErr
 			}
 			d.token = tok
 			return nil
 		},
-		loadClient: func(string) (*datadogauth.ClientCredentials, bool, error) {
+		loadClient: func(_, org string) (*datadogauth.ClientCredentials, bool, error) {
 			d.mu.Lock()
 			defer d.mu.Unlock()
+			d.orgs = append(d.orgs, org)
 			if d.client == nil {
 				return nil, false, nil
 			}
@@ -124,6 +131,22 @@ func (d *datadogAuthDisk) counts() (loads, saves, refreshs int) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.loads, d.saves, d.refreshs
+}
+
+// seenOrgs は読み書きで渡された org を重複なしで返す。
+func (d *datadogAuthDisk) seenOrgs() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	seen := map[string]bool{}
+	var orgs []string
+	for _, org := range d.orgs {
+		if seen[org] {
+			continue
+		}
+		seen[org] = true
+		orgs = append(orgs, org)
+	}
+	return orgs
 }
 
 // newDatadogAuthTestServer は疑似ディスクと静的キーの有無を指定して Server を組む。
@@ -278,9 +301,9 @@ func TestDatadogAuthStates(t *testing.T) {
 			}
 
 			var got any
-			authCtx, err := s.datadogAuthContext(context.Background())
+			authCtx, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 			if err == nil {
-				got, err = s.datadogCall(context.Background(), authCtx, call)
+				got, err = s.datadogCall(context.Background(), authCtx, datadogParentOrg, call)
 			}
 
 			if tt.wantErr {
@@ -335,7 +358,7 @@ func assertDatadogWarn(t *testing.T, logs *recordingHandler, want string) {
 func TestDatadogAuthContextNoCredentialsError(t *testing.T) {
 	s := newDatadogAuthTestServer(t, &datadogAuthDisk{}, false)
 
-	_, err := s.datadogAuthContext(context.Background())
+	_, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 	if !errors.Is(err, ErrDatadogNoCredentials) {
 		t.Fatalf("error = %v, want one matching ErrDatadogNoCredentials", err)
 	}
@@ -367,7 +390,7 @@ func TestDatadogRefreshIsCollapsedBySingleflight(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			started <- struct{}{}
-			ctx, err := s.datadogAuthContext(context.Background())
+			ctx, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 			if err != nil {
 				errs[i] = err
 				return
@@ -411,17 +434,17 @@ func TestDatadogRefreshSkippedWhenAnotherProcessAlreadyRefreshed(t *testing.T) {
 	// 読み直しの前に他プロセスが更新した状況を作る。
 	loads := 0
 	base := s.ddAuth.loadToken
-	s.ddAuth.loadToken = func(site string) (*datadogauth.TokenSet, bool, error) {
+	s.ddAuth.loadToken = func(site, org string) (*datadogauth.TokenSet, bool, error) {
 		loads++
 		if loads == 2 {
 			disk.mu.Lock()
 			disk.token = validTestToken(t, "token-from-the-cli")
 			disk.mu.Unlock()
 		}
-		return base(site)
+		return base(site, org)
 	}
 
-	ctx, err := s.datadogAuthContext(context.Background())
+	ctx, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 	if err != nil {
 		t.Fatalf("datadogAuthContext error = %v", err)
 	}
@@ -448,7 +471,7 @@ func TestDatadogRefreshRecoversFromConcurrentRotation(t *testing.T) {
 	s := newDatadogAuthTestServer(t, disk, false)
 	logs := captureLogs(t)
 
-	ctx, err := s.datadogAuthContext(context.Background())
+	ctx, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 	if err != nil {
 		t.Fatalf("datadogAuthContext error = %v", err)
 	}
@@ -468,7 +491,7 @@ func TestDatadogRefreshSavesRotatedToken(t *testing.T) {
 	}
 	s := newDatadogAuthTestServer(t, disk, false)
 
-	if _, err := s.datadogAuthContext(context.Background()); err != nil {
+	if _, err := s.datadogAuthContext(context.Background(), datadogParentOrg); err != nil {
 		t.Fatalf("datadogAuthContext error = %v", err)
 	}
 
@@ -483,7 +506,7 @@ func TestDatadogRefreshSavesRotatedToken(t *testing.T) {
 	}
 
 	// 2 回目の解決はリフレッシュを走らせない (保存済みのトークンが期限内なので)。
-	if _, err := s.datadogAuthContext(context.Background()); err != nil {
+	if _, err := s.datadogAuthContext(context.Background(), datadogParentOrg); err != nil {
 		t.Fatalf("second datadogAuthContext error = %v", err)
 	}
 	if _, _, refreshs := disk.counts(); refreshs != 1 {
@@ -498,7 +521,7 @@ func TestDatadogRefreshWithoutRefreshToken(t *testing.T) {
 	s := newDatadogAuthTestServer(t, disk, false)
 	logs := captureLogs(t)
 
-	_, err := s.datadogAuthContext(context.Background())
+	_, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 	if !errors.Is(err, ErrDatadogNoCredentials) {
 		t.Fatalf("error = %v, want one matching ErrDatadogNoCredentials", err)
 	}
@@ -516,11 +539,11 @@ func TestDatadogCallKeepsNonForbiddenErrors(t *testing.T) {
 
 	callErr := fmt.Errorf("get datadog historical cost: %w", ddapi.GenericOpenAPIError{ErrorMessage: "500 Internal Server Error"})
 	calls := 0
-	authCtx, err := s.datadogAuthContext(context.Background())
+	authCtx, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 	if err != nil {
 		t.Fatalf("datadogAuthContext error = %v", err)
 	}
-	_, err = s.datadogCall(context.Background(), authCtx, func(context.Context) (any, error) {
+	_, err = s.datadogCall(context.Background(), authCtx, datadogParentOrg, func(context.Context) (any, error) {
 		calls++
 		return nil, callErr
 	})
@@ -538,11 +561,11 @@ func TestDatadogCallDoesNotRetryStaticKeyForbidden(t *testing.T) {
 	s := newDatadogAuthTestServer(t, &datadogAuthDisk{}, true)
 
 	calls := 0
-	authCtx, err := s.datadogAuthContext(context.Background())
+	authCtx, err := s.datadogAuthContext(context.Background(), datadogParentOrg)
 	if err != nil {
 		t.Fatalf("datadogAuthContext error = %v", err)
 	}
-	_, err = s.datadogCall(context.Background(), authCtx, func(context.Context) (any, error) {
+	_, err = s.datadogCall(context.Background(), authCtx, datadogParentOrg, func(context.Context) (any, error) {
 		calls++
 		return nil, forbiddenDatadogError()
 	})
@@ -552,4 +575,135 @@ func TestDatadogCallDoesNotRetryStaticKeyForbidden(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("calls = %d, want 1", calls)
 	}
+}
+
+// TestDatadogAuthContextSubOrgDoesNotFallBackToStaticKeys は、静的 API キーが
+// Sub Organization の代わりにならないことを状態ごとに検証する。静的キーは発行元の
+// 組織でしか読めず、Sub Organization を指定した要求に使うと、黙って親組織のデータを
+// 返すことになる。親組織 (org == "") の行は、この変更で従来の挙動が変わらないことの対照。
+func TestDatadogAuthContextSubOrgDoesNotFallBackToStaticKeys(t *testing.T) {
+	const subOrg = "suborg1"
+
+	tests := []struct {
+		name string
+
+		org     string
+		token   func(t *testing.T) *datadogauth.TokenSet
+		loadErr error
+		refresh func(disk *datadogAuthDisk) (*datadogauth.TokenSet, error)
+
+		// wantKind は資格情報の解決に成功した場合に運ばれる資格情報。
+		wantKind string
+		// wantErr が真なら ErrDatadogNoCredentials で終わる。
+		wantErr bool
+		// wantHint はエラーメッセージに含まれるべき文字列。
+		wantHint string
+	}{
+		{
+			name:     "parent org without a token falls back to the static keys",
+			token:    nil,
+			wantKind: "static",
+		},
+		{
+			name:     "sub org without a token does not fall back",
+			org:      subOrg,
+			wantErr:  true,
+			wantHint: "thief datadog auth login --org suborg1",
+		},
+		{
+			name:     "sub org with a valid token uses it",
+			org:      subOrg,
+			token:    func(t *testing.T) *datadogauth.TokenSet { return validTestToken(t, "suborg-token") },
+			wantKind: "oauth:suborg-token",
+		},
+		{
+			name:     "parent org with a broken token file falls back to the static keys",
+			loadErr:  errors.New("parse token_datadoghq.com.json: invalid character 'x'"),
+			wantKind: "static",
+		},
+		{
+			name:     "sub org with a broken token file does not fall back",
+			org:      subOrg,
+			loadErr:  errors.New("parse token_datadoghq.com_suborg1.json: invalid character 'x'"),
+			wantErr:  true,
+			wantHint: "log in to Datadog again",
+		},
+		{
+			name:     "parent org whose refresh failed falls back to the static keys",
+			token:    func(t *testing.T) *datadogauth.TokenSet { return expiredTestToken(t, "stale-token") },
+			refresh:  func(*datadogAuthDisk) (*datadogauth.TokenSet, error) { return nil, errors.New("invalid_grant") },
+			wantKind: "static",
+		},
+		{
+			name:     "sub org whose refresh failed does not fall back",
+			org:      subOrg,
+			token:    func(t *testing.T) *datadogauth.TokenSet { return expiredTestToken(t, "stale-token") },
+			refresh:  func(*datadogAuthDisk) (*datadogauth.TokenSet, error) { return nil, errors.New("invalid_grant") },
+			wantErr:  true,
+			wantHint: "could not be refreshed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			disk := &datadogAuthDisk{loadErr: tt.loadErr, refresh: tt.refresh}
+			if tt.token != nil {
+				disk.token = tt.token(t)
+			}
+			// 静的キーは常に用意しておき、org の違いだけで挙動が変わることを見る。
+			s := newDatadogAuthTestServer(t, disk, true)
+
+			ctx, err := s.datadogAuthContext(context.Background(), tt.org)
+			if tt.wantErr {
+				if !errors.Is(err, ErrDatadogNoCredentials) {
+					t.Fatalf("error = %v, want one matching ErrDatadogNoCredentials", err)
+				}
+				if !strings.Contains(err.Error(), tt.org) {
+					t.Errorf("error = %q, want it to mention the organization %q", err, tt.org)
+				}
+				if !strings.Contains(err.Error(), tt.wantHint) {
+					t.Errorf("error = %q, want it to contain %q", err, tt.wantHint)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("error = %v, want nil", err)
+			}
+			if got := datadogAuthKind(t, ctx); got != tt.wantKind {
+				t.Errorf("credentials = %q, want %q", got, tt.wantKind)
+			}
+			if got := disk.seenOrgs(); len(got) != 1 || got[0] != tt.org {
+				t.Errorf("orgs passed to the storage = %v, want only %q", got, tt.org)
+			}
+		})
+	}
+}
+
+// TestDatadogCallSubOrgForbiddenDoesNotRetryWithStaticKeys は、Sub Organization への
+// 呼び出しが 403 で拒否されたときに静的キーで投げ直さないことを確認する。投げ直すと
+// 親組織のデータが Sub Organization の結果として返る。
+func TestDatadogCallSubOrgForbiddenDoesNotRetryWithStaticKeys(t *testing.T) {
+	const subOrg = "suborg1"
+
+	disk := &datadogAuthDisk{token: validTestToken(t, "suborg-token")}
+	s := newDatadogAuthTestServer(t, disk, true)
+	logs := captureLogs(t)
+
+	var kinds []string
+	authCtx, err := s.datadogAuthContext(context.Background(), subOrg)
+	if err != nil {
+		t.Fatalf("datadogAuthContext error = %v", err)
+	}
+	_, err = s.datadogCall(context.Background(), authCtx, subOrg, func(ctx context.Context) (any, error) {
+		kinds = append(kinds, datadogAuthKind(t, ctx))
+		return nil, forbiddenDatadogError()
+	})
+	if err == nil {
+		t.Fatal("error = nil, want the 403 error")
+	}
+	want := []string{"oauth:suborg-token"}
+	if len(kinds) != 1 || kinds[0] != want[0] {
+		t.Errorf("credentials used = %v, want %v (no static key retry)", kinds, want)
+	}
+	assertDatadogWarn(t, logs, "the static API keys are not used as a fallback")
 }

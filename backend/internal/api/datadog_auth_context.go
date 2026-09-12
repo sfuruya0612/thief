@@ -19,18 +19,22 @@ var ErrDatadogNoCredentials = errors.New("no usable Datadog credentials")
 // datadogErrorBodyLogBytes は Datadog のエラー応答の本文をログへ載せる際の上限。
 const datadogErrorBodyLogBytes = 512
 
+// datadogParentOrg は親組織を表す org の値。Sub Organization は識別子 (パブリック ID)
+// で表し、空文字は親組織を意味する。
+const datadogParentOrg = ""
+
 // datadogAuthDeps は Datadog の OAuth 認証状態の解決とログイン系エンドポイントが呼ぶ
 // 外部処理をまとめる。いずれも Datadog への接続または config.Dir()/datadog 配下の
 // 読み書きを伴い、テストからは実行できないため関数値で差し替える
 // (internal/api の ssoLoginDeps と同じ理由)。now は期限判定の基準時刻を固定するために持つ。
 type datadogAuthDeps struct {
-	loadToken     func(site string) (*datadogauth.TokenSet, bool, error)
-	saveToken     func(site string, tok *datadogauth.TokenSet) error
-	loadClient    func(site string) (*datadogauth.ClientCredentials, bool, error)
+	loadToken     func(site, org string) (*datadogauth.TokenSet, bool, error)
+	saveToken     func(site, org string, tok *datadogauth.TokenSet) error
+	loadClient    func(site, org string) (*datadogauth.ClientCredentials, bool, error)
 	refreshToken  func(ctx context.Context, site, clientID, refreshToken string) (*datadogauth.TokenSet, error)
 	prepareLogin  func(ctx context.Context, p datadogauth.PrepareParams) (*datadogauth.Login, error)
 	completeLogin func(ctx context.Context, login *datadogauth.Login, state, code string) (*datadogauth.TokenSet, error)
-	logout        func(site string) error
+	logout        func(site, org string) error
 	now           func() time.Time
 }
 
@@ -52,20 +56,24 @@ func datadogAuthDepsFrom(deps datadogauth.Deps) datadogAuthDeps {
 		completeLogin: func(ctx context.Context, login *datadogauth.Login, state, code string) (*datadogauth.TokenSet, error) {
 			return datadogauth.CompleteLogin(ctx, login, state, code, deps)
 		},
-		logout: func(site string) error { return datadogauth.Logout(site, deps) },
+		logout: func(site, org string) error { return datadogauth.Logout(site, org, deps) },
 		now:    deps.Now,
 	}
 }
 
-// datadogAuthContext は Datadog API 呼び出しに使う認証コンテキストを組み立てる。
+// datadogAuthContext は org (空文字は親組織) の Datadog API 呼び出しに使う認証
+// コンテキストを組み立てる。
 //
-// 保存済みの OAuth トークン (config.Dir()/datadog/token_<site>.json) を毎回読み直す。
-// 起動時に固定した context を使い回さないのは、CLI (thief datadog auth login/logout) が
-// サーバプロセスの外でトークンを更新するためで、ファイルを唯一の真実源とする
-// (internal/pricecache が TTL を持たずファイルを都度読むのと同じ考え方)。
+// 保存済みの OAuth トークン (config.Dir()/datadog/token_<site>[_<org>].json) を毎回
+// 読み直す。起動時に固定した context を使い回さないのは、CLI
+// (thief datadog auth login/logout) がサーバプロセスの外でトークンを更新するためで、
+// ファイルを唯一の真実源とする (internal/pricecache が TTL を持たずファイルを都度読むのと
+// 同じ考え方)。
 //
 // 状態と挙動の対応は次のとおり。静的キーへ倒すときは、通常運用 (未ログイン) を除いて
 // 必ず slog.Warn を残す。黙って倒すと、認証が壊れていることに運用者が気付けなくなる。
+// 静的キーへ倒せるのは親組織のときだけで、Sub Organization では倒さない
+// (datadogFallbackContext を参照)。
 //
 //   - トークン有効: そのトークンで続行する (ログ不要)
 //   - トークン無し + 静的キーあり: 静的キーで続行する (ログ不要)
@@ -73,30 +81,53 @@ func datadogAuthDepsFrom(deps datadogauth.Deps) datadogAuthDeps {
 //   - 期限切れ → リフレッシュ成功: 新しいトークンで続行する
 //   - 期限切れ → リフレッシュ失敗: 警告してから静的キーへ倒す (無ければエラー)
 //   - トークンファイル破損: 未ログインと区別して警告してから静的キーへ倒す (無ければエラー)
-func (s *Server) datadogAuthContext(ctx context.Context) (context.Context, error) {
+func (s *Server) datadogAuthContext(ctx context.Context, org string) (context.Context, error) {
 	site := s.cfg.Datadog.Site
 
-	tok, ok, err := s.ddAuth.loadToken(site)
+	tok, ok, err := s.ddAuth.loadToken(site, org)
 	if err != nil {
 		// 読めたが壊れている (不正 JSON、access_token 欠落など)。ファイルが無い
 		// 「未ログイン」とは別の事態なので、静かに静的キーへ倒さず警告を残す。
-		slog.Warn("stored datadog oauth token is unusable", "site", site, "err", err)
-		return s.datadogStaticKeyContext(ctx, "the stored Datadog OAuth token is broken; log in to Datadog again")
+		slog.Warn("stored datadog oauth token is unusable", "site", site, "org", org, "err", err)
+		return s.datadogFallbackContext(ctx, org, "the stored Datadog OAuth token is broken; log in to Datadog again")
 	}
 	if !ok {
-		return s.datadogStaticKeyContext(ctx, "no Datadog OAuth token is stored; run 'thief datadog auth login'")
+		return s.datadogFallbackContext(ctx, org, "no Datadog OAuth token is stored; "+datadogLoginHint(org))
 	}
 
 	if !tok.IsExpired(s.ddAuth.now()) {
 		return ddclient.NewOAuthContext(ctx, tok.AccessTokenValue()), nil
 	}
 
-	fresh, err := s.refreshDatadogToken(ctx, tok)
+	fresh, err := s.refreshDatadogToken(ctx, org, tok)
 	if err != nil {
-		slog.Warn("refresh datadog oauth token failed", "site", site, "err", err)
-		return s.datadogStaticKeyContext(ctx, "the stored Datadog OAuth token is expired and could not be refreshed; log in to Datadog again")
+		slog.Warn("refresh datadog oauth token failed", "site", site, "org", org, "err", err)
+		return s.datadogFallbackContext(ctx, org, "the stored Datadog OAuth token is expired and could not be refreshed; log in to Datadog again")
 	}
 	return ddclient.NewOAuthContext(ctx, fresh.AccessTokenValue()), nil
+}
+
+// datadogFallbackContext は OAuth トークンが使えないときの退避先を返す。
+//
+// 親組織 (org が空) では従来どおり静的キーへ倒す。Sub Organization では倒さず、
+// reason と org を添えたエラーを返す。静的キー (DATADOG_API_KEY / DATADOG_APP_KEY) は
+// org 非依存のグローバルな設定であり、Sub Organization の文脈でこれを使うと、求められた
+// Sub Organization ではなく親組織 (または静的キーが属する別の組織) のデータを黙って
+// 返すことになる。Sub Organization 同士はデータが完全に分離されているため、誤りに
+// 気付ける手掛かりが応答に残らない。
+func (s *Server) datadogFallbackContext(ctx context.Context, org, reason string) (context.Context, error) {
+	if org != datadogParentOrg {
+		return nil, fmt.Errorf("%w for Datadog sub organization %q: %s", ErrDatadogNoCredentials, org, reason)
+	}
+	return s.datadogStaticKeyContext(ctx, reason)
+}
+
+// datadogLoginHint は再ログインに使うコマンドを文言にする。
+func datadogLoginHint(org string) string {
+	if org == datadogParentOrg {
+		return "run 'thief datadog auth login'"
+	}
+	return fmt.Sprintf("run 'thief datadog auth login --org %s'", org)
 }
 
 // datadogStaticKeyContext は静的キー (DATADOG_API_KEY / DATADOG_APP_KEY) の認証
@@ -120,15 +151,17 @@ func (s *Server) datadogStaticKeyContext(ctx context.Context, reason string) (co
 //
 //  1. トークンエンドポイントを叩く直前。既に他プロセスが更新済みなら HTTP を出さない。
 //  2. 失敗を確定させる直前。他プロセスの成功が自分の失敗の原因だった場合を拾う。
-func (s *Server) refreshDatadogToken(ctx context.Context, tok *datadogauth.TokenSet) (*datadogauth.TokenSet, error) {
+func (s *Server) refreshDatadogToken(ctx context.Context, org string, tok *datadogauth.TokenSet) (*datadogauth.TokenSet, error) {
 	site := s.cfg.Datadog.Site
-	v, err, _ := s.ddRefresh.Do(site, func() (any, error) {
-		if fresh, ok := s.freshDatadogTokenOnDisk(site); ok {
+	// org ごとに別のトークンを更新するため、集約の単位も org で分ける。site には
+	// アンダースコアが現れない (datadogauth.ValidateSite) ので区切りに使える。
+	v, err, _ := s.ddRefresh.Do(site+"_"+org, func() (any, error) {
+		if fresh, ok := s.freshDatadogTokenOnDisk(site, org); ok {
 			return fresh, nil
 		}
-		fresh, err := s.refreshDatadogTokenOnce(ctx, site, tok)
+		fresh, err := s.refreshDatadogTokenOnce(ctx, site, org, tok)
 		if err != nil {
-			if recovered, ok := s.freshDatadogTokenOnDisk(site); ok {
+			if recovered, ok := s.freshDatadogTokenOnDisk(site, org); ok {
 				return recovered, nil
 			}
 			return nil, err
@@ -145,8 +178,8 @@ func (s *Server) refreshDatadogToken(ctx context.Context, tok *datadogauth.Token
 // 読めない場合と期限切れの場合は ok=false を返す (呼び出し側は通常の更新へ進む)。
 // ここでの読み取りエラーは握り潰してよい。直前に datadogAuthContext が同じファイルを
 // 読んで警告済みか、これから走る更新の成否で結果が決まるためである。
-func (s *Server) freshDatadogTokenOnDisk(site string) (*datadogauth.TokenSet, bool) {
-	tok, ok, err := s.ddAuth.loadToken(site)
+func (s *Server) freshDatadogTokenOnDisk(site, org string) (*datadogauth.TokenSet, bool) {
+	tok, ok, err := s.ddAuth.loadToken(site, org)
 	if err != nil || !ok || tok.IsExpired(s.ddAuth.now()) {
 		return nil, false
 	}
@@ -154,19 +187,19 @@ func (s *Server) freshDatadogTokenOnDisk(site string) (*datadogauth.TokenSet, bo
 }
 
 // refreshDatadogTokenOnce はトークンエンドポイントを 1 回呼び、結果を保存する。
-func (s *Server) refreshDatadogTokenOnce(ctx context.Context, site string, tok *datadogauth.TokenSet) (*datadogauth.TokenSet, error) {
+func (s *Server) refreshDatadogTokenOnce(ctx context.Context, site, org string, tok *datadogauth.TokenSet) (*datadogauth.TokenSet, error) {
 	if tok.RefreshTokenValue() == "" {
-		return nil, fmt.Errorf("%w; run 'thief datadog auth login' again", datadogauth.ErrRefreshTokenMissing)
+		return nil, fmt.Errorf("%w; %s again", datadogauth.ErrRefreshTokenMissing, datadogLoginHint(org))
 	}
 
 	clientID := tok.ClientID
 	if clientID == "" {
-		creds, ok, err := s.ddAuth.loadClient(site)
+		creds, ok, err := s.ddAuth.loadClient(site, org)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			return nil, fmt.Errorf("%w: no stored client registration for %q", datadogauth.ErrClientIncomplete, site)
+			return nil, fmt.Errorf("%w: no stored client registration for site %q org %q", datadogauth.ErrClientIncomplete, site, org)
 		}
 		clientID = creds.ClientID
 	}
@@ -189,7 +222,7 @@ func (s *Server) refreshDatadogTokenOnce(ctx context.Context, site string, tok *
 		fresh.ClientID = clientID
 	}
 
-	if err := s.ddAuth.saveToken(site, fresh); err != nil {
+	if err := s.ddAuth.saveToken(site, org, fresh); err != nil {
 		return nil, err
 	}
 	return fresh, nil
@@ -198,7 +231,8 @@ func (s *Server) refreshDatadogTokenOnce(ctx context.Context, site string, tok *
 // datadogCall は datadogAuthContext が組み立てた authCtx で call を実行する。
 // OAuth トークンで呼んで権限不足 (403) になった場合に限り、警告を残してから静的キーで
 // 1 回だけやり直す。OAuth のスコープが対象 API を覆っていない構成でも、静的キーが
-// あれば従来どおり動くようにするためである。
+// あれば従来どおり動くようにするためである。org が親組織 (空文字) でない場合は
+// やり直さない (datadogFallbackContext と同じ理由)。
 //
 // 静的キーの認証コンテキストは authCtx ではなく ctx (認証情報を載せる前のリクエストの
 // context) から組み立てる。authCtx を親にすると Bearer トークンと API キーの両方が
@@ -207,9 +241,14 @@ func (s *Server) refreshDatadogTokenOnce(ctx context.Context, site string, tok *
 // 新しい Datadog API を呼び足す場合は、その API が OAuth に対応しているかを確認すること。
 // 現在呼んでいる Usage Metering (/api/v2/usage/*) は OAuth 対応であり、非対応 API の
 // 除外リストは持たない。
-func (s *Server) datadogCall(ctx, authCtx context.Context, call func(context.Context) (any, error)) (any, error) {
+func (s *Server) datadogCall(ctx, authCtx context.Context, org string, call func(context.Context) (any, error)) (any, error) {
 	v, err := call(authCtx)
 	if err == nil || !ddclient.HasOAuthToken(authCtx) || !ddclient.IsForbidden(err) {
+		return v, err
+	}
+	if org != datadogParentOrg {
+		slog.Warn("datadog rejected the oauth token with 403 for a sub organization; the static API keys are not used as a fallback",
+			"site", s.cfg.Datadog.Site, "org", org, "body", ddclient.ErrorBody(err, datadogErrorBodyLogBytes))
 		return v, err
 	}
 

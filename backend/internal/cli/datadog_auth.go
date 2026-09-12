@@ -37,6 +37,10 @@ const (
 	datadogAuthLoginTimeout = 5 * time.Minute
 	// datadogAuthShutdownTimeout はコールバック受理後にローカルサーバを閉じる上限。
 	datadogAuthShutdownTimeout = 5 * time.Second
+	// datadogOrgFlagUsage は --org の説明。Datadog の Sub Organization はデータが
+	// 完全に分離されており、親組織のトークンでは参照できないため、Sub Organization
+	// ごとに別のログインが要る。
+	datadogOrgFlagUsage = "Datadog Sub Organization public ID (default: the parent organization)"
 )
 
 // datadogServerRedirectURI は API サーバ (issue 0165) 用の redirect_uri。
@@ -53,8 +57,8 @@ func datadogServerRedirectURI() string {
 type datadogAuthDeps struct {
 	prepareLogin     func(ctx context.Context, p datadogauth.PrepareParams) (*datadogauth.Login, error)
 	completeLogin    func(ctx context.Context, login *datadogauth.Login, state, code string) (*datadogauth.TokenSet, error)
-	ensureFreshToken func(ctx context.Context, site string) (*datadogauth.TokenSet, bool, error)
-	logout           func(site string) error
+	ensureFreshToken func(ctx context.Context, site, org string) (*datadogauth.TokenSet, bool, error)
+	logout           func(site, org string) error
 	openBrowser      func(url string) error
 	listen           func(addr string) (net.Listener, error)
 	serveCallback    func(ctx context.Context, ln net.Listener) (state, code string, err error)
@@ -72,11 +76,11 @@ func defaultDatadogAuthDeps(cmd *cobra.Command) datadogAuthDeps {
 		completeLogin: func(ctx context.Context, login *datadogauth.Login, state, code string) (*datadogauth.TokenSet, error) {
 			return datadogauth.CompleteLogin(ctx, login, state, code, authDeps)
 		},
-		ensureFreshToken: func(ctx context.Context, site string) (*datadogauth.TokenSet, bool, error) {
-			return datadogauth.EnsureFreshToken(ctx, site, authDeps)
+		ensureFreshToken: func(ctx context.Context, site, org string) (*datadogauth.TokenSet, bool, error) {
+			return datadogauth.EnsureFreshToken(ctx, site, org, authDeps)
 		},
-		logout: func(site string) error {
-			return datadogauth.Logout(site, authDeps)
+		logout: func(site, org string) error {
+			return datadogauth.Logout(site, org, authDeps)
 		},
 		openBrowser:   openBrowser,
 		listen:        func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) },
@@ -122,8 +126,40 @@ func newDatadogAuthCmd() *cobra.Command {
 		},
 	}
 
+	for _, c := range []*cobra.Command{loginCmd, logoutCmd, refreshCmd} {
+		c.Flags().String("org", "", datadogOrgFlagUsage)
+	}
+
 	authCmd.AddCommand(loginCmd, logoutCmd, refreshCmd)
 	return authCmd
+}
+
+// datadogOrgFlag は --org の値を返す。フラグが定義されていないコマンド (site だけを
+// 与えるテスト用のコマンドなど) では親組織を表す空文字を返す (loadConfig の override と
+// 同じ扱い)。
+func datadogOrgFlag(cmd *cobra.Command) string {
+	if f := cmd.Flag("org"); f != nil {
+		return f.Value.String()
+	}
+	return ""
+}
+
+// datadogOrgLabel は出力に添える org の表示を返す。親組織では空文字になり、OAuth を
+// org 次元へ広げる前と同じ文言のままになる。
+func datadogOrgLabel(org string) string {
+	if org == "" {
+		return ""
+	}
+	return " (organization: " + org + ")"
+}
+
+// datadogLoginHint は再ログインを促す文のコマンド部分を返す。org ごとに別のログインが
+// 必要なので、Sub Organization では --org 付きの形を示す。
+func datadogLoginHint(org string) string {
+	if org == "" {
+		return "thief datadog auth login"
+	}
+	return "thief datadog auth login --org " + org
 }
 
 // datadogAuthLoginWith は `thief datadog auth login` の本体。
@@ -155,6 +191,7 @@ func datadogAuthLoginWith(cmd *cobra.Command, deps datadogAuthDeps) error {
 
 	login, err := deps.prepareLogin(ctx, datadogauth.PrepareParams{
 		Site:                 cfg.Datadog.Site,
+		Org:                  datadogOrgFlag(cmd),
 		RedirectURI:          datadogCLIRedirectURI,
 		RegisterRedirectURIs: []string{datadogCLIRedirectURI, datadogServerRedirectURI()},
 	})
@@ -185,7 +222,7 @@ func datadogAuthLoginWith(cmd *cobra.Command, deps datadogAuthDeps) error {
 		return err
 	}
 
-	cmd.Printf("Successfully logged into Datadog site: %s\n", login.Site)
+	cmd.Printf("Successfully logged into Datadog site: %s%s\n", login.Site, datadogOrgLabel(login.Org))
 	return nil
 }
 
@@ -359,10 +396,11 @@ func datadogAuthLogoutWith(cmd *cobra.Command, deps datadogAuthDeps) error {
 	if err != nil {
 		return err
 	}
-	if err := deps.logout(cfg.Datadog.Site); err != nil {
+	org := datadogOrgFlag(cmd)
+	if err := deps.logout(cfg.Datadog.Site, org); err != nil {
 		return err
 	}
-	cmd.Printf("Removed the local Datadog OAuth credentials for site: %s\n", cfg.Datadog.Site)
+	cmd.Printf("Removed the local Datadog OAuth credentials for site: %s%s\n", cfg.Datadog.Site, datadogOrgLabel(org))
 	return nil
 }
 
@@ -373,18 +411,19 @@ func datadogAuthRefreshWith(cmd *cobra.Command, deps datadogAuthDeps) error {
 	if err != nil {
 		return err
 	}
-	tok, ok, err := deps.ensureFreshToken(commandContext(cmd), cfg.Datadog.Site)
+	org := datadogOrgFlag(cmd)
+	tok, ok, err := deps.ensureFreshToken(commandContext(cmd), cfg.Datadog.Site, org)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("no Datadog OAuth token found for site %s. Run 'thief datadog auth login' first", cfg.Datadog.Site)
+		return fmt.Errorf("no Datadog OAuth token found for site %s%s. Run '%s' first", cfg.Datadog.Site, datadogOrgLabel(org), datadogLoginHint(org))
 	}
 	expiresAt := tok.ExpiresAt()
 	if expiresAt.IsZero() {
-		cmd.Printf("Datadog OAuth token for site %s is available (expiry unknown)\n", cfg.Datadog.Site)
+		cmd.Printf("Datadog OAuth token for site %s%s is available (expiry unknown)\n", cfg.Datadog.Site, datadogOrgLabel(org))
 		return nil
 	}
-	cmd.Printf("Datadog OAuth token for site %s is valid until %s\n", cfg.Datadog.Site, expiresAt.UTC().Format(time.RFC3339))
+	cmd.Printf("Datadog OAuth token for site %s%s is valid until %s\n", cfg.Datadog.Site, datadogOrgLabel(org), expiresAt.UTC().Format(time.RFC3339))
 	return nil
 }

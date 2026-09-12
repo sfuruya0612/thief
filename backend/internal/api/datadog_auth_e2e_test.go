@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +44,7 @@ type datadogFakeOrg struct {
 	mu sync.Mutex
 
 	registrations int
+	exchanges     int
 	// usageAuth には Usage Metering が受け取った資格情報が呼び出しごとに積まれる。
 	usageAuth []string
 }
@@ -75,6 +77,7 @@ func (org *datadogFakeOrg) start(t *testing.T, dir string) *Server {
 			}
 			org.mu.Lock()
 			org.registrations++
+			clientID := fmt.Sprintf("generated-client-id-%d", org.registrations)
 			org.mu.Unlock()
 			// CLI とサーバの両方の redirect_uri を 1 回でまとめて登録すること。
 			for _, want := range []string{datadogTestServerRedirectURI, datadogTestCLIRedirectURI} {
@@ -84,10 +87,16 @@ func (org *datadogFakeOrg) start(t *testing.T, dir string) *Server {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			io.WriteString(w, `{"client_id":"generated-client-id","redirect_uris":["`+datadogTestServerRedirectURI+`","`+datadogTestCLIRedirectURI+`"]}`)
+			io.WriteString(w, `{"client_id":"`+clientID+`","redirect_uris":["`+datadogTestServerRedirectURI+`","`+datadogTestCLIRedirectURI+`"]}`)
 		case "/oauth2/v1/token":
+			// アクセストークンは引き換えごとに変える。org ごとに別のトークンが
+			// 保存されることを、値の違いで見分けられるようにするため。
+			org.mu.Lock()
+			org.exchanges++
+			accessToken := fmt.Sprintf("oauth-access-token-%d", org.exchanges)
+			org.mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"access_token":"oauth-access-token","refresh_token":"oauth-refresh-token","token_type":"Bearer","expires_in":3600,"scope":"usage_read"}`)
+			io.WriteString(w, `{"access_token":"`+accessToken+`","refresh_token":"oauth-refresh-token","token_type":"Bearer","expires_in":3600,"scope":"usage_read"}`)
 		default:
 			t.Errorf("unexpected request to the datadog oauth server: %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -112,14 +121,20 @@ func (org *datadogFakeOrg) start(t *testing.T, dir string) *Server {
 		RegisterClient: client.RegisterClient,
 		ExchangeCode:   client.ExchangeCode,
 		RefreshToken:   client.Refresh,
-		LoadClient: func(site string) (*datadogauth.ClientCredentials, bool, error) {
-			return datadogauth.LoadClient(dir, site)
+		LoadClient: func(site, o string) (*datadogauth.ClientCredentials, bool, error) {
+			return datadogauth.LoadClient(dir, site, o)
 		},
-		SaveClient:   func(site string, c *datadogauth.ClientCredentials) error { return datadogauth.SaveClient(dir, site, c) },
-		LoadToken:    func(site string) (*datadogauth.TokenSet, bool, error) { return datadogauth.LoadToken(dir, site) },
-		SaveToken:    func(site string, tok *datadogauth.TokenSet) error { return datadogauth.SaveToken(dir, site, tok) },
-		DeleteToken:  func(site string) error { return datadogauth.DeleteToken(dir, site) },
-		DeleteClient: func(site string) error { return datadogauth.DeleteClient(dir, site) },
+		SaveClient: func(site, o string, c *datadogauth.ClientCredentials) error {
+			return datadogauth.SaveClient(dir, site, o, c)
+		},
+		LoadToken: func(site, o string) (*datadogauth.TokenSet, bool, error) {
+			return datadogauth.LoadToken(dir, site, o)
+		},
+		SaveToken: func(site, o string, tok *datadogauth.TokenSet) error {
+			return datadogauth.SaveToken(dir, site, o, tok)
+		},
+		DeleteToken:  func(site, o string) error { return datadogauth.DeleteToken(dir, site, o) },
+		DeleteClient: func(site, o string) error { return datadogauth.DeleteClient(dir, site, o) },
 		Now:          time.Now,
 	}
 
@@ -190,7 +205,7 @@ func TestDatadogOAuthEndToEnd(t *testing.T) {
 	if got := org.registrationCount(); got != 1 {
 		t.Fatalf("client registrations = %d, want 1", got)
 	}
-	if _, ok, err := datadogauth.LoadClient(dir, testDatadogSite); err != nil || !ok {
+	if _, ok, err := datadogauth.LoadClient(dir, testDatadogSite, ""); err != nil || !ok {
 		t.Fatalf("the client registration was not stored: ok=%v err=%v", ok, err)
 	}
 
@@ -202,12 +217,12 @@ func TestDatadogOAuthEndToEnd(t *testing.T) {
 	if got := getDatadogLoginStatus(t, s, started.State); got.Status != string(datadogLoginSucceeded) {
 		t.Fatalf("login status = %q (error=%q), want %q", got.Status, got.ErrorMessage, datadogLoginSucceeded)
 	}
-	tok, ok, err := datadogauth.LoadToken(dir, testDatadogSite)
+	tok, ok, err := datadogauth.LoadToken(dir, testDatadogSite, "")
 	if err != nil || !ok {
 		t.Fatalf("the token was not stored: ok=%v err=%v", ok, err)
 	}
-	if tok.AccessTokenValue() != "oauth-access-token" {
-		t.Errorf("stored access token = %q, want %q", tok.AccessTokenValue(), "oauth-access-token")
+	if tok.AccessTokenValue() != "oauth-access-token-1" {
+		t.Errorf("stored access token = %q, want %q", tok.AccessTokenValue(), "oauth-access-token-1")
 	}
 
 	// 3. コスト取得が OAuth トークンで通る。
@@ -215,15 +230,15 @@ func TestDatadogOAuthEndToEnd(t *testing.T) {
 	if len(costs) != 1 || costs[0].Cost != 42.5 {
 		t.Fatalf("costs = %+v, want a single 42.5 charge", costs)
 	}
-	if got := org.usageCredentials(); len(got) != 1 || got[0] != "Bearer oauth-access-token" {
-		t.Fatalf("usage metering credentials = %v, want [Bearer oauth-access-token]", got)
+	if got := org.usageCredentials(); len(got) != 1 || got[0] != "Bearer oauth-access-token-1" {
+		t.Fatalf("usage metering credentials = %v, want [Bearer oauth-access-token-1]", got)
 	}
 
 	// 4. ログアウトするとトークンが消え、静的キーが無いので明確なエラーになる。
 	if w := doDatadogRequest(t, s, http.MethodPost, "/api/datadog/auth/logout"); w.Code != http.StatusNoContent {
 		t.Fatalf("logout status = %d, want %d (body=%s)", w.Code, http.StatusNoContent, w.Body.String())
 	}
-	if _, ok, _ := datadogauth.LoadToken(dir, testDatadogSite); ok {
+	if _, ok, _ := datadogauth.LoadToken(dir, testDatadogSite, ""); ok {
 		t.Error("the token file still exists after logout")
 	}
 	w = doDatadogRequest(t, s, http.MethodGet, "/api/datadog/cost/historical?start_month=2026-10")
@@ -272,7 +287,7 @@ func TestDatadogCorruptTokenFileFallsBackWithWarning(t *testing.T) {
 	org := &datadogFakeOrg{}
 	s := org.start(t, dir)
 
-	path, err := datadogauth.TokenPath(dir, testDatadogSite)
+	path, err := datadogauth.TokenPath(dir, testDatadogSite, "")
 	if err != nil {
 		t.Fatalf("token path: %v", err)
 	}
@@ -306,4 +321,83 @@ func TestDatadogCorruptTokenFileFallsBackWithWarning(t *testing.T) {
 		assertErrorCode(t, w, http.StatusUnauthorized, "DATADOG_NO_CREDENTIALS")
 		assertDatadogWarn(t, logs, "stored datadog oauth token is unusable")
 	})
+}
+
+// TestDatadogOAuthPerOrgSessions は、org ごとに別のクライアント登録とトークンが
+// 保存されることを、Dynamic Client Registration とトークンエンドポイントを模した
+// サーバ相手に通しで確認する。
+//
+// Datadog の client_id は登録を行った組織に紐づくため、Sub Organization ごとに
+// 登録をやり直す必要がある。1 つの client_id を使い回すと、別の組織のトークンを
+// 取得することになる。
+func TestDatadogOAuthPerOrgSessions(t *testing.T) {
+	dir := t.TempDir()
+	fake := &datadogFakeOrg{}
+	s := fake.start(t, dir)
+
+	orgs := []string{"", "suborg1", "suborg2"}
+	for i, org := range orgs {
+		started := startDatadogLoginForOrg(t, s, org)
+		if got := fake.registrationCount(); got != i+1 {
+			t.Fatalf("client registrations after logging in to org %q = %d, want %d", org, got, i+1)
+		}
+		w := doDatadogRequest(t, s, http.MethodGet, datadogCallbackTarget(started.State, "auth-code"))
+		if w.Code != http.StatusOK {
+			t.Fatalf("callback status for org %q = %d, want %d (body=%s)", org, w.Code, http.StatusOK, w.Body.String())
+		}
+	}
+
+	for i, org := range orgs {
+		wantClientID := fmt.Sprintf("generated-client-id-%d", i+1)
+		wantToken := fmt.Sprintf("oauth-access-token-%d", i+1)
+
+		creds, ok, err := datadogauth.LoadClient(dir, testDatadogSite, org)
+		if err != nil || !ok {
+			t.Fatalf("LoadClient(org=%q) = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+		if creds.ClientID != wantClientID {
+			t.Errorf("stored client id for org %q = %q, want %q", org, creds.ClientID, wantClientID)
+		}
+		tok, ok, err := datadogauth.LoadToken(dir, testDatadogSite, org)
+		if err != nil || !ok {
+			t.Fatalf("LoadToken(org=%q) = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+		if got := tok.AccessTokenValue(); got != wantToken {
+			t.Errorf("stored access token for org %q = %q, want %q", org, got, wantToken)
+		}
+	}
+
+	// 保存先のファイル名が org ごとに分かれていること。親組織のファイル名は org を
+	// 導入する前と同じままであること。
+	for _, tt := range []struct {
+		org      string
+		wantName string
+	}{
+		{org: "", wantName: "token_" + testDatadogSite + ".json"},
+		{org: "suborg1", wantName: "token_" + testDatadogSite + "_suborg1.json"},
+	} {
+		path, err := datadogauth.TokenPath(dir, testDatadogSite, tt.org)
+		if err != nil {
+			t.Fatalf("TokenPath(org=%q) err = %v", tt.org, err)
+		}
+		if got := filepath.Base(path); got != tt.wantName {
+			t.Errorf("token file name for org %q = %q, want %q", tt.org, got, tt.wantName)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("stat %s: %v", path, err)
+		}
+	}
+
+	// 1 つの org のログアウトは他の org の認証情報を消さない。
+	if w := doDatadogRequest(t, s, http.MethodPost, "/api/datadog/auth/logout?org=suborg1"); w.Code != http.StatusNoContent {
+		t.Fatalf("logout status = %d, want %d (body=%s)", w.Code, http.StatusNoContent, w.Body.String())
+	}
+	if _, ok, _ := datadogauth.LoadToken(dir, testDatadogSite, "suborg1"); ok {
+		t.Error("the token of suborg1 still exists after logging out of suborg1")
+	}
+	for _, org := range []string{"", "suborg2"} {
+		if _, ok, err := datadogauth.LoadToken(dir, testDatadogSite, org); !ok || err != nil {
+			t.Errorf("LoadToken(org=%q) after logging out of suborg1 = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+	}
 }

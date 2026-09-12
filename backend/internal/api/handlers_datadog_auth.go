@@ -53,20 +53,25 @@ func (s *Server) datadogServerRedirectURI() string {
 // handleDatadogAuthLoginStart は認可の準備を行い、ブラウザに開かせる認可 URL を返す。
 // トークンの取得は待たない (callback が受け、login/status が結果を知らせる)。
 //
+// org クエリパラメータで Sub Organization を指定する。省略時は親組織として扱う
+// (OAuth を org 次元へ広げる前と同じ挙動)。
+//
 // 初回登録では CLI 用の redirect_uri も一緒に登録する。Dynamic Client Registration には
 // 登録内容の更新エンドポイントが無く、後から URI を足すには新しい client_id を発行する
 // しかない。CLI とサーバのどちらが先にログインしても同じクライアントを再利用できるよう、
 // 両方の URI を最初にまとめて登録する。
 func (s *Server) handleDatadogAuthLoginStart(w http.ResponseWriter, r *http.Request) {
 	site := s.cfg.Datadog.Site
+	org := r.URL.Query().Get("org")
 	redirectURI := s.datadogServerRedirectURI()
-	s.warnDatadogRedirectBaseReregistration(site, redirectURI)
+	s.warnDatadogRedirectBaseReregistration(site, org, redirectURI)
 
 	ctx, cancel := context.WithTimeout(r.Context(), datadogAuthStartTimeout)
 	defer cancel()
 
 	login, err := s.ddAuth.prepareLogin(ctx, datadogauth.PrepareParams{
 		Site:                 site,
+		Org:                  org,
 		RedirectURI:          redirectURI,
 		RegisterRedirectURIs: []string{config.DefaultDatadogOAuthCLIRedirectURI, redirectURI},
 	})
@@ -84,15 +89,15 @@ func (s *Server) handleDatadogAuthLoginStart(w http.ResponseWriter, r *http.Requ
 // 変更後の redirect_uri を使うには新しい client_id を発行するしかなく、それ以前に
 // 発行されたトークン (CLI 側のものを含む) は使えなくなるため、AWS SSO の start URL 変更と
 // 同じく設定変更後は関係する全経路の再ログインが要る。
-func (s *Server) warnDatadogRedirectBaseReregistration(site, redirectURI string) {
+func (s *Server) warnDatadogRedirectBaseReregistration(site, org, redirectURI string) {
 	if s.cfg.Datadog.OAuthRedirectBase == config.DefaultDatadogOAuthRedirectBase {
 		return
 	}
-	if _, registered, err := s.ddAuth.loadClient(site); err != nil || registered {
+	if _, registered, err := s.ddAuth.loadClient(site, org); err != nil || registered {
 		return
 	}
 	slog.Warn("registering a new datadog oauth client for a non-default redirect base; tokens issued to the previous client, including the CLI's, stop working",
-		"site", site, "redirect_uri", redirectURI, "default_redirect_base", config.DefaultDatadogOAuthRedirectBase)
+		"site", site, "org", org, "redirect_uri", redirectURI, "default_redirect_base", config.DefaultDatadogOAuthRedirectBase)
 }
 
 // writeDatadogLoginStartError は認可準備の失敗を HTTP レスポンスへ変換する。
@@ -100,6 +105,10 @@ func (s *Server) warnDatadogRedirectBaseReregistration(site, redirectURI string)
 // 無効化するため PrepareLogin が自動では登録し直さない。利用者にログアウトを促せるよう
 // 専用コードで返す。
 func writeDatadogLoginStartError(w http.ResponseWriter, err error) {
+	if errors.Is(err, datadogauth.ErrInvalidOrg) {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
 	if errors.Is(err, datadogauth.ErrRedirectURINotRegistered) {
 		writeError(w, http.StatusConflict, "DATADOG_REDIRECT_URI_NOT_REGISTERED", err.Error())
 		return
@@ -109,6 +118,10 @@ func writeDatadogLoginStartError(w http.ResponseWriter, err error) {
 
 // handleDatadogAuthCallback は認可サーバがブラウザをリダイレクトさせる先。state で
 // 進行中のログインを引き当て、認可コードをトークンへ引き換えて保存する。
+//
+// 保存先の org は login/start が作った中間状態 (datadogauth.Login) が持つ。redirect_uri は
+// Dynamic Client Registration で登録した文字列と完全一致していなければならず、org を
+// クエリとして足せないためである。
 //
 // 応答はブラウザに表示される固定の文言で、クエリの値を一切含めない。frontend の fetch
 // ではなくブラウザの遷移で到達するため、ここで受け取った値を書き戻すと反射型 XSS になる。
@@ -143,7 +156,7 @@ func (s *Server) handleDatadogAuthCallback(w http.ResponseWriter, r *http.Reques
 
 	if _, err := s.ddAuth.completeLogin(ctx, login, state, code); err != nil {
 		s.ddLoginSessions.finish(state, err)
-		slog.Warn("datadog oauth login failed at the callback", "site", s.cfg.Datadog.Site, "err", err)
+		slog.Warn("datadog oauth login failed at the callback", "site", s.cfg.Datadog.Site, "org", login.Org, "err", err)
 		writeDatadogCallbackPage(w, http.StatusBadGateway, datadogCallbackFailedBody)
 		return
 	}
@@ -190,11 +203,18 @@ func (s *Server) handleDatadogAuthLoginStatus(w http.ResponseWriter, r *http.Req
 }
 
 // handleDatadogAuthLogout はローカルに保存した OAuth トークンとクライアント登録を
-// 削除する。Datadog 側にトークンを失効させるエンドポイントは確認できていないため、
-// 削除はローカルに限られる。既に未ログインでも冪等な操作として 204 を返す。
+// 削除する。org クエリパラメータで対象の Sub Organization を指定し、省略時は親組織の
+// 認証情報を削除する。他の org の認証情報は残る。Datadog 側にトークンを失効させる
+// エンドポイントは確認できていないため、削除はローカルに限られる。既に未ログインでも
+// 冪等な操作として 204 を返す。
 // backend のリソースキャッシュには触れない (frontend が cache/invalidate で破棄する)。
-func (s *Server) handleDatadogAuthLogout(w http.ResponseWriter, _ *http.Request) {
-	if err := s.ddAuth.logout(s.cfg.Datadog.Site); err != nil {
+func (s *Server) handleDatadogAuthLogout(w http.ResponseWriter, r *http.Request) {
+	org := r.URL.Query().Get("org")
+	if err := s.ddAuth.logout(s.cfg.Datadog.Site, org); err != nil {
+		if errors.Is(err, datadogauth.ErrInvalidOrg) {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "DATADOG_LOGOUT_FAILED", err.Error())
 		return
 	}
