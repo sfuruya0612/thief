@@ -21,6 +21,7 @@ import {
   bqFieldFromRaw,
   bqTableFromRaw,
   datadogCostFromRaw,
+  datadogOrgFromRaw,
   tidbClusterFromRaw,
   tidbCostFromRaw,
   tidbProjectFromRaw,
@@ -81,6 +82,7 @@ import {
   getCWLogGroups,
   getDatadogEstimated,
   getDatadogHistorical,
+  getDatadogOrgs,
   getDynamoItems,
   getDynamoSchema,
   getECRImages,
@@ -935,19 +937,51 @@ export function useDeleteSnippet(service: QueryEditorService) {
 // ============================================================
 // Datadog
 // ============================================================
-export function useDatadogHistorical(startMonth?: string, endMonth?: string, view?: string) {
+// 組織一覧。GCP プロジェクト一覧と同じく変化が少ないため staleTime を緩める。
+export function useDatadogOrgs() {
   return useQuery({
-    queryKey: ['datadog', 'historical', startMonth, endMonth, view],
-    queryFn: async () =>
-      (await getDatadogHistorical(startMonth, endMonth, view)).map(datadogCostFromRaw),
+    queryKey: ['datadog', 'orgs'],
+    queryFn: async () => (await getDatadogOrgs()).map(datadogOrgFromRaw),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
-export function useDatadogEstimated(startMonth?: string, endMonth?: string, view?: string) {
+// 組織一覧の手動更新 (Datadog から取り直しバックエンドのキャッシュを上書きする)。
+export function useRefreshDatadogOrgs() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await getDatadogOrgs({ refresh: true })).map(datadogOrgFromRaw),
+    onSuccess: (orgs) => {
+      queryClient.setQueryData(['datadog', 'orgs'], orgs);
+    },
+  });
+}
+
+// org はコスト取得の対象組織 (空文字は親組織)。queryKey に含めないと org を切り替えても
+// 直前の組織のコストがキャッシュから返る。
+export function useDatadogHistorical(
+  org: string,
+  startMonth?: string,
+  endMonth?: string,
+  view?: string,
+) {
   return useQuery({
-    queryKey: ['datadog', 'estimated', startMonth, endMonth, view],
+    queryKey: ['datadog', 'historical', org, startMonth, endMonth, view],
     queryFn: async () =>
-      (await getDatadogEstimated(startMonth, endMonth, view)).map(datadogCostFromRaw),
+      (await getDatadogHistorical(org, startMonth, endMonth, view)).map(datadogCostFromRaw),
+  });
+}
+
+export function useDatadogEstimated(
+  org: string,
+  startMonth?: string,
+  endMonth?: string,
+  view?: string,
+) {
+  return useQuery({
+    queryKey: ['datadog', 'estimated', org, startMonth, endMonth, view],
+    queryFn: async () =>
+      (await getDatadogEstimated(org, startMonth, endMonth, view)).map(datadogCostFromRaw),
   });
 }
 

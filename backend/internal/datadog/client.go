@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 )
 
@@ -47,4 +48,16 @@ type UsageMeteringV2API struct {
 func NewUsageMeteringV2API(cfg *datadog.Configuration) *UsageMeteringV2API {
 	client := datadog.NewAPIClient(cfg)
 	return &UsageMeteringV2API{api: datadogV2.NewUsageMeteringApi(client)}
+}
+
+// OrganizationsV1API wraps the Datadog v1 organizations API. The organizations
+// endpoint only exists in v1; there is no v2 equivalent.
+type OrganizationsV1API struct {
+	api *datadogV1.OrganizationsApi
+}
+
+// NewOrganizationsV1API creates a new OrganizationsV1API.
+func NewOrganizationsV1API(cfg *datadog.Configuration) *OrganizationsV1API {
+	client := datadog.NewAPIClient(cfg)
+	return &OrganizationsV1API{api: datadogV1.NewOrganizationsApi(client)}
 }

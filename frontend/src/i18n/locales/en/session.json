@@ -23,6 +23,12 @@
     "footerHint": "Projects in other accounts appear after authenticating with gcloud auth login",
     "emptyText": "No matching projects"
   },
+  "datadogOrgSessionTabs": {
+    "addLabel": "＋ Add organization",
+    "searchPlaceholder": "Search organizations…",
+    "footerHint": "Opening an organization you are not logged in to starts the Datadog login",
+    "emptyText": "No matching organizations"
+  },
   "awsActiveSessionCard": {
     "expiryLabel": "Expires",
     "copyReauthTitle": "Copy re-auth command",

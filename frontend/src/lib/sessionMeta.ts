@@ -3,6 +3,7 @@
 import i18n from '../i18n';
 import type { GcpProject } from '../types/gcp';
 import type { Profile } from '../types/common';
+import type { DatadogOrgRow } from '../types/nonaws';
 
 export type SessionEnv = 'dev' | 'stg' | 'prod' | 'default';
 
@@ -122,5 +123,21 @@ export function gcpPickerItems(projects: GcpProject[], open: string[]): SessionP
     badge: null,
     searchText: [p.id, p.name].join(' ').toLowerCase(),
     disabled: opened.has(p.id),
+  }));
+}
+
+// Datadog 組織のピッカー項目を構築する。組織ごとに OAuth トークンが要るため、
+// 未ログインの組織にはバッジを出す (選択自体は可能で、開くとログインが始まる)。
+export function datadogOrgPickerItems(orgs: DatadogOrgRow[], open: string[]): SessionPickerItem[] {
+  const opened = new Set(open);
+  return orgs.map((o) => ({
+    id: o.id,
+    name: o.name,
+    meta: o.name !== o.id ? o.id : undefined,
+    badge: o.loggedIn
+      ? null
+      : { label: i18n.t('session:sessionMeta.badgeNotLoggedIn'), tone: 'warn' },
+    searchText: [o.id, o.name].join(' ').toLowerCase(),
+    disabled: opened.has(o.id),
   }));
 }

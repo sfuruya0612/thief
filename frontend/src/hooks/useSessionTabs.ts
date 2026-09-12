@@ -15,11 +15,13 @@ import {
 } from '../lib/sessionTabsState';
 import { loadPersisted, savePersisted } from '../lib/storage';
 
-export type SessionScope = 'awsSessions' | 'gcpSessions';
+export type SessionScope = 'awsSessions' | 'gcpSessions' | 'datadogOrgSessions';
 
 // 旧バージョン互換のミラー先フィールド。アクティブタブを旧形式の単一選択
 // フィールドへ常に反映する (ロールバック時も選択が生きる)。
-const MIRROR_FIELD: Record<SessionScope, 'activeProfile' | 'gcpProject'> = {
+// datadogOrgSessions は最初からタブで導入したため対応する旧フィールドが無く、
+// ここに項目を持たない。
+const MIRROR_FIELD: Partial<Record<SessionScope, 'activeProfile' | 'gcpProject'>> = {
   awsSessions: 'activeProfile',
   gcpSessions: 'gcpProject',
 };
@@ -44,12 +46,15 @@ export function useSessionTabs(scope: SessionScope): SessionTabsApi {
     // 必ず最新の PersistedState を読み直してマージする (全 writer が同期実行
     // のため JS 単一スレッドでは安全)。
     const next = { ...loadPersisted(), [scope]: state };
-    if (state.active !== '') {
-      next[MIRROR_FIELD[scope]] = state.active;
-    } else {
-      // 全タブ閉のときはミラーを削除する。旧フィールドと active の食い違いを
-      // 「旧バージョンが書いた証拠」として扱う reconcile (storage.ts) の前提。
-      delete next[MIRROR_FIELD[scope]];
+    const mirror = MIRROR_FIELD[scope];
+    if (mirror !== undefined) {
+      if (state.active !== '') {
+        next[mirror] = state.active;
+      } else {
+        // 全タブ閉のときはミラーを削除する。旧フィールドと active の食い違いを
+        // 「旧バージョンが書いた証拠」として扱う reconcile (storage.ts) の前提。
+        delete next[mirror];
+      }
     }
     savePersisted(next);
   }, [scope, state]);

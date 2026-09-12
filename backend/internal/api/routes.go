@@ -113,6 +113,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/gcp/logging/tail", s.handleGCPLoggingTail)
 
 	// Datadog
+	s.mux.HandleFunc("GET /api/datadog/orgs", s.handleDatadogOrgs)
 	s.mux.HandleFunc("GET /api/datadog/cost/historical", s.handleDatadogHistorical)
 	s.mux.HandleFunc("GET /api/datadog/cost/estimated", s.handleDatadogEstimated)
 

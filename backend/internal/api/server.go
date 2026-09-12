@@ -29,6 +29,7 @@ type Server struct {
 	cfg           *config.Config
 	bq            *bqclient.Client
 	ddV2          *ddclient.UsageMeteringV2API
+	ddOrgV1       *ddclient.OrganizationsV1API
 	tidb          *tidbclient.Client
 	snippets      *snippet.Store
 	resourceCache *cache.Cache[any]
@@ -72,6 +73,7 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	// (OAuth トークンの更新と CLI 側のログイン / ログアウトを稼働中に反映するため)。
 	ddCfg := ddclient.NewConfiguration(cfg.Datadog.Site)
 	s.ddV2 = ddclient.NewUsageMeteringV2API(ddCfg)
+	s.ddOrgV1 = ddclient.NewOrganizationsV1API(ddCfg)
 
 	// TiDB
 	s.tidb = tidbclient.NewClient(cfg.TiDB.PublicKey, cfg.TiDBPrivateKey())
@@ -141,7 +143,7 @@ func cacheKey(parts ...string) string {
 // serveCached は resourceCache.Load の結果をキャッシュヘッダ付き JSON で書き出す。
 // キャッシュ応答を返すハンドラ共通のボイラープレート (Load → エラー → ヘッダ → JSON) を集約する。
 // エラー応答は onErr に委ねる。AWS リソース系と cost は writeAWSError (SSO 期限切れで 401)、
-// gcp は writeGCPError、datadog のコスト取得は writeDatadogCostError (資格情報無しで 401
+// gcp は writeGCPError、datadog のデータ取得は writeDatadogError (資格情報無しで 401
 // DATADOG_NO_CREDENTIALS、それ以外は 500)、tidb / bq は writeInternalFromError を渡し、
 // 既存のエラーレスポンス形状を変えないこと。
 func (s *Server) serveCached(

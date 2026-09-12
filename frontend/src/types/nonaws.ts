@@ -77,6 +77,21 @@ export interface DatadogCostRow {
   cost: number;
 }
 
+// Datadog の組織 (親組織と Sub Organization)。id は backend が小文字へ正規化した
+// public_id で、API 呼び出しとトークンの保存先の識別子を兼ねる。name は表示名。
+// loggedIn はその組織向けの OAuth トークンが保存されているかどうか。
+export interface DatadogOrgRaw {
+  id: string;
+  name: string;
+  logged_in: boolean;
+}
+
+export interface DatadogOrgRow {
+  id: string;
+  name: string;
+  loggedIn: boolean;
+}
+
 // Datadog OAuth ログイン (backend の datadogLoginStartResponse /
 // datadogLoginStatusResponse をミラーする)。state は認可要求の state であり、
 // login/status で進行状態を引くためのキーでもある。

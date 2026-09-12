@@ -6,11 +6,11 @@ import { DATADOG_LOGIN_POLL_TIMEOUT } from '../hooks/useDatadogLogin';
 
 afterEach(cleanup);
 
-function renderWithQC() {
+function renderWithQC(org = 'suborg1') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DatadogAuthBanner />
+      <DatadogAuthBanner org={org} />
     </QueryClientProvider>,
   );
 }
@@ -45,6 +45,14 @@ function mockFetch(handlers: {
     }
     throw new Error(`unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
+}
+
+// fetch モックが受け取った URL のうち login/start のものを返す。
+function startRequestUrls(): string[] {
+  return vi
+    .mocked(globalThis.fetch)
+    .mock.calls.map((call) => String(call[0]))
+    .filter((url) => url.includes('/api/datadog/auth/login/start'));
 }
 
 // 認可タブの WindowProxy のモック。closed は「ユーザが手動で閉じた後か」を表す。
@@ -92,6 +100,30 @@ describe('DatadogAuthBanner', () => {
     expect(screen.getByText(/ブラウザで認可を完了してください/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ログイン中…' })).toBeDisabled();
     expect(authWindow.close).not.toHaveBeenCalled();
+  });
+
+  it('ログインの対象を表示中の組織に限定する (org を login/start へ渡す)', async () => {
+    // org を渡し損ねると、Sub Organization のタブから始めたログインが親組織の
+    // トークンを上書きし、そのタブは未ログインのままになる。
+    mockFetch({});
+    mockAuthWindow();
+    renderWithQC('suborg1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Datadog 再ログイン' }));
+
+    await waitFor(() => expect(startRequestUrls().length).toBe(1));
+    expect(startRequestUrls()[0]).toContain('org=suborg1');
+  });
+
+  it('親組織 (org が空文字) では org クエリを付けない', async () => {
+    mockFetch({});
+    mockAuthWindow();
+    renderWithQC('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Datadog 再ログイン' }));
+
+    await waitFor(() => expect(startRequestUrls().length).toBe(1));
+    expect(startRequestUrls()[0]).not.toContain('org=');
   });
 
   it('login/status が succeeded になったら認可タブを閉じてヒントを消す', async () => {

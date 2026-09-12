@@ -23,6 +23,12 @@
     "footerHint": "別アカウントのプロジェクトは gcloud auth login で認証後に表示",
     "emptyText": "一致するプロジェクトがありません"
   },
+  "datadogOrgSessionTabs": {
+    "addLabel": "＋ 組織を追加",
+    "searchPlaceholder": "組織を検索…",
+    "footerHint": "未ログインの組織は開いた時点で Datadog のログインが始まります",
+    "emptyText": "一致する組織がありません"
+  },
   "awsActiveSessionCard": {
     "expiryLabel": "有効期限",
     "copyReauthTitle": "再認証コマンドをコピー",

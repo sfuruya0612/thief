@@ -202,6 +202,8 @@
   - @sfuruya0612
 - [ADD] Datadog OAuth 認証を Sub Organization 単位の named session に対応させる (CLI の `--org` フラグと API サーバの `org` クエリパラメータの両方で、Sub Organization ごとに独立した OAuth トークンとクライアント登録を持てるようにする。org を指定しない場合は従来どおり親組織として動作し、既存の挙動は変わらない。Sub Organization 文脈では静的キー (DATADOG_API_KEY / DATADOG_APP_KEY) へのフォールバックを行わない)
   - @sfuruya0612
+- [ADD] Datadog ビューに Sub Organization (Sub Org) タブを追加し、AWS/Google Cloud と同じセッションタブの体験で Sub Org を切り替えられるようにする (`GET /api/datadog/orgs` で Sub Org 一覧とログイン状態を取得し、未ログインの Sub Org タブを開くと issue 0167 の org 単位 OAuth ログインが自動的に開始される。既存の Cost 機能は選択中の Sub Org のデータを表示するようになる)
+  - @sfuruya0612
 - [CHANGE] Cost Explorer の絞り込みを、Service と Linked account の 2 つの入力から、Service / Usage type / Linked account を横断する 1 つのキーワード入力に変更する (`GET /api/aws/profiles/{profile}/cost` のクエリパラメータ `service` と `account` を廃止し `keyword` を追加する。backend は `GetDimensionValues` で 3 次元の値を並列に取得し、大文字小文字を区別しない部分一致で照合したうえで EQUALS の Or フィルタを組み立てる。Linked account はアカウント ID とアカウント名 (次元値の description 属性) の両方を照合対象とする。`GetCostAndUsage` の Filter が EQUALS と CASE_SENSITIVE しか受け付けないため、部分一致の判定は backend 側で行う。どの次元にも一致しなかった場合は結果が空と確定するため、課金される `GetCostAndUsage` を呼ばずに空の結果を返す)
   - @sfuruya0612
 - [CHANGE] CLI `sso logout` を、SSO キャッシュディレクトリ (`~/.aws/sso/cache`) が無い場合にエラー終了ではなく正常終了 (削除するものが無い) にする

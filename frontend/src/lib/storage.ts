@@ -22,6 +22,9 @@ export interface PersistedState {
   // セッションタブ (開いている複数セッション + アクティブ)
   awsSessions?: SessionTabsState;
   gcpSessions?: SessionTabsState;
+  // Datadog の組織タブ。組織単位の選択は当初からタブで導入したため、
+  // 旧形式の単一選択フィールド (activeProfile / gcpProject 相当) を持たない。
+  datadogOrgSessions?: SessionTabsState;
   pricing?: PricingPersistedState;
 }
 
@@ -92,6 +95,11 @@ export function loadPersisted(): PersistedState {
   if (awsSessions !== undefined) state.awsSessions = awsSessions;
   const gcpSessions = migrateSessions(state.gcpSessions, state.gcpProject);
   if (gcpSessions !== undefined) state.gcpSessions = gcpSessions;
+  // Datadog の組織タブには引き継ぐ旧形式のフィールドが無いため、正規化だけ行う
+  // (手編集や旧データで壊れた形でも後続が throw しないようにする)。
+  if (state.datadogOrgSessions !== undefined) {
+    state.datadogOrgSessions = normalizeSessionState(state.datadogOrgSessions);
+  }
   return state;
 }
 

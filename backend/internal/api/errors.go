@@ -57,7 +57,8 @@ func writeInternalFromError(w http.ResponseWriter, err error) {
 	writeInternalError(w, err.Error())
 }
 
-// writeDatadogCostError は Datadog のコスト取得のエラーを HTTP ステータスへマップする。
+// writeDatadogError は Datadog のデータ取得 (コスト、組織一覧) のエラーを HTTP
+// ステータスへマップする。
 // 資格情報が 1 つも使えない場合 (ErrDatadogNoCredentials) だけを 401
 // DATADOG_NO_CREDENTIALS とし、frontend がブラウザからの再ログイン導線を出せるようにする。
 // AWS の SSO 期限切れ (writeUnauthorized が返す SSO_TOKEN_EXPIRED) とは意味が異なるため、
@@ -69,7 +70,7 @@ func writeInternalFromError(w http.ResponseWriter, err error) {
 // いるのに Datadog に拒否される場合も同様で、datadogStaticKeyContext が値の有無しか見ない
 // ため ErrDatadogNoCredentials にならず、ここでも 500 INTERNAL_ERROR になる。
 // serveCached のエラー writer として writeInternalFromError の代わりに使う。
-func writeDatadogCostError(w http.ResponseWriter, err error) {
+func writeDatadogError(w http.ResponseWriter, err error) {
 	if errors.Is(err, ErrDatadogNoCredentials) {
 		writeError(w, http.StatusUnauthorized, "DATADOG_NO_CREDENTIALS", err.Error())
 		return

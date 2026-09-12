@@ -35,11 +35,11 @@ const startBody = {
   authorization_url: 'https://app.datadoghq.com/oauth2/v1/authorize?state=state-1',
 };
 
-function renderView() {
+function renderView(orgId = 'suborg1') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DatadogView />
+      <DatadogView orgId={orgId} />
     </QueryClientProvider>,
   );
 }
@@ -92,6 +92,24 @@ describe('DatadogView のエラーバナー出し分け', () => {
     expect(container.querySelector('.error-banner')).not.toBeInTheDocument();
   });
 
+  it('表示中の組織をコスト取得の両フックへ渡す', () => {
+    // orgId を渡し損ねると、どのタブを開いても親組織のコストが表示される。
+    mocks.useDatadogHistorical.mockReturnValue({ data: [], isLoading: false, error: null });
+
+    renderView('suborg2');
+
+    expect(mocks.useDatadogHistorical).toHaveBeenCalledWith(
+      'suborg2',
+      expect.any(String),
+      expect.any(String),
+    );
+    expect(mocks.useDatadogEstimated).toHaveBeenCalledWith(
+      'suborg2',
+      expect.any(String),
+      expect.any(String),
+    );
+  });
+
   it('DatadogAuthBanner のログインボタンのクリックでログインフローが始まる', async () => {
     const err = new ApiError(401, DATADOG_NO_CREDENTIALS_CODE, 'no usable Datadog credentials');
     mocks.useDatadogHistorical.mockReturnValue({ data: undefined, isLoading: false, error: err });
@@ -105,12 +123,18 @@ describe('DatadogView のエラーバナー出し分け', () => {
     const authWindow = { closed: false, close: vi.fn(), location: { replace: vi.fn() } };
     vi.spyOn(window, 'open').mockReturnValue(authWindow as unknown as Window);
 
-    renderView();
+    renderView('suborg2');
     fireEvent.click(screen.getByRole('button', { name: 'Datadog 再ログイン' }));
 
     await waitFor(() =>
       expect(authWindow.location.replace).toHaveBeenCalledWith(startBody.authorization_url),
     );
     expect(screen.getByRole('button', { name: 'ログイン中…' })).toBeDisabled();
+    // 再ログインの対象は表示中の組織。
+    const startUrl = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map((call) => String(call[0]))
+      .find((url) => url.includes('/api/datadog/auth/login/start'));
+    expect(startUrl).toContain('org=suborg2');
   });
 });

@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AppView } from './types/common';
 import { useCacheInvalidate, useHealthCheck } from './api/queries';
 import { useProfiles } from './hooks/useProfiles';
+import { useActiveDatadogOrg } from './hooks/useDatadogOrgs';
 import { useActiveGcpProject } from './hooks/useGcpProjects';
 import { useTweaks } from './hooks/useTweaks';
 import { createViewRefresher } from './lib/refreshView';
@@ -15,6 +16,7 @@ import { ConnectionWaiting } from './components/ConnectionWaiting';
 import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
 import { AwsSessionTabs } from './components/session/AwsSessionTabs';
+import { DatadogOrgSessionTabs } from './components/session/DatadogOrgSessionTabs';
 import { GcpSessionTabs } from './components/session/GcpSessionTabs';
 import { SessionEmptyState } from './components/session/SessionEmptyState';
 import { AccountView } from './views/AccountView';
@@ -78,6 +80,8 @@ export function App() {
   const { profiles, activeProfile, error } = aws;
   const gcp = useActiveGcpProject();
   const { projects: gcpProjects, activeProject: gcpProject } = gcp;
+  const datadog = useActiveDatadogOrg();
+  const { activeOrg: datadogOrg } = datadog;
   const { region, setRegion } = usePersistedRegion();
   const { view, setView } = usePersistedView();
   const { setWidth: setSidebarWidth } = usePersistedSidebarWidth();
@@ -127,6 +131,7 @@ export function App() {
       />
       {view === 'aws' && <AwsSessionTabs sessions={aws} />}
       {view === 'gcp' && <GcpSessionTabs sessions={gcp} />}
+      {view === 'datadog' && <DatadogOrgSessionTabs sessions={datadog} />}
       {view === 'aws' &&
         (activeProfile ? (
           // key= でプロファイル切替時に丸ごと再マウントする。ServicePanel の
@@ -160,7 +165,17 @@ export function App() {
         ) : (
           <SessionEmptyState title={t('emptyState.gcp.title')} hint={t('emptyState.gcp.hint')} />
         ))}
-      {view === 'datadog' && <DatadogView />}
+      {view === 'datadog' &&
+        (datadogOrg ? (
+          // key= で組織切替時に丸ごと再マウントし、前の組織の期間 / 絞り込みが
+          // 残らないようにする (AccountView / GcpView と同じ扱い)。
+          <DatadogView key={datadogOrg} orgId={datadogOrg} />
+        ) : (
+          <SessionEmptyState
+            title={t('emptyState.datadog.title')}
+            hint={t('emptyState.datadog.hint')}
+          />
+        ))}
       {view === 'tidb' && <TiDBView />}
       {tweaksOpen && <TweaksPanel open onClose={() => setTweaksOpen(false)} />}
     </div>

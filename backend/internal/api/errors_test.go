@@ -132,7 +132,7 @@ func TestWriteDatadogCostError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			writeDatadogCostError(rec, tt.err)
+			writeDatadogError(rec, tt.err)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
