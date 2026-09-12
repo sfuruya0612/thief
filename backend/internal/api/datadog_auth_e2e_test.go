@@ -227,7 +227,7 @@ func TestDatadogOAuthEndToEnd(t *testing.T) {
 		t.Error("the token file still exists after logout")
 	}
 	w = doDatadogRequest(t, s, http.MethodGet, "/api/datadog/cost/historical?start_month=2026-10")
-	assertErrorCode(t, w, http.StatusInternalServerError, "INTERNAL_ERROR")
+	assertErrorCode(t, w, http.StatusUnauthorized, "DATADOG_NO_CREDENTIALS")
 	if !strings.Contains(w.Body.String(), "no usable Datadog credentials") {
 		t.Errorf("error body = %s, want it to state that no credentials are usable", w.Body.String())
 	}
@@ -303,7 +303,7 @@ func TestDatadogCorruptTokenFileFallsBackWithWarning(t *testing.T) {
 		s.cfg.SetDatadogAppKey("")
 
 		w := doDatadogRequest(t, s, http.MethodGet, "/api/datadog/cost/historical?start_month=2026-10")
-		assertErrorCode(t, w, http.StatusInternalServerError, "INTERNAL_ERROR")
+		assertErrorCode(t, w, http.StatusUnauthorized, "DATADOG_NO_CREDENTIALS")
 		assertDatadogWarn(t, logs, "stored datadog oauth token is unusable")
 	})
 }

@@ -57,6 +57,26 @@ func writeInternalFromError(w http.ResponseWriter, err error) {
 	writeInternalError(w, err.Error())
 }
 
+// writeDatadogCostError は Datadog のコスト取得のエラーを HTTP ステータスへマップする。
+// 資格情報が 1 つも使えない場合 (ErrDatadogNoCredentials) だけを 401
+// DATADOG_NO_CREDENTIALS とし、frontend がブラウザからの再ログイン導線を出せるようにする。
+// AWS の SSO 期限切れ (writeUnauthorized が返す SSO_TOKEN_EXPIRED) とは意味が異なるため、
+// コードを共有せず専用のコードを返す。
+//
+// OAuth トークンは有効だがスコープ不足で 403 になった場合 (datadogCall のフォールバックも
+// 失敗した場合) は、再ログインしても同じスコープのトークンが再発行されるだけで解消しない
+// ため、再ログイン導線の対象にせず 500 INTERNAL_ERROR のままとする。静的キーが設定されて
+// いるのに Datadog に拒否される場合も同様で、datadogStaticKeyContext が値の有無しか見ない
+// ため ErrDatadogNoCredentials にならず、ここでも 500 INTERNAL_ERROR になる。
+// serveCached のエラー writer として writeInternalFromError の代わりに使う。
+func writeDatadogCostError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrDatadogNoCredentials) {
+		writeError(w, http.StatusUnauthorized, "DATADOG_NO_CREDENTIALS", err.Error())
+		return
+	}
+	writeInternalError(w, err.Error())
+}
+
 // writeAWSError writes the appropriate HTTP error based on whether err is an
 // IAM permission error (403 ACCESS_DENIED), an SSO token expiry
 // (401 SSO_TOKEN_EXPIRED), or a generic AWS error (500). Order matters:
