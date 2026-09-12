@@ -1,5 +1,11 @@
 import { useEffect, useMemo } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import type { CostRow, SSOLoginStartRow } from '../types/aws';
 import { ApiError } from '../types/common';
 import type { AppView, BaseRow } from '../types/common';
@@ -16,11 +22,15 @@ import {
   snippetFromRaw,
 } from '../lib/normalizeQuery';
 import type { QueryEditorService } from '../lib/queryEditorStorage';
+import type { MetricsWindow } from '../lib/timeseries';
 import {
   bqDatasetFromRaw,
   bqFieldFromRaw,
   bqTableFromRaw,
   datadogCostFromRaw,
+  datadogDashboardDetailFromRaw,
+  datadogDashboardFromRaw,
+  datadogMetricQueryResultFromRaw,
   datadogOrgFromRaw,
   tidbClusterFromRaw,
   tidbCostFromRaw,
@@ -80,8 +90,11 @@ import {
   type CWLogEventsQuery,
   getCWLogEvents,
   getCWLogGroups,
+  getDatadogDashboard,
+  getDatadogDashboards,
   getDatadogEstimated,
   getDatadogHistorical,
+  getDatadogMetricsQuery,
   getDatadogOrgs,
   getDynamoItems,
   getDynamoSchema,
@@ -964,11 +977,13 @@ export function useDatadogHistorical(
   startMonth?: string,
   endMonth?: string,
   view?: string,
+  options?: { enabled?: boolean },
 ) {
   return useQuery({
     queryKey: ['datadog', 'historical', org, startMonth, endMonth, view],
     queryFn: async () =>
       (await getDatadogHistorical(org, startMonth, endMonth, view)).map(datadogCostFromRaw),
+    enabled: options?.enabled,
   });
 }
 
@@ -977,11 +992,57 @@ export function useDatadogEstimated(
   startMonth?: string,
   endMonth?: string,
   view?: string,
+  options?: { enabled?: boolean },
 ) {
   return useQuery({
     queryKey: ['datadog', 'estimated', org, startMonth, endMonth, view],
     queryFn: async () =>
       (await getDatadogEstimated(org, startMonth, endMonth, view)).map(datadogCostFromRaw),
+    enabled: options?.enabled,
+  });
+}
+
+// ダッシュボード一覧。org はダッシュボードの所属組織で、queryKey に含めないと組織を
+// 切り替えても直前の組織の一覧がキャッシュから返る。
+export function useDatadogDashboards(org: string) {
+  return useQuery({
+    queryKey: ['datadog', 'dashboards', org],
+    queryFn: async () => (await getDatadogDashboards(org)).map(datadogDashboardFromRaw),
+    enabled: !!org,
+  });
+}
+
+// 選択中のダッシュボードの詳細。未選択 (id が空) の間は取得しない。
+export function useDatadogDashboard(org: string, id: string) {
+  return useQuery({
+    queryKey: ['datadog', 'dashboard', org, id],
+    queryFn: async () => datadogDashboardDetailFromRaw(await getDatadogDashboard(org, id)),
+    enabled: !!org && !!id,
+  });
+}
+
+// 1 つのウィジェットが持つ全クエリを実行し、結果の系列をまとめて返す。
+//
+// ウィジェットはクエリを複数持つことがあり、その全部を 1 つのグラフに重ねて描く。
+// クエリ数は実行時にしか決まらないので useQueries でまとめ、combine で 1 つの
+// 読み込み状態・エラー・系列へ畳む。
+export function useDatadogMetricsQueries(org: string, queries: string[], range: MetricsWindow) {
+  return useQueries({
+    queries: queries.map((query) => ({
+      queryKey: ['datadog', 'metrics', org, query, range.from, range.to],
+      queryFn: async () =>
+        datadogMetricQueryResultFromRaw(
+          await getDatadogMetricsQuery(org, query, range.from, range.to),
+        ),
+      enabled: !!org && !!query,
+    })),
+    combine: (results) => ({
+      series: results.flatMap((r) => r.data?.series ?? []),
+      isLoading: results.some((r) => r.isLoading),
+      // 1 つでも失敗したらそれを見せる。一部だけ欠けた状態を成功として描くと、
+      // 実際には取得できていない系列が「値が無い」ように見えてしまう。
+      error: results.find((r) => r.error)?.error ?? null,
+    }),
   });
 }
 

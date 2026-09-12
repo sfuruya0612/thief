@@ -30,6 +30,8 @@ type Server struct {
 	bq            *bqclient.Client
 	ddV2          *ddclient.UsageMeteringV2API
 	ddOrgV1       *ddclient.OrganizationsV1API
+	ddDashV1      *ddclient.DashboardsV1API
+	ddMetricsV1   *ddclient.MetricsV1API
 	tidb          *tidbclient.Client
 	snippets      *snippet.Store
 	resourceCache *cache.Cache[any]
@@ -74,6 +76,8 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	ddCfg := ddclient.NewConfiguration(cfg.Datadog.Site)
 	s.ddV2 = ddclient.NewUsageMeteringV2API(ddCfg)
 	s.ddOrgV1 = ddclient.NewOrganizationsV1API(ddCfg)
+	s.ddDashV1 = ddclient.NewDashboardsV1API(ddCfg)
+	s.ddMetricsV1 = ddclient.NewMetricsV1API(ddCfg)
 
 	// TiDB
 	s.tidb = tidbclient.NewClient(cfg.TiDB.PublicKey, cfg.TiDBPrivateKey())

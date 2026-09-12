@@ -8,13 +8,22 @@ import type {
   BQTableRow,
   DatadogCostRaw,
   DatadogCostRow,
+  DatadogDashboardDetailRaw,
+  DatadogDashboardDetailRow,
+  DatadogDashboardRaw,
+  DatadogDashboardRow,
   DatadogLoginStartRaw,
   DatadogLoginStartRow,
   DatadogLoginStatus,
   DatadogLoginStatusRaw,
   DatadogLoginStatusRow,
+  DatadogMetricQueryResultRaw,
+  DatadogMetricQueryResultRow,
   DatadogOrgRaw,
   DatadogOrgRow,
+  DatadogWidgetKind,
+  DatadogWidgetRaw,
+  DatadogWidgetRow,
   TiDBClusterRaw,
   TiDBClusterRow,
   TiDBCostRaw,
@@ -92,6 +101,58 @@ export function datadogLoginStatusFromRaw(raw: DatadogLoginStatusRaw): DatadogLo
   return {
     status,
     errorMessage: raw.error_message ?? '',
+  };
+}
+
+// タイトルが空のダッシュボードは id を表示名として使う。一覧の行が空になるのを防ぐ。
+export function datadogDashboardFromRaw(raw: DatadogDashboardRaw): DatadogDashboardRow {
+  return {
+    id: raw.id,
+    title: raw.title || raw.id,
+    description: raw.description ?? '',
+    url: raw.url ?? '',
+  };
+}
+
+// backend が返す kind を union 型へ縮小する。未知の値は描き方が決まらないため
+// unsupported として扱い、Datadog へのリンクにフォールバックさせる。
+export function datadogWidgetFromRaw(raw: DatadogWidgetRaw): DatadogWidgetRow {
+  const kind: DatadogWidgetKind =
+    raw.kind === 'timeseries' || raw.kind === 'query_value' ? raw.kind : 'unsupported';
+  return {
+    id: raw.id,
+    kind,
+    type: raw.type || 'unknown',
+    title: raw.title ?? '',
+    queries: raw.queries ?? [],
+  };
+}
+
+export function datadogDashboardDetailFromRaw(
+  raw: DatadogDashboardDetailRaw,
+): DatadogDashboardDetailRow {
+  return {
+    id: raw.id,
+    title: raw.title || raw.id,
+    description: raw.description ?? '',
+    url: raw.url ?? '',
+    widgets: (raw.widgets ?? []).map(datadogWidgetFromRaw),
+  };
+}
+
+// メトリクスクエリの結果を UI 用に整える。欠測 (v が null) は null のまま残し、
+// 0 に潰さない。0 に潰すと「値が 0 だった」と読めてしまう。
+export function datadogMetricQueryResultFromRaw(
+  raw: DatadogMetricQueryResultRaw,
+): DatadogMetricQueryResultRow {
+  return {
+    query: raw.query ?? '',
+    series: (raw.series ?? []).map((s) => ({
+      name: s.name ?? '',
+      scope: s.scope ?? '',
+      unit: s.unit ?? '',
+      points: (s.points ?? []).map((p) => ({ t: p.t, v: p.v ?? null })),
+    })),
   };
 }
 

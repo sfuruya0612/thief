@@ -116,6 +116,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/datadog/orgs", s.handleDatadogOrgs)
 	s.mux.HandleFunc("GET /api/datadog/cost/historical", s.handleDatadogHistorical)
 	s.mux.HandleFunc("GET /api/datadog/cost/estimated", s.handleDatadogEstimated)
+	s.mux.HandleFunc("GET /api/datadog/dashboards", s.handleDatadogDashboards)
+	s.mux.HandleFunc("GET /api/datadog/dashboards/{id}", s.handleDatadogDashboard)
+	s.mux.HandleFunc("GET /api/datadog/metrics/query", s.handleDatadogMetricsQuery)
 
 	// Datadog OAuth 2.0 ログイン (callback は認可サーバがブラウザを遷移させる先)
 	s.mux.HandleFunc("POST /api/datadog/auth/login/start", s.handleDatadogAuthLoginStart)
