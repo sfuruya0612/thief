@@ -39,8 +39,11 @@ import type {
   BQFieldRaw,
   BQTableRaw,
   DatadogCostRaw,
+  DatadogDashboardDetailRaw,
+  DatadogDashboardRaw,
   DatadogLoginStartRaw,
   DatadogLoginStatusRaw,
+  DatadogMetricQueryResultRaw,
   DatadogOrgRaw,
   TiDBClusterRaw,
   TiDBCostRaw,
@@ -767,6 +770,35 @@ export function getDatadogEstimated(
     start_month: startMonth,
     end_month: endMonth,
     view,
+  });
+}
+
+// ダッシュボード一覧。org は必須で、省略すると backend が 400 を返す。ダッシュボードは
+// 組織ごとに分離しており、組織を跨いだ一覧取得は行わない。
+export function getDatadogDashboards(org: string): Promise<DatadogDashboardRaw[]> {
+  return apiGetList<DatadogDashboardRaw>('/api/datadog/dashboards', { org });
+}
+
+// 1 つのダッシュボードと、thief が描けるウィジェット。
+export function getDatadogDashboard(org: string, id: string): Promise<DatadogDashboardDetailRaw> {
+  return apiGet<DatadogDashboardDetailRaw>(`/api/datadog/dashboards/${encodeURIComponent(id)}`, {
+    org,
+  });
+}
+
+// ウィジェットのクエリを実行して時系列を得る。ダッシュボードの定義はクエリ文字列しか
+// 持たないため、値を描くにはこれを呼ぶ。from と to は Unix 秒。
+export function getDatadogMetricsQuery(
+  org: string,
+  query: string,
+  from: number,
+  to: number,
+): Promise<DatadogMetricQueryResultRaw> {
+  return apiGet<DatadogMetricQueryResultRaw>('/api/datadog/metrics/query', {
+    org,
+    query,
+    from: String(from),
+    to: String(to),
   });
 }
 

@@ -1,5 +1,6 @@
 // 非 AWS サービス (BigQuery / Datadog / TiDB) の Raw (JSON) / Row (UI 用) 型定義
 // Raw は backend/internal/{bigquery,datadog,tidb}/*.go の JSON タグをミラーする
+import type { TimeseriesPoint } from '../lib/timeseries';
 
 // ============================================================
 // BigQuery
@@ -117,6 +118,88 @@ export type DatadogLoginStatus = 'pending' | 'succeeded' | 'failed';
 export interface DatadogLoginStatusRow {
   status: DatadogLoginStatus;
   errorMessage: string;
+}
+
+// Datadog のダッシュボード。url は backend が app.<site> を補った絶対 URL で、
+// 「Open in Datadog」リンクにそのまま使える。
+export interface DatadogDashboardRaw {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+}
+
+export interface DatadogDashboardRow {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+}
+
+// kind は thief がウィジェットをどう描くか (backend の WidgetKind)。type は Datadog の
+// 種別名で、kind が 'unsupported' のときに何のウィジェットだったかを利用者へ示す。
+export type DatadogWidgetKind = 'timeseries' | 'query_value' | 'unsupported';
+
+export interface DatadogWidgetRaw {
+  id: number;
+  kind: string;
+  type: string;
+  title: string;
+  queries: string[] | null;
+}
+
+export interface DatadogWidgetRow {
+  id: number;
+  kind: DatadogWidgetKind;
+  type: string;
+  title: string;
+  queries: string[];
+}
+
+export interface DatadogDashboardDetailRaw {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  widgets: DatadogWidgetRaw[] | null;
+}
+
+export interface DatadogDashboardDetailRow {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  widgets: DatadogWidgetRow[];
+}
+
+// ウィジェットのクエリを実行した結果の時系列。t はエポックミリ秒、v は欠測が null。
+export interface DatadogMetricPointRaw {
+  t: number;
+  v: number | null;
+}
+
+export interface DatadogMetricSeriesRaw {
+  name: string;
+  scope: string;
+  unit: string;
+  points: DatadogMetricPointRaw[] | null;
+}
+
+export interface DatadogMetricQueryResultRaw {
+  query: string;
+  series: DatadogMetricSeriesRaw[] | null;
+}
+
+export interface DatadogMetricSeriesRow {
+  name: string;
+  scope: string;
+  unit: string;
+  points: TimeseriesPoint[];
+}
+
+export interface DatadogMetricQueryResultRow {
+  query: string;
+  series: DatadogMetricSeriesRow[];
 }
 
 // ============================================================

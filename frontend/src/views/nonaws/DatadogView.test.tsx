@@ -1,4 +1,5 @@
-// DatadogView のエラーバナー出し分けの検証 (issue 0166)。
+// DatadogView のエラーバナー出し分け (issue 0166) と cost / dashboards の
+// セクション切替 (issue 0169) の検証。
 // 資格情報不備 (401 DATADOG_NO_CREDENTIALS) のときだけ DatadogAuthBanner を出し、
 // それ以外の Datadog のエラーは従来どおり ErrorBanner に落ちることを確認する。
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -19,6 +20,14 @@ const mocks = vi.hoisted(() => ({
 // CostExplorerPanel のテストと同じくチャートをスタブに差し替える。
 vi.mock('../../components/charts/CostChart', () => ({
   CostChart: () => <div data-testid="cost-chart-stub" />,
+}));
+
+// セクション切替の検証が目的なので、Dashboards 側の中身はスタブで足りる
+// (中身は DatadogDashboardView.test.tsx で検証する)。
+vi.mock('./DatadogDashboardView', () => ({
+  DatadogDashboardView: ({ orgId }: { orgId: string }) => (
+    <div data-testid="dashboard-view-stub">{orgId}</div>
+  ),
 }));
 
 vi.mock('../../api/queries', async (importOriginal) => {
@@ -102,11 +111,15 @@ describe('DatadogView のエラーバナー出し分け', () => {
       'suborg2',
       expect.any(String),
       expect.any(String),
+      undefined,
+      expect.objectContaining({ enabled: true }),
     );
     expect(mocks.useDatadogEstimated).toHaveBeenCalledWith(
       'suborg2',
       expect.any(String),
       expect.any(String),
+      undefined,
+      expect.objectContaining({ enabled: true }),
     );
   });
 
@@ -136,5 +149,49 @@ describe('DatadogView のエラーバナー出し分け', () => {
       .mock.calls.map((call) => String(call[0]))
       .find((url) => url.includes('/api/datadog/auth/login/start'));
     expect(startUrl).toContain('org=suborg2');
+  });
+});
+
+describe('DatadogView のセクション切替', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.useDatadogHistorical.mockReturnValue({ data: [], isLoading: false, error: null });
+    mocks.useDatadogEstimated.mockReturnValue({ data: [], isLoading: false, error: null });
+  });
+
+  it('既定では cost を表示する', () => {
+    renderView();
+    expect(screen.getByTestId('cost-chart-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Historical' })).toBeInTheDocument();
+  });
+
+  it('Dashboards を押すと表示中の組織で Dashboards に切り替わる', () => {
+    renderView('suborg2');
+    fireEvent.click(screen.getByRole('button', { name: 'Dashboards' }));
+
+    expect(screen.getByTestId('dashboard-view-stub')).toHaveTextContent('suborg2');
+    expect(screen.queryByTestId('cost-chart-stub')).not.toBeInTheDocument();
+    // cost 専用の Historical / Estimated 切替は dashboards では出さない。
+    expect(screen.queryByRole('button', { name: 'Historical' })).not.toBeInTheDocument();
+  });
+
+  it('Dashboards に切り替えると Cost の historical/estimated 取得を止める', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Dashboards' }));
+
+    const lastHistoricalCall = mocks.useDatadogHistorical.mock.calls.at(-1);
+    const lastEstimatedCall = mocks.useDatadogEstimated.mock.calls.at(-1);
+    expect(lastHistoricalCall?.at(-1)).toEqual(expect.objectContaining({ enabled: false }));
+    expect(lastEstimatedCall?.at(-1)).toEqual(expect.objectContaining({ enabled: false }));
+  });
+
+  it('Cost を押すと cost に戻る', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Dashboards' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cost' }));
+
+    expect(screen.getByTestId('cost-chart-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
   });
 });

@@ -61,3 +61,27 @@ func NewOrganizationsV1API(cfg *datadog.Configuration) *OrganizationsV1API {
 	client := datadog.NewAPIClient(cfg)
 	return &OrganizationsV1API{api: datadogV1.NewOrganizationsApi(client)}
 }
+
+// DashboardsV1API wraps the Datadog v1 dashboards API. Dashboards only exist in
+// v1; there is no v2 equivalent.
+type DashboardsV1API struct {
+	api *datadogV1.DashboardsApi
+}
+
+// NewDashboardsV1API creates a new DashboardsV1API.
+func NewDashboardsV1API(cfg *datadog.Configuration) *DashboardsV1API {
+	client := datadog.NewAPIClient(cfg)
+	return &DashboardsV1API{api: datadogV1.NewDashboardsApi(client)}
+}
+
+// MetricsV1API wraps the Datadog v1 metrics API. The metrics query endpoint
+// (GET /api/v1/query) only exists in v1; there is no v2 equivalent.
+type MetricsV1API struct {
+	api *datadogV1.MetricsApi
+}
+
+// NewMetricsV1API creates a new MetricsV1API.
+func NewMetricsV1API(cfg *datadog.Configuration) *MetricsV1API {
+	client := datadog.NewAPIClient(cfg)
+	return &MetricsV1API{api: datadogV1.NewMetricsApi(client)}
+}

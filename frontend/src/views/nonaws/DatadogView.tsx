@@ -1,4 +1,5 @@
-// Datadog ビュー: historical / estimated cost の切替表示 (AWS Cost Explorer と同じ chart + クロス集計表)
+// Datadog ビュー: cost (historical / estimated の切替表示) と dashboards のセクション切替。
+// cost は AWS Cost Explorer と同じ chart + クロス集計表。
 import { useMemo, useState } from 'react';
 import { useDatadogEstimated, useDatadogHistorical } from '../../api/queries';
 import { MonthlyCostPanel } from '../../components/MonthlyCostPanel';
@@ -8,8 +9,12 @@ import { aggregateDatadogCost, type DatadogCostGroupBy } from '../../lib/costAgg
 import { isDatadogAuthError } from '../../lib/datadogAuthError';
 import { defaultMonthRange, lastMonthsRange } from '../../lib/monthRange';
 import type { DatadogCostRow } from '../../types/nonaws';
+import { DatadogDashboardView } from './DatadogDashboardView';
 
 type Mode = 'historical' | 'estimated';
+
+// Section は Datadog ビューの中で切り替える表示の単位。
+type Section = 'cost' | 'dashboards';
 
 const GROUP_BY_OPTIONS: { value: DatadogCostGroupBy; label: string }[] = [
   { value: 'productName', label: 'Product' },
@@ -30,6 +35,7 @@ export interface DatadogViewProps {
 // Datadog の cost API は月単位でしか取得できないため、AWS Cost Explorer の日付範囲では
 // なく年月 (YYYY-MM) の範囲で期間を指定する。estimated は当月/前月のみ有効。
 export function DatadogView({ orgId }: DatadogViewProps) {
+  const [section, setSection] = useState<Section>('cost');
   const [mode, setMode] = useState<Mode>('historical');
 
   const initialRange = useMemo(defaultMonthRange, []);
@@ -42,12 +48,12 @@ export function DatadogView({ orgId }: DatadogViewProps) {
     data: historical,
     error: historicalError,
     isLoading: historicalLoading,
-  } = useDatadogHistorical(orgId, startMonth, endMonth);
+  } = useDatadogHistorical(orgId, startMonth, endMonth, undefined, { enabled: section === 'cost' });
   const {
     data: estimated,
     error: estimatedError,
     isLoading: estimatedLoading,
-  } = useDatadogEstimated(orgId, startMonth, endMonth);
+  } = useDatadogEstimated(orgId, startMonth, endMonth, undefined, { enabled: section === 'cost' });
 
   const error = mode === 'historical' ? historicalError : estimatedError;
   const isLoading = mode === 'historical' ? historicalLoading : estimatedLoading;
@@ -67,50 +73,69 @@ export function DatadogView({ orgId }: DatadogViewProps) {
       <div className="toolbar">
         <div className="title">
           <h1>Datadog</h1>
-          <span className="subtitle">cost</span>
+          <span className="subtitle">{section}</span>
         </div>
         <div className="seg" style={{ width: 200 }}>
-          <button
-            className={mode === 'historical' ? 'active' : ''}
-            onClick={() => setMode('historical')}
-          >
-            Historical
+          <button className={section === 'cost' ? 'active' : ''} onClick={() => setSection('cost')}>
+            Cost
           </button>
           <button
-            className={mode === 'estimated' ? 'active' : ''}
-            onClick={() => setMode('estimated')}
+            className={section === 'dashboards' ? 'active' : ''}
+            onClick={() => setSection('dashboards')}
           >
-            Estimated
+            Dashboards
           </button>
         </div>
+        {section === 'cost' && (
+          <div className="seg" style={{ width: 200 }}>
+            <button
+              className={mode === 'historical' ? 'active' : ''}
+              onClick={() => setMode('historical')}
+            >
+              Historical
+            </button>
+            <button
+              className={mode === 'estimated' ? 'active' : ''}
+              onClick={() => setMode('estimated')}
+            >
+              Estimated
+            </button>
+          </div>
+        )}
       </div>
 
-      {error &&
-        (isDatadogAuthError(error) ? (
-          <DatadogAuthBanner org={orgId} />
-        ) : (
-          <ErrorBanner error={error} />
-        ))}
+      {section === 'dashboards' ? (
+        <DatadogDashboardView orgId={orgId} />
+      ) : (
+        <>
+          {error &&
+            (isDatadogAuthError(error) ? (
+              <DatadogAuthBanner org={orgId} />
+            ) : (
+              <ErrorBanner error={error} />
+            ))}
 
-      <MonthlyCostPanel
-        rows={allRows}
-        isLoading={isLoading}
-        groupByOptions={GROUP_BY_OPTIONS}
-        groupBy={groupBy}
-        onGroupByChange={(g) => {
-          setGroupBy(g);
-          setGroupFilter('');
-        }}
-        groupFilter={groupFilter}
-        onGroupFilterChange={setGroupFilter}
-        startMonth={startMonth}
-        endMonth={endMonth}
-        onStartMonthChange={setStartMonth}
-        onEndMonthChange={setEndMonth}
-        onApplyPreset={applyPreset}
-        aggregate={aggregateDatadogCost}
-        groupValueOf={groupValueOf}
-      />
+          <MonthlyCostPanel
+            rows={allRows}
+            isLoading={isLoading}
+            groupByOptions={GROUP_BY_OPTIONS}
+            groupBy={groupBy}
+            onGroupByChange={(g) => {
+              setGroupBy(g);
+              setGroupFilter('');
+            }}
+            groupFilter={groupFilter}
+            onGroupFilterChange={setGroupFilter}
+            startMonth={startMonth}
+            endMonth={endMonth}
+            onStartMonthChange={setStartMonth}
+            onEndMonthChange={setEndMonth}
+            onApplyPreset={applyPreset}
+            aggregate={aggregateDatadogCost}
+            groupValueOf={groupValueOf}
+          />
+        </>
+      )}
     </div>
   );
 }
