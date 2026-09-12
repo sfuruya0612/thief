@@ -47,9 +47,9 @@ func newTestServer(t *testing.T) *Server {
 func unconfiguredDatadogAuthDeps() datadogAuthDeps {
 	err := errors.New("datadog auth deps are not configured in newTestServer; use newDatadogAuthTestServer")
 	return datadogAuthDeps{
-		loadToken:  func(string) (*datadogauth.TokenSet, bool, error) { return nil, false, err },
-		saveToken:  func(string, *datadogauth.TokenSet) error { return err },
-		loadClient: func(string) (*datadogauth.ClientCredentials, bool, error) { return nil, false, err },
+		loadToken:  func(string, string) (*datadogauth.TokenSet, bool, error) { return nil, false, err },
+		saveToken:  func(string, string, *datadogauth.TokenSet) error { return err },
+		loadClient: func(string, string) (*datadogauth.ClientCredentials, bool, error) { return nil, false, err },
 		refreshToken: func(context.Context, string, string, string) (*datadogauth.TokenSet, error) {
 			return nil, err
 		},
@@ -59,7 +59,7 @@ func unconfiguredDatadogAuthDeps() datadogAuthDeps {
 		completeLogin: func(context.Context, *datadogauth.Login, string, string) (*datadogauth.TokenSet, error) {
 			return nil, err
 		},
-		logout: func(string) error { return err },
+		logout: func(string, string) error { return err },
 		now:    time.Now,
 	}
 }

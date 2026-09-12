@@ -3,7 +3,9 @@ package datadogauth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 
 const (
 	testSite        = "datadoghq.com"
+	testOrg         = "suborg1"
 	testCLIRedirect = "http://127.0.0.1:8400/callback"
 	testSrvRedirect = "http://127.0.0.1:8089/api/datadog/auth/callback"
 )
@@ -57,6 +60,12 @@ type refreshArgs struct {
 	site, clientID, refreshToken string
 }
 
+// credKey は fakeAuth の保存先を表すキー。本番の保存が site と org の組ごとに別の
+// ファイルへ書くことを、map の上で再現する。
+func credKey(site, org string) string {
+	return site + "|" + org
+}
+
 func newFakeAuth() *fakeAuth {
 	return &fakeAuth{
 		clients: map[string]*ClientCredentials{},
@@ -97,43 +106,43 @@ func (f *fakeAuth) deps() Deps {
 			}
 			return &TokenSet{AccessToken: "new-at", RefreshToken: "new-rt", ExpiresIn: 3600}, nil
 		},
-		LoadClient: func(site string) (*ClientCredentials, bool, error) {
+		LoadClient: func(site, org string) (*ClientCredentials, bool, error) {
 			if f.loadClientErr != nil {
 				return nil, false, f.loadClientErr
 			}
-			creds, ok := f.clients[site]
+			creds, ok := f.clients[credKey(site, org)]
 			return creds, ok, nil
 		},
-		SaveClient: func(site string, creds *ClientCredentials) error {
+		SaveClient: func(site, org string, creds *ClientCredentials) error {
 			if f.saveClientErr != nil {
 				return f.saveClientErr
 			}
-			f.clients[site] = creds
+			f.clients[credKey(site, org)] = creds
 			return nil
 		},
-		LoadToken: func(site string) (*TokenSet, bool, error) {
+		LoadToken: func(site, org string) (*TokenSet, bool, error) {
 			if f.loadTokenErr != nil {
 				return nil, false, f.loadTokenErr
 			}
-			tok, ok := f.tokens[site]
+			tok, ok := f.tokens[credKey(site, org)]
 			return tok, ok, nil
 		},
-		SaveToken: func(site string, tok *TokenSet) error {
+		SaveToken: func(site, org string, tok *TokenSet) error {
 			f.savedTokens++
 			if f.saveTokenErr != nil {
 				return f.saveTokenErr
 			}
-			f.tokens[site] = tok
+			f.tokens[credKey(site, org)] = tok
 			return nil
 		},
-		DeleteToken: func(site string) error {
+		DeleteToken: func(site, org string) error {
 			f.deletedTokens++
-			delete(f.tokens, site)
+			delete(f.tokens, credKey(site, org))
 			return f.deleteTokenErr
 		},
-		DeleteClient: func(site string) error {
+		DeleteClient: func(site, org string) error {
 			f.deletedClient++
-			delete(f.clients, site)
+			delete(f.clients, credKey(site, org))
 			return f.deleteClientErr
 		},
 		Now: func() time.Time { return f.now },
@@ -172,7 +181,7 @@ func TestPrepareLogin(t *testing.T) {
 			name:   "reuses the stored client",
 			params: testPrepareParams(),
 			setup: func(f *fakeAuth) {
-				f.clients[testSite] = storedOK
+				f.clients[credKey(testSite, "")] = storedOK
 			},
 			wantClientID: "stored-cid",
 		},
@@ -180,7 +189,7 @@ func TestPrepareLogin(t *testing.T) {
 			name:   "does not re-register when the stored client lacks the redirect URI",
 			params: testPrepareParams(),
 			setup: func(f *fakeAuth) {
-				f.clients[testSite] = storedOther
+				f.clients[credKey(testSite, "")] = storedOther
 			},
 			wantErr: ErrRedirectURINotRegistered,
 		},
@@ -275,7 +284,7 @@ func TestPrepareLogin(t *testing.T) {
 				t.Error("code verifier is empty")
 			}
 			if tt.wantSaved {
-				if _, ok := f.clients[tt.params.Site]; !ok {
+				if _, ok := f.clients[credKey(tt.params.Site, tt.params.Org)]; !ok {
 					t.Error("the registered client was not saved")
 				}
 				if diff := cmp.Diff([][]string{tt.params.RegisterRedirectURIs}, f.registered); diff != "" {
@@ -445,7 +454,7 @@ func TestCompleteLogin(t *testing.T) {
 				if tt.wantErr != errAny && !errors.Is(err, tt.wantErr) {
 					t.Fatalf("CompleteLogin() err = %v, want %v", err, tt.wantErr)
 				}
-				if _, ok := f.tokens[testSite]; ok {
+				if _, ok := f.tokens[credKey(testSite, "")]; ok {
 					t.Error("a token was stored although the login failed")
 				}
 				return
@@ -459,7 +468,7 @@ func TestCompleteLogin(t *testing.T) {
 				t.Errorf("ExchangeCode args mismatch (-want +got):\n%s", diff)
 			}
 			if tt.wantSaved {
-				stored, ok := f.tokens[testSite]
+				stored, ok := f.tokens[credKey(testSite, "")]
 				if !ok {
 					t.Fatal("the token was not saved")
 				}
@@ -504,6 +513,7 @@ func TestEnsureFreshToken(t *testing.T) {
 	tests := []struct {
 		name            string
 		site            string
+		org             string
 		setup           func(*fakeAuth)
 		wantOK          bool
 		wantAccessToken string
@@ -519,14 +529,14 @@ func TestEnsureFreshToken(t *testing.T) {
 		{
 			name:            "a valid token is returned as is",
 			site:            testSite,
-			setup:           func(f *fakeAuth) { f.tokens[testSite] = valid },
+			setup:           func(f *fakeAuth) { f.tokens[credKey(testSite, "")] = valid },
 			wantOK:          true,
 			wantAccessToken: "at",
 		},
 		{
 			name:            "an expired token is refreshed",
 			site:            testSite,
-			setup:           func(f *fakeAuth) { f.tokens[testSite] = expired },
+			setup:           func(f *fakeAuth) { f.tokens[credKey(testSite, "")] = expired },
 			wantOK:          true,
 			wantAccessToken: "new-at",
 			wantRefresh:     []refreshArgs{{site: testSite, clientID: "cid", refreshToken: "old-rt"}},
@@ -537,7 +547,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			site: testSite,
 			setup: func(f *fakeAuth) {
 				// 期限まで 299 秒 (バッファは 300 秒)。
-				f.tokens[testSite] = &TokenSet{AccessToken: "at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-3601*time.Second + 300*time.Second), ClientID: "cid"}
+				f.tokens[credKey(testSite, "")] = &TokenSet{AccessToken: "at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-3601*time.Second + 300*time.Second), ClientID: "cid"}
 			},
 			wantOK:          true,
 			wantAccessToken: "new-at",
@@ -548,8 +558,8 @@ func TestEnsureFreshToken(t *testing.T) {
 			name: "the client id falls back to the stored client registration",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = &TokenSet{AccessToken: "old-at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour)}
-				f.clients[testSite] = &ClientCredentials{ClientID: "stored-cid", RedirectURIs: []string{testCLIRedirect}}
+				f.tokens[credKey(testSite, "")] = &TokenSet{AccessToken: "old-at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour)}
+				f.clients[credKey(testSite, "")] = &ClientCredentials{ClientID: "stored-cid", RedirectURIs: []string{testCLIRedirect}}
 			},
 			wantOK:          true,
 			wantAccessToken: "new-at",
@@ -560,7 +570,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			name: "no client id anywhere",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = &TokenSet{AccessToken: "old-at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour)}
+				f.tokens[credKey(testSite, "")] = &TokenSet{AccessToken: "old-at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour)}
 			},
 			wantErr: ErrClientIncomplete,
 		},
@@ -568,7 +578,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			name: "an expired token without a refresh token",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = &TokenSet{AccessToken: "old-at", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour), ClientID: "cid"}
+				f.tokens[credKey(testSite, "")] = &TokenSet{AccessToken: "old-at", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour), ClientID: "cid"}
 			},
 			wantErr: ErrRefreshTokenMissing,
 		},
@@ -576,7 +586,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			name: "refresh failure is an error, not a silent logout",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = expired
+				f.tokens[credKey(testSite, "")] = expired
 				f.refreshErr = errAny
 			},
 			wantRefresh: []refreshArgs{{site: testSite, clientID: "cid", refreshToken: "old-rt"}},
@@ -586,7 +596,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			name: "a refreshed token without an access token",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = expired
+				f.tokens[credKey(testSite, "")] = expired
 				f.refreshTok = &TokenSet{ExpiresIn: 3600}
 			},
 			wantRefresh: []refreshArgs{{site: testSite, clientID: "cid", refreshToken: "old-rt"}},
@@ -596,7 +606,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			name: "save failure after a refresh",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = expired
+				f.tokens[credKey(testSite, "")] = expired
 				f.saveTokenErr = errAny
 			},
 			wantRefresh: []refreshArgs{{site: testSite, clientID: "cid", refreshToken: "old-rt"}},
@@ -614,6 +624,20 @@ func TestEnsureFreshToken(t *testing.T) {
 			site:    "../evil",
 			wantErr: ErrInvalidSite,
 		},
+		{
+			name:    "invalid org",
+			site:    testSite,
+			org:     "../evil",
+			wantErr: ErrInvalidOrg,
+		},
+		{
+			// 親組織のトークンは Sub Organization のトークンとして使われない。
+			name:   "a token stored for the parent organization is not used for a sub organization",
+			site:   testSite,
+			org:    testOrg,
+			setup:  func(f *fakeAuth) { f.tokens[credKey(testSite, "")] = valid },
+			wantOK: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -622,7 +646,7 @@ func TestEnsureFreshToken(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(f)
 			}
-			got, ok, err := EnsureFreshToken(context.Background(), tt.site, f.deps())
+			got, ok, err := EnsureFreshToken(context.Background(), tt.site, tt.org, f.deps())
 
 			if diff := cmp.Diff(tt.wantRefresh, f.refreshed, cmp.AllowUnexported(refreshArgs{})); diff != "" {
 				t.Errorf("RefreshToken calls mismatch (-want +got):\n%s", diff)
@@ -662,10 +686,10 @@ func TestEnsureFreshToken(t *testing.T) {
 // 省いた場合 (RFC 6749 §6 で OPTIONAL) に元の値を引き継ぐことを確かめる。
 func TestEnsureFreshTokenCarriesOverTheRefreshToken(t *testing.T) {
 	f := newFakeAuth()
-	f.tokens[testSite] = &TokenSet{AccessToken: "old-at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour), ClientID: "cid"}
+	f.tokens[credKey(testSite, "")] = &TokenSet{AccessToken: "old-at", RefreshToken: "old-rt", ExpiresIn: 3600, IssuedAt: testNow.Add(-2 * time.Hour), ClientID: "cid"}
 	f.refreshTok = &TokenSet{AccessToken: "new-at", ExpiresIn: 3600}
 
-	got, ok, err := EnsureFreshToken(context.Background(), testSite, f.deps())
+	got, ok, err := EnsureFreshToken(context.Background(), testSite, "", f.deps())
 	if err != nil || !ok {
 		t.Fatalf("EnsureFreshToken() = (_, %v, %v), want (_, true, nil)", ok, err)
 	}
@@ -678,7 +702,7 @@ func TestEnsureFreshTokenCarriesOverTheRefreshToken(t *testing.T) {
 	if !got.IssuedAt.Equal(testNow) {
 		t.Errorf("issued_at = %v, want %v", got.IssuedAt, testNow)
 	}
-	if stored := f.tokens[testSite]; stored != got {
+	if stored := f.tokens[credKey(testSite, "")]; stored != got {
 		t.Error("the refreshed token was not saved")
 	}
 }
@@ -687,6 +711,7 @@ func TestLogout(t *testing.T) {
 	tests := []struct {
 		name        string
 		site        string
+		org         string
 		setup       func(*fakeAuth)
 		wantDeletes int
 		wantErr     error
@@ -695,8 +720,8 @@ func TestLogout(t *testing.T) {
 			name: "both files are removed",
 			site: testSite,
 			setup: func(f *fakeAuth) {
-				f.tokens[testSite] = &TokenSet{AccessToken: "at"}
-				f.clients[testSite] = &ClientCredentials{ClientID: "cid", RedirectURIs: []string{testCLIRedirect}}
+				f.tokens[credKey(testSite, "")] = &TokenSet{AccessToken: "at"}
+				f.clients[credKey(testSite, "")] = &ClientCredentials{ClientID: "cid", RedirectURIs: []string{testCLIRedirect}}
 			},
 			wantDeletes: 1,
 		},
@@ -725,6 +750,12 @@ func TestLogout(t *testing.T) {
 			site:    "../evil",
 			wantErr: ErrInvalidSite,
 		},
+		{
+			name:    "invalid org",
+			site:    testSite,
+			org:     "../evil",
+			wantErr: ErrInvalidOrg,
+		},
 	}
 
 	for _, tt := range tests {
@@ -733,7 +764,7 @@ func TestLogout(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(f)
 			}
-			err := Logout(tt.site, f.deps())
+			err := Logout(tt.site, tt.org, f.deps())
 
 			if f.deletedTokens != tt.wantDeletes {
 				t.Errorf("DeleteToken calls = %d, want %d", f.deletedTokens, tt.wantDeletes)
@@ -791,10 +822,10 @@ func TestDefaultDepsUsesTheConfigDir(t *testing.T) {
 	d := DefaultDeps()
 
 	tok := &TokenSet{AccessToken: "at", ExpiresIn: 3600, IssuedAt: testNow}
-	if err := d.SaveToken(testSite, tok); err != nil {
+	if err := d.SaveToken(testSite, "", tok); err != nil {
 		t.Fatalf("SaveToken() err = %v", err)
 	}
-	got, ok, err := d.LoadToken(testSite)
+	got, ok, err := d.LoadToken(testSite, "")
 	if err != nil || !ok {
 		t.Fatalf("LoadToken() = (_, %v, %v), want (_, true, nil)", ok, err)
 	}
@@ -803,23 +834,23 @@ func TestDefaultDepsUsesTheConfigDir(t *testing.T) {
 	}
 
 	creds := &ClientCredentials{ClientID: "cid", RedirectURIs: []string{testCLIRedirect}}
-	if err := d.SaveClient(testSite, creds); err != nil {
+	if err := d.SaveClient(testSite, "", creds); err != nil {
 		t.Fatalf("SaveClient() err = %v", err)
 	}
-	if _, ok, err := d.LoadClient(testSite); err != nil || !ok {
+	if _, ok, err := d.LoadClient(testSite, ""); err != nil || !ok {
 		t.Fatalf("LoadClient() = (_, %v, %v), want (_, true, nil)", ok, err)
 	}
 
-	if err := d.DeleteToken(testSite); err != nil {
+	if err := d.DeleteToken(testSite, ""); err != nil {
 		t.Fatalf("DeleteToken() err = %v", err)
 	}
-	if err := d.DeleteClient(testSite); err != nil {
+	if err := d.DeleteClient(testSite, ""); err != nil {
 		t.Fatalf("DeleteClient() err = %v", err)
 	}
-	if _, ok, _ := d.LoadToken(testSite); ok {
+	if _, ok, _ := d.LoadToken(testSite, ""); ok {
 		t.Error("the token is still readable after DeleteToken")
 	}
-	if _, ok, _ := d.LoadClient(testSite); ok {
+	if _, ok, _ := d.LoadClient(testSite, ""); ok {
 		t.Error("the client is still readable after DeleteClient")
 	}
 }
@@ -829,4 +860,103 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// TestLoginIsIndependentPerOrg は、同じ site の異なる org のログインが互いのファイルへ
+// 影響しないことを、実際の保存先 (config.Dir()/datadog) を使って確かめる。Datadog の
+// Sub Organization はデータが完全に分離されているため、トークンとクライアント登録が
+// org をまたいで混ざると、別の組織のデータを返すことになる。
+//
+// 差し替えるのは Datadog へ接続する 2 つ (Dynamic Client Registration と認可コードの
+// 引き換え) だけで、保存と読み出しは本番の実装を通る。
+func TestLoginIsIndependentPerOrg(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+	dir := filepath.Join(base, "thief", "datadog")
+
+	orgs := []string{"", "suborg1", "suborg2"}
+	registrations := 0
+	exchanges := 0
+
+	deps := DefaultDeps()
+	deps.RegisterClient = func(_ context.Context, _, clientName string, redirectURIs []string) (*ClientCredentials, error) {
+		registrations++
+		return &ClientCredentials{
+			ClientID:     fmt.Sprintf("cid-%d", registrations),
+			ClientName:   clientName,
+			RedirectURIs: redirectURIs,
+		}, nil
+	}
+	deps.ExchangeCode = func(_ context.Context, _, _, _, _, _ string) (*TokenSet, error) {
+		exchanges++
+		return &TokenSet{AccessToken: secret(fmt.Sprintf("at-%d", exchanges)), RefreshToken: "rt", ExpiresIn: 3600}, nil
+	}
+
+	// org ごとにログインし、そのたびに新しいクライアント登録とトークンが作られる。
+	wantTokens := map[string]string{}
+	wantClients := map[string]string{}
+	for i, org := range orgs {
+		params := testPrepareParams()
+		params.Org = org
+		login, err := PrepareLogin(context.Background(), params, deps)
+		if err != nil {
+			t.Fatalf("PrepareLogin(org=%q) err = %v", org, err)
+		}
+		if login.Org != org {
+			t.Errorf("Login.Org = %q, want %q", login.Org, org)
+		}
+		if _, err := CompleteLogin(context.Background(), login, login.State, "auth-code", deps); err != nil {
+			t.Fatalf("CompleteLogin(org=%q) err = %v", org, err)
+		}
+		wantTokens[org] = fmt.Sprintf("at-%d", i+1)
+		wantClients[org] = fmt.Sprintf("cid-%d", i+1)
+	}
+
+	if registrations != len(orgs) {
+		t.Errorf("client registrations = %d, want %d (one per org)", registrations, len(orgs))
+	}
+
+	for _, org := range orgs {
+		tok, ok, err := LoadToken(dir, testSite, org)
+		if err != nil || !ok {
+			t.Fatalf("LoadToken(org=%q) = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+		if got := tok.AccessTokenValue(); got != wantTokens[org] {
+			t.Errorf("LoadToken(org=%q) access token = %q, want %q", org, got, wantTokens[org])
+		}
+		creds, ok, err := LoadClient(dir, testSite, org)
+		if err != nil || !ok {
+			t.Fatalf("LoadClient(org=%q) = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+		if creds.ClientID != wantClients[org] {
+			t.Errorf("LoadClient(org=%q) client id = %q, want %q", org, creds.ClientID, wantClients[org])
+		}
+		// 保存済みのトークンは期限内なので、更新はトークンエンドポイントを呼ばない。
+		fresh, ok, err := EnsureFreshToken(context.Background(), testSite, org, deps)
+		if err != nil || !ok {
+			t.Fatalf("EnsureFreshToken(org=%q) = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+		if got := fresh.AccessTokenValue(); got != wantTokens[org] {
+			t.Errorf("EnsureFreshToken(org=%q) access token = %q, want %q", org, got, wantTokens[org])
+		}
+	}
+
+	// 1 つの org のログアウトは、その org のファイルだけを消す。
+	if err := Logout(testSite, "suborg1", deps); err != nil {
+		t.Fatalf("Logout() err = %v", err)
+	}
+	if _, ok, _ := LoadToken(dir, testSite, "suborg1"); ok {
+		t.Error("the token of suborg1 is still readable after the logout")
+	}
+	if _, ok, _ := LoadClient(dir, testSite, "suborg1"); ok {
+		t.Error("the client registration of suborg1 is still readable after the logout")
+	}
+	for _, org := range []string{"", "suborg2"} {
+		if _, ok, err := EnsureFreshToken(context.Background(), testSite, org, deps); !ok || err != nil {
+			t.Errorf("EnsureFreshToken(org=%q) after logging out suborg1 = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+		if _, ok, err := LoadClient(dir, testSite, org); !ok || err != nil {
+			t.Errorf("LoadClient(org=%q) after logging out suborg1 = (_, %v, %v), want (_, true, nil)", org, ok, err)
+		}
+	}
 }

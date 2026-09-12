@@ -29,16 +29,23 @@ var (
 // 実行できないため差し替える。Now は期限判定の基準時刻を固定するために差し替える。
 // これらは元から自由関数であり、絞り込む対象の具象型が無いため、コンシューマ定義の
 // インターフェースではなく関数値で持つ (internal/ssoauth の Deps と同じ形)。
+//
+// 保存系は site に加えて org (Sub Organization の識別子、空文字は親組織) を取る。
+// Datadog の Sub Organization はデータが完全に分離されており、org ごとに別のトークンと
+// クライアント登録が要るためである。Datadog へ接続する 3 つは org を取らない。DCR、
+// トークン、リフレッシュのどのエンドポイントも https://api.{site} 配下にあり、
+// プロトコル上 org を載せる場所が無い (どの Sub Organization を認可するかは、利用者が
+// 認可画面で選ぶ)。
 type Deps struct {
 	RegisterClient func(ctx context.Context, site, clientName string, redirectURIs []string) (*ClientCredentials, error)
 	ExchangeCode   func(ctx context.Context, site, clientID, code, redirectURI, codeVerifier string) (*TokenSet, error)
 	RefreshToken   func(ctx context.Context, site, clientID, refreshToken string) (*TokenSet, error)
-	LoadClient     func(site string) (*ClientCredentials, bool, error)
-	SaveClient     func(site string, creds *ClientCredentials) error
-	LoadToken      func(site string) (*TokenSet, bool, error)
-	SaveToken      func(site string, tok *TokenSet) error
-	DeleteToken    func(site string) error
-	DeleteClient   func(site string) error
+	LoadClient     func(site, org string) (*ClientCredentials, bool, error)
+	SaveClient     func(site, org string, creds *ClientCredentials) error
+	LoadToken      func(site, org string) (*TokenSet, bool, error)
+	SaveToken      func(site, org string, tok *TokenSet) error
+	DeleteToken    func(site, org string) error
+	DeleteClient   func(site, org string) error
 	Now            func() time.Time
 }
 
@@ -50,47 +57,47 @@ func DefaultDeps() Deps {
 		RegisterClient: RegisterClient,
 		ExchangeCode:   ExchangeCode,
 		RefreshToken:   Refresh,
-		LoadClient: func(site string) (*ClientCredentials, bool, error) {
+		LoadClient: func(site, org string) (*ClientCredentials, bool, error) {
 			dir, err := Dir()
 			if err != nil {
 				return nil, false, err
 			}
-			return LoadClient(dir, site)
+			return LoadClient(dir, site, org)
 		},
-		SaveClient: func(site string, creds *ClientCredentials) error {
+		SaveClient: func(site, org string, creds *ClientCredentials) error {
 			dir, err := Dir()
 			if err != nil {
 				return err
 			}
-			return SaveClient(dir, site, creds)
+			return SaveClient(dir, site, org, creds)
 		},
-		LoadToken: func(site string) (*TokenSet, bool, error) {
+		LoadToken: func(site, org string) (*TokenSet, bool, error) {
 			dir, err := Dir()
 			if err != nil {
 				return nil, false, err
 			}
-			return LoadToken(dir, site)
+			return LoadToken(dir, site, org)
 		},
-		SaveToken: func(site string, tok *TokenSet) error {
+		SaveToken: func(site, org string, tok *TokenSet) error {
 			dir, err := Dir()
 			if err != nil {
 				return err
 			}
-			return SaveToken(dir, site, tok)
+			return SaveToken(dir, site, org, tok)
 		},
-		DeleteToken: func(site string) error {
+		DeleteToken: func(site, org string) error {
 			dir, err := Dir()
 			if err != nil {
 				return err
 			}
-			return DeleteToken(dir, site)
+			return DeleteToken(dir, site, org)
 		},
-		DeleteClient: func(site string) error {
+		DeleteClient: func(site, org string) error {
 			dir, err := Dir()
 			if err != nil {
 				return err
 			}
-			return DeleteClient(dir, site)
+			return DeleteClient(dir, site, org)
 		},
 		Now: time.Now,
 	}
@@ -100,6 +107,8 @@ func DefaultDeps() Deps {
 type PrepareParams struct {
 	// Site は Datadog の site (datadoghq.com など)。
 	Site string
+	// Org は Sub Organization の識別子。空文字は親組織を表す。
+	Org string
 	// RedirectURI は今回のログインでコールバックを受け取る URI。
 	RedirectURI string
 	// RegisterRedirectURIs はクライアントを新規登録するときに登録する URI 一覧。
@@ -114,6 +123,7 @@ type PrepareParams struct {
 // code_verifier は認可コードの引き換えでしか使わない秘密なので外へ出さない。
 type Login struct {
 	Site             string
+	Org              string
 	ClientID         string
 	RedirectURI      string
 	State            string
@@ -123,6 +133,7 @@ type Login struct {
 }
 
 // PrepareLogin は認可の準備を行い、利用者に開かせる認可 URL を組み立てて返す。
+// 読み書きするクライアント登録は p.Org で分かれる (空文字は親組織)。
 //
 // クライアント登録ファイルが存在すればそのまま再利用し、存在しない場合だけ
 // p.RegisterRedirectURIs をまとめて 1 回登録する。Datadog の DCR には登録済みの
@@ -135,6 +146,9 @@ func PrepareLogin(ctx context.Context, p PrepareParams, deps Deps) (*Login, erro
 	if err := ValidateSite(p.Site); err != nil {
 		return nil, err
 	}
+	if err := ValidateOrg(p.Org); err != nil {
+		return nil, err
+	}
 	if p.RedirectURI == "" {
 		return nil, errors.New("prepare datadog oauth login: redirect URI is empty")
 	}
@@ -142,7 +156,7 @@ func PrepareLogin(ctx context.Context, p PrepareParams, deps Deps) (*Login, erro
 		return nil, fmt.Errorf("prepare datadog oauth login: redirect URI %q is not in the URIs to register", p.RedirectURI)
 	}
 
-	creds, ok, err := deps.LoadClient(p.Site)
+	creds, ok, err := deps.LoadClient(p.Site, p.Org)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +168,7 @@ func PrepareLogin(ctx context.Context, p PrepareParams, deps Deps) (*Login, erro
 		if err := creds.Validate(); err != nil {
 			return nil, err
 		}
-		if err := deps.SaveClient(p.Site, creds); err != nil {
+		if err := deps.SaveClient(p.Site, p.Org, creds); err != nil {
 			return nil, err
 		}
 	}
@@ -178,6 +192,7 @@ func PrepareLogin(ctx context.Context, p PrepareParams, deps Deps) (*Login, erro
 
 	return &Login{
 		Site:             p.Site,
+		Org:              p.Org,
 		ClientID:         creds.ClientID,
 		RedirectURI:      p.RedirectURI,
 		State:            state,
@@ -187,7 +202,8 @@ func PrepareLogin(ctx context.Context, p PrepareParams, deps Deps) (*Login, erro
 }
 
 // CompleteLogin はコールバックで受け取った state を検証してから認可コードをトークンへ
-// 引き換え、保存したトークンを返す。
+// 引き換え、保存したトークンを返す。保存先は PrepareLogin が login に記録した org で
+// 決まる (コールバックのクエリには org が載らないため、login を唯一の出所とする)。
 //
 // state の比較は subtle.ConstantTimeCompare で行う。値の一致を時間差から推測させないため
 // である。
@@ -211,23 +227,28 @@ func CompleteLogin(ctx context.Context, login *Login, state, code string, deps D
 	}
 	stampToken(tok, login.ClientID, deps)
 
-	if err := deps.SaveToken(login.Site, tok); err != nil {
+	if err := deps.SaveToken(login.Site, login.Org, tok); err != nil {
 		return nil, err
 	}
 	return tok, nil
 }
 
-// EnsureFreshToken は保存済みのトークンを、期限切れならリフレッシュしたうえで返す。
+// EnsureFreshToken は site と org の保存済みのトークンを、期限切れならリフレッシュした
+// うえで返す。
 //
 // 未ログイン (トークンファイルが無い) の場合は (nil, false, nil) を返す。呼び出し側は
-// これを見て静的キー (DATADOG_API_KEY / DATADOG_APP_KEY) へフォールバックできる。
+// これを見て静的キー (DATADOG_API_KEY / DATADOG_APP_KEY) へフォールバックできる
+// (静的キーは org 非依存なので、フォールバックしてよいのは org が空のときだけである)。
 // 保存されたトークンが壊れている場合と、リフレッシュに失敗した場合はエラーを返す
 // (どちらも利用者の対処が要るので、未ログインと同じ扱いにして黙って静的キーへ倒さない)。
-func EnsureFreshToken(ctx context.Context, site string, deps Deps) (*TokenSet, bool, error) {
+func EnsureFreshToken(ctx context.Context, site, org string, deps Deps) (*TokenSet, bool, error) {
 	if err := ValidateSite(site); err != nil {
 		return nil, false, err
 	}
-	tok, ok, err := deps.LoadToken(site)
+	if err := ValidateOrg(org); err != nil {
+		return nil, false, err
+	}
+	tok, ok, err := deps.LoadToken(site, org)
 	if err != nil {
 		return nil, false, err
 	}
@@ -243,12 +264,12 @@ func EnsureFreshToken(ctx context.Context, site string, deps Deps) (*TokenSet, b
 
 	clientID := tok.ClientID
 	if clientID == "" {
-		creds, ok, err := deps.LoadClient(site)
+		creds, ok, err := deps.LoadClient(site, org)
 		if err != nil {
 			return nil, false, err
 		}
 		if !ok {
-			return nil, false, fmt.Errorf("%w: no stored client registration for %q", ErrClientIncomplete, site)
+			return nil, false, fmt.Errorf("%w: no stored client registration for site %q org %q", ErrClientIncomplete, site, org)
 		}
 		clientID = creds.ClientID
 	}
@@ -266,23 +287,26 @@ func EnsureFreshToken(ctx context.Context, site string, deps Deps) (*TokenSet, b
 	}
 	stampToken(fresh, clientID, deps)
 
-	if err := deps.SaveToken(site, fresh); err != nil {
+	if err := deps.SaveToken(site, org, fresh); err != nil {
 		return nil, false, err
 	}
 	return fresh, true, nil
 }
 
-// Logout はローカルに保存したトークンとクライアント登録を削除する。Datadog 側の
-// トークンを失効させる revoke エンドポイントは確認できていないため、削除はローカルに
-// 限られる。
+// Logout はローカルに保存した site と org のトークンとクライアント登録を削除する。
+// 他の org の認証情報には触れない。Datadog 側のトークンを失効させる revoke
+// エンドポイントは確認できていないため、削除はローカルに限られる。
 //
 // 片方の削除に失敗しても、もう片方の削除は試みる。認証情報が中途半端に残る状態を
 // 避けるためで、失敗した分は errors.Join でまとめて返す。
-func Logout(site string, deps Deps) error {
+func Logout(site, org string, deps Deps) error {
 	if err := ValidateSite(site); err != nil {
 		return err
 	}
-	return errors.Join(deps.DeleteToken(site), deps.DeleteClient(site))
+	if err := ValidateOrg(org); err != nil {
+		return err
+	}
+	return errors.Join(deps.DeleteToken(site, org), deps.DeleteClient(site, org))
 }
 
 // stampToken は保存の前に、トークン側で欠けている値を補う。

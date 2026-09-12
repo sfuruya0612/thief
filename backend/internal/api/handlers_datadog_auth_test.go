@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,10 +25,11 @@ const testDatadogState = "test-state"
 type datadogLoginStub struct {
 	mu sync.Mutex
 
-	prepared      []datadogauth.PrepareParams
-	prepareErr    error
-	completed     []string
-	completeErr   error
+	prepared    []datadogauth.PrepareParams
+	prepareErr  error
+	completed   []string
+	completeErr error
+	// loggedOut にはログアウトの対象が "<site>|<org>" の形で積まれる。
 	loggedOut     []string
 	logoutErr     error
 	registered    bool
@@ -37,7 +39,7 @@ type datadogLoginStub struct {
 func (st *datadogLoginStub) deps(t *testing.T) datadogAuthDeps {
 	t.Helper()
 	deps := (&datadogAuthDisk{}).deps(t)
-	deps.loadClient = func(string) (*datadogauth.ClientCredentials, bool, error) {
+	deps.loadClient = func(_, _ string) (*datadogauth.ClientCredentials, bool, error) {
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		if !st.registered {
@@ -59,6 +61,7 @@ func (st *datadogLoginStub) deps(t *testing.T) datadogAuthDeps {
 		}
 		return &datadogauth.Login{
 			Site:             p.Site,
+			Org:              p.Org,
 			ClientID:         "client-id",
 			RedirectURI:      p.RedirectURI,
 			State:            testDatadogState,
@@ -74,10 +77,10 @@ func (st *datadogLoginStub) deps(t *testing.T) datadogAuthDeps {
 		}
 		return validTestToken(t, "access-token"), nil
 	}
-	deps.logout = func(site string) error {
+	deps.logout = func(site, org string) error {
 		st.mu.Lock()
 		defer st.mu.Unlock()
-		st.loggedOut = append(st.loggedOut, site)
+		st.loggedOut = append(st.loggedOut, site+"|"+org)
 		return st.logoutErr
 	}
 	return deps
@@ -112,7 +115,18 @@ func doDatadogRequest(t *testing.T, s *Server, method, target string) *httptest.
 
 func startDatadogLogin(t *testing.T, s *Server) datadogLoginStartResponse {
 	t.Helper()
-	w := doDatadogRequest(t, s, http.MethodPost, "/api/datadog/auth/login/start")
+	return startDatadogLoginForOrg(t, s, "")
+}
+
+// startDatadogLoginForOrg は org を指定して login/start を呼ぶ。org が空なら
+// クエリパラメータ自体を付けない (親組織)。
+func startDatadogLoginForOrg(t *testing.T, s *Server, org string) datadogLoginStartResponse {
+	t.Helper()
+	target := "/api/datadog/auth/login/start"
+	if org != "" {
+		target += "?org=" + url.QueryEscape(org)
+	}
+	w := doDatadogRequest(t, s, http.MethodPost, target)
 	if w.Code != http.StatusOK {
 		t.Fatalf("login/start status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
 	}
@@ -411,8 +425,8 @@ func TestDatadogAuthLogout(t *testing.T) {
 		}
 		stub.mu.Lock()
 		defer stub.mu.Unlock()
-		if len(stub.loggedOut) != 1 || stub.loggedOut[0] != testDatadogSite {
-			t.Errorf("logged out sites = %v, want [%s]", stub.loggedOut, testDatadogSite)
+		if want := testDatadogSite + "|"; len(stub.loggedOut) != 1 || stub.loggedOut[0] != want {
+			t.Errorf("logged out targets = %v, want [%s]", stub.loggedOut, want)
 		}
 	})
 
@@ -478,4 +492,94 @@ func TestDatadogRedirectBaseReregistrationWarning(t *testing.T) {
 			assertDatadogWarn(t, logs, want)
 		})
 	}
+}
+
+// TestDatadogAuthOrgQueryParam は org クエリパラメータが login/start と logout に届き、
+// 不正な値が 400 になることを確認する。org を取り違えると、別の Sub Organization の
+// 認証情報を上書きしたり消したりすることになる。
+//
+// callback と login/status は org を取らない。callback の redirect_uri は Dynamic Client
+// Registration で登録した文字列と完全一致していなければならずクエリを足せないため、
+// org は login/start が作った中間状態を state 経由で引き継ぐ。login/status も同じく
+// state で引く。
+func TestDatadogAuthOrgQueryParam(t *testing.T) {
+	t.Run("login start passes the org through", func(t *testing.T) {
+		tests := []struct {
+			name string
+			org  string
+		}{
+			{name: "parent organization", org: ""},
+			{name: "sub organization", org: "suborg1"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				stub := &datadogLoginStub{}
+				s := newDatadogLoginTestServer(t, stub)
+
+				started := startDatadogLoginForOrg(t, s, tt.org)
+
+				stub.mu.Lock()
+				gotOrg := stub.prepared[0].Org
+				stub.mu.Unlock()
+				if gotOrg != tt.org {
+					t.Errorf("PrepareParams.Org = %q, want %q", gotOrg, tt.org)
+				}
+
+				// callback は org をクエリで受け取らず、state から引いた中間状態を使う。
+				w := doDatadogRequest(t, s, http.MethodGet, datadogCallbackTarget(started.State, "auth-code"))
+				if w.Code != http.StatusOK {
+					t.Fatalf("callback status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
+				}
+			})
+		}
+	})
+
+	t.Run("logout passes the org through", func(t *testing.T) {
+		stub := &datadogLoginStub{}
+		s := newDatadogLoginTestServer(t, stub)
+
+		if w := doDatadogRequest(t, s, http.MethodPost, "/api/datadog/auth/logout?org=suborg1"); w.Code != http.StatusNoContent {
+			t.Fatalf("logout status = %d, want %d (body=%s)", w.Code, http.StatusNoContent, w.Body.String())
+		}
+		stub.mu.Lock()
+		defer stub.mu.Unlock()
+		if want := testDatadogSite + "|suborg1"; len(stub.loggedOut) != 1 || stub.loggedOut[0] != want {
+			t.Errorf("logged out targets = %v, want [%s]", stub.loggedOut, want)
+		}
+	})
+
+	t.Run("an invalid org is rejected", func(t *testing.T) {
+		// org は保存先のファイル名の一部になるため、パスを遡れる値は受け付けない。
+		const badOrg = "../../etc/passwd"
+
+		tests := []struct {
+			name   string
+			method string
+			path   string
+			// prepareErr はスタブが返すエラー。login/start は datadogauth 側の検証を
+			// 通るため、その失敗が HTTP へどう写るかを見る。
+			prepareErr error
+			logoutErr  error
+		}{
+			{
+				name:       "login start",
+				method:     http.MethodPost,
+				path:       "/api/datadog/auth/login/start",
+				prepareErr: fmt.Errorf("%w: %q", datadogauth.ErrInvalidOrg, badOrg),
+			},
+			{
+				name:      "logout",
+				method:    http.MethodPost,
+				path:      "/api/datadog/auth/logout",
+				logoutErr: fmt.Errorf("%w: %q", datadogauth.ErrInvalidOrg, badOrg),
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				s := newDatadogLoginTestServer(t, &datadogLoginStub{prepareErr: tt.prepareErr, logoutErr: tt.logoutErr})
+				w := doDatadogRequest(t, s, tt.method, tt.path+"?org="+url.QueryEscape(badOrg))
+				assertErrorCode(t, w, http.StatusBadRequest, "BAD_REQUEST")
+			})
+		}
+	})
 }

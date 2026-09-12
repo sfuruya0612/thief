@@ -40,8 +40,10 @@ type fakeDatadogAuth struct {
 	completeCalls []completeArgs
 	completeErr   error
 	ensureTok     *datadogauth.TokenSet
+	ensureOrgs    []string
 	ensureOK      bool
 	ensureErr     error
+	// logoutCalls にはログアウトの対象が "<site>|<org>" の形で積まれる。
 	logoutCalls   []string
 	logoutErr     error
 	openedURLs    []string
@@ -96,11 +98,16 @@ func (f *fakeDatadogAuth) deps(t *testing.T) datadogAuthDeps {
 			}
 			return &datadogauth.TokenSet{AccessToken: "at", ExpiresIn: 3600, IssuedAt: time.Now()}, nil
 		},
-		ensureFreshToken: func(_ context.Context, _ string) (*datadogauth.TokenSet, bool, error) {
+		ensureFreshToken: func(_ context.Context, _, org string) (*datadogauth.TokenSet, bool, error) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.ensureOrgs = append(f.ensureOrgs, org)
 			return f.ensureTok, f.ensureOK, f.ensureErr
 		},
-		logout: func(site string) error {
-			f.logoutCalls = append(f.logoutCalls, site)
+		logout: func(site, org string) error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.logoutCalls = append(f.logoutCalls, site+"|"+org)
 			return f.logoutErr
 		},
 		openBrowser: func(rawURL string) error {
@@ -154,11 +161,21 @@ func (f *fakeDatadogAuth) completed() []completeArgs {
 // 利用者の設定ファイルに依存しないようにする。
 func newDatadogAuthTestCmd(t *testing.T, site string) (*cobra.Command, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
+	return newDatadogAuthOrgTestCmd(t, site, "")
+}
+
+// newDatadogAuthOrgTestCmd は site に加えて org フラグも持つコマンドを返す。
+func newDatadogAuthOrgTestCmd(t *testing.T, site, org string) (*cobra.Command, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
 
 	cmd := &cobra.Command{Use: "login"}
 	cmd.Flags().String("site", "", "")
 	if err := cmd.Flags().Set("site", site); err != nil {
 		t.Fatalf("set site flag: %v", err)
+	}
+	cmd.Flags().String("org", "", datadogOrgFlagUsage)
+	if err := cmd.Flags().Set("org", org); err != nil {
+		t.Fatalf("set org flag: %v", err)
 	}
 	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
 	cmd.SetOut(out)
@@ -569,7 +586,7 @@ func TestDatadogAuthLogoutWith(t *testing.T) {
 			if err != nil {
 				t.Fatalf("datadogAuthLogoutWith() err = %v", err)
 			}
-			if diff := cmp.Diff([]string{"datadoghq.com"}, f.logoutCalls); diff != "" {
+			if diff := cmp.Diff([]string{"datadoghq.com|"}, f.logoutCalls); diff != "" {
 				t.Errorf("logout calls mismatch (-want +got):\n%s", diff)
 			}
 			if !strings.Contains(out.String(), tt.wantOut) {
@@ -770,10 +787,10 @@ func TestDatadogAuthLoginEndToEnd(t *testing.T) {
 		completeLogin: func(ctx context.Context, login *datadogauth.Login, state, code string) (*datadogauth.TokenSet, error) {
 			return datadogauth.CompleteLogin(ctx, login, state, code, authDeps)
 		},
-		ensureFreshToken: func(ctx context.Context, site string) (*datadogauth.TokenSet, bool, error) {
-			return datadogauth.EnsureFreshToken(ctx, site, authDeps)
+		ensureFreshToken: func(ctx context.Context, site, org string) (*datadogauth.TokenSet, bool, error) {
+			return datadogauth.EnsureFreshToken(ctx, site, org, authDeps)
 		},
-		logout:        func(site string) error { return datadogauth.Logout(site, authDeps) },
+		logout:        func(site, org string) error { return datadogauth.Logout(site, org, authDeps) },
 		listen:        func(string) (net.Listener, error) { return ln, nil },
 		serveCallback: serveDatadogAuthCallback,
 		readPastedCode: func(ctx context.Context) (string, error) {
@@ -869,7 +886,7 @@ func TestDatadogAuthLoginEndToEnd(t *testing.T) {
 			t.Errorf("%s mode = %v, want %v", name, got, os.FileMode(0o600))
 		}
 	}
-	tok, ok, err := datadogauth.LoadToken(dir, "datadoghq.com")
+	tok, ok, err := datadogauth.LoadToken(dir, "datadoghq.com", "")
 	if err != nil || !ok {
 		t.Fatalf("LoadToken() = (_, %v, %v), want (_, true, nil)", ok, err)
 	}
@@ -920,4 +937,117 @@ func boolToCount(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// TestDatadogAuthOrgFlag は --org が 3 つのサブコマンドすべてに生えており、その値が
+// datadogauth へそのまま渡って出力にも現れることを確かめる。org を取り違えると、
+// 別の Sub Organization の認証情報を上書きしたり消したりすることになる。
+func TestDatadogAuthOrgFlag(t *testing.T) {
+	t.Run("the flag is registered on every subcommand", func(t *testing.T) {
+		for _, c := range newDatadogAuthCmd().Commands() {
+			f := c.Flags().Lookup("org")
+			if f == nil {
+				t.Errorf("'datadog auth %s' has no --org flag", c.Name())
+				continue
+			}
+			if f.DefValue != "" {
+				t.Errorf("'datadog auth %s' --org default = %q, want the parent organization (empty)", c.Name(), f.DefValue)
+			}
+		}
+	})
+
+	// --org を定義していないコマンドでも親組織として動く (loadConfig の override と同じ
+	// 許容の仕方)。
+	t.Run("a command without the flag means the parent organization", func(t *testing.T) {
+		if got := datadogOrgFlag(&cobra.Command{}); got != "" {
+			t.Errorf("datadogOrgFlag() = %q, want %q", got, "")
+		}
+	})
+
+	tests := []struct {
+		name string
+		org  string
+		// wantLabel は出力に現れるべき org の表示。親組織では空。
+		wantLabel string
+	}{
+		{name: "parent organization", org: "", wantLabel: ""},
+		{name: "sub organization", org: "suborg1", wantLabel: " (organization: suborg1)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Run("login", func(t *testing.T) {
+				f := newFakeDatadogAuth()
+				f.prepareLogin.Org = tt.org
+				f.callbackState, f.callbackCode = "state-value", "auth-code"
+				cmd, out, _ := newDatadogAuthOrgTestCmd(t, "datadoghq.com", tt.org)
+
+				if err := datadogAuthLoginWith(cmd, f.deps(t)); err != nil {
+					t.Fatalf("datadogAuthLoginWith() err = %v", err)
+				}
+				want := datadogauth.PrepareParams{
+					Site:                 "datadoghq.com",
+					Org:                  tt.org,
+					RedirectURI:          datadogCLIRedirectURI,
+					RegisterRedirectURIs: []string{datadogCLIRedirectURI, datadogServerRedirectURI()},
+				}
+				if diff := cmp.Diff(want, f.prepared()[0]); diff != "" {
+					t.Errorf("prepareLogin params mismatch (-want +got):\n%s", diff)
+				}
+				wantOut := "Successfully logged into Datadog site: datadoghq.com" + tt.wantLabel
+				if !strings.Contains(out.String(), wantOut) {
+					t.Errorf("stdout does not contain %q:\n%s", wantOut, out.String())
+				}
+			})
+
+			t.Run("logout", func(t *testing.T) {
+				f := newFakeDatadogAuth()
+				cmd, out, _ := newDatadogAuthOrgTestCmd(t, "datadoghq.com", tt.org)
+
+				if err := datadogAuthLogoutWith(cmd, f.deps(t)); err != nil {
+					t.Fatalf("datadogAuthLogoutWith() err = %v", err)
+				}
+				if diff := cmp.Diff([]string{"datadoghq.com|" + tt.org}, f.logoutCalls); diff != "" {
+					t.Errorf("logout calls mismatch (-want +got):\n%s", diff)
+				}
+				wantOut := "Removed the local Datadog OAuth credentials for site: datadoghq.com" + tt.wantLabel
+				if !strings.Contains(out.String(), wantOut) {
+					t.Errorf("stdout does not contain %q:\n%s", wantOut, out.String())
+				}
+			})
+
+			t.Run("refresh", func(t *testing.T) {
+				f := newFakeDatadogAuth()
+				f.ensureTok = &datadogauth.TokenSet{AccessToken: "at", ExpiresIn: 3600, IssuedAt: time.Now()}
+				f.ensureOK = true
+				cmd, out, _ := newDatadogAuthOrgTestCmd(t, "datadoghq.com", tt.org)
+
+				if err := datadogAuthRefreshWith(cmd, f.deps(t)); err != nil {
+					t.Fatalf("datadogAuthRefreshWith() err = %v", err)
+				}
+				if diff := cmp.Diff([]string{tt.org}, f.ensureOrgs); diff != "" {
+					t.Errorf("ensureFreshToken orgs mismatch (-want +got):\n%s", diff)
+				}
+				wantOut := "Datadog OAuth token for site datadoghq.com" + tt.wantLabel + " is valid until"
+				if !strings.Contains(out.String(), wantOut) {
+					t.Errorf("stdout does not contain %q:\n%s", wantOut, out.String())
+				}
+			})
+
+			t.Run("refresh without a token names the org in the login hint", func(t *testing.T) {
+				f := newFakeDatadogAuth()
+				f.ensureOK = false
+				cmd, _, _ := newDatadogAuthOrgTestCmd(t, "datadoghq.com", tt.org)
+
+				err := datadogAuthRefreshWith(cmd, f.deps(t))
+				if err == nil {
+					t.Fatal("datadogAuthRefreshWith() err = nil, want an error")
+				}
+				want := "Run '" + datadogLoginHint(tt.org) + "' first"
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("err = %q, want it to contain %q", err.Error(), want)
+				}
+			})
+		})
+	}
 }
