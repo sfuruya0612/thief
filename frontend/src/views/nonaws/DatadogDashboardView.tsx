@@ -18,23 +18,20 @@ import { TimeseriesChart } from '../../components/charts/TimeseriesChart';
 import { DatadogAuthBanner } from '../../components/DatadogAuthBanner';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { isDatadogAuthError } from '../../lib/datadogAuthError';
-import { metricsWindow, type MetricsWindow } from '../../lib/timeseries';
+import { metricsWindow, unitFormatter, type MetricsWindow } from '../../lib/timeseries';
 import type { DatadogMetricSeriesRow, DatadogWidgetRow } from '../../types/nonaws';
 
 export interface DatadogDashboardViewProps {
   // 表示対象の組織 (小文字の public_id)。ダッシュボードの取得と再ログインの対象を決める。
   orgId: string;
+  // timeseries ウィジェットのクエリを Metrics で開く。ウィジェットは定義 (クエリ文字列)
+  // をそのまま持つので、同じ文字列を Metrics の入力へ渡せる。
+  onOpenQuery: (query: string) => void;
 }
 
 // widgetLabel はウィジェットの見出し。タイトルが空のウィジェットは種別名で代替する。
 function widgetLabel(widget: DatadogWidgetRow): string {
   return widget.title || widget.type;
-}
-
-// unitFormatter は単位付きの値の表示形式を返す。単位の無いメトリクスでは数値だけを出す。
-function unitFormatter(unit: string): (v: number) => string {
-  if (!unit) return (v: number) => v.toLocaleString();
-  return (v: number) => `${v.toLocaleString()} ${unit}`;
 }
 
 // latestPoint は単一値表示に使う「最後に観測された値」と、その単位を返す。
@@ -58,7 +55,11 @@ interface WidgetDataProps {
   range: MetricsWindow;
 }
 
-function TimeseriesWidget({ orgId, widget, range }: WidgetDataProps) {
+interface TimeseriesWidgetProps extends WidgetDataProps {
+  onOpenQuery: (query: string) => void;
+}
+
+function TimeseriesWidget({ orgId, widget, range, onOpenQuery }: TimeseriesWidgetProps) {
   const { series, isLoading, error } = useDatadogMetricsQueries(orgId, widget.queries, range);
 
   return (
@@ -72,6 +73,20 @@ function TimeseriesWidget({ orgId, widget, range }: WidgetDataProps) {
           valueFormatter={unitFormatter(series[0]?.unit ?? '')}
         />
       )}
+      {/* クエリごとに 1 つ置く。ウィジェットが複数クエリを重ねている場合、どのクエリを
+          開くのかはボタンの位置では区別できないため、アクセシブル名にクエリを含める。 */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {widget.queries.map((q, i) => (
+          <button
+            key={`${widget.id}-${i}`}
+            className="btn sm ghost"
+            aria-label={`Open in Metrics: ${q}`}
+            onClick={() => onOpenQuery(q)}
+          >
+            Open in Metrics
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -99,14 +114,16 @@ function QueryValueWidget({ orgId, widget, range }: WidgetDataProps) {
   );
 }
 
-interface WidgetCardProps extends WidgetDataProps {
+interface WidgetCardProps extends TimeseriesWidgetProps {
   // ダッシュボードの絶対 URL (backend が app.<site> を補ったもの)。
   dashboardUrl: string;
 }
 
-function WidgetCard({ orgId, widget, range, dashboardUrl }: WidgetCardProps) {
+function WidgetCard({ orgId, widget, range, dashboardUrl, onOpenQuery }: WidgetCardProps) {
   if (widget.kind === 'timeseries') {
-    return <TimeseriesWidget orgId={orgId} widget={widget} range={range} />;
+    return (
+      <TimeseriesWidget orgId={orgId} widget={widget} range={range} onOpenQuery={onOpenQuery} />
+    );
   }
   if (widget.kind === 'query_value') {
     return <QueryValueWidget orgId={orgId} widget={widget} range={range} />;
@@ -125,7 +142,7 @@ function WidgetCard({ orgId, widget, range, dashboardUrl }: WidgetCardProps) {
   );
 }
 
-export function DatadogDashboardView({ orgId }: DatadogDashboardViewProps) {
+export function DatadogDashboardView({ orgId, onOpenQuery }: DatadogDashboardViewProps) {
   const [selectedId, setSelectedId] = useState('');
 
   const {
@@ -195,6 +212,7 @@ export function DatadogDashboardView({ orgId }: DatadogDashboardViewProps) {
               widget={w}
               range={range}
               dashboardUrl={detail.url}
+              onOpenQuery={onOpenQuery}
             />
           ))}
         </div>

@@ -22,11 +22,29 @@ vi.mock('../../components/charts/CostChart', () => ({
   CostChart: () => <div data-testid="cost-chart-stub" />,
 }));
 
-// セクション切替の検証が目的なので、Dashboards 側の中身はスタブで足りる
-// (中身は DatadogDashboardView.test.tsx で検証する)。
+// セクション切替の検証が目的なので、Dashboards と Metrics の中身はスタブで足りる
+// (中身は DatadogDashboardView.test.tsx と DatadogMetricsView.test.tsx で検証する)。
+// Dashboards のスタブは引き継ぎ導線だけを模し、押されたら固定のクエリを親へ返す。
 vi.mock('./DatadogDashboardView', () => ({
-  DatadogDashboardView: ({ orgId }: { orgId: string }) => (
-    <div data-testid="dashboard-view-stub">{orgId}</div>
+  DatadogDashboardView: ({
+    orgId,
+    onOpenQuery,
+  }: {
+    orgId: string;
+    onOpenQuery: (query: string) => void;
+  }) => (
+    <div data-testid="dashboard-view-stub">
+      {orgId}
+      <button onClick={() => onOpenQuery('avg:system.cpu.user{*}')}>Open in Metrics</button>
+    </div>
+  ),
+}));
+
+vi.mock('./DatadogMetricsView', () => ({
+  DatadogMetricsView: ({ orgId, initialQuery }: { orgId: string; initialQuery?: string }) => (
+    <div data-testid="metrics-view-stub" data-initial-query={initialQuery}>
+      {orgId}
+    </div>
   ),
 }));
 
@@ -193,5 +211,40 @@ describe('DatadogView のセクション切替', () => {
 
     expect(screen.getByTestId('cost-chart-stub')).toBeInTheDocument();
     expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
+  });
+
+  it('Metrics を押すと表示中の組織で Metrics に切り替わる', () => {
+    renderView('suborg2');
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    expect(screen.getByTestId('metrics-view-stub')).toHaveTextContent('suborg2');
+    expect(screen.queryByTestId('cost-chart-stub')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
+    // 直接開いた Metrics には引き継ぐクエリが無い。
+    expect(screen.getByTestId('metrics-view-stub')).toHaveAttribute('data-initial-query', '');
+  });
+
+  it('Metrics に切り替えると Cost の historical/estimated 取得を止める', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    expect(mocks.useDatadogHistorical.mock.calls.at(-1)?.at(-1)).toEqual(
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(mocks.useDatadogEstimated.mock.calls.at(-1)?.at(-1)).toEqual(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it('Dashboards の引き継ぎ導線で Metrics へクエリを渡して切り替わる', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Dashboards' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Metrics' }));
+
+    expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
+    expect(screen.getByTestId('metrics-view-stub')).toHaveAttribute(
+      'data-initial-query',
+      'avg:system.cpu.user{*}',
+    );
   });
 });

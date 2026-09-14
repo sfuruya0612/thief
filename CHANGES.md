@@ -206,6 +206,8 @@
   - @sfuruya0612
 - [ADD] Datadog ビューに Dashboards セクションを追加し、選択中の Sub Organization のダッシュボードを thief 内で参照できるようにする (`GET /api/datadog/dashboards`/`GET /api/datadog/dashboards/{id}` でダッシュボード一覧とウィジェット定義を取得し、`GET /api/datadog/metrics/query` で timeseries/query_value ウィジェットの実データを取得して `TimeseriesChart`/`StatTile` で再描画する。table/toplist/heatmap 等の未対応ウィジェットは種別名の表示と Datadog への外部リンクにフォールバックする。Cost/Dashboards の切り替えは既存のセグメントコントロールで行う)
   - @sfuruya0612
+- [ADD] Datadog ビューに Metrics セクションを追加し、選択中の Sub Organization に対して Datadog クエリ言語のクエリを入力し時系列グラフを表示できるようにする (`GET /api/datadog/metrics/query` を呼び出し、期間は Last 1 hour/4 hours/1 day/1 week から選択する。Dashboards のダッシュボードウィジェットから「この Q をここで開く」でクエリを引き継いで開けるようにする。Cost/Dashboards/Metrics の切り替えは既存のセグメントコントロールを 3 択に拡張する)
+  - @sfuruya0612
 - [CHANGE] Cost Explorer の絞り込みを、Service と Linked account の 2 つの入力から、Service / Usage type / Linked account を横断する 1 つのキーワード入力に変更する (`GET /api/aws/profiles/{profile}/cost` のクエリパラメータ `service` と `account` を廃止し `keyword` を追加する。backend は `GetDimensionValues` で 3 次元の値を並列に取得し、大文字小文字を区別しない部分一致で照合したうえで EQUALS の Or フィルタを組み立てる。Linked account はアカウント ID とアカウント名 (次元値の description 属性) の両方を照合対象とする。`GetCostAndUsage` の Filter が EQUALS と CASE_SENSITIVE しか受け付けないため、部分一致の判定は backend 側で行う。どの次元にも一致しなかった場合は結果が空と確定するため、課金される `GetCostAndUsage` を呼ばずに空の結果を返す)
   - @sfuruya0612
 - [CHANGE] CLI `sso logout` を、SSO キャッシュディレクトリ (`~/.aws/sso/cache`) が無い場合にエラー終了ではなく正常終了 (削除するものが無い) にする
