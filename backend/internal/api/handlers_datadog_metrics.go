@@ -14,7 +14,7 @@ import (
 // ダッシュボードのウィジェットは定義 (クエリ文字列) しか持たないため、実際の値を描くには
 // クエリを実行する必要がある。描画側はウィジェットのクエリごとにこのエンドポイントを呼ぶ。
 func (s *Server) handleDatadogMetricsQuery(w http.ResponseWriter, r *http.Request) {
-	org, ok := datadogRequiredOrgFromQuery(w, r)
+	org, ok := datadogOrgFromQuery(w, r)
 	if !ok {
 		return
 	}

@@ -50,10 +50,32 @@ func (d *datadogOrgTokens) logIn(org string) {
 	d.loggedIn[org] = true
 }
 
-const datadogOrgsBody = `{"orgs":[
-  {"public_id":"PARENT1","name":"Parent Org"},
-  {"public_id":"suborg1","name":"Sub Org 1"}
-]}`
+// datadogTestSelfID と datadogTestSubID は GET /api/v2/org のレスポンスに使う組織 ID。
+// SDK が uuid.UUID として復号するため、UUID 形式の文字列でなければならない。
+const (
+	datadogTestSelfID = "11111111-1111-1111-1111-111111111111"
+	datadogTestSubID  = "22222222-2222-2222-2222-222222222222"
+)
+
+// datadogOrgsBody は GET /api/v2/org の JSON:API 形式のレスポンス。datadogTestSelfID が
+// 呼び出し元自身 (current_org) で、datadogTestSubID が管理下の Sub Organization。
+const datadogOrgsBody = `{"data":{"id":"` + datadogTestSelfID + `","type":"managed_orgs",` +
+	`"relationships":{` +
+	`"current_org":{"data":{"id":"` + datadogTestSelfID + `","type":"orgs"}},` +
+	`"managed_orgs":{"data":[` +
+	`{"id":"` + datadogTestSelfID + `","type":"orgs"},` +
+	`{"id":"` + datadogTestSubID + `","type":"orgs"}` +
+	`]}}},` +
+	`"included":[` +
+	`{"id":"` + datadogTestSelfID + `","type":"orgs","attributes":{` +
+	`"created_at":"2020-01-01T00:00:00Z","description":"","disabled":false,` +
+	`"modified_at":"2020-01-01T00:00:00Z","name":"Parent Org","public_id":"` + datadogTestSelfID + `",` +
+	`"sharing":"organization","url":""}},` +
+	`{"id":"` + datadogTestSubID + `","type":"orgs","attributes":{` +
+	`"created_at":"2020-01-01T00:00:00Z","description":"","disabled":false,` +
+	`"modified_at":"2020-01-01T00:00:00Z","name":"Sub Org 1","public_id":"` + datadogTestSubID + `",` +
+	`"sharing":"organization","url":""}}` +
+	`]}`
 
 // newDatadogOrgsTestServer は Organizations API を orgs へ向けた Server をルート登録済みで
 // 返す。呼び出し回数はキャッシュ動作の検証に使うため *int へ数える。
@@ -69,7 +91,7 @@ func newDatadogOrgsTestServer(t *testing.T, tokens *datadogOrgTokens, orgs http.
 	cfg := ddclient.NewConfiguration(testDatadogSite)
 	cfg.Host = orgsURL.Host
 	cfg.Scheme = orgsURL.Scheme
-	s.ddOrgV1 = ddclient.NewOrganizationsV1API(cfg)
+	s.ddOrgV2 = ddclient.NewOrganizationsV2API(cfg)
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
 	return s
@@ -100,20 +122,57 @@ func getDatadogOrgs(t *testing.T, s *Server, target string) ([]datadogOrgRespons
 	return orgs, w
 }
 
-// TestDatadogOrgsReturnsLowerCasedIdsAndLoginState は、組織一覧が小文字の識別子と表示名、
-// および org 単位のログイン状態を返すことを確認する。
+// TestDatadogOrgsReturnsLowerCasedIdsAndLoginState は、組織一覧が識別子と表示名、
+// および org 単位のログイン状態を返すことを確認する。親組織自身のエントリ (IsSelf) は
+// org == "" (datadogParentOrg) のトークンで判定されなければならない (issue 0171。
+// org.ID をそのまま見ると、親組織のトークンが org == "" にしか保存されないため常に
+// 未ログイン判定になっていた)。
 func TestDatadogOrgsReturnsLowerCasedIdsAndLoginState(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
-	// 親組織のトークンだけが保存されている状態。一覧の取得はこれで行える。
-	tokens := &datadogOrgTokens{loggedIn: map[string]bool{datadogParentOrg: true, "suborg1": true}}
+	// 親組織と Sub Org の両方のトークンが保存されている状態。一覧の取得は親組織の
+	// トークンで行える。
+	tokens := &datadogOrgTokens{loggedIn: map[string]bool{datadogParentOrg: true, datadogTestSubID: true}}
 	s := newDatadogOrgsTestServer(t, tokens, okOrgsHandler(&calls, &mu))
 
 	orgs, _ := getDatadogOrgs(t, s, "/api/datadog/orgs")
 
 	want := []datadogOrgResponse{
-		{ID: "parent1", Name: "Parent Org", LoggedIn: false},
-		{ID: "suborg1", Name: "Sub Org 1", LoggedIn: true},
+		{ID: datadogTestSelfID, Name: "Parent Org", LoggedIn: true, IsSelf: true},
+		{ID: datadogTestSubID, Name: "Sub Org 1", LoggedIn: true, IsSelf: false},
+	}
+	if len(orgs) != len(want) {
+		t.Fatalf("orgs = %+v, want %+v", orgs, want)
+	}
+	for i, w := range want {
+		if orgs[i] != w {
+			t.Errorf("orgs[%d] = %+v, want %+v", i, orgs[i], w)
+		}
+	}
+}
+
+// TestDatadogOrgsSelfLoggedInViaStaticKey は、親組織自身が OAuth トークンを
+// 一度も保存していなくても、静的キー (DATADOG_API_KEY/DATADOG_APP_KEY) が
+// 両方設定されていればログイン済みとして扱われることを確認する。この経路が
+// OAuth トークンの有無しか見ていなかったため、静的キーのみで運用している
+// 親組織のタブが常に未ログイン表示になっていた (issue 0171)。Sub Organization
+// のエントリは静的キーの影響を受けず、そのトークンの有無だけで判定される
+// (静的キーは org 非依存のグローバル環境変数であり、親組織以外には使わない)。
+func TestDatadogOrgsSelfLoggedInViaStaticKey(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	// OAuth トークンは 1 つも保存されていない。一覧取得自体は静的キーへの
+	// フォールバックで行える。
+	tokens := &datadogOrgTokens{loggedIn: map[string]bool{}}
+	s := newDatadogOrgsTestServer(t, tokens, okOrgsHandler(&calls, &mu))
+	s.cfg.SetDatadogAPIKey("api-key")
+	s.cfg.SetDatadogAppKey("app-key")
+
+	orgs, _ := getDatadogOrgs(t, s, "/api/datadog/orgs")
+
+	want := []datadogOrgResponse{
+		{ID: datadogTestSelfID, Name: "Parent Org", LoggedIn: true, IsSelf: true},
+		{ID: datadogTestSubID, Name: "Sub Org 1", LoggedIn: false, IsSelf: false},
 	}
 	if len(orgs) != len(want) {
 		t.Fatalf("orgs = %+v, want %+v", orgs, want)
@@ -156,13 +215,13 @@ func TestDatadogOrgsCaching(t *testing.T) {
 	}
 
 	// キャッシュ HIT でもログイン状態は判定し直される。
-	tokens.logIn("suborg1")
+	tokens.logIn(datadogTestSubID)
 	orgs, w = getDatadogOrgs(t, s, "/api/datadog/orgs")
 	if got := w.Header().Get("X-Cache-Status"); got != "HIT" {
 		t.Errorf("third X-Cache-Status = %q, want HIT", got)
 	}
 	if !orgs[1].LoggedIn {
-		t.Errorf("orgs[1].LoggedIn = false after logging in to suborg1, want true")
+		t.Errorf("orgs[1].LoggedIn = false after logging in to the sub org, want true")
 	}
 
 	// refresh=true は Datadog から取り直す。
@@ -183,8 +242,8 @@ func TestDatadogOrgsCorruptTokenIsNotLoggedIn(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
 	tokens := &datadogOrgTokens{
-		loggedIn: map[string]bool{datadogParentOrg: true, "suborg1": true},
-		loadErr:  map[string]error{"suborg1": errDatadogTestTokenBroken},
+		loggedIn: map[string]bool{datadogParentOrg: true, datadogTestSubID: true},
+		loadErr:  map[string]error{datadogTestSubID: errDatadogTestTokenBroken},
 	}
 	logs := captureLogs(t)
 	s := newDatadogOrgsTestServer(t, tokens, okOrgsHandler(&calls, &mu))

@@ -141,3 +141,12 @@ export function datadogOrgPickerItems(orgs: DatadogOrgRow[], open: string[]): Se
     disabled: opened.has(o.id),
   }));
 }
+
+// Cost/Dashboards/Metrics の取得先と再ログインバナーの対象組織を、タブの id から解決する。
+// 親組織自身のタブ (isSelf) では空文字を返す。親組織の OAuth トークン・静的キーは空文字の
+// org 宛てにしか保存 / フォールバックされないため (issue 0171)、タブの id (Datadog 側の
+// 実 UUID) をそのまま渡すと親組織タブが常に未ログイン扱いになる。
+export function resolveDatadogRequestOrg(orgs: DatadogOrgRow[], activeOrg: string): string {
+  const isSelf = orgs.find((o) => o.id === activeOrg)?.isSelf ?? false;
+  return isSelf ? '' : activeOrg;
+}

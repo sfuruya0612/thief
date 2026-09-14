@@ -75,15 +75,14 @@ func getDatadogMetrics(t *testing.T, s *Server, target string) (ddclient.MetricQ
 	return got, w
 }
 
-// TestDatadogMetricsQueryRequiresParams は org・query・時間窓が必須であることを確認する。
-// どれが欠けても Datadog を呼ぶ前に 400 で弾く。
+// TestDatadogMetricsQueryRequiresParams は query・時間窓が必須であること、org がパス
+// トラバーサルの疑いがある値だと弾かれることを確認する。org 自体の省略・空文字は親組織
+// を意味し 400 にはしない (TestDatadogMetricsQueryParentOrg を参照)。
 func TestDatadogMetricsQueryRequiresParams(t *testing.T) {
 	tests := []struct {
 		name   string
 		target string
 	}{
-		{name: "without an org", target: "/api/datadog/metrics/query?from=1&to=2&query=q"},
-		{name: "with an empty org", target: "/api/datadog/metrics/query?org=&from=1&to=2&query=q"},
 		{name: "with an invalid org", target: "/api/datadog/metrics/query?org=../../etc/passwd&from=1&to=2&query=q"},
 		{name: "without a query", target: "/api/datadog/metrics/query?org=suborg1&from=1&to=2"},
 		{name: "with an empty query", target: "/api/datadog/metrics/query?org=suborg1&from=1&to=2&query="},
@@ -102,6 +101,41 @@ func TestDatadogMetricsQueryRequiresParams(t *testing.T) {
 
 			w := doDatadogRequest(t, s, http.MethodGet, tt.target)
 			assertErrorCode(t, w, http.StatusBadRequest, "BAD_REQUEST")
+		})
+	}
+}
+
+// TestDatadogMetricsQueryParentOrg は org が省略または空文字のとき、親組織自身のメトリ
+// クスを返すことを確認する (issue 0171: self タブは org="" で Cost/Dashboards/Metrics を
+// 横断的に扱う)。Metrics は元々 Sub Organization 専用として org の省略を 400 で弾いてい
+// たが、親組織自身のタブでも使えるようこの制限を撤廃した。
+func TestDatadogMetricsQueryParentOrg(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{name: "an omitted org", target: "/api/datadog/metrics/query?from=1700000000&to=1700003600&query=q"},
+		{name: "an empty org", target: "/api/datadog/metrics/query?org=&from=1700000000&to=1700003600&query=q"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			calls := 0
+			// OAuth トークンが無くても、親組織は静的キーへフォールバックできる。
+			s := newDatadogMetricsTestServer(t, &datadogAuthDisk{}, true, okMetricsHandler(&calls, &mu))
+
+			w := doDatadogRequest(t, s, http.MethodGet, tt.target)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
+			}
+
+			mu.Lock()
+			got := calls
+			mu.Unlock()
+			if got != 1 {
+				t.Fatalf("upstream calls = %d, want 1", got)
+			}
 		})
 	}
 }

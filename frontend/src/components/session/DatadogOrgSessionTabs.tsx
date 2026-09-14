@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useRefreshDatadogOrgs } from '../../api/queries';
 import type { DatadogOrgSessions } from '../../hooks/useDatadogOrgs';
 import { useDatadogLoginFlow } from '../../hooks/useDatadogLogin';
-import { datadogOrgPickerItems } from '../../lib/sessionMeta';
+import { datadogOrgPickerItems, resolveDatadogRequestOrg } from '../../lib/sessionMeta';
 import { Icons } from '../icons/Icons';
 import { AddSessionPicker } from './AddSessionPicker';
 import { SessionTabs, type SessionTabItem } from './SessionTabs';
@@ -39,10 +39,15 @@ export function DatadogOrgSessionTabs({ sessions }: DatadogOrgSessionTabsProps) 
 
   // 未ログインの組織を選んだときだけログインを始める。一覧に無い組織はログイン状態が
   // 分からないため始めない (別の組織の認可を勝手に開始しない)。
+  // 親組織自身のタブ (isSelf) は、Datadog 側の id ではなく org: '' でログインを開始する。
+  // id をそのまま渡すと親組織向けの Sub Organization ログインが新たに始まってしまい、
+  // 既存の親組織トークン (org == '') と結び付かないまま「ログインしても未ログイン表示の
+  // まま」になる (issue 0171)。isSelf からの org 解決は resolveDatadogRequestOrg に
+  // 集約する (Cost/Dashboards/Metrics の取得先解決と同じロジック)。
   const loginIfNeeded = (id: string) => {
     const org = orgs.find((o) => o.id === id);
     if (!org || org.loggedIn || flow.loggingIn) return;
-    flow.begin(id);
+    flow.begin(resolveDatadogRequestOrg(orgs, id));
   };
 
   return (
@@ -55,7 +60,7 @@ export function DatadogOrgSessionTabs({ sessions }: DatadogOrgSessionTabsProps) 
         <AddSessionPicker
           items={pickerItems}
           placeholder={t('datadogOrgSessionTabs.searchPlaceholder')}
-          headerNote="GET /api/v1/org"
+          headerNote="GET /api/v2/org"
           headerAction={
             <button
               className="btn sm ghost"

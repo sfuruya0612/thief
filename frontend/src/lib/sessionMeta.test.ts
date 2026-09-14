@@ -11,6 +11,7 @@ import {
   profileAuthLabel,
   profileBadge,
   projectEnv,
+  resolveDatadogRequestOrg,
 } from './sessionMeta';
 
 describe('projectEnv', () => {
@@ -185,9 +186,9 @@ describe('gcpPickerItems', () => {
 
 describe('datadogOrgPickerItems', () => {
   const orgs: DatadogOrgRow[] = [
-    { id: 'abc123', name: 'Parent Org', loggedIn: true },
-    { id: 'sub456', name: 'Sub Org', loggedIn: false },
-    { id: 'sub789', name: 'sub789', loggedIn: false },
+    { id: 'abc123', name: 'Parent Org', loggedIn: true, isSelf: true },
+    { id: 'sub456', name: 'Sub Org', loggedIn: false, isSelf: false },
+    { id: 'sub789', name: 'sub789', loggedIn: false, isSelf: false },
   ];
 
   it('表示名を name、補足を id にする (同じなら meta を出さない)', () => {
@@ -211,5 +212,28 @@ describe('datadogOrgPickerItems', () => {
     const items = datadogOrgPickerItems(orgs, []);
     expect(items[1].searchText).toContain('sub456');
     expect(items[1].searchText).toContain('sub org');
+  });
+});
+
+describe('resolveDatadogRequestOrg', () => {
+  const orgs: DatadogOrgRow[] = [
+    { id: 'abc123', name: 'Parent Org', loggedIn: true, isSelf: true },
+    { id: 'sub456', name: 'Sub Org', loggedIn: false, isSelf: false },
+  ];
+
+  it('親組織自身のタブは空文字を返す', () => {
+    expect(resolveDatadogRequestOrg(orgs, 'abc123')).toBe('');
+  });
+
+  it('Sub Organization のタブは id をそのまま返す', () => {
+    expect(resolveDatadogRequestOrg(orgs, 'sub456')).toBe('sub456');
+  });
+
+  it('一覧に無い id (未取得中など) はそのまま返す', () => {
+    expect(resolveDatadogRequestOrg(orgs, 'unknown')).toBe('unknown');
+  });
+
+  it('タブが無い (空文字) 場合も空文字を返す', () => {
+    expect(resolveDatadogRequestOrg(orgs, '')).toBe('');
   });
 });

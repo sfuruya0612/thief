@@ -50,16 +50,19 @@ func NewUsageMeteringV2API(cfg *datadog.Configuration) *UsageMeteringV2API {
 	return &UsageMeteringV2API{api: datadogV2.NewUsageMeteringApi(client)}
 }
 
-// OrganizationsV1API wraps the Datadog v1 organizations API. The organizations
-// endpoint only exists in v1; there is no v2 equivalent.
-type OrganizationsV1API struct {
-	api *datadogV1.OrganizationsApi
+// OrganizationsV2API wraps the Datadog v2 organizations API.
+//
+// v1 の GET /api/v1/org は呼び出し元自身の組織 1 件しか返さず Sub Organization を
+// 列挙できないため (issue 0171 で実機検証済み)、v2 の managed orgs
+// エンドポイント (GET /api/v2/org) を使う。
+type OrganizationsV2API struct {
+	api *datadogV2.OrganizationsApi
 }
 
-// NewOrganizationsV1API creates a new OrganizationsV1API.
-func NewOrganizationsV1API(cfg *datadog.Configuration) *OrganizationsV1API {
+// NewOrganizationsV2API creates a new OrganizationsV2API.
+func NewOrganizationsV2API(cfg *datadog.Configuration) *OrganizationsV2API {
 	client := datadog.NewAPIClient(cfg)
-	return &OrganizationsV1API{api: datadogV1.NewOrganizationsApi(client)}
+	return &OrganizationsV2API{api: datadogV2.NewOrganizationsApi(client)}
 }
 
 // DashboardsV1API wraps the Datadog v1 dashboards API. Dashboards only exist in

@@ -11,6 +11,7 @@ import { useActiveDatadogOrg } from './hooks/useDatadogOrgs';
 import { useActiveGcpProject } from './hooks/useGcpProjects';
 import { useTweaks } from './hooks/useTweaks';
 import { createViewRefresher } from './lib/refreshView';
+import { resolveDatadogRequestOrg } from './lib/sessionMeta';
 import { loadPersisted, savePersisted } from './lib/storage';
 import { ConnectionWaiting } from './components/ConnectionWaiting';
 import { TopBar } from './components/TopBar';
@@ -81,7 +82,10 @@ export function App() {
   const gcp = useActiveGcpProject();
   const { projects: gcpProjects, activeProject: gcpProject } = gcp;
   const datadog = useActiveDatadogOrg();
-  const { activeOrg: datadogOrg } = datadog;
+  const { activeOrg: datadogOrg, orgs: datadogOrgs } = datadog;
+  // DatadogView への orgId は resolveDatadogRequestOrg で解決する (親組織自身のタブは
+  // 空文字)。key には引き続きタブの id を使い、タブ切替時の再マウントは維持する。
+  const datadogRequestOrg = resolveDatadogRequestOrg(datadogOrgs, datadogOrg);
   const { region, setRegion } = usePersistedRegion();
   const { view, setView } = usePersistedView();
   const { setWidth: setSidebarWidth } = usePersistedSidebarWidth();
@@ -169,7 +173,7 @@ export function App() {
         (datadogOrg ? (
           // key= で組織切替時に丸ごと再マウントし、前の組織の期間 / 絞り込みが
           // 残らないようにする (AccountView / GcpView と同じ扱い)。
-          <DatadogView key={datadogOrg} orgId={datadogOrg} />
+          <DatadogView key={datadogOrg} orgId={datadogRequestOrg} />
         ) : (
           <SessionEmptyState
             title={t('emptyState.datadog.title')}

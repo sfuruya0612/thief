@@ -14,10 +14,11 @@ import { getDatadogOrgs } from '../api/endpoints';
 
 const mockedGetDatadogOrgs = vi.mocked(getDatadogOrgs);
 
-const raw = (id: string, loggedIn = true): DatadogOrgRaw => ({
+const raw = (id: string, loggedIn = true, isSelf = false): DatadogOrgRaw => ({
   id,
   name: id.toUpperCase(),
   logged_in: loggedIn,
+  is_self: isSelf,
 });
 
 function wrapper({ children }: { children: ReactNode }) {

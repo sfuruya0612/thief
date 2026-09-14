@@ -29,7 +29,7 @@ type Server struct {
 	cfg           *config.Config
 	bq            *bqclient.Client
 	ddV2          *ddclient.UsageMeteringV2API
-	ddOrgV1       *ddclient.OrganizationsV1API
+	ddOrgV2       *ddclient.OrganizationsV2API
 	ddDashV1      *ddclient.DashboardsV1API
 	ddMetricsV1   *ddclient.MetricsV1API
 	tidb          *tidbclient.Client
@@ -75,7 +75,7 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	// (OAuth トークンの更新と CLI 側のログイン / ログアウトを稼働中に反映するため)。
 	ddCfg := ddclient.NewConfiguration(cfg.Datadog.Site)
 	s.ddV2 = ddclient.NewUsageMeteringV2API(ddCfg)
-	s.ddOrgV1 = ddclient.NewOrganizationsV1API(ddCfg)
+	s.ddOrgV2 = ddclient.NewOrganizationsV2API(ddCfg)
 	s.ddDashV1 = ddclient.NewDashboardsV1API(ddCfg)
 	s.ddMetricsV1 = ddclient.NewMetricsV1API(ddCfg)
 
