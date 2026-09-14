@@ -1,5 +1,5 @@
-// Datadog ビュー: cost (historical / estimated の切替表示) と dashboards のセクション切替。
-// cost は AWS Cost Explorer と同じ chart + クロス集計表。
+// Datadog ビュー: cost (historical / estimated の切替表示)、dashboards、metrics の
+// セクション切替。cost は AWS Cost Explorer と同じ chart + クロス集計表。
 import { useMemo, useState } from 'react';
 import { useDatadogEstimated, useDatadogHistorical } from '../../api/queries';
 import { MonthlyCostPanel } from '../../components/MonthlyCostPanel';
@@ -10,11 +10,12 @@ import { isDatadogAuthError } from '../../lib/datadogAuthError';
 import { defaultMonthRange, lastMonthsRange } from '../../lib/monthRange';
 import type { DatadogCostRow } from '../../types/nonaws';
 import { DatadogDashboardView } from './DatadogDashboardView';
+import { DatadogMetricsView } from './DatadogMetricsView';
 
 type Mode = 'historical' | 'estimated';
 
 // Section は Datadog ビューの中で切り替える表示の単位。
-type Section = 'cost' | 'dashboards';
+type Section = 'cost' | 'dashboards' | 'metrics';
 
 const GROUP_BY_OPTIONS: { value: DatadogCostGroupBy; label: string }[] = [
   { value: 'productName', label: 'Product' },
@@ -37,6 +38,8 @@ export interface DatadogViewProps {
 export function DatadogView({ orgId }: DatadogViewProps) {
   const [section, setSection] = useState<Section>('cost');
   const [mode, setMode] = useState<Mode>('historical');
+  // Dashboards から引き継いだクエリ。Metrics を開いたときの初期入力になる。
+  const [metricsQuery, setMetricsQuery] = useState('');
 
   const initialRange = useMemo(defaultMonthRange, []);
   const [startMonth, setStartMonth] = useState(initialRange.start);
@@ -75,7 +78,7 @@ export function DatadogView({ orgId }: DatadogViewProps) {
           <h1>Datadog</h1>
           <span className="subtitle">{section}</span>
         </div>
-        <div className="seg" style={{ width: 200 }}>
+        <div className="seg" style={{ width: 300 }}>
           <button className={section === 'cost' ? 'active' : ''} onClick={() => setSection('cost')}>
             Cost
           </button>
@@ -84,6 +87,12 @@ export function DatadogView({ orgId }: DatadogViewProps) {
             onClick={() => setSection('dashboards')}
           >
             Dashboards
+          </button>
+          <button
+            className={section === 'metrics' ? 'active' : ''}
+            onClick={() => setSection('metrics')}
+          >
+            Metrics
           </button>
         </div>
         {section === 'cost' && (
@@ -104,9 +113,19 @@ export function DatadogView({ orgId }: DatadogViewProps) {
         )}
       </div>
 
-      {section === 'dashboards' ? (
-        <DatadogDashboardView orgId={orgId} />
-      ) : (
+      {section === 'dashboards' && (
+        <DatadogDashboardView
+          orgId={orgId}
+          onOpenQuery={(query) => {
+            setMetricsQuery(query);
+            setSection('metrics');
+          }}
+        />
+      )}
+
+      {section === 'metrics' && <DatadogMetricsView orgId={orgId} initialQuery={metricsQuery} />}
+
+      {section === 'cost' && (
         <>
           {error &&
             (isDatadogAuthError(error) ? (

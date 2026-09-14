@@ -1,4 +1,5 @@
-// DatadogDashboardView の一覧表示・選択・ウィジェット描画 (実データ)・未対応フォールバックの検証。
+// DatadogDashboardView の一覧表示・選択・ウィジェット描画 (実データ)・未対応フォールバック・
+// timeseries ウィジェットから Metrics への引き継ぎの検証。
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   useDatadogDashboards: vi.fn(),
   useDatadogDashboard: vi.fn(),
   useDatadogMetricsQueries: vi.fn(),
+  onOpenQuery: vi.fn(),
 }));
 
 // echarts-for-react は jsdom (canvas 未実装) では描画できないため、渡された系列を
@@ -84,7 +86,7 @@ function renderView(orgId = 'suborg1') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DatadogDashboardView orgId={orgId} />
+      <DatadogDashboardView orgId={orgId} onOpenQuery={mocks.onOpenQuery} />
     </QueryClientProvider>,
   );
 }
@@ -214,6 +216,33 @@ describe('DatadogDashboardView', () => {
     expect(screen.getByText('thief does not render "toplist" widgets.')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: 'Open in Datadog' });
     expect(link).toHaveAttribute('href', 'https://app.datadoghq.com/dashboard/abc-123/overview');
+  });
+
+  it('timeseries ウィジェットからそのクエリを Metrics へ引き継げる', () => {
+    mocks.useDatadogDashboard.mockReturnValue({ data: detail, isLoading: false, error: null });
+    renderView();
+
+    // 引き継ぎ導線は timeseries ウィジェットだけに出す。
+    const buttons = screen.getAllByRole('button', { name: /^Open in Metrics/ });
+    expect(buttons).toHaveLength(1);
+
+    fireEvent.click(buttons[0]);
+    expect(mocks.onOpenQuery).toHaveBeenCalledWith('avg:system.cpu.user{*}');
+  });
+
+  it('複数クエリの timeseries ウィジェットはクエリごとに引き継ぎ導線を出す', () => {
+    mocks.useDatadogDashboard.mockReturnValue({
+      data: {
+        ...detail,
+        widgets: [{ ...widgets[0], queries: ['avg:a{*}', 'avg:b{*}'] }],
+      },
+      isLoading: false,
+      error: null,
+    });
+    renderView();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Metrics: avg:b{*}' }));
+    expect(mocks.onOpenQuery).toHaveBeenCalledWith('avg:b{*}');
   });
 
   it('ウィジェットが 1 つも無いダッシュボードでもその旨を出す', () => {

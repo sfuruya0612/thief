@@ -7,6 +7,7 @@ import {
   metricsWindow,
   OTHER_SERIES_NAME,
   seriesColors,
+  unitFormatter,
   type TimeseriesSeries,
 } from './timeseries';
 
@@ -125,5 +126,15 @@ describe('metricsWindow', () => {
   it('遡る長さを指定できる', () => {
     const w = metricsWindow(900, new Date('2026-09-12T10:30:00.000Z'));
     expect(w.to - w.from).toBe(900);
+  });
+});
+
+describe('unitFormatter', () => {
+  it('単位があれば値の後ろに付ける', () => {
+    expect(unitFormatter('%')(12.5)).toBe('12.5 %');
+  });
+
+  it('単位が無ければ値だけを出す', () => {
+    expect(unitFormatter('')(1234)).toBe((1234).toLocaleString());
   });
 });

@@ -79,6 +79,13 @@ export function seriesColors(series: TimeseriesSeries[]): string[] {
   );
 }
 
+// unitFormatter は単位付きの値の表示形式を返す。単位の無いメトリクスでは数値だけを出す。
+// Dashboards のウィジェットと Metrics の双方が同じ形式で値を出すために共有する。
+export function unitFormatter(unit: string): (v: number) => string {
+  if (!unit) return (v: number) => v.toLocaleString();
+  return (v: number) => `${v.toLocaleString()} ${unit}`;
+}
+
 // MetricsWindow はメトリクスを取得する時間窓。どちらも Unix 秒。
 export interface MetricsWindow {
   from: number;
