@@ -83,6 +83,7 @@ export function datadogOrgFromRaw(raw: DatadogOrgRaw): DatadogOrgRow {
     id: raw.id,
     name: raw.name || raw.id,
     loggedIn: raw.logged_in,
+    isSelf: raw.is_self,
   };
 }
 

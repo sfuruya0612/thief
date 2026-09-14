@@ -11,21 +11,33 @@ import {
 
 describe('datadogOrgFromRaw', () => {
   it('logged_in を camelCase に変換する', () => {
-    expect(datadogOrgFromRaw({ id: 'abc123', name: 'Parent Org', logged_in: true })).toEqual({
+    expect(
+      datadogOrgFromRaw({ id: 'abc123', name: 'Parent Org', logged_in: true, is_self: true }),
+    ).toEqual({
       id: 'abc123',
       name: 'Parent Org',
       loggedIn: true,
+      isSelf: true,
     });
   });
 
   it('未ログインの組織をそのまま通す', () => {
-    expect(datadogOrgFromRaw({ id: 'sub456', name: 'Sub Org', logged_in: false }).loggedIn).toBe(
-      false,
-    );
+    expect(
+      datadogOrgFromRaw({ id: 'sub456', name: 'Sub Org', logged_in: false, is_self: false })
+        .loggedIn,
+    ).toBe(false);
   });
 
   it('表示名が空なら id を表示名にする (タブのラベルが空になるのを防ぐ)', () => {
-    expect(datadogOrgFromRaw({ id: 'sub456', name: '', logged_in: false }).name).toBe('sub456');
+    expect(
+      datadogOrgFromRaw({ id: 'sub456', name: '', logged_in: false, is_self: false }).name,
+    ).toBe('sub456');
+  });
+
+  it('is_self を camelCase に変換する', () => {
+    expect(
+      datadogOrgFromRaw({ id: 'sub456', name: 'Sub Org', logged_in: false, is_self: false }).isSelf,
+    ).toBe(false);
   });
 });
 

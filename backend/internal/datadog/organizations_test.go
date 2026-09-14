@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// newTestOrgsAPI returns an OrganizationsV1API pointed at the given httptest.Server.
-func newTestOrgsAPI(t *testing.T, srv *httptest.Server) (*OrganizationsV1API, context.Context) {
+// newTestOrgsAPI は、指定した httptest.Server を向いた OrganizationsV2API を返す。
+func newTestOrgsAPI(t *testing.T, srv *httptest.Server) (*OrganizationsV2API, context.Context) {
 	t.Helper()
 	t.Cleanup(srv.Close)
 
@@ -19,10 +19,52 @@ func newTestOrgsAPI(t *testing.T, srv *httptest.Server) (*OrganizationsV1API, co
 	cfg.Scheme = "http"
 
 	ctx := NewContext(context.Background(), "public", "private")
-	return NewOrganizationsV1API(cfg), ctx
+	return NewOrganizationsV2API(cfg), ctx
+}
+
+// managedOrgsBody は GET /api/v2/org のレスポンスボディ (JSON:API 形式) を組み立てる。
+// selfID は current_org の id、managed は管理下の組織 id の順序付きリスト
+// (実際の API と同様に自組織自身も含む)、included は id から表示名への対応
+// (対応が無い id は included に一致するリソースが無い状態を表す)。
+func managedOrgsBody(selfID string, managed []string, included map[string]string) string {
+	var managedRefs strings.Builder
+	for i, id := range managed {
+		if i > 0 {
+			managedRefs.WriteString(",")
+		}
+		managedRefs.WriteString(`{"id":"` + id + `","type":"orgs"}`)
+	}
+
+	var includedResources strings.Builder
+	i := 0
+	for id, name := range included {
+		if i > 0 {
+			includedResources.WriteString(",")
+		}
+		// OrgAttributes は created_at/description/disabled/modified_at/name/public_id/
+		// sharing/url を全て必須とし (SDK の UnmarshalJSON が検証する)、これらが欠けると
+		// この OrgData 自体が UnparsedObject に落ちて GetId() がゼロ値になる。
+		includedResources.WriteString(
+			`{"id":"` + id + `","type":"orgs","attributes":{` +
+				`"created_at":"2020-01-01T00:00:00Z","description":"","disabled":false,` +
+				`"modified_at":"2020-01-01T00:00:00Z","name":"` + name + `","public_id":"` + id + `",` +
+				`"sharing":"organization","url":""}}`,
+		)
+		i++
+	}
+
+	return `{"data":{"id":"` + selfID + `","type":"managed_orgs","relationships":{` +
+		`"current_org":{"data":{"id":"` + selfID + `","type":"orgs"}},` +
+		`"managed_orgs":{"data":[` + managedRefs.String() + `]}` +
+		`}},"included":[` + includedResources.String() + `]}`
 }
 
 func TestListOrgs(t *testing.T) {
+	const (
+		selfID = "4c4f231c-00cc-11ea-a77b-17122b83a2a2"
+		subID  = "5d5f342d-11dd-22fb-b88c-28233c94b3b3"
+	)
+
 	tests := []struct {
 		name   string
 		status int
@@ -32,39 +74,36 @@ func TestListOrgs(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "public ids are lower-cased and names are kept as they are",
+			name:   "the current org is marked IsSelf and ids are lower-cased",
 			status: http.StatusOK,
-			body: `{"orgs":[
-			  {"public_id":"ABC123def","name":"Parent Org"},
-			  {"public_id":"sub456","name":"Sub Org"}
-			]}`,
+			body: managedOrgsBody(strings.ToUpper(selfID), []string{strings.ToUpper(selfID), strings.ToUpper(subID)}, map[string]string{
+				strings.ToUpper(selfID): "Parent Org",
+				strings.ToUpper(subID):  "Sub Org",
+			}),
 			want: []OrgInfo{
-				{ID: "abc123def", Name: "Parent Org"},
-				{ID: "sub456", Name: "Sub Org"},
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: "Sub Org", IsSelf: false},
 			},
 		},
 		{
-			name:   "an organization without a public id is skipped",
+			name:   "an organization missing from included falls back to its id as the name",
 			status: http.StatusOK,
-			body:   `{"orgs":[{"name":"No Public Id"},{"public_id":"sub456","name":"Sub Org"}]}`,
-			want:   []OrgInfo{{ID: "sub456", Name: "Sub Org"}},
+			body:   managedOrgsBody(selfID, []string{selfID, subID}, map[string]string{selfID: "Parent Org"}),
+			want: []OrgInfo{
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: subID, IsSelf: false},
+			},
 		},
 		{
-			name:   "an organization without a name keeps its id",
+			name:   "only the current org managed yields a single self entry",
 			status: http.StatusOK,
-			body:   `{"orgs":[{"public_id":"sub456"}]}`,
-			want:   []OrgInfo{{ID: "sub456", Name: ""}},
+			body:   managedOrgsBody(selfID, []string{selfID}, map[string]string{selfID: "Parent Org"}),
+			want:   []OrgInfo{{ID: selfID, Name: "Parent Org", IsSelf: true}},
 		},
 		{
-			name:   "an empty list yields an empty slice",
+			name:   "an empty managed orgs list yields an empty slice",
 			status: http.StatusOK,
-			body:   `{"orgs":[]}`,
-			want:   []OrgInfo{},
-		},
-		{
-			name:   "a missing orgs field yields an empty slice",
-			status: http.StatusOK,
-			body:   `{}`,
+			body:   managedOrgsBody(selfID, nil, nil),
 			want:   []OrgInfo{},
 		},
 		{
@@ -99,8 +138,8 @@ func TestListOrgs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ListOrgs() error = %v", err)
 			}
-			if gotPath != "/api/v1/org" {
-				t.Errorf("requested path = %q, want /api/v1/org", gotPath)
+			if gotPath != "/api/v2/org" {
+				t.Errorf("requested path = %q, want /api/v2/org", gotPath)
 			}
 			if orgs == nil {
 				t.Fatal("ListOrgs() returned a nil slice, want an empty slice")

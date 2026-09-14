@@ -24,8 +24,8 @@ const startBody = {
 function newSessions(overrides: Partial<DatadogOrgSessions> = {}): DatadogOrgSessions {
   return {
     orgs: [
-      { id: 'abc123', name: 'Parent Org', loggedIn: true },
-      { id: 'sub456', name: 'Sub Org', loggedIn: false },
+      { id: 'abc123', name: 'Parent Org', loggedIn: true, isSelf: true },
+      { id: 'sub456', name: 'Sub Org', loggedIn: false, isSelf: false },
     ],
     isLoading: false,
     isError: false,
@@ -104,13 +104,34 @@ describe('DatadogOrgSessionTabs', () => {
     // 認可画面を開くことになる。
     mockAuthWindow();
     const sessions = renderTabs(
-      newSessions({ orgs: [{ id: 'abc123', name: 'Parent Org', loggedIn: true }] }),
+      newSessions({ orgs: [{ id: 'abc123', name: 'Parent Org', loggedIn: true, isSelf: true }] }),
     );
 
     fireEvent.click(screen.getByText('sub456'));
 
     expect(sessions.activateOrg).toHaveBeenCalledWith('sub456');
     expect(mockedStart).not.toHaveBeenCalled();
+  });
+
+  it('親組織自身が未ログインのタブをクリックすると org を空文字にしてログインを始める', async () => {
+    // 親組織のトークンは org == '' のファイルに保存されるため (issue 0167)、id
+    // (Datadog 側の UUID) をそのまま渡すと親組織として認証済みにならない (issue 0171)。
+    const authWindow = mockAuthWindow();
+    const sessions = renderTabs(
+      newSessions({
+        orgs: [
+          { id: 'abc123', name: 'Parent Org', loggedIn: false, isSelf: true },
+          { id: 'sub456', name: 'Sub Org', loggedIn: true, isSelf: false },
+        ],
+        activeOrg: 'sub456',
+      }),
+    );
+
+    fireEvent.click(screen.getByText('Parent Org'));
+
+    expect(sessions.activateOrg).toHaveBeenCalledWith('abc123');
+    await waitFor(() => expect(mockedStart).toHaveBeenCalledWith(''));
+    expect(authWindow.location.replace).toHaveBeenCalledWith(startBody.authorization_url);
   });
 
   it('ピッカーから未ログインの組織を選ぶとタブを開いてログインを始める', async () => {

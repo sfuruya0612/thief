@@ -85,12 +85,16 @@ export interface DatadogOrgRaw {
   id: string;
   name: string;
   logged_in: boolean;
+  is_self: boolean;
 }
 
 export interface DatadogOrgRow {
   id: string;
   name: string;
   loggedIn: boolean;
+  // 呼び出し元の認証情報が属する組織 (親組織自身) かどうか。true の場合、ログイン開始時
+  // の org は '' (親組織) にする (DatadogOrgSessionTabs 参照)。
+  isSelf: boolean;
 }
 
 // Datadog OAuth ログイン (backend の datadogLoginStartResponse /

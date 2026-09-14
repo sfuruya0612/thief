@@ -85,29 +85,60 @@ func getDatadogDashboards(t *testing.T, s *Server, target string) ([]ddclient.Da
 	return got, w
 }
 
-// TestDatadogDashboardsRequireOrg は org クエリパラメータが必須であることを確認する。
-// ダッシュボードは組織ごとに分離しており、対象組織が決まらないリクエストは Datadog を
-// 呼ぶ前に弾く。
-func TestDatadogDashboardsRequireOrg(t *testing.T) {
+// TestDatadogDashboardsInvalidOrgIsRejected は、パストラバーサルの疑いがある org を
+// Datadog を呼ぶ前に弾くことを確認する。
+func TestDatadogDashboardsInvalidOrgIsRejected(t *testing.T) {
 	tests := []struct {
 		name   string
 		target string
 	}{
-		{name: "the list without an org", target: "/api/datadog/dashboards"},
-		{name: "the list with an empty org", target: "/api/datadog/dashboards?org="},
-		{name: "the list with an invalid org", target: "/api/datadog/dashboards?org=../../etc/passwd"},
-		{name: "the detail without an org", target: "/api/datadog/dashboards/abc-123"},
-		{name: "the detail with an empty org", target: "/api/datadog/dashboards/abc-123?org="},
-		{name: "the detail with an invalid org", target: "/api/datadog/dashboards/abc-123?org=../../etc/passwd"},
+		{name: "the list", target: "/api/datadog/dashboards?org=../../etc/passwd"},
+		{name: "the detail", target: "/api/datadog/dashboards/abc-123?org=../../etc/passwd"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 静的キーを設定しても、org が無ければ Datadog には届かない。
 			s := newDatadogDashboardsTestServer(t, &datadogAuthDisk{}, true, unreachableDashboardsHandler(t))
 
 			w := doDatadogRequest(t, s, http.MethodGet, tt.target)
 			assertErrorCode(t, w, http.StatusBadRequest, "BAD_REQUEST")
+		})
+	}
+}
+
+// TestDatadogDashboardsParentOrg は org が省略または空文字のとき、親組織自身のダッシュ
+// ボードを返すことを確認する (issue 0171: self タブは org="" で Cost/Dashboards/Metrics
+// を横断的に扱う)。Dashboards は元々 Sub Organization 専用として org の省略を 400 で
+// 弾いていたが、親組織自身のタブでも使えるようこの制限を撤廃した。
+func TestDatadogDashboardsParentOrg(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+	}{
+		{name: "the list with an omitted org", target: "/api/datadog/dashboards"},
+		{name: "the list with an empty org", target: "/api/datadog/dashboards?org="},
+		{name: "the detail with an omitted org", target: "/api/datadog/dashboards/abc-123"},
+		{name: "the detail with an empty org", target: "/api/datadog/dashboards/abc-123?org="},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			calls := 0
+			// OAuth トークンが無くても、親組織は静的キーへフォールバックできる。
+			s := newDatadogDashboardsTestServer(t, &datadogAuthDisk{}, true, okDashboardsHandler(&calls, &mu))
+
+			w := doDatadogRequest(t, s, http.MethodGet, tt.target)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
+			}
+
+			mu.Lock()
+			got := calls
+			mu.Unlock()
+			if got != 1 {
+				t.Fatalf("upstream calls = %d, want 1", got)
+			}
 		})
 	}
 }

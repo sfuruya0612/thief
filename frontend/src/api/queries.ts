@@ -1003,21 +1003,23 @@ export function useDatadogEstimated(
 }
 
 // ダッシュボード一覧。org はダッシュボードの所属組織で、queryKey に含めないと組織を
-// 切り替えても直前の組織の一覧がキャッシュから返る。
+// 切り替えても直前の組織の一覧がキャッシュから返る。org は空文字 (親組織自身) も有効な
+// 値のため、enabled の判定には使わない (issue 0171: !!org で弾くと親組織タブで
+// 永久に取得されなくなる)。
 export function useDatadogDashboards(org: string) {
   return useQuery({
     queryKey: ['datadog', 'dashboards', org],
     queryFn: async () => (await getDatadogDashboards(org)).map(datadogDashboardFromRaw),
-    enabled: !!org,
   });
 }
 
-// 選択中のダッシュボードの詳細。未選択 (id が空) の間は取得しない。
+// 選択中のダッシュボードの詳細。未選択 (id が空) の間は取得しない。org は空文字
+// (親組織自身) も有効な値のため、enabled の判定には使わない (issue 0171 と同様)。
 export function useDatadogDashboard(org: string, id: string) {
   return useQuery({
     queryKey: ['datadog', 'dashboard', org, id],
     queryFn: async () => datadogDashboardDetailFromRaw(await getDatadogDashboard(org, id)),
-    enabled: !!org && !!id,
+    enabled: !!id,
   });
 }
 
@@ -1026,6 +1028,8 @@ export function useDatadogDashboard(org: string, id: string) {
 // ウィジェットはクエリを複数持つことがあり、その全部を 1 つのグラフに重ねて描く。
 // クエリ数は実行時にしか決まらないので useQueries でまとめ、combine で 1 つの
 // 読み込み状態・エラー・系列へ畳む。
+// org は空文字 (親組織自身) も有効な値のため、enabled の判定には使わない
+// (issue 0171 と同様)。
 export function useDatadogMetricsQueries(org: string, queries: string[], range: MetricsWindow) {
   return useQueries({
     queries: queries.map((query) => ({
@@ -1034,7 +1038,7 @@ export function useDatadogMetricsQueries(org: string, queries: string[], range: 
         datadogMetricQueryResultFromRaw(
           await getDatadogMetricsQuery(org, query, range.from, range.to),
         ),
-      enabled: !!org && !!query,
+      enabled: !!query,
     })),
     combine: (results) => ({
       series: results.flatMap((r) => r.data?.series ?? []),

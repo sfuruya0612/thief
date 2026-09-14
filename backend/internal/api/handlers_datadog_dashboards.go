@@ -9,27 +9,12 @@ import (
 	ddclient "github.com/sfuruya0612/thief/backend/internal/datadog"
 )
 
-// datadogRequiredOrgFromQuery は org クエリパラメータを必須として取り出す。
-//
-// ダッシュボードは組織ごとに完全に分離しており、組織を跨いだ一覧取得は行わない。
-// 対象組織が指定されていないリクエストは、どの組織のダッシュボードを返すべきか決まらない
-// ため、Datadog を呼ぶ前に 400 で弾く。コスト取得 (datadogOrgFromQuery) が org の省略を
-// 親組織として受け付けるのとはここが異なる。
-func datadogRequiredOrgFromQuery(w http.ResponseWriter, r *http.Request) (string, bool) {
-	org, ok := datadogOrgFromQuery(w, r)
-	if !ok {
-		return "", false
-	}
-	if org == datadogParentOrg {
-		writeBadRequest(w, "the org query parameter is required")
-		return "", false
-	}
-	return org, true
-}
-
 // handleDatadogDashboards は選択中の組織のダッシュボード一覧を返す。
+//
+// 対象組織は org クエリパラメータで指定する。省略時は親組織自身 (datadogOrgFromQuery
+// が返す datadogParentOrg) を対象にする。コスト取得と同じ扱い。
 func (s *Server) handleDatadogDashboards(w http.ResponseWriter, r *http.Request) {
-	org, ok := datadogRequiredOrgFromQuery(w, r)
+	org, ok := datadogOrgFromQuery(w, r)
 	if !ok {
 		return
 	}
@@ -55,7 +40,7 @@ func (s *Server) handleDatadogDashboards(w http.ResponseWriter, r *http.Request)
 
 // handleDatadogDashboard は 1 つのダッシュボードと、thief が描けるウィジェットを返す。
 func (s *Server) handleDatadogDashboard(w http.ResponseWriter, r *http.Request) {
-	org, ok := datadogRequiredOrgFromQuery(w, r)
+	org, ok := datadogOrgFromQuery(w, r)
 	if !ok {
 		return
 	}
