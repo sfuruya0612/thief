@@ -160,6 +160,11 @@ dir = "frontend"
 usage = "arg \"<zip>\" var=#true help=\"Google Cloud 公式アイコンパッケージの zip ファイルパス (複数指定可)\""
 run = "node scripts/fetch-gcp-icons.mjs $usage_zip"
 
+[tasks."frontend:update"]
+description = "frontend 依存更新"
+dir = "frontend"
+run = "npm update"
+
 [tasks."frontend:build"]
 description = "frontend ビルド (Web)"
 dir = "frontend"

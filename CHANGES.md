@@ -433,6 +433,8 @@
   - @sfuruya0612
 - AWS クライアント生成クロージャ約 50 箇所のコピペをサービス別 newXxxClient ヘルパに集約する
   - @sfuruya0612
+- npm audit が検出した esbuild の脆弱性 (GHSA-67mh-4wv8-2f99、開発サーバーへの任意オリジンからのリクエスト送信と応答の読み取り) を解消するため vite を v5.4.10 から v8.3.0 に更新する (peer dependency の都合で @vitejs/plugin-react を v4.3.3 から v6.1.1 に、vitest を v4.1.10 から v5.0.0 に合わせて更新する。3 パッケージともメジャーバージョンの更新だが、vite.config.ts の設定・ビルド成果物・全 926 件のユニットテスト・dev サーバー / preview サーバーの起動に挙動の変化は無い)
+  - @sfuruya0612
 - SDK Tag 型ごとに重複していた tagsToMap 4 実装と WAF のインラインループをジェネリクスの tagsToMapFunc に統合する
   - @sfuruya0612
 - ECS クラスタ ARN 列挙の重複 2 実装を共通コアに集約し、バッチ分割の手書き上限 clamp を min() とバッチサイズ定数に統一する
