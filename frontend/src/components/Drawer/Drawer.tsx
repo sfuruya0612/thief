@@ -27,7 +27,8 @@ import { DrawerSecretEdit } from './DrawerSecretEdit';
 import { DrawerSSMEdit } from './DrawerSSMEdit';
 import { DrawerTags } from './DrawerTags';
 import { DrawerWAFRules } from './DrawerWAFRules';
-import { DrawerTerminal, type ECSExecTarget } from './DrawerTerminal';
+import { DrawerTerminal } from './DrawerTerminal';
+import { openECSTerminalSession } from '../../lib/terminalLaunchers';
 import type { OverviewEntry } from './overviewRows';
 
 const DRAWER_TABS: Record<string, string[]> = {
@@ -118,15 +119,11 @@ export function Drawer({
 }: DrawerProps) {
   const [tab, setTab] = useState('Overview');
   const [size, setSize] = useState<DrawerSize>(loadDrawerSize);
-  // Tasks タブの Containers テーブルで「Exec」を押した対象。Terminal タブへ渡ってドロップダウン
-  // 選択を経由せず直接接続する (タブ間で状態を持ち回す唯一の受け渡し役)。
-  const [pendingExecTarget, setPendingExecTarget] = useState<ECSExecTarget | null>(null);
   const open = !!resource;
 
   useEffect(() => {
     if (resource) {
       setTab('Overview');
-      setPendingExecTarget(null);
     }
   }, [resource?.id]);
 
@@ -293,7 +290,6 @@ export function Drawer({
                   profile={profile}
                   region={region}
                   resource={resource}
-                  execTarget={pendingExecTarget}
                 />
               )}
               {tab === 'Images' && (
@@ -307,9 +303,15 @@ export function Drawer({
                   profile={profile}
                   region={region}
                   cluster={resource.name}
+                  // Terminal タブへ切り替えず、常駐ドックへ直接セッションを開く
                   onExec={(target) => {
-                    setPendingExecTarget(target);
-                    setTab('Terminal');
+                    openECSTerminalSession(
+                      profile,
+                      region,
+                      resource.name,
+                      target.taskArn,
+                      target.container,
+                    );
                   }}
                 />
               )}

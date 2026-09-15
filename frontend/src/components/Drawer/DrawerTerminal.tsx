@@ -1,4 +1,7 @@
 // Drawer の Terminal タブ本体。
+// ターミナル本体は App 直下の常駐ドック (components/Terminal/TerminalDock.tsx) にマウントされるため、
+// このタブはドックへセッションを開くランチャーだけを担う (同じセッションのマウント位置が
+// 2 つにならないよう、ここでは Terminal を描画しない)。
 // EC2 は instance id (resource.id) だけで SSM Start Session を開始できる。
 // ECS は cluster (resource.name; ARN ではなく bare name。パスセグメントとして "/" を含む ARN は使えない) から
 // タスク一覧・コンテナ一覧を取得し、選択した上で Exec Command を開始する
@@ -6,69 +9,58 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BaseRow } from '../../types/common';
-import { ec2SessionUrl, ecsExecUrl } from '../../api/terminal';
 import { useECSContainers, useECSTasks } from '../../api/queries';
 import { arnSuffix } from '../../lib/format';
-import { Terminal } from '../Terminal/Terminal';
-
-// Tasks タブの Containers テーブルで事前に選択された exec 対象
-export interface ECSExecTarget {
-  taskArn: string;
-  container: string;
-}
+import { openEC2TerminalSession, openECSTerminalSession } from '../../lib/terminalLaunchers';
+import { Icons } from '../icons/Icons';
 
 export interface DrawerTerminalProps {
   service: string;
   profile: string;
   region: string;
   resource: BaseRow;
-  execTarget?: ECSExecTarget | null;
 }
 
-export function DrawerTerminal({
-  service,
-  profile,
-  region,
-  resource,
-  execTarget,
-}: DrawerTerminalProps) {
+export function DrawerTerminal({ service, profile, region, resource }: DrawerTerminalProps) {
   if (service === 'ec2') {
-    return <Terminal wsUrl={ec2SessionUrl(profile, resource.id, region)} />;
+    return <EC2ExecLauncher profile={profile} region={region} resource={resource} />;
   }
   if (service === 'ecs') {
-    return (
-      <ECSExecTerminal
-        profile={profile}
-        region={region}
-        cluster={resource.name}
-        target={execTarget}
-      />
-    );
+    return <ECSExecLauncher profile={profile} region={region} cluster={resource.name} />;
   }
   return null;
 }
 
-function ECSExecTerminal({
+function ConnectButton({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
+  const { t } = useTranslation('drawerStorage');
+  return (
+    <button className="btn sm" disabled={disabled} onClick={onClick}>
+      <Icons.terminal size={12} /> {t('terminal.connect')}
+    </button>
+  );
+}
+
+function EC2ExecLauncher({
   profile,
   region,
-  cluster,
-  target,
+  resource,
 }: {
   profile: string;
   region: string;
-  cluster: string;
-  target?: ECSExecTarget | null;
+  resource: BaseRow;
 }) {
-  // Tasks タブから対象が事前確定している場合は、ドロップダウン選択を経由せず直接接続する
-  if (target) {
-    const task = arnSuffix(target.taskArn);
-    return <Terminal wsUrl={ecsExecUrl(profile, cluster, task, target.container, region)} />;
-  }
-
-  return <ECSExecTerminalDropdown profile={profile} region={region} cluster={cluster} />;
+  const { t } = useTranslation('drawerStorage');
+  return (
+    <div className="col" style={{ gap: 10 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <ConnectButton onClick={() => openEC2TerminalSession(profile, region, resource)} />
+      </div>
+      <div className="empty-hint">{t('terminal.launcherHint')}</div>
+    </div>
+  );
 }
 
-function ECSExecTerminalDropdown({
+function ECSExecLauncher({
   profile,
   region,
   cluster,
@@ -118,7 +110,7 @@ function ECSExecTerminalDropdown({
   const execEnabledContainers = containers?.filter((c) => c.execEnabled) ?? [];
 
   return (
-    <div className="col" style={{ height: '100%', gap: 10 }}>
+    <div className="col" style={{ gap: 10 }}>
       <div className="row" style={{ gap: 8 }}>
         {tasks.length > 1 && (
           <select
@@ -154,15 +146,18 @@ function ECSExecTerminalDropdown({
             ))}
           </select>
         )}
+        {/* 選択を変えるたびにセッションが開かないよう、接続は明示的なボタン操作に限る */}
+        <ConnectButton
+          disabled={!taskArn || !containerName}
+          onClick={() => openECSTerminalSession(profile, region, cluster, taskArn, containerName)}
+        />
       </div>
 
       {taskArn && !containersLoading && execEnabledContainers.length === 0 && (
         <div className="empty-hint">{t('drawerTerminal.noExecContainers')}</div>
       )}
 
-      {taskArn && containerName && (
-        <Terminal wsUrl={ecsExecUrl(profile, cluster, task, containerName, region)} />
-      )}
+      <div className="empty-hint">{t('terminal.launcherHint')}</div>
     </div>
   );
 }

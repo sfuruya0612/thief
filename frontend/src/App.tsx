@@ -20,6 +20,7 @@ import { AwsSessionTabs } from './components/session/AwsSessionTabs';
 import { DatadogOrgSessionTabs } from './components/session/DatadogOrgSessionTabs';
 import { GcpSessionTabs } from './components/session/GcpSessionTabs';
 import { SessionEmptyState } from './components/session/SessionEmptyState';
+import { TerminalDock } from './components/Terminal/TerminalDock';
 import { AccountView } from './views/AccountView';
 import { GcpView } from './views/GcpView';
 import { DatadogView } from './views/nonaws/DatadogView';
@@ -182,6 +183,9 @@ export function App() {
         ))}
       {view === 'tidb' && <TiDBView />}
       {tweaksOpen && <TweaksPanel open onClose={() => setTweaksOpen(false)} />}
+      {/* ターミナルドックは view / プロファイル / サービスのどれにも依存しない位置に置き、
+          画面遷移をまたいでも Terminal がアンマウントされないようにする (issue 0174) */}
+      <TerminalDock />
     </div>
   );
 }

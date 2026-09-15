@@ -1462,7 +1462,9 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   position: fixed;
   top: 8px;
   right: 8px;
-  bottom: 8px;
+  /* 常駐ターミナルドック (TerminalDock.tsx が --terminal-dock-h を設定する) の上に収める。
+     ドックが無いときは 0px にフォールバックし、従来どおり 8px 浮かせる。 */
+  bottom: calc(var(--terminal-dock-h, 0px) + 8px);
   width: min(600px, 52vw);
   /* インラインの px 指定 (永続化されたリサイズ値) が描画後のウィンドウ縮小を追い越さないためのガードレール */
   max-width: 85vw;
@@ -1486,7 +1488,8 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   top: auto;
   left: 8px;
   right: 8px;
-  bottom: 8px;
+  /* .drawer より詳細度が高いため、下配置でも同じ計算を再宣言する */
+  bottom: calc(var(--terminal-dock-h, 0px) + 8px);
   width: auto;
   max-width: none;
   height: min(46vh, 520px);
@@ -1773,6 +1776,112 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 }
 .terminal-status-closed {
   color: var(--text-3);
+}
+
+/* Terminal dock (画面下部に常駐するターミナルパネル) */
+.terminal-dock {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border-top: 1px solid var(--line-2);
+}
+.terminal-dock-tabs {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 var(--sp-2);
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--line-1);
+  overflow-x: auto;
+}
+.terminal-dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 280px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.terminal-dock-tab:hover {
+  color: var(--text-1);
+}
+.terminal-dock-tab.active {
+  color: var(--text-1);
+  border-bottom-color: var(--accent);
+}
+.terminal-dock-tab-status {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.terminal-dock-tab-status.status-connected {
+  background: var(--ok);
+}
+.terminal-dock-tab-status.status-error {
+  background: var(--err);
+}
+.terminal-dock-tab-kind {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+.terminal-dock-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-dock-tab-state {
+  flex: none;
+  color: var(--text-3);
+}
+.terminal-dock-tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.terminal-dock-tab-close:hover {
+  color: var(--text-1);
+}
+.terminal-dock-toggle {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.terminal-dock-toggle:hover {
+  color: var(--text-1);
+}
+/* .terminal-panel は height: 100% と min-height: 320px を持つため、本文とペインには
+   display を宣言せず (hidden 属性での非表示を UA スタイルに任せる)、高さだけを渡す。 */
+.terminal-dock-body {
+  flex: 1;
+  min-height: 0;
+}
+.terminal-dock-pane {
+  height: 100%;
+}
+/* author 由来の display 宣言が UA スタイルシートの [hidden] { display: none } に
+   常に勝つため、非表示を明示する (将来ここに display が足されても壊れないようにする)。 */
+.terminal-dock-body[hidden],
+.terminal-dock-pane[hidden] {
+  display: none;
 }
 
 /* ============================================================

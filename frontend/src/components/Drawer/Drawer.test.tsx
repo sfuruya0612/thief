@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Drawer } from './Drawer';
 import type { BaseRow } from '../../types/common';
+import { resetTerminalSessionsForTest, useTerminalSessions } from '../../hooks/useTerminalSessions';
 
 const RESOURCE: BaseRow = {
   id: 'i-0123456789abcdef0',
@@ -341,5 +342,103 @@ describe('Drawer の RDS パラメータタブのエラー分離', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('max_connections');
     });
+  });
+});
+
+// issue 0174: Tasks タブの Exec は Terminal タブへ切り替えず、常駐ターミナルドックへ
+// 直接セッションを開く (Drawer 側に pendingExecTarget を持たない)。
+describe('Drawer の ECS Tasks タブの Exec', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetTerminalSessionsForTest();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => [
+        {
+          arn: 'arn:aws:ecs:ap-northeast-1:123:task/my-cluster/abc',
+          group: 'service:my-svc',
+          last_status: 'RUNNING',
+          desired_status: 'RUNNING',
+          launch_type: 'FARGATE',
+          enable_execute_command: true,
+          container_names: ['app'],
+          cpu: '256',
+          memory: '512',
+          started_at: '2026-07-08T00:00:00Z',
+          stopped_at: '',
+          stopped_reason: '',
+          containers: [
+            {
+              name: 'app',
+              image: 'app:latest',
+              last_status: 'RUNNING',
+              health_status: 'HEALTHY',
+              reason: '',
+              runtime_id: 'runtime-app',
+              cpu: '',
+              memory: '',
+              memory_reservation: '',
+              exec_enabled: true,
+            },
+          ],
+        },
+      ],
+    } as Response);
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('Exec ボタンでストアに kind: ecs のセッションが追加され、タブは Terminal へ切り替わらない', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <Drawer
+          resource={{ id: 'my-cluster', name: 'my-cluster', state: 'ACTIVE' }}
+          service="ecs"
+          profile="test-profile"
+          region="ap-northeast-1"
+          overviewRows={[]}
+          onClose={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    const tasksTab = Array.from(container.querySelectorAll('.dtab')).find(
+      (el) => el.textContent === 'Tasks',
+    );
+    fireEvent.click(tasksTab!);
+
+    await waitFor(() => {
+      expect(container.querySelector('td .primary.truncate')).not.toBeNull();
+    });
+    fireEvent.click(container.querySelector('td .primary.truncate')!);
+
+    await waitFor(() => {
+      expect(
+        Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Exec'),
+      ).not.toBeUndefined();
+    });
+    const execButton = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Exec',
+    )!;
+    fireEvent.click(execButton);
+
+    const state = renderHook(() => useTerminalSessions()).result.current;
+    expect(state.tabs.open).toHaveLength(1);
+    const session = state.sessions[state.tabs.active];
+    expect(session.kind).toBe('ecs');
+    expect(session.label).toBe('my-cluster / abc / app');
+    expect(session.wsUrl).toContain('/ecs/my-cluster/tasks/abc/exec');
+
+    // Drawer のタブは Tasks のまま (Terminal へ切り替わらない)
+    const activeTab = container.querySelector('.dtab.active');
+    expect(activeTab?.textContent).toBe('Tasks');
   });
 });

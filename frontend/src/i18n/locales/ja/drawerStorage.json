@@ -29,6 +29,15 @@
     "sessionEnded": "セッション終了",
     "sessionEndedWithMessage": "セッション終了: {{message}}",
     "connectError": "接続エラー",
-    "errorWithMessage": "エラー: {{message}}"
+    "errorWithMessage": "エラー: {{message}}",
+    "connect": "接続",
+    "launcherHint": "接続すると画面下部のターミナルに開きます。画面を切り替えても接続は維持されます。",
+    "collapseDock": "ターミナルを折りたたむ",
+    "expandDock": "ターミナルを展開する",
+    "closeSession": "セッションを閉じる",
+    "statusConnecting": "接続中",
+    "statusConnected": "接続済み",
+    "statusClosed": "終了",
+    "statusError": "エラー"
   }
 }
