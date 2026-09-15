@@ -22,11 +22,32 @@ func newTestOrgsAPI(t *testing.T, srv *httptest.Server) (*OrganizationsV2API, co
 	return NewOrganizationsV2API(cfg), ctx
 }
 
+// includedOrg は GET /api/v2/org の included[] に入れる組織リソース 1 件分のフィクスチャ。
+// Type と Attributes は JSON の断片をそのまま埋め込む (Attributes が空文字なら
+// attributes キー自体を出さない)。
+type includedOrg struct {
+	ID         string
+	Type       string
+	Attributes string
+}
+
+// fullOrgAttributes は SDK (v2.65.0) の OrgAttributes が必須とする 8 フィールドを
+// すべて満たす attributes の JSON を返す。
+func fullOrgAttributes(id, name string) string {
+	return `{"created_at":"2020-01-01T00:00:00Z","description":"","disabled":false,` +
+		`"modified_at":"2020-01-01T00:00:00Z","name":"` + name + `","public_id":"` + id + `",` +
+		`"sharing":"organization","url":""}`
+}
+
+// fullOrg は SDK の検証に通る included の組織を返す。
+func fullOrg(id, name string) includedOrg {
+	return includedOrg{ID: id, Type: "orgs", Attributes: fullOrgAttributes(id, name)}
+}
+
 // managedOrgsBody は GET /api/v2/org のレスポンスボディ (JSON:API 形式) を組み立てる。
 // selfID は current_org の id、managed は管理下の組織 id の順序付きリスト
-// (実際の API と同様に自組織自身も含む)、included は id から表示名への対応
-// (対応が無い id は included に一致するリソースが無い状態を表す)。
-func managedOrgsBody(selfID string, managed []string, included map[string]string) string {
+// (実際の API と同様に自組織自身も含む)、included は included[] に並べる組織リソース。
+func managedOrgsBody(selfID string, managed []string, included []includedOrg) string {
 	var managedRefs strings.Builder
 	for i, id := range managed {
 		if i > 0 {
@@ -36,21 +57,15 @@ func managedOrgsBody(selfID string, managed []string, included map[string]string
 	}
 
 	var includedResources strings.Builder
-	i := 0
-	for id, name := range included {
+	for i, o := range included {
 		if i > 0 {
 			includedResources.WriteString(",")
 		}
-		// OrgAttributes は created_at/description/disabled/modified_at/name/public_id/
-		// sharing/url を全て必須とし (SDK の UnmarshalJSON が検証する)、これらが欠けると
-		// この OrgData 自体が UnparsedObject に落ちて GetId() がゼロ値になる。
-		includedResources.WriteString(
-			`{"id":"` + id + `","type":"orgs","attributes":{` +
-				`"created_at":"2020-01-01T00:00:00Z","description":"","disabled":false,` +
-				`"modified_at":"2020-01-01T00:00:00Z","name":"` + name + `","public_id":"` + id + `",` +
-				`"sharing":"organization","url":""}}`,
-		)
-		i++
+		includedResources.WriteString(`{"id":"` + o.ID + `","type":"` + o.Type + `"`)
+		if o.Attributes != "" {
+			includedResources.WriteString(`,"attributes":` + o.Attributes)
+		}
+		includedResources.WriteString(`}`)
 	}
 
 	return `{"data":{"id":"` + selfID + `","type":"managed_orgs","relationships":{` +
@@ -76,9 +91,9 @@ func TestListOrgs(t *testing.T) {
 		{
 			name:   "the current org is marked IsSelf and ids are lower-cased",
 			status: http.StatusOK,
-			body: managedOrgsBody(strings.ToUpper(selfID), []string{strings.ToUpper(selfID), strings.ToUpper(subID)}, map[string]string{
-				strings.ToUpper(selfID): "Parent Org",
-				strings.ToUpper(subID):  "Sub Org",
+			body: managedOrgsBody(strings.ToUpper(selfID), []string{strings.ToUpper(selfID), strings.ToUpper(subID)}, []includedOrg{
+				fullOrg(strings.ToUpper(selfID), "Parent Org"),
+				fullOrg(strings.ToUpper(subID), "Sub Org"),
 			}),
 			want: []OrgInfo{
 				{ID: selfID, Name: "Parent Org", IsSelf: true},
@@ -88,7 +103,73 @@ func TestListOrgs(t *testing.T) {
 		{
 			name:   "an organization missing from included falls back to its id as the name",
 			status: http.StatusOK,
-			body:   managedOrgsBody(selfID, []string{selfID, subID}, map[string]string{selfID: "Parent Org"}),
+			body:   managedOrgsBody(selfID, []string{selfID, subID}, []includedOrg{fullOrg(selfID, "Parent Org")}),
+			want: []OrgInfo{
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: subID, IsSelf: false},
+			},
+		},
+		{
+			// SDK の OrgAttributes は 8 フィールドすべてを必須とするため、この組織は
+			// SDK 側では UnparsedObject に退避される。生の JSON から名前を読めること。
+			name:   "an included org whose attributes lack fields the sdk requires still resolves its name (issue 0173)",
+			status: http.StatusOK,
+			body: managedOrgsBody(selfID, []string{selfID, subID}, []includedOrg{
+				fullOrg(selfID, "Parent Org"),
+				{ID: subID, Type: "orgs", Attributes: `{"name":"Sub Org","public_id":"` + subID + `"}`},
+			}),
+			want: []OrgInfo{
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: "Sub Org", IsSelf: false},
+			},
+		},
+		{
+			// 必須フィールドが JSON の null でも SDK は欠落と同じく拒否する。
+			name:   "an included org with a null description still resolves its name (issue 0173)",
+			status: http.StatusOK,
+			body: managedOrgsBody(selfID, []string{selfID, subID}, []includedOrg{
+				{ID: selfID, Type: "orgs", Attributes: strings.Replace(fullOrgAttributes(selfID, "Parent Org"), `"description":""`, `"description":null`, 1)},
+				{ID: subID, Type: "orgs", Attributes: strings.Replace(fullOrgAttributes(subID, "Sub Org"), `"description":""`, `"description":null`, 1)},
+			}),
+			want: []OrgInfo{
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: "Sub Org", IsSelf: false},
+			},
+		},
+		{
+			name:   "an included org with an unknown resource type still resolves its name (issue 0173)",
+			status: http.StatusOK,
+			body: managedOrgsBody(selfID, []string{selfID, subID}, []includedOrg{
+				fullOrg(selfID, "Parent Org"),
+				{ID: subID, Type: "organizations", Attributes: fullOrgAttributes(subID, "Sub Org")},
+			}),
+			want: []OrgInfo{
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: "Sub Org", IsSelf: false},
+			},
+		},
+		{
+			// included の要素に attributes キー自体が無いと、SDK はその要素だけでなく
+			// レスポンス全体を UnparsedObject に退避する。その場合も current_org と
+			// managed_orgs を生の JSON から読めること。
+			name:   "an included org without attributes makes the sdk reject the whole response, which is still read from the raw json (issue 0173)",
+			status: http.StatusOK,
+			body: managedOrgsBody(selfID, []string{selfID, subID}, []includedOrg{
+				fullOrg(selfID, "Parent Org"),
+				{ID: subID, Type: "orgs"},
+			}),
+			want: []OrgInfo{
+				{ID: selfID, Name: "Parent Org", IsSelf: true},
+				{ID: subID, Name: subID, IsSelf: false},
+			},
+		},
+		{
+			name:   "an included org whose raw attributes have no name falls back to its id",
+			status: http.StatusOK,
+			body: managedOrgsBody(selfID, []string{selfID, subID}, []includedOrg{
+				fullOrg(selfID, "Parent Org"),
+				{ID: subID, Type: "orgs", Attributes: `{"public_id":"` + subID + `","name":null}`},
+			}),
 			want: []OrgInfo{
 				{ID: selfID, Name: "Parent Org", IsSelf: true},
 				{ID: subID, Name: subID, IsSelf: false},
@@ -97,7 +178,7 @@ func TestListOrgs(t *testing.T) {
 		{
 			name:   "only the current org managed yields a single self entry",
 			status: http.StatusOK,
-			body:   managedOrgsBody(selfID, []string{selfID}, map[string]string{selfID: "Parent Org"}),
+			body:   managedOrgsBody(selfID, []string{selfID}, []includedOrg{fullOrg(selfID, "Parent Org")}),
 			want:   []OrgInfo{{ID: selfID, Name: "Parent Org", IsSelf: true}},
 		},
 		{
