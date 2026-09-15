@@ -9,8 +9,9 @@ import (
 )
 
 // datadogOrgResponse は /api/datadog/orgs が返す 1 組織分の情報。
-// LoggedIn はその組織向けの OAuth トークンが保存されているかどうかで、frontend の
-// Sub Organization タブが未ログインのバッジとログイン導線を出すために使う。
+// LoggedIn はその組織向けの OAuth トークンが保存されているか、または静的キー
+// (DATADOG_API_KEY/DATADOG_APP_KEY) が設定されているかで、frontend の Sub
+// Organization タブが未ログインのバッジとログイン導線を出すために使う (issue 0172)。
 // IsSelf は呼び出し元の認証情報が属する組織 (親組織自身) かどうかで、frontend が
 // そのタブのログイン開始時にどの org 宛て (親組織は空文字) にするかを決めるために使う。
 type datadogOrgResponse struct {
@@ -49,15 +50,26 @@ func (s *Server) handleDatadogOrgs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.datadogOrgsWithLoginState(entry.Value.([]ddclient.OrgInfo)))
 }
 
-// datadogOrgsWithLoginState は組織一覧に、保存済み OAuth トークンまたは
-// 静的キー (親組織自身のみ) の有無を添える。
+// datadogOrgsWithLoginState は組織一覧に、保存済み OAuth トークンまたは静的キーの
+// 有無を添える。
 //
 // トークンの期限は見ない。期限切れのトークンはリクエスト時に自動で更新されるため、
 // ここで期限まで判定すると「更新すれば使えるセッション」を未ログインとして扱うことに
 // なる。期限の確認のために Datadog を呼ぶこともしない (一覧の表示に外部への往復を
 // 増やさない)。
+//
+// 静的キー (DATADOG_API_KEY/DATADOG_APP_KEY) は org を問わずすべてのエントリの
+// ログイン状態判定に使う (issue 0172)。ただし、これは「一覧の表示」だけの話であり、
+// Sub Organization の実際のデータ取得 (datadogAuthContext/datadogFallbackContext) は
+// これまでどおり親組織のときしか静的キーへフォールバックしない。静的キーは org
+// 非依存のグローバル環境変数のため、Sub Organization のデータ取得にそのまま使うと、
+// 要求した Sub Organization ではなく静的キーが属する組織のデータを黙って返しかねない
+// (issue 0171)。そのため、静的キーを設定していても OAuth 未ログインの Sub
+// Organization タブは、一覧では「ログイン済み」と表示されつつ、実際にタブを開くと
+// データ取得はエラーになりうる (この非対称性は意図した仕様。issue 0172 参照)。
 func (s *Server) datadogOrgsWithLoginState(orgs []ddclient.OrgInfo) []datadogOrgResponse {
 	site := s.cfg.Datadog.Site
+	hasStaticKeys := s.cfg.DatadogAPIKey() != "" && s.cfg.DatadogAppKey() != ""
 	out := make([]datadogOrgResponse, 0, len(orgs))
 	for _, org := range orgs {
 		// 親組織自身のエントリは org == "" (datadogParentOrg) のトークンで判定する。
@@ -74,15 +86,7 @@ func (s *Server) datadogOrgsWithLoginState(orgs []ddclient.OrgInfo) []datadogOrg
 			// (datadogAuthContext がトークンを読むときと同じ扱い)。
 			slog.Warn("stored datadog oauth token is unusable", "site", site, "org", tokenOrg, "err", err)
 		}
-		loggedIn := ok
-		if !loggedIn && org.IsSelf {
-			// 親組織自身は OAuth トークンが無くても、静的キー
-			// (DATADOG_API_KEY/DATADOG_APP_KEY) が両方設定されていればログイン済み
-			// として扱う。datadogFallbackContext が親組織のときだけ静的キーへ
-			// フォールバックするのと同じ基準で、静的キーは org 非依存のグローバル
-			// 環境変数なので Sub Organization には適用しない (issue 0171)。
-			loggedIn = s.cfg.DatadogAPIKey() != "" && s.cfg.DatadogAppKey() != ""
-		}
+		loggedIn := ok || hasStaticKeys
 		out = append(out, datadogOrgResponse{ID: org.ID, Name: org.Name, LoggedIn: loggedIn, IsSelf: org.IsSelf})
 	}
 	return out

@@ -151,14 +151,17 @@ func TestDatadogOrgsReturnsLowerCasedIdsAndLoginState(t *testing.T) {
 	}
 }
 
-// TestDatadogOrgsSelfLoggedInViaStaticKey は、親組織自身が OAuth トークンを
-// 一度も保存していなくても、静的キー (DATADOG_API_KEY/DATADOG_APP_KEY) が
-// 両方設定されていればログイン済みとして扱われることを確認する。この経路が
-// OAuth トークンの有無しか見ていなかったため、静的キーのみで運用している
-// 親組織のタブが常に未ログイン表示になっていた (issue 0171)。Sub Organization
-// のエントリは静的キーの影響を受けず、そのトークンの有無だけで判定される
-// (静的キーは org 非依存のグローバル環境変数であり、親組織以外には使わない)。
-func TestDatadogOrgsSelfLoggedInViaStaticKey(t *testing.T) {
+// TestDatadogOrgsLoggedInViaStaticKey は、OAuth トークンを一度も保存していない
+// 組織 (親組織・Sub Organization のどちらも) が、静的キー
+// (DATADOG_API_KEY/DATADOG_APP_KEY) が両方設定されていればログイン済みとして
+// 一覧に表示されることを確認する。この経路がもともと OAuth トークンの有無しか
+// 見ていなかったため、静的キーのみで運用している親組織のタブが常に未ログイン
+// 表示になっていた (issue 0171)。Sub Organization のエントリも一覧の表示だけは
+// 静的キーの有無を見るようにする (issue 0172)。静的キーは org 非依存のグローバル
+// 環境変数であり、実際のデータ取得のフォールバックには引き続き親組織のときしか
+// 使わない (datadogFallbackContext、issue 0171 の設計を変えない) ため、この
+// LoggedIn は「一覧の表示」限定の判定であることに注意する。
+func TestDatadogOrgsLoggedInViaStaticKey(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
 	// OAuth トークンは 1 つも保存されていない。一覧取得自体は静的キーへの
@@ -167,6 +170,31 @@ func TestDatadogOrgsSelfLoggedInViaStaticKey(t *testing.T) {
 	s := newDatadogOrgsTestServer(t, tokens, okOrgsHandler(&calls, &mu))
 	s.cfg.SetDatadogAPIKey("api-key")
 	s.cfg.SetDatadogAppKey("app-key")
+
+	orgs, _ := getDatadogOrgs(t, s, "/api/datadog/orgs")
+
+	want := []datadogOrgResponse{
+		{ID: datadogTestSelfID, Name: "Parent Org", LoggedIn: true, IsSelf: true},
+		{ID: datadogTestSubID, Name: "Sub Org 1", LoggedIn: true, IsSelf: false},
+	}
+	if len(orgs) != len(want) {
+		t.Fatalf("orgs = %+v, want %+v", orgs, want)
+	}
+	for i, w := range want {
+		if orgs[i] != w {
+			t.Errorf("orgs[%d] = %+v, want %+v", i, orgs[i], w)
+		}
+	}
+}
+
+// TestDatadogOrgsSubOrgNotLoggedInWithoutStaticKeys は、静的キーが設定されていない
+// 通常の構成で、OAuth トークンを持たない Sub Organization が未ログインのまま
+// 表示されることを確認する (TestDatadogOrgsLoggedInViaStaticKey の対照)。
+func TestDatadogOrgsSubOrgNotLoggedInWithoutStaticKeys(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	tokens := &datadogOrgTokens{loggedIn: map[string]bool{datadogParentOrg: true}}
+	s := newDatadogOrgsTestServer(t, tokens, okOrgsHandler(&calls, &mu))
 
 	orgs, _ := getDatadogOrgs(t, s, "/api/datadog/orgs")
 
