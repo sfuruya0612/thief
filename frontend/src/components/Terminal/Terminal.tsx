@@ -9,7 +9,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 
-type ConnectionStatus = 'connecting' | 'connected' | 'closed' | 'error';
+export type ConnectionStatus = 'connecting' | 'connected' | 'closed' | 'error';
 
 interface ControlMessage {
   type: 'resize' | 'exit' | 'error';
@@ -19,11 +19,18 @@ interface ControlMessage {
 export interface TerminalProps {
   // 接続先の WebSocket URL (api/terminal.ts の ec2SessionUrl/ecsExecUrl で組み立てる)
   wsUrl: string;
+  // 表示中かどうか。ターミナルドックでは、非アクティブなタブと折りたたみ中に false になる。
+  // false から true へ変わったときだけ再フィットと入力フォーカスの移動を行う。
+  active?: boolean;
+  // 接続状態の変化の通知 (ドックのタブに接続状態を表示するために使う)
+  onStatusChange?: (status: ConnectionStatus) => void;
 }
 
-export function Terminal({ wsUrl }: TerminalProps) {
+export function Terminal({ wsUrl, active = true, onStatusChange }: TerminalProps) {
   const { t } = useTranslation('drawerStorage');
   const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [message, setMessage] = useState<string | null>(null);
 
@@ -39,6 +46,8 @@ export function Terminal({ wsUrl }: TerminalProps) {
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    termRef.current = term;
+    fitAddonRef.current = fitAddon;
     if (containerRef.current) {
       term.open(containerRef.current);
       fitAddon.fit();
@@ -106,6 +115,13 @@ export function Terminal({ wsUrl }: TerminalProps) {
 
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
+      // 非表示のコンテナ (ドックの非アクティブなタブ、折りたたみ中の本文) では寸法が 0 に
+      // なりうる。@xterm/addon-fit の proposeDimensions はセル寸法が前回値を保持するため
+      // 早期 return せず、ターミナルを 2 列 1 行へ縮めて term.onResize 経由でその寸法を
+      // backend へ送り、リモートの端末を再レイアウトさせてしまう。CSS に依存しないよう
+      // ここで寸法 0 をガードする。
+      const el = containerRef.current;
+      if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
       fitAddon.fit();
     });
     if (containerRef.current) resizeObserver.observe(containerRef.current);
@@ -122,8 +138,30 @@ export function Terminal({ wsUrl }: TerminalProps) {
       // (StrictMode の mount→cleanup→再 mount のような同一タイミングで顕在化しやすい)。
       // dispose 自体を次のマクロタスクへ遅らせ、内部タイマーを先に消化させてから破棄する。
       setTimeout(() => term.dispose());
+      termRef.current = null;
+      fitAddonRef.current = null;
     };
   }, [wsUrl]);
+
+  // 非表示から表示に戻ったとき (ドックのタブ切替、折りたたみの解除) に、ResizeObserver の
+  // 発火を待たずに寸法を合わせ、入力フォーカスを移す。
+  const prevActiveRef = useRef(active);
+  useEffect(() => {
+    const wasActive = prevActiveRef.current;
+    prevActiveRef.current = active;
+    if (!active || wasActive) return;
+    fitAddonRef.current?.fit();
+    termRef.current?.focus();
+  }, [active]);
+
+  // 接続状態の通知。onStatusChange の identity 変化で再通知しないよう ref 経由で呼ぶ。
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
+  useEffect(() => {
+    onStatusChangeRef.current?.(status);
+  }, [status]);
 
   return (
     <div className="terminal-panel">
