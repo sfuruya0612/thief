@@ -1482,6 +1482,11 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 .drawer.open {
   transform: translateX(0);
 }
+/* 閉じた Drawer は位置にかかわらず入力を受け取らない (閉じ位置の計算が崩れても
+   常駐ターミナルドックへのクリックを奪わないための保険)。 */
+.drawer:not(.open) {
+  pointer-events: none;
+}
 
 /* Bottom-docked variant */
 .drawer.pos-bottom {
@@ -1495,7 +1500,9 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   height: min(46vh, 520px);
   /* インラインの px 指定が現在のビューポートを超えて画面全体を覆わないためのガードレール */
   max-height: 85vh;
-  transform: translateY(calc(100% + 16px));
+  /* 閉じ位置は bottom で持ち上げたドック分も足して下げる。自身の高さ + 16px だけでは
+     ドックの高さ分が画面内に残り、ドックの上に被さって入力を奪う。 */
+  transform: translateY(calc(100% + var(--terminal-dock-h, 0px) + 16px));
 }
 .drawer.pos-bottom.open {
   transform: translateY(0);
@@ -1780,6 +1787,14 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 
 /* Terminal dock (画面下部に常駐するターミナルパネル) */
 .terminal-dock {
+  /* 常駐の殻として、一時的なオーバーレイである .drawer-backdrop (10) と .drawer (11) より
+     前面に置く。これが無いと Drawer を開いている間は backdrop がドックを覆い、Terminal への
+     クリックが Drawer を閉じるだけでフォーカスが渡らない。下配置の Drawer はドックの背面へ
+     滑り込んで閉じる。 */
+  position: relative;
+  z-index: 12;
+  /* .app の flex 列で本文側 (.body / .main) だけを縮め、ドックの高さは inline の height で固定する */
+  flex: none;
   display: flex;
   flex-direction: column;
   background: var(--bg-1);

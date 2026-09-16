@@ -190,16 +190,12 @@ export function Drawer({
   return (
     <>
       <div className={`drawer-backdrop ${open ? 'open' : ''}`} onClick={onClose} />
+      {/* 開閉位置 (transform) は app.css の .drawer / .drawer.open / .drawer.pos-bottom /
+          .drawer.pos-bottom.open だけで定義する。inline で重複させると、下配置の閉じ位置が
+          参照する --terminal-dock-h の加算を片方だけ直す余地が生まれる (issue 0174 の reopen)。 */}
       <div
         className={`drawer ${position === 'bottom' ? 'pos-bottom' : ''} ${open ? 'open' : ''}`}
-        style={{
-          ...sizeStyle,
-          transform: open
-            ? 'translate(0, 0)'
-            : position === 'bottom'
-              ? 'translateY(calc(100% + 16px))'
-              : 'translateX(calc(100% + 16px))',
-        }}
+        style={sizeStyle}
       >
         <div
           className={`resize-handle ${position === 'bottom' ? 'rh-top' : 'rh-left'}`}
