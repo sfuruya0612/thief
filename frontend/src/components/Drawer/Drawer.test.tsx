@@ -105,6 +105,41 @@ describe('Drawer の ESC キー', () => {
   });
 });
 
+describe('Drawer の開閉クラスと transform の定義元', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  // 閉じ位置と開き位置は app.css の .drawer / .drawer.open / .drawer.pos-bottom /
+  // .drawer.pos-bottom.open だけで定義する。inline の transform を残すと、下配置の閉じ位置が
+  // 参照する --terminal-dock-h の加算を CSS 側だけ直す余地が生まれる (issue 0174 の reopen)。
+  it('閉じた下配置の Drawer は pos-bottom を持ち open を持たず、inline の transform を設定しない', () => {
+    const { container } = renderDrawer({ resource: null, position: 'bottom' });
+
+    const drawer = drawerElement(container);
+    expect(drawer.classList.contains('pos-bottom')).toBe(true);
+    expect(drawer.classList.contains('open')).toBe(false);
+    expect(drawer.style.transform).toBe('');
+  });
+
+  it('閉じた右配置の Drawer は pos-bottom も open も持たず、inline の transform を設定しない', () => {
+    const { container } = renderDrawer({ resource: null, position: 'right' });
+
+    const drawer = drawerElement(container);
+    expect(drawer.classList.contains('pos-bottom')).toBe(false);
+    expect(drawer.classList.contains('open')).toBe(false);
+    expect(drawer.style.transform).toBe('');
+  });
+
+  it('開いた Drawer は open を持ち、inline の transform を設定しない', () => {
+    const { container } = renderDrawer({ position: 'bottom' });
+
+    const drawer = drawerElement(container);
+    expect(drawer.classList.contains('open')).toBe(true);
+    expect(drawer.style.transform).toBe('');
+  });
+});
+
 function tabLabels(container: HTMLElement): string[] {
   return Array.from(container.querySelectorAll('.dtab')).map((el) => el.textContent ?? '');
 }
