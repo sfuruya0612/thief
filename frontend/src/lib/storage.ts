@@ -16,6 +16,9 @@ export interface PersistedState {
   sidebarWidth?: number;
   // Athena / CloudWatch Logs / BigQuery / Cloud Logging の左パネル (.qe-schema / .lv-tree) 幅
   resourcePanelWidth?: number;
+  // 常駐ターミナルドックの本文 (div.terminal-dock-body) の高さ。タブバー (32px) を含まない
+  // 本文だけの高さを持つ (hooks/useTerminalDockHeight.ts 参照)。
+  terminalDockHeight?: number;
   gcpProject?: string;
   // Cloud Logging の SUMMARY 列に先頭表示するフィールドキー (選択順 = 表示順)
   gcpLogSummaryFields?: string[];

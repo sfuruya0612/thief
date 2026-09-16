@@ -1753,7 +1753,6 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 320px;
 }
 .terminal-container {
   flex: 1;
@@ -1799,6 +1798,22 @@ table.dt.cost-cross-table thead th:nth-child(2) {
   flex-direction: column;
   background: var(--bg-1);
   border-top: 1px solid var(--line-2);
+}
+/* ドックの上端に重ねるリサイズハンドル。.panel-resizer がパネル内側の右端 6px を占めるのと
+   同じ扱いで、タブバーの上端 6px に重ねる。既存の寸法 (折りたたみ時の 32px を含む) を
+   変えずに高さのドラッグ変更だけを受け取るため、独立した行にはしない。 */
+.terminal-dock-resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 1;
+}
+.terminal-dock-resizer:hover {
+  background: var(--accent);
+  opacity: 0.5;
 }
 .terminal-dock-tabs {
   flex: none;
@@ -1883,8 +1898,9 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 .terminal-dock-toggle:hover {
   color: var(--text-1);
 }
-/* .terminal-panel は height: 100% と min-height: 320px を持つため、本文とペインには
-   display を宣言せず (hidden 属性での非表示を UA スタイルに任せる)、高さだけを渡す。 */
+/* .terminal-panel は height: 100% を持つため、本文とペインには display を宣言せず
+   (hidden 属性での非表示を UA スタイルに任せる)、高さだけを渡す。本文の高さの下限は
+   hooks/useTerminalDockHeight.ts のクランプが持ち、CSS 側には二重に持たない。 */
 .terminal-dock-body {
   flex: 1;
   min-height: 0;

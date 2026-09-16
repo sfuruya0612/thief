@@ -97,3 +97,22 @@ describe('app.css の Drawer とターミナルドックの重なり', () => {
     expect(declarationOf('.terminal-dock', 'flex')).toBe('none');
   });
 });
+
+describe('app.css のターミナルドックの高さ変更', () => {
+  it('.terminal-dock-resizer はドックの上端 6px に重なり、縦方向のカーソルを出す', () => {
+    expect(declarationOf('.terminal-dock-resizer', 'position')).toBe('absolute');
+    expect(declarationOf('.terminal-dock-resizer', 'top')).toBe('0');
+    expect(declarationOf('.terminal-dock-resizer', 'height')).toBe('6px');
+    expect(declarationOf('.terminal-dock-resizer', 'z-index')).toBe('1');
+    expect(declarationOf('.terminal-dock-resizer', 'cursor')).toBe('ns-resize');
+  });
+
+  it('.terminal-panel は min-height を持たない (本文の下限は TypeScript 側のクランプが持つ)', () => {
+    expect(declarationsOf('.terminal-panel')).not.toMatch(/^\s*min-height:/m);
+    // 他の宣言は変わらない
+    expect(declarationOf('.terminal-panel', 'position')).toBe('relative');
+    expect(declarationOf('.terminal-panel', 'display')).toBe('flex');
+    expect(declarationOf('.terminal-panel', 'flex-direction')).toBe('column');
+    expect(declarationOf('.terminal-panel', 'height')).toBe('100%');
+  });
+});

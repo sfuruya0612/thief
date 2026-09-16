@@ -14,6 +14,8 @@ import {
   resetTerminalSessionsForTest,
   type TerminalSession,
 } from '../../hooks/useTerminalSessions';
+import { terminalDockBodyHeightRange } from '../../hooks/useTerminalDockHeight';
+import { STORAGE_KEY, type PersistedState } from '../../lib/storage';
 
 class FakeWebSocket {
   static readonly CONNECTING = 0;
@@ -57,11 +59,26 @@ function panes(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>('.terminal-dock-pane'));
 }
 
+function storedDockHeight(): PersistedState['terminalDockHeight'] {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw === null ? undefined : (JSON.parse(raw) as PersistedState).terminalDockHeight;
+}
+
+function dispatchPointerMoveY(clientY: number) {
+  document.dispatchEvent(new MouseEvent('pointermove', { clientY }) as unknown as PointerEvent);
+}
+
+function dispatchPointerUp() {
+  document.dispatchEvent(new MouseEvent('pointerup') as unknown as PointerEvent);
+}
+
 describe('TerminalDock', () => {
   const originalMatchMedia = globalThis.matchMedia;
+  const originalInnerHeight = window.innerHeight;
 
   beforeEach(() => {
     resetTerminalSessionsForTest();
+    localStorage.clear();
     document.documentElement.style.removeProperty('--terminal-dock-h');
     vi.stubGlobal('WebSocket', FakeWebSocket);
     // xterm.js の CoreBrowserService が DPR 更新のために matchMedia を呼ぶ。jsdom は未実装のため
@@ -78,6 +95,7 @@ describe('TerminalDock', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     globalThis.matchMedia = originalMatchMedia;
+    window.innerHeight = originalInnerHeight;
     vi.restoreAllMocks();
   });
 
@@ -199,5 +217,123 @@ describe('TerminalDock', () => {
 
     expect(container.querySelector('.terminal-dock')).toBeNull();
     expect(dockHeightVar()).toBe('0px');
+  });
+
+  it('リサイズハンドルは展開中だけ、ドックの先頭の子として描画される', () => {
+    const { container } = render(<TerminalDock />);
+
+    act(() => {
+      openTerminalSession(sessionInput('web-01'));
+    });
+
+    const dock = container.querySelector('.terminal-dock') as HTMLElement;
+    const resizer = dock.firstElementChild as HTMLElement;
+    expect(resizer.className).toBe('terminal-dock-resizer');
+    expect(resizer.getAttribute('title')).toBe('ドラッグして高さを変更する');
+
+    fireEvent.click(container.querySelector('.terminal-dock-toggle') as HTMLElement);
+
+    expect(container.querySelector('.terminal-dock-resizer')).toBeNull();
+
+    fireEvent.click(container.querySelector('.terminal-dock-toggle') as HTMLElement);
+
+    expect(container.querySelector('.terminal-dock-resizer')).not.toBeNull();
+  });
+
+  it('ハンドルのドラッグでルート要素の高さが追従し、本文の高さが永続化される', () => {
+    window.innerHeight = 800;
+    const { container } = render(<TerminalDock />);
+
+    act(() => {
+      openTerminalSession(sessionInput('web-01'));
+    });
+
+    const dock = container.querySelector('.terminal-dock') as HTMLElement;
+    // jsdom はレイアウトを計算せず getBoundingClientRect が全て 0 を返すため、
+    // ビューポート下端に接するドックの下端を差し替える。
+    vi.spyOn(dock, 'getBoundingClientRect').mockReturnValue({ bottom: 800 } as DOMRect);
+
+    fireEvent.pointerDown(container.querySelector('.terminal-dock-resizer') as HTMLElement);
+    act(() => {
+      dispatchPointerMoveY(300); // 800 - 300 = 500
+    });
+
+    expect(dock.style.height).toBe('500px');
+    expect(dockHeightVar()).toBe('500px');
+    expect(storedDockHeight()).toBe(500 - 32);
+
+    // ドラッグ時のクランプは描画時の再クランプと同じ範囲関数に従う
+    const range = terminalDockBodyHeightRange(800);
+    act(() => {
+      dispatchPointerMoveY(0); // 下端との差 800 > 上限
+    });
+    expect(dock.style.height).toBe(`${32 + range.max}px`);
+    expect(dockHeightVar()).toBe(`${32 + range.max}px`);
+
+    act(() => {
+      dispatchPointerMoveY(790); // 下端との差 10 < 下限
+    });
+    expect(dock.style.height).toBe(`${32 + range.min}px`);
+    expect(dockHeightVar()).toBe(`${32 + range.min}px`);
+    expect(storedDockHeight()).toBe(range.min);
+
+    dispatchPointerUp();
+  });
+
+  it('永続化された本文の高さでマウントするとルート要素がその高さ + タブバーになる', () => {
+    window.innerHeight = 800;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ terminalDockHeight: 500 }));
+    const { container } = render(<TerminalDock />);
+
+    act(() => {
+      openTerminalSession(sessionInput('web-01'));
+    });
+
+    expect((container.querySelector('.terminal-dock') as HTMLElement).style.height).toBe('532px');
+    expect(dockHeightVar()).toBe('532px');
+
+    // 折りたたみ時の高さはタブバーだけで決まり、永続化された本文の高さに影響されない
+    fireEvent.click(container.querySelector('.terminal-dock-toggle') as HTMLElement);
+
+    expect((container.querySelector('.terminal-dock') as HTMLElement).style.height).toBe('32px');
+    expect(dockHeightVar()).toBe('32px');
+
+    fireEvent.click(container.querySelector('.terminal-dock-tab-close') as HTMLElement);
+
+    expect(container.querySelector('.terminal-dock')).toBeNull();
+    expect(dockHeightVar()).toBe('0px');
+  });
+
+  it('永続化された値が上限を超えていれば描画時にクランプする', () => {
+    window.innerHeight = 800;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ terminalDockHeight: 5000 }));
+    const { container } = render(<TerminalDock />);
+
+    act(() => {
+      openTerminalSession(sessionInput('web-01'));
+    });
+
+    const expected = 32 + terminalDockBodyHeightRange(800).max;
+    expect((container.querySelector('.terminal-dock') as HTMLElement).style.height).toBe(
+      `${expected}px`,
+    );
+    // 再クランプの結果は localStorage に書き戻さない
+    expect(storedDockHeight()).toBe(5000);
+  });
+
+  it('永続化された値が下限を下回っていれば描画時にクランプする', () => {
+    window.innerHeight = 800;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ terminalDockHeight: 100 }));
+    const { container } = render(<TerminalDock />);
+
+    act(() => {
+      openTerminalSession(sessionInput('web-01'));
+    });
+
+    const expected = 32 + terminalDockBodyHeightRange(800).min;
+    expect((container.querySelector('.terminal-dock') as HTMLElement).style.height).toBe(
+      `${expected}px`,
+    );
+    expect(storedDockHeight()).toBe(100);
   });
 });
