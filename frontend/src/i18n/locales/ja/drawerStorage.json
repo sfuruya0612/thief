@@ -33,6 +33,7 @@
     "connect": "接続",
     "launcherHint": "接続すると画面下部のターミナルに開きます。画面を切り替えても接続は維持されます。",
     "collapseDock": "ターミナルを折りたたむ",
+    "resizeDock": "ドラッグして高さを変更する",
     "expandDock": "ターミナルを展開する",
     "closeSession": "セッションを閉じる",
     "statusConnecting": "接続中",
