@@ -25,6 +25,7 @@ import {
   s3ObjectFromRaw,
   sqsFromRaw,
   ssoLoginStartFromRaw,
+  timeseriesResponseFromRaw,
   wafFromRaw,
   wafRuleFromRaw,
 } from './normalize';
@@ -1113,5 +1114,54 @@ describe('kinesisFromRaw', () => {
       encryptionType: 'KMS',
       tags: {},
     });
+  });
+});
+
+describe('timeseriesResponseFromRaw', () => {
+  it('期間と粒度を camelCase へ移し、欠測を null のまま残す', () => {
+    expect(
+      timeseriesResponseFromRaw({
+        range: '7d',
+        period_seconds: 300,
+        series: [
+          {
+            name: 'prod-cluster',
+            points: [
+              { t: 1_700_000_000_000, v: 3 },
+              { t: 1_700_000_300_000, v: null },
+              { t: 1_700_000_600_000, v: 0 },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      range: '7d',
+      periodSeconds: 300,
+      series: [
+        {
+          name: 'prod-cluster',
+          points: [
+            { t: 1_700_000_000_000, v: 3 },
+            { t: 1_700_000_300_000, v: null },
+            { t: 1_700_000_600_000, v: 0 },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('series と points の null を空配列に正規化する', () => {
+    expect(timeseriesResponseFromRaw({ range: '1d', period_seconds: 60, series: null })).toEqual({
+      range: '1d',
+      periodSeconds: 60,
+      series: [],
+    });
+    expect(
+      timeseriesResponseFromRaw({
+        range: '1d',
+        period_seconds: 60,
+        series: [{ name: 'Running', points: null }],
+      }),
+    ).toEqual({ range: '1d', periodSeconds: 60, series: [{ name: 'Running', points: [] }] });
   });
 });

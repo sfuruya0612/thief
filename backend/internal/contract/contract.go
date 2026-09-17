@@ -22,7 +22,7 @@ type Entry struct {
 	Value any
 }
 
-// Registry は契約対象 61 型の一覧である。issues/closed/0099 の対応表 (62 行) のうち
+// Registry は契約対象 64 型の一覧である。issues/closed/0099 の対応表 (62 行) のうち
 // frontend に Raw の対応を持つ 60 行を転記し、その後に追加した型を加えた。frontend に消費者が無い
 // SSOAccountResource と SSMValueResponse は含めない。
 var Registry = []Entry{
@@ -61,6 +61,9 @@ var Registry = []Entry{
 	{Name: "ECSTaskContainerDetail", Value: aws.ECSTaskContainerDetail{}},
 	{Name: "ECSContainerResource", Value: aws.ECSContainerResource{}},
 	{Name: "ECSContainerInstanceResource", Value: aws.ECSContainerInstanceResource{}},
+	{Name: "MetricPoint", Value: aws.MetricPoint{}},
+	{Name: "TimeseriesSeries", Value: aws.TimeseriesSeries{}},
+	{Name: "TimeseriesResponse", Value: aws.TimeseriesResponse{}},
 	{Name: "ElastiCacheResource", Value: aws.ElastiCacheResource{}},
 	{Name: "ElastiCacheParameter", Value: aws.ElastiCacheParameter{}},
 	{Name: "ELBResource", Value: aws.ELBResource{}},

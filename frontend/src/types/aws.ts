@@ -1,6 +1,7 @@
 // AWS リソースの Raw (JSON) / Row (UI 用) 型定義
 // Raw は backend/internal/aws/*.go の JSON タグをミラーする
 // Row は snake_case → camelCase 変換、cost_monthly は除外、region を必須で保持する
+import type { TimeseriesSeries } from '../lib/timeseries';
 
 // ============================================================
 // EC2
@@ -1189,4 +1190,34 @@ export interface SSOLoginStartRow {
   verificationUriComplete: string;
   verificationUri: string;
   userCode: string;
+}
+
+// ============================================================
+// 台数の推移 (EC2 の Running インスタンス数 / ECS のクラスタごとのタスク数)
+// ============================================================
+// TimeseriesRange は取得する期間。粒度は backend が期間から決める
+// (1d = 60 秒、7d = 300 秒、30d = 3600 秒)。
+export type TimeseriesRange = '1d' | '7d' | '30d';
+
+// MetricPointRaw は時系列の 1 点。t はエポックミリ秒、v は欠測が null。
+export interface MetricPointRaw {
+  t: number;
+  v: number | null;
+}
+
+export interface TimeseriesSeriesRaw {
+  name: string;
+  points: MetricPointRaw[] | null;
+}
+
+export interface TimeseriesResponseRaw {
+  range: string;
+  period_seconds: number;
+  series: TimeseriesSeriesRaw[] | null;
+}
+
+export interface TimeseriesResponseRow {
+  range: string;
+  periodSeconds: number;
+  series: TimeseriesSeries[];
 }

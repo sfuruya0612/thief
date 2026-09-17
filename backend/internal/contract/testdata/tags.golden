@@ -240,6 +240,16 @@ RegisteredCPU "registered_cpu"
 RegisteredMemory "registered_memory"
 RemainingCPU "remaining_cpu"
 RemainingMemory "remaining_memory"
+== MetricPoint
+T "t"
+V "v"
+== TimeseriesSeries
+Name "name"
+Points "points"
+== TimeseriesResponse
+Range "range"
+PeriodSeconds "period_seconds"
+Series "series"
 == ElastiCacheResource
 ID "id"
 Name "name"

@@ -19,6 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/athena v1.66.0
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.0
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.73.0
+	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.72.0
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.87.0
 	github.com/aws/aws-sdk-go-v2/service/costexplorer v1.72.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.68.0
