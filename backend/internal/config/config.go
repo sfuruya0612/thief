@@ -167,7 +167,24 @@ func Load() (*Config, error) {
 	cfg := Defaults()
 	applyFile(cfg, fc)
 	applyEnv(cfg)
+	// 正規化は既定値・YAML・環境変数をすべて反映し終えた後の 1 か所で行う。
+	// applyFile と applyEnv に分けて置くと、片方だけを通る経路で抜けが出る。
+	cfg.Datadog.OAuthRedirectBase = normalizeURLBase(cfg.Datadog.OAuthRedirectBase)
+	if cfg.Datadog.OAuthRedirectBase == "" {
+		// スラッシュや空白だけの値は正規化後に空になる。空のまま使うと redirect_uri が
+		// スキームもホストも持たない相対 URI になり、認可要求が確実に壊れるため既定値へ戻す。
+		cfg.Datadog.OAuthRedirectBase = DefaultDatadogOAuthRedirectBase
+	}
 	return cfg, nil
+}
+
+// normalizeURLBase は、パスと連結して使う URL のベース値を正規化する。前後の空白を
+// 落としたうえで末尾のスラッシュをすべて除去する。連結するパスが先頭にスラッシュを
+// 持つため、ベース側の末尾スラッシュが残ると連結結果のパスが二重スラッシュになる。
+// RFC 6749 3.1.2.3 は認可サーバが登録済みの redirect_uri と単純な文字列比較で照合する
+// ことを求めており、二重スラッシュを含む URI は登録済みの値と一致しない。
+func normalizeURLBase(u string) string {
+	return strings.TrimRight(strings.TrimSpace(u), "/")
 }
 
 func applyFile(cfg *Config, fc fileConfig) {

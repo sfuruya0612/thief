@@ -494,6 +494,30 @@ func TestDatadogRedirectBaseReregistrationWarning(t *testing.T) {
 	}
 }
 
+// TestDatadogServerRedirectURITrimsTrailingSlash は、末尾スラッシュ付きの redirect base を
+// 設定しても redirect_uri のパスが二重スラッシュにならないことを確認する。
+// DatadogOAuthCallbackPath は先頭にスラッシュを持つため、ベース側の末尾スラッシュが残ると
+// 連結結果が "//api/datadog/auth/callback" になり、Datadog に登録済みの redirect_uri と
+// 文字列一致しない (RFC 6749 3.1.2.3)。正規化は config.Load が担うため、Server には
+// Load 経由で組み立てた Config を渡す。
+func TestDatadogServerRedirectURITrimsTrailingSlash(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("THIEF_DATADOG_OAUTH_REDIRECT_BASE", "http://127.0.0.1:8089/")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	s := &Server{cfg: cfg}
+
+	want := "http://127.0.0.1:8089/api/datadog/auth/callback"
+	if got := s.datadogServerRedirectURI(); got != want {
+		t.Errorf("datadogServerRedirectURI() = %q, want %q", got, want)
+	}
+}
+
 // TestDatadogAuthOrgQueryParam は org クエリパラメータが login/start と logout に届き、
 // 不正な値が 400 になることを確認する。org を取り違えると、別の Sub Organization の
 // 認証情報を上書きしたり消したりすることになる。
