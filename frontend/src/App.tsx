@@ -97,7 +97,6 @@ export function App() {
 
   useEffect(() => {
     if (error) {
-      // eslint-disable-next-line no-console
       console.error('failed to load profiles', error);
     }
   }, [error]);

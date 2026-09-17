@@ -489,3 +489,5 @@
   - @sfuruya0612
 - `backend/internal/datadog` の非テストファイル 6 本にある exported 識別子の godoc コメントを日本語に統一する (issue 0169 のレビューで判明した、同パッケージ内での英語/日本語混在の解消。挙動を変える変更は無い)
   - @sfuruya0612
+- `frontend/src/App.tsx` の未使用になっていた `// eslint-disable-next-line no-console` を削除する (`no-console` ルールが `eslint.config.js` で有効化されていないため、`console.error('failed to load profiles', error)` の呼び出しは残したまま抑止だけが不要になっていた。frontend の `npx eslint .` の警告が 10 件から 9 件に減る。挙動を変える変更は無い)
+  - @sfuruya0612
