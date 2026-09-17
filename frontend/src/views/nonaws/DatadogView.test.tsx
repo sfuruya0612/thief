@@ -14,6 +14,7 @@ import { ApiError } from '../../types/common';
 const mocks = vi.hoisted(() => ({
   useDatadogHistorical: vi.fn(),
   useDatadogEstimated: vi.fn(),
+  useDatadogMetricsQueries: vi.fn(),
 }));
 
 // echarts-for-react は jsdom (canvas 未実装) では描画に失敗するため、
@@ -22,9 +23,13 @@ vi.mock('../../components/charts/CostChart', () => ({
   CostChart: () => <div data-testid="cost-chart-stub" />,
 }));
 
-// セクション切替の検証が目的なので、Dashboards と Metrics の中身はスタブで足りる
-// (中身は DatadogDashboardView.test.tsx と DatadogMetricsView.test.tsx で検証する)。
-// Dashboards のスタブは引き継ぎ導線だけを模し、押されたら固定のクエリを親へ返す。
+vi.mock('../../components/charts/TimeseriesChart', () => ({
+  TimeseriesChart: () => <div data-testid="timeseries-chart-stub" />,
+}));
+
+// Dashboards の中身は DatadogDashboardView.test.tsx で検証するため、ここはスタブで足りる。
+// スタブは引き継ぎ導線だけを模し、押されたら固定のクエリを親へ返す。
+// Metrics は入力状態の保持 (issue 0180) を検証する対象なので実体を描画する。
 vi.mock('./DatadogDashboardView', () => ({
   DatadogDashboardView: ({
     orgId,
@@ -40,20 +45,13 @@ vi.mock('./DatadogDashboardView', () => ({
   ),
 }));
 
-vi.mock('./DatadogMetricsView', () => ({
-  DatadogMetricsView: ({ orgId, initialQuery }: { orgId: string; initialQuery?: string }) => (
-    <div data-testid="metrics-view-stub" data-initial-query={initialQuery}>
-      {orgId}
-    </div>
-  ),
-}));
-
 vi.mock('../../api/queries', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/queries')>();
   return {
     ...actual,
     useDatadogHistorical: mocks.useDatadogHistorical,
     useDatadogEstimated: mocks.useDatadogEstimated,
+    useDatadogMetricsQueries: mocks.useDatadogMetricsQueries,
   };
 });
 
@@ -175,6 +173,7 @@ describe('DatadogView のセクション切替', () => {
     vi.clearAllMocks();
     mocks.useDatadogHistorical.mockReturnValue({ data: [], isLoading: false, error: null });
     mocks.useDatadogEstimated.mockReturnValue({ data: [], isLoading: false, error: null });
+    mocks.useDatadogMetricsQueries.mockReturnValue({ series: [], isLoading: false, error: null });
   });
 
   it('既定では cost を表示する', () => {
@@ -217,11 +216,16 @@ describe('DatadogView のセクション切替', () => {
     renderView('suborg2');
     fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
 
-    expect(screen.getByTestId('metrics-view-stub')).toHaveTextContent('suborg2');
+    expect(screen.getByLabelText('Query')).toBeInTheDocument();
     expect(screen.queryByTestId('cost-chart-stub')).not.toBeInTheDocument();
     expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
     // 直接開いた Metrics には引き継ぐクエリが無い。
-    expect(screen.getByTestId('metrics-view-stub')).toHaveAttribute('data-initial-query', '');
+    expect(screen.getByLabelText('Query')).toHaveValue('');
+    expect(mocks.useDatadogMetricsQueries).toHaveBeenLastCalledWith(
+      'suborg2',
+      [],
+      expect.anything(),
+    );
   });
 
   it('Metrics に切り替えると Cost の historical/estimated 取得を止める', () => {
@@ -242,9 +246,76 @@ describe('DatadogView のセクション切替', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open in Metrics' }));
 
     expect(screen.queryByTestId('dashboard-view-stub')).not.toBeInTheDocument();
-    expect(screen.getByTestId('metrics-view-stub')).toHaveAttribute(
-      'data-initial-query',
-      'avg:system.cpu.user{*}',
+    expect(screen.getByLabelText('Query')).toHaveValue('avg:system.cpu.user{*}');
+    expect(mocks.useDatadogMetricsQueries).toHaveBeenLastCalledWith(
+      'suborg1',
+      ['avg:system.cpu.user{*}'],
+      expect.anything(),
+    );
+  });
+});
+
+describe('DatadogView をまたぐ Metrics の入力の保持', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.useDatadogHistorical.mockReturnValue({ data: [], isLoading: false, error: null });
+    mocks.useDatadogEstimated.mockReturnValue({ data: [], isLoading: false, error: null });
+    mocks.useDatadogMetricsQueries.mockReturnValue({ series: [], isLoading: false, error: null });
+  });
+
+  it('入力中のクエリは Cost へ移って戻っても残る', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+    fireEvent.change(screen.getByLabelText('Query'), {
+      target: { value: 'avg:system.cpu.idle{*}' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cost' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    expect(screen.getByLabelText('Query')).toHaveValue('avg:system.cpu.idle{*}');
+  });
+
+  it('選んだ期間は Dashboards へ移って戻っても残る', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+    fireEvent.change(screen.getByLabelText('Period'), { target: { value: String(24 * 3600) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dashboards' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    expect(screen.getByLabelText('Period')).toHaveValue(String(24 * 3600));
+  });
+
+  it('実行済みのクエリは Cost へ移って戻っても実行済みのまま', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+    fireEvent.change(screen.getByLabelText('Query'), { target: { value: 'sum:x{*}' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cost' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    expect(mocks.useDatadogMetricsQueries).toHaveBeenLastCalledWith(
+      'suborg1',
+      ['sum:x{*}'],
+      expect.anything(),
+    );
+  });
+
+  it('Run を押していないクエリは戻っても実行されない', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+    fireEvent.change(screen.getByLabelText('Query'), { target: { value: 'sum:x{*}' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cost' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    expect(screen.getByLabelText('Query')).toHaveValue('sum:x{*}');
+    expect(mocks.useDatadogMetricsQueries).toHaveBeenLastCalledWith(
+      'suborg1',
+      [],
+      expect.anything(),
     );
   });
 });
