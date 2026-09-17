@@ -68,6 +68,8 @@ github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.0 h1:HAYwS6/mgbd+M+enV
 github.com/aws/aws-sdk-go-v2/service/cloudformation v1.81.0/go.mod h1:FyOhT3yf+nXnwVKSDfP9vPodJtzyxfNQVvgcDnKKd3Q=
 github.com/aws/aws-sdk-go-v2/service/cloudfront v1.73.0 h1:HPWvupnWpnWakePyUlEPCPgY2HDEmcwB1Pc7Ap5zz/U=
 github.com/aws/aws-sdk-go-v2/service/cloudfront v1.73.0/go.mod h1:yau58e5HNLT0ZbIOk5u91J7B9JRfP2SiEqJiySQE8Q0=
+github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.72.0 h1:BAVXU2PW/FQZUWdTZ9VQZPpbCF711hEQ0l6bW8FKl1I=
+github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.72.0/go.mod h1:4ZX78yzuIXJ78KT4eiKxQ7bUUm/Oe5xWvKzWFoL6x+g=
 github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.87.0 h1:qn5nw6rYGLIBnxbOexypxG2eOaMzV389mG4WdUXp0/k=
 github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.87.0/go.mod h1:wsz6uFaBRCfqWjNLeBH0jutf0ek8CQGVCO/QSTWZl54=
 github.com/aws/aws-sdk-go-v2/service/costexplorer v1.72.0 h1:NE/Ky5Qk7bV8RN9sLymPOV33+yOC6eSpKZunkB7kYtg=

@@ -24,6 +24,8 @@ import type {
   RegionRaw,
   S3ObjectRaw,
   SSOLoginStartRaw,
+  TimeseriesRange,
+  TimeseriesResponseRaw,
   ValueRaw,
   WAFRuleRaw,
 } from '../types/aws';
@@ -95,6 +97,24 @@ export function postCacheInvalidate(view: AppView): Promise<void> {
 // 選択時にこちらで補完する。
 export function getProfileIdentity(profile: string): Promise<CallerIdentityRaw> {
   return apiGet<CallerIdentityRaw>(`/api/aws/profiles/${encodeURIComponent(profile)}/identity`);
+}
+
+// 台数の推移を取得する。一覧 (getResources) とは別のエンドポイントで、
+// 期間 (range) ごとに粒度と時間窓が変わる。
+export function getResourceTimeseries(
+  service: string,
+  profile: string,
+  region: string,
+  range: TimeseriesRange,
+): Promise<TimeseriesResponseRaw> {
+  const seg = SERVICE_TO_PATH[service];
+  if (!seg) {
+    return Promise.reject(new Error(`unknown service key: ${service}`));
+  }
+  return apiGet<TimeseriesResponseRaw>(
+    `/api/aws/profiles/${encodeURIComponent(profile)}/${seg}/timeseries`,
+    { region, range },
+  );
 }
 
 export function getResources<TRaw>(

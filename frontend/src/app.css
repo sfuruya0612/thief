@@ -4213,3 +4213,16 @@ td.qe-rt-empty {
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   台数の推移グラフ (ResourceCountChart)
+   ============================================================ */
+.timeseries-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.timeseries-head .seg {
+  flex: 0 0 auto;
+}

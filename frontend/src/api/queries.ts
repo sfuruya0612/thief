@@ -6,7 +6,12 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { CostRow, SSOLoginStartRow } from '../types/aws';
+import type {
+  CostRow,
+  SSOLoginStartRow,
+  TimeseriesRange,
+  TimeseriesResponseRow,
+} from '../types/aws';
 import { ApiError } from '../types/common';
 import type { AppView, BaseRow } from '../types/common';
 import type { QueryStatusRow } from '../types/query';
@@ -59,6 +64,7 @@ import {
   rdsParameterFromRaw,
   s3ObjectFromRaw,
   ssoLoginStartFromRaw,
+  timeseriesResponseFromRaw,
   wafRuleFromRaw,
 } from '../lib/normalize';
 import {
@@ -121,6 +127,7 @@ import {
   getRDSParameters,
   getRegions,
   getResources,
+  getResourceTimeseries,
   getS3ObjectPreview,
   getS3Objects,
   getSecretValue,
@@ -208,6 +215,23 @@ export function useResources<TRaw, TRow>(
       const raws = await getResources<TRaw>(service, profile, region);
       return raws.map((r) => normalizer(r, region));
     },
+    enabled: !!profile && !!service,
+  });
+}
+
+// useResourceTimeseries は台数の推移を一覧とは別のクエリで取得する。
+// 一覧 (useResources) と分けているのは、一覧の表示を時系列の取得完了まで待たせないため。
+// 期間はキーに含める (期間ごとに粒度も時間窓も変わり、結果を使い回せない)。
+export function useResourceTimeseries(
+  service: string,
+  profile: string,
+  region: string,
+  range: TimeseriesRange,
+) {
+  return useQuery({
+    queryKey: ['aws', service, profile, region, 'timeseries', range],
+    queryFn: async (): Promise<TimeseriesResponseRow> =>
+      timeseriesResponseFromRaw(await getResourceTimeseries(service, profile, region, range)),
     enabled: !!profile && !!service,
   });
 }

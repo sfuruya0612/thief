@@ -89,6 +89,8 @@ import type {
   SSMParamRow,
   SSOLoginStartRaw,
   SSOLoginStartRow,
+  TimeseriesResponseRaw,
+  TimeseriesResponseRow,
   WAFRaw,
   WAFRow,
   WAFRuleRaw,
@@ -729,5 +731,18 @@ export function cwLogEventFromRaw(raw: CWLogEventRaw, index: number): CWLogEvent
     logGroup: raw.log_group,
     logStream: raw.log_stream,
     eventId: raw.event_id,
+  };
+}
+
+// 台数の推移を UI 用に整える。欠測 (v が null) は null のまま残し、0 に潰さない。
+// 0 に潰すと「台数が 0 だった」と読めてしまう (グラフは null で線を切る)。
+export function timeseriesResponseFromRaw(raw: TimeseriesResponseRaw): TimeseriesResponseRow {
+  return {
+    range: raw.range ?? '',
+    periodSeconds: raw.period_seconds ?? 0,
+    series: (raw.series ?? []).map((s) => ({
+      name: s.name ?? '',
+      points: (s.points ?? []).map((p) => ({ t: p.t, v: p.v ?? null })),
+    })),
   };
 }

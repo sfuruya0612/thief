@@ -16,6 +16,7 @@ func (s *Server) registerRoutes() {
 
 	// AWS per-profile resources
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2", s.handleEC2)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2/timeseries", s.handleEC2Timeseries)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds", s.handleRDS)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds/parameters", s.handleRDSParameters)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds/cluster-parameters", s.handleRDSClusterParameters)
@@ -23,6 +24,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elasticache/parameters", s.handleElastiCacheParameters)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/lambda", s.handleLambda)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs", s.handleECS)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/timeseries", s.handleECSTimeseries)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/services", s.handleECSServices)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/tasks", s.handleECSTasks)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ecs/{cluster}/container-instances", s.handleECSContainerInstances)

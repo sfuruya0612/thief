@@ -214,6 +214,8 @@
   - @sfuruya0612
 - [ADD] 常駐ターミナルドックの高さをドラッグで変更できるようにする (ドックの上端に重ねた `div.terminal-dock-resizer` をドラッグすると本文の高さが `frontend/src/lib/panelResize.ts` の新規関数 `startPanelHeightResize` で追従し、`localStorage` の `terminalDockHeight` に保存される。次回起動時は保存した高さを `frontend/src/hooks/useTerminalDockHeight.ts` の `clampTerminalDockBodyHeight` でウィンドウ高さに対して丸めて復元する。折りたたみ状態は永続化しない。下限は 160px、上限は Drawer と同じ係数 0.85 でウィンドウ高さに対して決まる)
   - @sfuruya0612
+- [ADD] EC2 の Running インスタンス数と ECS のクラスターごとのタスク数の推移を折れ線グラフで表示できるようにする (期間は 1 日 / 7 日 / 1 か月を切り替えられ、粒度はそれぞれ 60 秒 / 300 秒 / 3600 秒。ECS は新規導入した `github.com/aws/aws-sdk-go-v2/service/cloudwatch` で `AWS/ECS` `LiveTaskCount` をメトリクス演算 `SUM(SEARCH(...))` によりクラスター単位に合算して取得する (`cloudwatch:GetMetricData` が無い場合は 403 で理由を表示しグラフを出さない)。EC2 には account/region 単位の集計メトリクスが無いため、`handleEC2` が AWS から一覧を実際に取得したとき (キャッシュ MISS と Refresh) だけ Running 台数を profile と region ごとのプロセス内固定長リングバッファ (上限 4096 点) に記録し、時系列エンドポイントはこれを切り出して返す。時系列の取得は一覧の取得とは別の TanStack Query で行い、一覧の表示を待たせない)
+  - @sfuruya0612
 - [CHANGE] Cost Explorer の絞り込みを、Service と Linked account の 2 つの入力から、Service / Usage type / Linked account を横断する 1 つのキーワード入力に変更する (`GET /api/aws/profiles/{profile}/cost` のクエリパラメータ `service` と `account` を廃止し `keyword` を追加する。backend は `GetDimensionValues` で 3 次元の値を並列に取得し、大文字小文字を区別しない部分一致で照合したうえで EQUALS の Or フィルタを組み立てる。Linked account はアカウント ID とアカウント名 (次元値の description 属性) の両方を照合対象とする。`GetCostAndUsage` の Filter が EQUALS と CASE_SENSITIVE しか受け付けないため、部分一致の判定は backend 側で行う。どの次元にも一致しなかった場合は結果が空と確定するため、課金される `GetCostAndUsage` を呼ばずに空の結果を返す)
   - @sfuruya0612
 - [CHANGE] CLI `sso logout` を、SSO キャッシュディレクトリ (`~/.aws/sso/cache`) が無い場合にエラー終了ではなく正常終了 (削除するものが無い) にする

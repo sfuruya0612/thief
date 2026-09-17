@@ -68,6 +68,7 @@ import {
   wafOverviewRows,
   type OverviewEntry,
 } from '../components/Drawer/overviewRows';
+import { ResourceCountChart } from '../components/charts/ResourceCountChart';
 import { Drawer } from '../components/Drawer/Drawer';
 import { useCost, useResources } from '../api/queries';
 import { SERVICES } from '../lib/serviceMeta';
@@ -94,6 +95,9 @@ interface ServicePanelProps<TRaw, TRow extends BaseRow> {
   drawerPos: DrawerPos;
   selectedId: string | null;
   onSelectId: (id: string | null) => void;
+  // 台数の推移グラフの見出し。渡したサービスだけグラフを表示する
+  // (時系列エンドポイントを持つ ec2 と ecs のみ)。
+  countChartTitle?: string;
 }
 
 // 汎用サービスパネル: useResources 呼び出し + Stats/Facet/Table/Drawer 描画
@@ -107,6 +111,7 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   drawerPos,
   selectedId,
   onSelectId,
+  countChartTitle,
 }: ServicePanelProps<TRaw, TRow>) {
   const { data, isLoading, error } = useResources<TRaw, TRow>(service, profile, region, normalizer);
   const { data: cost } = useCost(profile, region);
@@ -153,6 +158,15 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
       {!ssoExpired && error && <ErrorBanner error={error} />}
 
       <StatsRow resources={allResources} service={service} cost={cost ?? []} />
+
+      {countChartTitle && (
+        <ResourceCountChart
+          service={service}
+          profile={profile}
+          region={region}
+          title={countChartTitle}
+        />
+      )}
 
       <FacetBar rows={allResources} filters={filters} setFilters={setFilters} />
 
@@ -228,6 +242,7 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          countChartTitle="Running instances"
         />
       )}
       {activeService === 'ecr' && (
@@ -319,6 +334,7 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          countChartTitle="Tasks per cluster"
         />
       )}
       {activeService === 's3' && (

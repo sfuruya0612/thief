@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	bqclient "github.com/sfuruya0612/thief/backend/internal/bigquery"
 	"github.com/sfuruya0612/thief/backend/internal/cache"
 	"github.com/sfuruya0612/thief/backend/internal/config"
@@ -37,6 +38,16 @@ type Server struct {
 	resourceCache *cache.Cache[any]
 	mux           *http.ServeMux
 
+	// ec2Counts は Running な EC2 インスタンス数の推移をプロセス内に記録する。
+	// handleEC2 が AWS から一覧を取得したときだけ追記され、handleEC2Timeseries が読む。
+	ec2Counts *awsinternal.EC2CountRecorder
+	// ec2Resources は EC2 の一覧を取得する関数。台数の記録がキャッシュ MISS のときだけ
+	// 行われることをテストで確かめられるよう、関数として持つ。
+	ec2Resources func(ctx context.Context, profile, region string) ([]awsinternal.EC2Resource, error)
+	// ecsTaskCountSeries は ECS のタスク数の時系列を取得する関数。テストで実 AWS へ
+	// 接続せずに差し替えられるよう、関数として持つ。
+	ecsTaskCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, now time.Time) ([]awsinternal.TimeseriesSeries, error)
+
 	// SSO デバイス認可 (start / complete エンドポイント) の進行中セッションと外部依存。
 	ssoLoginSessions *ssoLoginSessionStore
 	ssoLogin         ssoLoginDeps
@@ -54,12 +65,15 @@ type Server struct {
 // if projectID is empty or ADC fails, BigQuery endpoints return 503.
 func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	s := &Server{
-		cfg:              cfg,
-		resourceCache:    cache.New[any](5 * time.Minute),
-		ssoLoginSessions: newSSOLoginSessionStore(),
-		ssoLogin:         defaultSSOLoginDeps(),
-		ddLoginSessions:  newDatadogLoginSessionStore(),
-		ddAuth:           defaultDatadogAuthDeps(),
+		cfg:                cfg,
+		resourceCache:      cache.New[any](5 * time.Minute),
+		ssoLoginSessions:   newSSOLoginSessionStore(),
+		ssoLogin:           defaultSSOLoginDeps(),
+		ddLoginSessions:    newDatadogLoginSessionStore(),
+		ddAuth:             defaultDatadogAuthDeps(),
+		ec2Counts:          awsinternal.NewEC2CountRecorder(),
+		ec2Resources:       awsinternal.ListEC2Resources,
+		ecsTaskCountSeries: awsinternal.ListECSTaskCountSeries,
 	}
 
 	// BigQuery: try to initialise but don't fail server startup.

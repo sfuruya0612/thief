@@ -45,6 +45,9 @@ import type {
   ECSTaskContainerDetailRaw,
   ECSContainerRaw,
   ECSContainerInstanceRaw,
+  MetricPointRaw,
+  TimeseriesSeriesRaw,
+  TimeseriesResponseRaw,
   CacheRaw,
   CacheParameterRaw,
   ELBRaw,
@@ -118,6 +121,9 @@ import ecsTask from './__contract__/ECSTaskResource.json';
 import ecsTaskContainerDetail from './__contract__/ECSTaskContainerDetail.json';
 import ecsContainer from './__contract__/ECSContainerResource.json';
 import ecsContainerInstance from './__contract__/ECSContainerInstanceResource.json';
+import metricPoint from './__contract__/MetricPoint.json';
+import timeseriesSeries from './__contract__/TimeseriesSeries.json';
+import timeseriesResponse from './__contract__/TimeseriesResponse.json';
 import cache from './__contract__/ElastiCacheResource.json';
 import cacheParameter from './__contract__/ElastiCacheParameter.json';
 import elb from './__contract__/ELBResource.json';
@@ -203,7 +209,7 @@ type Expect<T extends true> = T;
 type PriceRateRawWidened = Omit<PriceRateRaw, 'model'> & { model: string };
 type PriceTableRawWidened = Omit<PriceTableRaw, 'rates'> & { rates: PriceRateRawWidened[] };
 
-// 契約対象 60 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
+// 契約対象 64 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
 export type ContractChecks = [
   Expect<Contract<typeof apigw, APIGWRaw>>,
   Expect<Contract<typeof athenaCatalog, AthenaCatalogRaw>>,
@@ -240,6 +246,9 @@ export type ContractChecks = [
   Expect<Contract<typeof ecsTaskContainerDetail, ECSTaskContainerDetailRaw>>,
   Expect<Contract<typeof ecsContainer, ECSContainerRaw>>,
   Expect<Contract<typeof ecsContainerInstance, ECSContainerInstanceRaw>>,
+  Expect<Contract<typeof metricPoint, MetricPointRaw>>,
+  Expect<Contract<typeof timeseriesSeries, TimeseriesSeriesRaw>>,
+  Expect<Contract<typeof timeseriesResponse, TimeseriesResponseRaw>>,
   Expect<Contract<typeof cache, CacheRaw>>,
   Expect<Contract<typeof cacheParameter, CacheParameterRaw>>,
   Expect<Contract<typeof elb, ELBRaw>>,
