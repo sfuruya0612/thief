@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// newTestV2API returns a UsageMeteringV2API pointed at the given httptest.Server.
+// newTestV2API は指定した httptest.Server を向いた UsageMeteringV2API を返す。
 func newTestV2API(t *testing.T, srv *httptest.Server) (*UsageMeteringV2API, context.Context) {
 	t.Helper()
 	t.Cleanup(srv.Close)

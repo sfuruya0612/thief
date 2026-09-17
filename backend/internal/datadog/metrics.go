@@ -33,8 +33,8 @@ type MetricQueryResult struct {
 	Series []MetricSeries `json:"series"`
 }
 
-// QueryMetrics runs a metrics query over the given time window
-// (GET /api/v1/query).
+// QueryMetrics は指定した期間でメトリクスのクエリを実行する
+// (GET /api/v1/query)。
 //
 // from と to は Datadog へ Unix 秒として渡す。ウィジェットのクエリ文字列
 // (timeseries / query_value の q) をそのまま実行するために使う。

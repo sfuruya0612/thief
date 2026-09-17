@@ -485,3 +485,5 @@
   - @sfuruya0612
 - `go:` 管理ツール (mockery / goimports / staticcheck / govulncheck) のビルド時 Go バージョンをアクティブな Go 本体と比較し、不一致のツールだけを `mise install --force` で再ビルドする mise タスク `backend:tools` を追加し、`backend:lint` の依存として lint 本体の前に走らせる (旧ツールチェインでビルドされたバイナリが残ると、go vet は通るのに staticcheck だけ「file requires newer Go version」等で失敗する分かりにくい事象になるため。全ツールが一致していれば再ビルドせず、ツールごとに skip / rebuild を標準出力に 1 行ずつ出す)
   - @sfuruya0612
+- `backend/internal/datadog` の非テストファイル 6 本にある exported 識別子の godoc コメントを日本語に統一する (issue 0169 のレビューで判明した、同パッケージ内での英語/日本語混在の解消。挙動を変える変更は無い)
+  - @sfuruya0612

@@ -8,7 +8,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 )
 
-// CostInfo represents a Datadog cost line item.
+// CostInfo は Datadog のコストの 1 明細を表す。
 type CostInfo struct {
 	Month       string  `json:"month"`
 	AccountName string  `json:"account_name"`
@@ -18,7 +18,7 @@ type CostInfo struct {
 	Cost        float64 `json:"cost"`
 }
 
-// GetHistoricalCost returns historical monthly cost data.
+// GetHistoricalCost は月単位の実績コストを返す。
 func GetHistoricalCost(ctx context.Context, api *UsageMeteringV2API, startMonth, endMonth, view string) ([]CostInfo, error) {
 	start, err := parseMonth(startMonth)
 	if err != nil {
@@ -44,8 +44,8 @@ func GetHistoricalCost(ctx context.Context, api *UsageMeteringV2API, startMonth,
 	return costInfosFromResponse(resp), nil
 }
 
-// GetEstimatedCost returns estimated cost data for the current and/or previous
-// month (Datadog only exposes estimated cost for those two months).
+// GetEstimatedCost は当月または前月、あるいはその両方の見積もりコストを返す
+// (Datadog はこの 2 つの月の見積もりコストしか公開していない)。
 func GetEstimatedCost(ctx context.Context, api *UsageMeteringV2API, startMonth, endMonth, view string) ([]CostInfo, error) {
 	start, err := parseMonth(startMonth)
 	if err != nil {

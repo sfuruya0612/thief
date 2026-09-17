@@ -9,12 +9,12 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 )
 
-// IsForbidden reports whether err is a Datadog API error carrying HTTP 403.
+// IsForbidden は err が HTTP 403 を伴う Datadog API のエラーかどうかを返す。
 //
-// datadog.GenericOpenAPIError does not keep the status code itself: for a
-// non-2xx response the SDK puts http.Response.Status ("403 Forbidden") into
-// ErrorMessage and the raw body into ErrorBody. The leading token of
-// ErrorMessage is therefore the only place the status code survives.
+// datadog.GenericOpenAPIError はステータスコード自体を保持しない。非 2xx の
+// レスポンスでは SDK が http.Response.Status ("403 Forbidden") を ErrorMessage に、
+// 生のボディを ErrorBody に入れる。そのため ErrorMessage の先頭のトークンだけが
+// ステータスコードの残る場所になる。
 func IsForbidden(err error) bool {
 	var apiErr datadog.GenericOpenAPIError
 	if !errors.As(err, &apiErr) {
@@ -24,10 +24,10 @@ func IsForbidden(err error) bool {
 	return code == strconv.Itoa(http.StatusForbidden)
 }
 
-// ErrorBody returns the raw response body of a Datadog API error, truncated to
-// maxLen bytes. It returns an empty string when err is not a Datadog API error
-// or carries no body. Callers use it to log why a call was rejected, since
-// GenericOpenAPIError.Error() only yields the status line.
+// ErrorBody は Datadog API のエラーの生のレスポンスボディを maxLen バイトまで
+// 切り詰めて返す。err が Datadog API のエラーでない場合やボディを持たない場合は
+// 空文字列を返す。GenericOpenAPIError.Error() はステータス行しか返さないため、
+// 呼び出し側は呼び出しが拒否された理由をログに残すためにこれを使う。
 func ErrorBody(err error, maxLen int) string {
 	var apiErr datadog.GenericOpenAPIError
 	if !errors.As(err, &apiErr) {

@@ -61,8 +61,8 @@ type WidgetInfo struct {
 	Queries []string `json:"queries"`
 }
 
-// ListDashboards returns the dashboards visible to the current credentials
-// (GET /api/v1/dashboard).
+// ListDashboards は現在の認証情報から見えるダッシュボードの一覧を返す
+// (GET /api/v1/dashboard)。
 func ListDashboards(ctx context.Context, api *DashboardsV1API) ([]DashboardInfo, error) {
 	resp, _, err := api.api.ListDashboards(ctx)
 	if err != nil {
@@ -88,8 +88,8 @@ func ListDashboards(ctx context.Context, api *DashboardsV1API) ([]DashboardInfo,
 	return dashboards, nil
 }
 
-// GetDashboard returns a single dashboard with its widgets flattened into the
-// subset thief can render (GET /api/v1/dashboard/{id}).
+// GetDashboard は 1 つのダッシュボードを、そのウィジェットを thief が描ける範囲へ
+// 平坦化して返す (GET /api/v1/dashboard/{id})。
 func GetDashboard(ctx context.Context, api *DashboardsV1API, id string) (DashboardDetail, error) {
 	resp, _, err := api.api.GetDashboard(ctx, id)
 	if err != nil {
