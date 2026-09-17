@@ -378,6 +378,8 @@
   - @sfuruya0612
 - [FIX] Datadog 親組織自身のタブが常に「未ログイン」と表示される不具合を修正する (`handleDatadogOrgs` が組織一覧の各エントリの ID (Datadog 側の UUID) でログイン状態を判定していたが、親組織自身のトークンは issue 0167 の設計どおり `org == ""` のファイルに保存されるため、自身の ID では一度も一致せず常に未ログイン扱いになっていた。組織一覧の各エントリに、その組織が自分自身かどうかを表す `IsSelf` を追加し、`IsSelf` な要素だけログイン判定を `org == ""` で行うようにする。`org == ""` に OAuth トークンが無い場合は、`DATADOG_API_KEY`/`DATADOG_APP_KEY` の静的キーが両方設定されていればログイン済みとして扱う (静的キーのみで運用している親組織の self タブが未ログイン表示のままになる、同種の不具合を合わせて防ぐ)。あわせて issue 0168 で積み残していた「Sub Organization が一覧に出ない」不具合も修正する。組織一覧の取得に呼び出し元自身の 1 組織しか返さない `GET /api/v1/org` を使っていたのが原因で、JSON:API 形式で管理下の全組織を返す `GET /api/v2/org` (`datadogV2.OrganizationsApi.ListOrgs`) に切り替える。フロントは `isSelf` をタブ/ピッカーの状態判定まで伝播させ、未ログインの親組織タブをクリックしたときのログイン開始も組織 ID ではなく空文字の org で行うようにする。ログイン開始だけでなく Cost/Dashboards/Metrics のデータ取得と再ログインバナーも同じ理由で親組織自身のタブでは常に失敗していたため、`App.tsx` が `DatadogView` に渡す `orgId` を `isSelf` に応じて空文字に解決するようにし、Sub Organization 専用として org の省略を拒否していた Dashboards/Metrics (issue 0169/0170) も親組織を受け付けるようにする)
   - @sfuruya0612
+- [FIX] `THIEF_DATADOG_OAUTH_REDIRECT_BASE` (`Datadog.OAuthRedirectBase`) に末尾スラッシュ付きの URL を設定すると Datadog OAuth の redirect_uri が二重スラッシュになり、登録済みの redirect_uri と文字列一致しなくなる不具合を修正する (`config.Load()` が既定値・YAML・環境変数をすべて反映し終えた後、`Datadog.OAuthRedirectBase` の前後の空白と末尾のスラッシュを 1 か所で正規化する。正規化後に空文字になる場合 (スラッシュや空白だけの値) は既定値にフォールバックする。AWS SSO の start URL や `Datadog.Site`、`ListenAddr`、`WebOrigins`、frontend の `VITE_API_BASE` はパスと連結しない、またはパスの連結方法が異なるため対象としない)
+  - @sfuruya0612
 
 ### misc
 
