@@ -491,3 +491,5 @@
   - @sfuruya0612
 - `frontend/src/App.tsx` の未使用になっていた `// eslint-disable-next-line no-console` を削除する (`no-console` ルールが `eslint.config.js` で有効化されていないため、`console.error('failed to load profiles', error)` の呼び出しは残したまま抑止だけが不要になっていた。frontend の `npx eslint .` の警告が 10 件から 9 件に減る。挙動を変える変更は無い)
   - @sfuruya0612
+- `frontend/vite.config.ts` の `test` に `pool: 'vmThreads'` を追加し、`mise run frontend:test` の実行時間を短縮する (既定の `pool: 'forks'` はテストファイルごとに jsdom を作り直しており、95 ファイル 987 テストの実行時間の 74% (71.98 秒中) をその生成が占めていた。`vmThreads` はワーカーごとに 1 回だけ環境を用意しつつファイルごとの分離を保ち、同じテストが 9.58 秒で成功する。`isolate: false` はさらに速いが実行順依存で一部テストが失敗するため採らない。テスト自体とテスト結果は変えない)
+  - @sfuruya0612
