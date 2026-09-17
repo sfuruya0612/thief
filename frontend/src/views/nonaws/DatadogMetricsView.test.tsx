@@ -1,9 +1,11 @@
 // DatadogMetricsView のクエリ入力・期間指定・グラフ表示・エラー表示の検証。
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatadogMetricsView } from './DatadogMetricsView';
 import { DATADOG_NO_CREDENTIALS_CODE } from '../../lib/datadogAuthError';
+import { DEFAULT_METRICS_SPAN_SECONDS } from '../../lib/timeseries';
 import { ApiError } from '../../types/common';
 import type { DatadogMetricSeriesRow } from '../../types/nonaws';
 
@@ -44,11 +46,45 @@ const cpuSeries: DatadogMetricSeriesRow[] = [
   },
 ];
 
-function renderView(props?: { orgId?: string; initialQuery?: string }) {
+// DatadogMetricsView は state を持たないため、本来の親 (DatadogView) が持つ 3 つの値を
+// このラッパーが代わりに保持する。
+interface HarnessProps {
+  orgId: string;
+  initialQueryInput: string;
+  initialRunningQuery: string;
+}
+
+function Harness({ orgId, initialQueryInput, initialRunningQuery }: HarnessProps) {
+  const [queryInput, setQueryInput] = useState(initialQueryInput);
+  const [runningQuery, setRunningQuery] = useState(initialRunningQuery);
+  const [spanSeconds, setSpanSeconds] = useState(DEFAULT_METRICS_SPAN_SECONDS);
+
+  return (
+    <DatadogMetricsView
+      orgId={orgId}
+      queryInput={queryInput}
+      onQueryInputChange={setQueryInput}
+      runningQuery={runningQuery}
+      onRunningQueryChange={setRunningQuery}
+      spanSeconds={spanSeconds}
+      onSpanSecondsChange={setSpanSeconds}
+    />
+  );
+}
+
+function renderView(props?: {
+  orgId?: string;
+  initialQueryInput?: string;
+  initialRunningQuery?: string;
+}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <DatadogMetricsView orgId={props?.orgId ?? 'suborg1'} initialQuery={props?.initialQuery} />
+      <Harness
+        orgId={props?.orgId ?? 'suborg1'}
+        initialQueryInput={props?.initialQueryInput ?? ''}
+        initialRunningQuery={props?.initialRunningQuery ?? ''}
+      />
     </QueryClientProvider>,
   );
 }
@@ -206,7 +242,10 @@ describe('DatadogMetricsView', () => {
       isLoading: false,
       error: null,
     });
-    renderView({ initialQuery: 'avg:system.cpu.user{*}' });
+    renderView({
+      initialQueryInput: 'avg:system.cpu.user{*}',
+      initialRunningQuery: 'avg:system.cpu.user{*}',
+    });
 
     expect(screen.getByLabelText('Query')).toHaveValue('avg:system.cpu.user{*}');
     expect(mocks.useDatadogMetricsQueries).toHaveBeenCalledWith(

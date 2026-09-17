@@ -8,6 +8,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { aggregateDatadogCost, type DatadogCostGroupBy } from '../../lib/costAggregateDatadog';
 import { isDatadogAuthError } from '../../lib/datadogAuthError';
 import { defaultMonthRange, lastMonthsRange } from '../../lib/monthRange';
+import { DEFAULT_METRICS_SPAN_SECONDS } from '../../lib/timeseries';
 import type { DatadogCostRow } from '../../types/nonaws';
 import { DatadogDashboardView } from './DatadogDashboardView';
 import { DatadogMetricsView } from './DatadogMetricsView';
@@ -38,8 +39,12 @@ export interface DatadogViewProps {
 export function DatadogView({ orgId }: DatadogViewProps) {
   const [section, setSection] = useState<Section>('cost');
   const [mode, setMode] = useState<Mode>('historical');
-  // Dashboards から引き継いだクエリ。Metrics を開いたときの初期入力になる。
-  const [metricsQuery, setMetricsQuery] = useState('');
+  // Metrics の入力状態。DatadogMetricsView はセクション切り替えでアンマウントされるため、
+  // ここで持たないと入力中のクエリと選んだ期間が失われる (issue 0180)。組織タブの切り替えでは
+  // App.tsx の key により DatadogView ごと作り直されるので、組織をまたいだ持ち越しは起きない。
+  const [metricsQueryInput, setMetricsQueryInput] = useState('');
+  const [metricsRunningQuery, setMetricsRunningQuery] = useState('');
+  const [metricsSpanSeconds, setMetricsSpanSeconds] = useState(DEFAULT_METRICS_SPAN_SECONDS);
 
   const initialRange = useMemo(defaultMonthRange, []);
   const [startMonth, setStartMonth] = useState(initialRange.start);
@@ -117,13 +122,25 @@ export function DatadogView({ orgId }: DatadogViewProps) {
         <DatadogDashboardView
           orgId={orgId}
           onOpenQuery={(query) => {
-            setMetricsQuery(query);
+            // Metrics に入力中の値が残っていても、利用者が選んだウィジェットのクエリで上書きする。
+            setMetricsQueryInput(query);
+            setMetricsRunningQuery(query.trim());
             setSection('metrics');
           }}
         />
       )}
 
-      {section === 'metrics' && <DatadogMetricsView orgId={orgId} initialQuery={metricsQuery} />}
+      {section === 'metrics' && (
+        <DatadogMetricsView
+          orgId={orgId}
+          queryInput={metricsQueryInput}
+          onQueryInputChange={setMetricsQueryInput}
+          runningQuery={metricsRunningQuery}
+          onRunningQueryChange={setMetricsRunningQuery}
+          spanSeconds={metricsSpanSeconds}
+          onSpanSecondsChange={setMetricsSpanSeconds}
+        />
+      )}
 
       {section === 'cost' && (
         <>
