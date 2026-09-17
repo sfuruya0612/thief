@@ -4,7 +4,7 @@
 
 ## pre-commit
 
-- mise run fmt / mise run check / mise run test を実行すること
+- フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt` / `mise run lint` / `mise run test` を実行する。まとめて確認するなら `mise run check`。
 
 ## リポジトリ概要
 
@@ -12,6 +12,14 @@
 
 - backend/  : Go で実装された API サーバ・CLI
 - frontend/ : Vite + React + TypeScript で実装された Web クライアント
+
+## backend / frontend の型契約 (golden JSON)
+
+frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴールデン JSON と型レベルで突き合わせている。backend の型や JSON タグを変えたら必ず再生成する。
+
+- ゴールデン: `frontend/src/types/__contract__/<Type>.json`。対象型は `backend/internal/contract/contract.go` の `Registry` が列挙する (対象型を追加したらここに追記する)。
+- 再生成: `backend/` で `UPDATE_GOLDEN=1 go test ./internal/contract/` を実行する。
+- 検査: `frontend/src/types/contract.check.ts` がキー集合の双方向一致と型適合を `tsc --noEmit` で検査する (`npm run lint` に含まれる)。不一致は型エラーとして現れる。
 
 ## タスクランナー (mise run)
 
@@ -81,31 +89,25 @@ ORM、リッチなロガー(zap/zerolog 等)、自前 DI コンテナなどは�
 
 ### プロジェクト構造
 
-CLI と Web API サーバを単一リポジトリで扱う場合の標準構造:
+単一の `cmd/thief` が API サーバ (`thief server`) と CLI の両方を提供する。
 
 ```
 backend/
-├── cmd/
-│   ├── <app-name>/          # 各エントリポイント (main パッケージ)
-│   │   └── main.go
-│   └── <other-cli>/
-│       └── main.go
-├── internal/                # 外部からの import を禁止する内部パッケージ
-│   ├── <domain>/            # ドメインごとに分割
-│   ├── handler/ または server/  # Web API のハンドラ層
-│   ├── command/             # CLI のサブコマンド実装 (cobra Command を返す関数群)
-│   ├── service/             # ユースケース層
-│   ├── repository/          # 永続化層 (interface とその実装)
-│   ├── config/              # 設定の読み込み・検証
-│   └── logging/             # slog の初期化
-├── pkg/                     # 外部公開する再利用可能なパッケージ (慎重に)
-├── go.mod
-└── go.sum
+├── cmd/thief/main.go        # 唯一のエントリポイント
+└── internal/                # 外部からの import を禁止する内部パッケージ
+    ├── api/                 # HTTP サーバ・ルーティング・ハンドラ (server.go / routes.go / handlers_*.go / middleware.go / errors.go)
+    ├── cli/                 # Cobra サブコマンド (root.go / helper.go / <service>.go)
+    ├── aws/                 # AWS SDK クライアントとサービス別リソース一覧 (<service>.go)
+    ├── gcp/ bigquery/ datadog/ tidb/   # 各クラウド・外部サービスの取得層
+    ├── contract/            # backend 型 → frontend ゴールデン JSON の生成・検査
+    ├── cache/ pricecache/   # リソース / 価格キャッシュ
+    ├── session/ snippet/ sqlguard/ util/
+    └── config/ ssoauth/ datadogauth/   # 設定・認証
 ```
 
-- 公開する必要がないものはすべて `internal/` 配下に置く。`pkg/` は意図的に外部公開する場合のみ。
-- 1 パッケージ 1 責務。パッケージ名は短く小文字(`util`, `common`, `helpers` のような曖昧名は避ける)。
-- 循環参照は禁止。レイヤ間は上位 → 下位の単方向依存とする(`handler` → `service` → `repository`)。
+- AWS リソースの追加はリポジトリ内 skill `.claude/skills/add-aws-service/SKILL.md` の手順に従う。
+- `aws/<service>.go` は `ResourceID`/`ResourceName`/`ResourceState`/`ServiceName` を実装する resource インターフェース (`aws/resource.go`) を満たす型と `List<Service>Resources(ctx, profile, region)` を公開する。SDK 型 → Resource 型の変換はプライベートヘルパー (`<service>FromXxx`) に分離する。
+- 公開する必要がないものはすべて `internal/` 配下に置く。1 パッケージ 1 責務、循環参照は禁止。
 
 ### エラーハンドリング
 
@@ -259,20 +261,19 @@ frontend/
 ├── public/assets/
 └── src/
     ├── main.tsx / App.tsx / app.css     # エントリポイントとレイアウト CSS
-    ├── types/{aws,nonaws,common}.ts     # Raw (backend JSON 形状) と Row (UI 形状) の 2 層
-    ├── api/{client,endpoints,queries}.ts
-    ├── lib/{normalize,normalizeNonAws,serviceMeta,format,storage,sessionTabsState,sessionMeta,sessionTabsLayout}.ts
-    ├── hooks/{useTweaks,useProfiles,useGcpProjects,useSessionTabs}.ts
+    ├── types/{aws,gcp,nonaws,query,common}.ts  # Raw (backend JSON 形状) と Row (UI 形状) の 2 層
+    ├── types/__contract__/*.json / contract.check.ts  # backend と突き合わせるゴールデン JSON と型検査
+    ├── api/{client,endpoints,queries,terminal}.ts
+    ├── lib/*.ts                         # normalize / format / storage / 集計などの純関数
+    ├── hooks/use*.ts
+    ├── i18n/locales/ja/*.json           # react-i18next の翻訳リソース
     ├── components/
     │   ├── {TopBar,Sidebar,StatsRow,FacetBar,StatusBar,DataTable,TweaksPanel,SSOExpiredBanner}.tsx
-    │   ├── session/{SessionTabs,AddSessionPicker,AwsSessionTabs,GcpSessionTabs,AwsActiveSessionCard,GcpActiveSessionCard,SessionEmptyState}.tsx
-    │   ├── Drawer/{Drawer,DrawerTags,DrawerLogs,DrawerEmpty,overviewRows}.tsx
-    │   ├── icons/{Icons,AwsIcons,Spark,AreaChart}.tsx
-    │   ├── primitives/{StatusBadge,TagList,CellBar,Money,Kbd}.tsx
-    │   └── tables/{columns,nonAwsColumns}.tsx
+    │   ├── session/ Drawer/ icons/ primitives/ tables/
     └── views/
-        ├── AccountView.tsx              # AWS 15 サービス共通の ServicePanel
-        └── nonaws/{BigQueryView,DatadogView,TiDBView}.tsx
+        ├── AccountView.tsx              # AWS サービス共通の ServicePanel
+        ├── CostExplorerPanel.tsx / PricingPanel.tsx / AthenaView.tsx / CloudWatchLogsView.tsx / GcpView.tsx
+        └── nonaws/{BigQueryView,CloudLoggingView,DatadogView,DatadogMetricsView,DatadogDashboardView,TiDBView}.tsx
 ```
 
 - `types/*.ts` は Raw(バックエンド snake_case JSON)と Row(UI camelCase 表示用)を明確に分離する。変換は `lib/normalize.ts` / `lib/normalizeNonAws.ts` の純関数(`xxxFromRaw`)に集約する。
@@ -336,4 +337,11 @@ frontend/
   - 永続化する状態フィールドの追加
   - 認証フロー(SSO)の挙動変更
   - 新規依存ライブラリの追加
+
+## ローカル動作確認 (example / floci)
+
+実 AWS アカウントなしで動作確認できる `example/` 環境がある (floci の単一コンテナ、詳細は `example/README.md`)。`mise run example:up` / `example:down` / `example:seed` で操作する。
+
+- backend は `HOME="$(pwd)/example/home"` と `THIEF_S3_PATH_STYLE=true` を設定して起動する。前者はホストの実 `~/.aws` (実プロファイル・SSO キャッシュ) から隔離するため必須。frontend は通常どおり起動してよい。
+- SSO ログイン、EC2 Start Session / ECS Exec のターミナル、Cost Explorer / 請求系はエミュレータでは確認できない。
 
