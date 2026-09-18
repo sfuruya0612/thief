@@ -64,6 +64,8 @@
   - @sfuruya0612
 - [UPDATE] Datadog Metrics のクエリ入力・実行済みクエリ・期間の状態を `DatadogMetricsView` から `DatadogView` へリフトアップし、Cost/Dashboards セクションへ切り替えてから Metrics に戻っても入力が失われないようにする (`DatadogMetricsView` はセクション切り替えで条件レンダリングによりアンマウントされ、ローカル state を持っていたため従来は戻るたびに空欄と既定期間に戻っていた。組織タブを切り替えたときにクエリが持ち越されない挙動は `DatadogView` を再マウントする既存の `key={datadogOrg}` により従来どおり変わらない)
   - @sfuruya0612
+- [UPDATE] EC2 の Running instances と ECS の Tasks per cluster のグラフで、開いた直後に表示する期間の既定を 1 day から 7 days に変える (期間ボタンで 1 day と 1 month に切り替えられることは変わらない。EC2 の台数は一覧の取得時にだけ記録されるため、1 日の窓では点が少なく推移が読めなかった)
+  - @sfuruya0612
 - [ADD] API サーバの Datadog コスト取得 (`GET /api/datadog/cost/historical`/`estimated`) を OAuth トークン優先・静的キー (`DD_API_KEY`/`DD_APP_KEY`) フォールバックの非破壊的な認証方式にする (`POST /api/datadog/auth/login/start`/`GET /api/datadog/auth/callback`/`GET /api/datadog/auth/login/status`/`POST /api/datadog/auth/logout` の 4 エンドポイントを追加し、frontend からの非同期ブラウザログインに対応する。OAuth トークンが未ログイン・期限切れでリフレッシュも失敗・破損している場合は `slog.Warn` を出した上で静的キーへ自動フォールバックし、静的キーも無ければ明確なエラーを返す。frontend の UI 変更は対象外)
   - @sfuruya0612
 - [ADD] Datadog CLI に OAuth 2.0 (Authorization Code + PKCE + Dynamic Client Registration) によるブラウザログインを追加する (`thief datadog auth login`/`logout`/`refresh`。トークンは `~/.config/thief/datadog/` にファイル権限 0600 で保存する。既存の `DD_API_KEY`/`DD_APP_KEY` 静的キー方式と `thief datadog historical`/`estimated` の挙動は変えない)

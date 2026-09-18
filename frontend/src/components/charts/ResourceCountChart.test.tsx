@@ -55,31 +55,33 @@ describe('ResourceCountChart', () => {
     mocks.useResourceTimeseries.mockReturnValue({ data: undefined, isLoading: false, error: null });
   });
 
-  it('既定は 1 日で取得し、欠測を含む系列をそのままグラフへ渡す', () => {
+  it('既定は 7 日で取得し、欠測を含む系列をそのままグラフへ渡す', () => {
     mocks.useResourceTimeseries.mockReturnValue({
-      data: { range: '1d', periodSeconds: 60, series },
+      data: { range: '7d', periodSeconds: 300, series },
       isLoading: false,
       error: null,
     });
 
     renderChart();
 
-    expect(mocks.useResourceTimeseries).toHaveBeenCalledWith('ecs', 'prod', 'ap-northeast-1', '1d');
+    expect(mocks.useResourceTimeseries).toHaveBeenCalledWith('ecs', 'prod', 'ap-northeast-1', '7d');
+    expect(screen.getByRole('button', { name: '7 days' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: '1 day' })).not.toHaveClass('active');
     expect(screen.getByText('Tasks per cluster')).toBeInTheDocument();
     expect(screen.getByTestId('timeseries-chart-stub')).toBeInTheDocument();
     // 欠測は null のまま渡す (0 に潰すと「台数が 0 だった」と読めてしまう)。
     expect(captured.series).toEqual(series);
   });
 
-  it('期間ボタンで 7 日と 1 か月に切り替えて取得し直す', () => {
+  it('期間ボタンで 1 日と 1 か月に切り替えて取得し直す', () => {
     renderChart();
 
-    fireEvent.click(screen.getByRole('button', { name: '7 days' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 day' }));
     expect(mocks.useResourceTimeseries).toHaveBeenLastCalledWith(
       'ecs',
       'prod',
       'ap-northeast-1',
-      '7d',
+      '1d',
     );
 
     fireEvent.click(screen.getByRole('button', { name: '1 month' }));
