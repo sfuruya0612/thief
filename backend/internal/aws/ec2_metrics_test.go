@@ -112,6 +112,46 @@ func TestEC2CountRecorderSeries(t *testing.T) {
 	})
 }
 
+// TestEC2CountRingSizeCovers30Days はリングバッファが定期サンプリングだけで 30 日分を
+// 保持できる大きさであることを検証する。ec2CountRingSize は定数式で求めているため、
+// Range30Days.Duration() の値とずれていないことをテストで固定する。
+func TestEC2CountRingSizeCovers30Days(t *testing.T) {
+	samples := int(Range30Days.Duration() / EC2CountSampleInterval)
+	if ec2CountRingSize < 2*samples {
+		t.Errorf("ec2CountRingSize = %d, want >= %d (2 * %d samples in 30 days)", ec2CountRingSize, 2*samples, samples)
+	}
+}
+
+func TestEC2CountRecorderKeys(t *testing.T) {
+	rec := NewEC2CountRecorder()
+	if got := rec.Keys(); len(got) != 0 {
+		t.Fatalf("keys = %+v, want empty", got)
+	}
+
+	now := time.Now()
+	rec.Record("prod", "ap-northeast-1", 1, now)
+	rec.Record("prod", "us-east-1", 2, now)
+	// 同じ組への追記で組が増えない。
+	rec.Record("prod", "ap-northeast-1", 3, now)
+
+	got := rec.Keys()
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2: %+v", len(got), got)
+	}
+	seen := map[EC2CountTarget]bool{}
+	for _, target := range got {
+		seen[target] = true
+	}
+	for _, want := range []EC2CountTarget{
+		{Profile: "prod", Region: "ap-northeast-1"},
+		{Profile: "prod", Region: "us-east-1"},
+	} {
+		if !seen[want] {
+			t.Errorf("keys missing %+v: %+v", want, got)
+		}
+	}
+}
+
 // TestEC2CountRecorderDropsOldest は上限到達時に最古の点が捨てられることを検証する。
 func TestEC2CountRecorderDropsOldest(t *testing.T) {
 	base := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)

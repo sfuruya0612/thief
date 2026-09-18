@@ -76,6 +76,11 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		ecsTaskCountSeries: awsinternal.ListECSTaskCountSeries,
 	}
 
+	// 一度開いた profile と region の EC2 台数を、一覧の取得とは独立に定期サンプリング
+	// する。ctx は thief server コマンドの context で、シグナルでキャンセルされると
+	// サンプラーも終了する。
+	go s.runEC2CountSampler(ctx, awsinternal.EC2CountSampleInterval)
+
 	// BigQuery: try to initialise but don't fail server startup.
 	if cfg.BigQuery.ProjectID != "" {
 		bq, err := bqclient.NewClient(ctx, cfg.BigQuery.ProjectID)
