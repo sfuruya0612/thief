@@ -11,6 +11,7 @@ import { isSSOExpiredError } from '../lib/ssoError';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { aggregateCost, type CostMetricType } from '../lib/costAggregate';
+import { crossTableCsv, downloadCsv } from '../lib/download';
 
 export interface CostExplorerPanelProps {
   profile: string;
@@ -137,6 +138,10 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
     setEndDate(toDateInputValue(end));
   };
 
+  const exportCsv = () => {
+    downloadCsv(`cost-${startDate}-${endDate}.csv`, crossTableCsv(categories, crossTableRows));
+  };
+
   return (
     <div className="main">
       <div className="toolbar">
@@ -237,6 +242,15 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
             </option>
           ))}
         </select>
+
+        <button
+          className="btn sm"
+          onClick={exportCsv}
+          disabled={crossTableRows.length === 0}
+          title="Download the cross table as CSV"
+        >
+          Download CSV
+        </button>
       </div>
 
       {isLoading ? (

@@ -9,6 +9,7 @@ import { Loading } from './Loading';
 import { Icons } from './icons/Icons';
 import { MONTH_RANGE_PRESETS } from '../lib/monthRange';
 import type { CostAggregateResult } from '../lib/costAggregateCore';
+import { crossTableCsv, downloadCsv } from '../lib/download';
 
 // 積み上げグラフの系列が多すぎると凡例が読めなくなるため、金額の大きい上位のみ個別系列にし
 // 残りは Other にまとめる
@@ -31,6 +32,8 @@ export interface MonthlyCostPanelProps<R, G extends string> {
   // groupValueOf はフィルタ対象のグループ名を行から取り出す。useMemo の依存に入るため
   // モジュールスコープの安定した関数を渡すこと。
   groupValueOf: (row: R, groupBy: G) => string;
+  // csvBaseName はダウンロードする CSV のファイル名先頭に使う (既定 "cost")。
+  csvBaseName?: string;
 }
 
 export function MonthlyCostPanel<R, G extends string>({
@@ -48,6 +51,7 @@ export function MonthlyCostPanel<R, G extends string>({
   onApplyPreset,
   aggregate,
   groupValueOf,
+  csvBaseName = 'cost',
 }: MonthlyCostPanelProps<R, G>) {
   const { t } = useTranslation('cost');
   // グループ名フィルタは取得済みデータに対してブラウザ側で絞り込むだけにし、都度 API を
@@ -65,6 +69,11 @@ export function MonthlyCostPanel<R, G extends string>({
     () => aggregate(filteredRows, groupBy, MAX_SERIES),
     [aggregate, filteredRows, groupBy],
   );
+
+  const exportCsv = () => {
+    const name = [csvBaseName, startMonth, endMonth].filter(Boolean).join('-');
+    downloadCsv(`${name}.csv`, crossTableCsv(categories, crossTableRows));
+  };
 
   return (
     <>
@@ -129,6 +138,15 @@ export function MonthlyCostPanel<R, G extends string>({
             </option>
           ))}
         </select>
+
+        <button
+          className="btn sm"
+          onClick={exportCsv}
+          disabled={crossTableRows.length === 0}
+          title="Download the cross table as CSV"
+        >
+          Download CSV
+        </button>
       </div>
 
       {isLoading ? (

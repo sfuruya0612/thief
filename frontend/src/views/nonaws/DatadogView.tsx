@@ -169,6 +169,7 @@ export function DatadogView({ orgId }: DatadogViewProps) {
             onApplyPreset={applyPreset}
             aggregate={aggregateDatadogCost}
             groupValueOf={groupValueOf}
+            csvBaseName="datadog"
           />
         </>
       )}

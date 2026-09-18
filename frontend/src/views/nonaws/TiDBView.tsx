@@ -104,6 +104,7 @@ export function TiDBView() {
           onApplyPreset={applyPreset}
           aggregate={aggregateTiDBCost}
           groupValueOf={groupValueOf}
+          csvBaseName="tidb"
         />
       ) : (
         <div className="nonaws-cols">
