@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -79,7 +80,31 @@ func newGCPCmd() *cobra.Command {
 		},
 	}
 	objectsCmd.Flags().String("prefix", "", "Object name prefix filter")
-	gcsCmd.AddCommand(objectsCmd)
+
+	downloadCmd := &cobra.Command{
+		Use:   "download <bucket> <key>",
+		Short: "Download a GCS object to a local file",
+		Long: "Downloads a GCS object. --output-file defaults to the base name of the key " +
+			"in the current directory. An existing file is overwritten.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			outputFile, _ := cmd.Flags().GetString("output-file")
+			return gcpRunGCSDownload(cmd, args[0], args[1], outputFile)
+		},
+	}
+	downloadCmd.Flags().String("output-file", "", "Local file path (default: base name of the key)")
+
+	uploadCmd := &cobra.Command{
+		Use:   "upload <bucket> <key> <file>",
+		Short: "Upload a local file to a GCS object",
+		Long:  "Uploads a local file. The Content-Type is inferred from the file extension.",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gcpRunGCSUpload(cmd, args[0], args[1], args[2])
+		},
+	}
+
+	gcsCmd.AddCommand(objectsCmd, downloadCmd, uploadCmd)
 
 	// iam サブコマンド
 	iamCmd := &cobra.Command{
@@ -377,5 +402,61 @@ func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
 	if truncated {
 		fmt.Fprintln(cmd.ErrOrStderr(), "warning: object list truncated, narrow down with --prefix")
 	}
+	return nil
+}
+
+func gcpRunGCSDownload(cmd *cobra.Command, bucket, key, outputFile string) error {
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	projectID, err := gcpRequireProjectID(cmd, cfg)
+	if err != nil {
+		return err
+	}
+	dest, err := resolveDownloadPath(key, outputFile)
+	if err != nil {
+		return err
+	}
+	reader, err := gcp.GetObject(commandContext(cmd), projectID, bucket, key)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	f, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", dest, err)
+	}
+	if _, err := io.Copy(f, reader); err != nil {
+		f.Close()
+		return fmt.Errorf("write %s: %w", dest, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", dest, err)
+	}
+	cmd.Printf("Downloaded gs://%s/%s to %s\n", bucket, key, dest)
+	return nil
+}
+
+func gcpRunGCSUpload(cmd *cobra.Command, bucket, key, filePath string) error {
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	projectID, err := gcpRequireProjectID(cmd, cfg)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	if err := gcp.PutObject(commandContext(cmd), projectID, bucket, key, f, contentTypeForFile(filePath)); err != nil {
+		return err
+	}
+	cmd.Printf("Uploaded %s to gs://%s/%s\n", filePath, bucket, key)
 	return nil
 }
