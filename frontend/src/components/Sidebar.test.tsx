@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
+import { useResources } from '../api/queries';
+import { ecrFromRaw } from '../lib/normalize';
+import type { ApiError } from '../types/common';
 
 // テスト間で QueryClient を独立させるためのラッパー
 function renderWithQC(ui: React.ReactElement) {
@@ -81,7 +85,7 @@ describe('Sidebar region selector', () => {
   });
 });
 
-describe('Sidebar SvcItem (queryFn/skipToken)', () => {
+describe('Sidebar SvcItem (キャッシュ読み取り専用)', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -134,10 +138,84 @@ describe('Sidebar SvcItem (queryFn/skipToken)', () => {
       expect(ec2Item?.querySelector('.count')?.textContent).toBe('3');
     });
 
-    // aws/ec2 の queryKey は skipToken により fetch されないため、実 HTTP リクエストは発生しない
+    // 件数バッジは QueryObserver を作らないため、実 HTTP リクエストは発生しない
     const ec2FetchCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
       ([url]) => typeof url === 'string' && url.includes('/ec2'),
     );
     expect(ec2FetchCalls).toHaveLength(0);
+  });
+});
+
+// issue 0187 の回帰テスト。SvcItem が同一 queryKey のクエリ options を skipToken で
+// 上書きしていたため、invalidateQueries(['aws']) の再取得が Missing queryFn で失敗し、
+// SSO 期限切れ (401 SSO_TOKEN_EXPIRED) が SSOExpiredBanner に届かなかった。
+describe('Sidebar とリソース一覧クエリの同居', () => {
+  const originalFetch = globalThis.fetch;
+
+  function Panel() {
+    const { error } = useResources('ecr', 'test', 'ap-northeast-1', ecrFromRaw);
+    return <div id="panel">{(error as ApiError | null)?.code ?? ''}</div>;
+  }
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/aws/regions')) {
+        return { ok: true, status: 200, json: async () => [] } as Response;
+      }
+      return {
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: async () => ({
+          error: 'the SSO session has expired or is invalid',
+          code: 'SSO_TOKEN_EXPIRED',
+        }),
+      } as Response;
+    });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('invalidate 後も Missing queryFn にならず SSO 期限切れのエラーが届く', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 60_000 } } });
+    const { container } = render(
+      <StrictMode>
+        <QueryClientProvider client={qc}>
+          <Sidebar
+            profile="test"
+            region="ap-northeast-1"
+            profiles={[{ name: 'test' }]}
+            onRegionChange={() => {}}
+            activeService="ecr"
+            onService={() => {}}
+          />
+          <Panel />
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(
+      () => expect(container.querySelector('#panel')?.textContent).toBe('SSO_TOKEN_EXPIRED'),
+      {
+        timeout: 3000,
+      },
+    );
+
+    // Refresh / SSO ログイン成功相当。SvcItem が共有クエリの options を壊していなければ
+    // 本来の queryFn で再取得され、Missing queryFn にはならない。
+    await qc.invalidateQueries({ queryKey: ['aws'] });
+    await waitFor(
+      () => expect(container.querySelector('#panel')?.textContent).toBe('SSO_TOKEN_EXPIRED'),
+      {
+        timeout: 3000,
+      },
+    );
+
+    const query = qc.getQueryCache().find({ queryKey: ['aws', 'ecr', 'test', 'ap-northeast-1'] });
+    expect((query?.state.error as Error | null)?.message ?? '').not.toContain('Missing queryFn');
   });
 });
