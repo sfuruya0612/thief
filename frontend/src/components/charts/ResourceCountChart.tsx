@@ -29,8 +29,12 @@ const RANGE_OPTIONS: { label: string; value: TimeseriesRange }[] = [
 
 const CHART_HEIGHT = 220;
 
+// DEFAULT_RANGE は開いた直後に表示する期間。EC2 の台数は一覧の取得時にだけ記録されるため、
+// 1 日の窓では点が少なく推移が読めない。7 日を既定にして直近の推移が入るようにする。
+const DEFAULT_RANGE: TimeseriesRange = '7d';
+
 export function ResourceCountChart({ service, profile, region, title }: ResourceCountChartProps) {
-  const [range, setRange] = useState<TimeseriesRange>('1d');
+  const [range, setRange] = useState<TimeseriesRange>(DEFAULT_RANGE);
   const { data, isLoading, error } = useResourceTimeseries(service, profile, region, range);
 
   return (
