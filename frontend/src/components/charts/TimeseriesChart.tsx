@@ -3,7 +3,12 @@
 // (CostChart と同じ関心の分離)。色の固定順割当と Other 集約は lib/timeseries.ts。
 import ReactECharts from 'echarts-for-react';
 import { useTweaks } from '../../hooks/useTweaks';
-import { collapseSeries, DEFAULT_MAX_SERIES, seriesColors } from '../../lib/timeseries';
+import {
+  collapseSeries,
+  DEFAULT_MAX_SERIES,
+  isolatedPointFlags,
+  seriesColors,
+} from '../../lib/timeseries';
 import type { TimeseriesSeries } from '../../lib/timeseries';
 
 export interface TimeseriesChartProps {
@@ -67,13 +72,24 @@ export function TimeseriesChart({
       axisLabel: { color: textColor, formatter: (v: number) => format(v) },
       splitLine: { lineStyle: { color: tweaks.theme === 'dark' ? '#35353c' : '#e4e4e8' } },
     },
-    series: shown.map((s) => ({
-      name: s.name,
-      type: 'line',
-      showSymbol: false,
-      emphasis: { focus: 'series' },
-      data: s.points.map((p) => [p.t, p.v]),
-    })),
+    // 線分を持てない孤立点 (点が 1 つだけの系列や、欠測に挟まれた点) にだけ marker を描く。
+    // 系列既定を symbol: 'none' にしたうえで showSymbol: true を指定し、孤立点のデータ項目
+    // だけで symbol を上書きする。showSymbol: false のままだとデータ項目の symbol に関係なく
+    // marker が出ないため、この組み合わせが必要になる。
+    // 連続する区間の点に marker は出ないので、1440 点ある ECS の系列の見え方は変わらない。
+    series: shown.map((s) => {
+      const isolated = isolatedPointFlags(s.points);
+      return {
+        name: s.name,
+        type: 'line',
+        showSymbol: true,
+        symbol: 'none',
+        emphasis: { focus: 'series' },
+        data: s.points.map((p, i) =>
+          isolated[i] ? { value: [p.t, p.v], symbol: 'circle' } : [p.t, p.v],
+        ),
+      };
+    }),
   };
 
   return <ReactECharts option={option} style={{ height }} notMerge />;

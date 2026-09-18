@@ -10,6 +10,17 @@ import { DEFAULT_MAX_SERIES, OTHER_SERIES_NAME, type TimeseriesSeries } from '..
 
 const captured = vi.hoisted(() => ({ option: {} as Record<string, unknown> }));
 
+// SeriesOption は option.series の要素のうち、検証に使う範囲だけを写した型。
+// データ項目は [t, v] の配列か、symbol を上書きしたオブジェクトのどちらかになる。
+type SeriesDatum = [number, number | null] | { value: [number, number | null]; symbol: string };
+
+interface SeriesOption {
+  name: string;
+  showSymbol: boolean;
+  symbol: string;
+  data: SeriesDatum[];
+}
+
 vi.mock('echarts-for-react', () => ({
   default: (props: { option: Record<string, unknown> }) => {
     captured.option = props.option;
@@ -72,16 +83,63 @@ describe('TimeseriesChart の option', () => {
             name: 'a',
             points: [
               { t: 1_000, v: 1 },
-              { t: 2_000, v: null },
+              { t: 2_000, v: 2 },
+              { t: 3_000, v: null },
             ],
           },
         ]}
       />,
     );
-    const series = captured.option.series as { data: [number, number | null][] }[];
+    const series = captured.option.series as SeriesOption[];
     expect(series[0].data).toEqual([
       [1_000, 1],
-      [2_000, null],
+      [2_000, 2],
+      [3_000, null],
+    ]);
+  });
+
+  it('点が 1 つだけの系列はその点に symbol を付ける (線分を持てず何も描かれないのを防ぐ)', () => {
+    render(<TimeseriesChart series={[{ name: 'Running', points: [{ t: 1_000, v: 2 }] }]} />);
+    const series = captured.option.series as SeriesOption[];
+    // showSymbol: false のままだと、データ項目の symbol に関係なく marker が描かれない。
+    expect(series[0].showSymbol).toBe(true);
+    expect(series[0].symbol).toBe('none');
+    expect(series[0].data).toEqual([{ value: [1_000, 2], symbol: 'circle' }]);
+  });
+
+  it('欠測に挟まれた孤立点にだけ symbol を付け、値の連続する区間の点には付けない', () => {
+    render(
+      <TimeseriesChart
+        series={[
+          {
+            name: 'a',
+            points: [
+              { t: 1_000, v: 1 },
+              { t: 2_000, v: 2 },
+              { t: 3_000, v: null },
+              { t: 4_000, v: 9 },
+              { t: 5_000, v: null },
+            ],
+          },
+        ]}
+      />,
+    );
+    const series = captured.option.series as SeriesOption[];
+    expect(series[0].data).toEqual([
+      [1_000, 1],
+      [2_000, 2],
+      [3_000, null],
+      { value: [4_000, 9], symbol: 'circle' },
+      [5_000, null],
+    ]);
+  });
+
+  it('値が連続する系列には symbol を付けない (marker が線を覆わない)', () => {
+    render(<TimeseriesChart series={manySeries(1)} />);
+    const series = captured.option.series as SeriesOption[];
+    expect(series[0].data).toEqual([
+      [1_000, 1],
+      [2_000, 1],
     ]);
   });
 

@@ -113,7 +113,12 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   onSelectId,
   countChartTitle,
 }: ServicePanelProps<TRaw, TRow>) {
-  const { data, isLoading, error } = useResources<TRaw, TRow>(service, profile, region, normalizer);
+  const { data, isLoading, error, dataUpdatedAt } = useResources<TRaw, TRow>(
+    service,
+    profile,
+    region,
+    normalizer,
+  );
   const { data: cost } = useCost(profile, region);
   const [filters, setFilters] = useState<Filters>({});
   const queryClient = useQueryClient();
@@ -127,6 +132,18 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
     if (!ssoExpired) return;
     void queryClient.invalidateQueries({ queryKey: ['aws', 'profiles'] });
   }, [ssoExpired, queryClient]);
+
+  // 一覧の取得が成功したら、同じ profile と region の時系列を取り直す。
+  // backend が台数を記録するのは一覧を実際に取得したときだけであり、Refresh では
+  // 時系列の再取得が一覧の取得完了より先に終わるため、追随させないとその回の記録が
+  // グラフに入らない (期間ごとのキーをまとめて無効化するので range は指定しない)。
+  useEffect(() => {
+    if (!dataUpdatedAt) return;
+    void queryClient.invalidateQueries({
+      queryKey: ['aws', service, profile, region, 'timeseries'],
+    });
+  }, [dataUpdatedAt, queryClient, service, profile, region]);
+
   const allResources = data ?? [];
   const selected = allResources.find((r) => r.id === selectedId) ?? null;
 

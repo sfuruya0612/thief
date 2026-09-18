@@ -25,12 +25,11 @@ vi.mock('../api/queries', async (importOriginal) => {
   };
 });
 
-function renderView() {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
+// viewElement は検証対象の AccountView を QueryClientProvider で包んだ要素を返す。
+// 初回の render と、props を変えずに再描画する rerender の両方で同じ要素を使う。
+function viewElement(client: QueryClient) {
+  return (
+    <QueryClientProvider client={client}>
       <AccountView
         profile="test-profile"
         region="ap-northeast-1"
@@ -40,8 +39,13 @@ function renderView() {
         onServiceChange={() => {}}
         drawerPos="right"
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+}
+
+function renderView(qc?: QueryClient) {
+  const client = qc ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(viewElement(client));
 }
 
 describe('AccountView のエラーバナー出し分け', () => {
@@ -87,5 +91,108 @@ describe('AccountView のエラーバナー出し分け', () => {
     expect(container.querySelector('.sso-banner')).not.toBeInTheDocument();
     expect(container.querySelector('.error-banner')).not.toBeInTheDocument();
     expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+});
+
+describe('AccountView の一覧取得に追随した時系列の再取得', () => {
+  const TIMESERIES_KEY = ['aws', 'ec2', 'test-profile', 'ap-northeast-1', 'timeseries'];
+
+  function newClient() {
+    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+    mocks.useCost.mockReturnValue({ data: [], isLoading: false, error: null });
+  });
+
+  it('一覧の取得が成功したら同じ profile と region の時系列クエリを無効化する', () => {
+    mocks.useResources.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      dataUpdatedAt: 1_700_000_000_000,
+    });
+    const qc = newClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+
+    renderView(qc);
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: TIMESERIES_KEY });
+  });
+
+  it('一覧が未取得 (dataUpdatedAt が 0) の間は時系列を無効化しない', () => {
+    mocks.useResources.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null,
+      dataUpdatedAt: 0,
+    });
+    const qc = newClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+
+    renderView(qc);
+
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: TIMESERIES_KEY });
+  });
+
+  it('一覧が取り直されて dataUpdatedAt が進むたびに時系列を無効化する', () => {
+    mocks.useResources.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      dataUpdatedAt: 1_700_000_000_000,
+    });
+    const qc = newClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+
+    const { rerender } = renderView(qc);
+    const before = invalidate.mock.calls.length;
+
+    // Refresh で一覧を取り直した状況。時系列の取得は一覧より先に終わるため、
+    // 一覧の更新に追随して取り直さないとその回の記録がグラフに入らない。
+    mocks.useResources.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      dataUpdatedAt: 1_700_000_060_000,
+    });
+    rerender(viewElement(qc));
+
+    expect(invalidate.mock.calls.length).toBeGreaterThan(before);
+    expect(invalidate).toHaveBeenLastCalledWith({ queryKey: TIMESERIES_KEY });
+  });
+
+  it('一覧の取り直しが失敗して dataUpdatedAt が進まなければ時系列を無効化し直さない', () => {
+    mocks.useResources.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      dataUpdatedAt: 1_700_000_000_000,
+    });
+    const qc = newClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+
+    const { rerender } = renderView(qc);
+    // ServicePanel は呼び出しごとに新しい配列を組むため、参照ではなく中身で数える。
+    const timeseriesCalls = () =>
+      invalidate.mock.calls.filter(
+        ([arg]) => JSON.stringify(arg?.queryKey) === JSON.stringify(TIMESERIES_KEY),
+      ).length;
+    expect(timeseriesCalls()).toBe(1);
+
+    // 取得済みの一覧を持ったまま再取得に失敗した状況。TanStack Query は失敗した
+    // 再取得で dataUpdatedAt を進めず、前回の data と error が並ぶ。backend は
+    // 一覧の取得に失敗すると台数を記録しないため、時系列を取り直す必要も無い。
+    mocks.useResources.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: new ApiError(500, 'INTERNAL', 'DescribeInstances failed'),
+      dataUpdatedAt: 1_700_000_000_000,
+    });
+    rerender(viewElement(qc));
+
+    expect(timeseriesCalls()).toBe(1);
   });
 });
