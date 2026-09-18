@@ -16,7 +16,6 @@ func (s *Server) registerRoutes() {
 
 	// AWS per-profile resources
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2", s.handleEC2)
-	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/ec2/timeseries", s.handleEC2Timeseries)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds", s.handleRDS)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds/parameters", s.handleRDSParameters)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/rds/cluster-parameters", s.handleRDSClusterParameters)
