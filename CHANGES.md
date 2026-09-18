@@ -2,6 +2,16 @@
 
 ## develop
 
+- [ADD] CLI に DynamoDB / API Gateway / NAT Gateway / SQS / WAF の一覧コマンド (`thief dynamo` / `apigw` / `natgw` / `sqs` / `waf`) を追加する (Web では表示できるが CLI に無かった 5 サービスの一覧を tab / CSV / `--group-by` で出力できるようにする。既存の `ListXxxResources` と `runList` を使い、`util.Row` を満たすため各 Resource 型に `ToRow()` を追加する。issue 0188)
+  - @sfuruya0612
+- [ADD] CLI に `secretsmanager get <name>` を追加し、Secrets Manager の復号済みの値を Name / Value の 2 列で表示できるようにする (Web の Drawer の Value タブと同じ値を CLI から確認できる。既存の `GetSecretValue` をラップした `GetSecretValueDetail` と `SecretValue` を追加し、`-o csv` / `--no-header` を使えるようにする。値はログ・エラーメッセージに含めない。issue 0189)
+  - @sfuruya0612
+- [ADD] CLI に S3 オブジェクトの一覧・ダウンロード・アップロード (`thief s3 objects` / `download` / `upload`) を追加する (既存の `ListS3Objects` / `GetS3Object` / `PutS3Object` を使う。`download` は `--output-file` 省略時に key の base name へ書き出し、key が `/` 終わりのときはエラーにする。`upload` は Content-Type を拡張子から推定する。出力先解決と Content-Type 推定は純関数に切り出して単体テストする。issue 0190)
+  - @sfuruya0612
+- [ADD] CLI に GCS オブジェクトのダウンロード・アップロード (`thief gcp gcs download` / `upload`) を追加する (既存の `gcp.GetObject` / `PutObject` を使い、出力先解決と Content-Type 推定は S3 と共有する。issue 0191)
+  - @sfuruya0612
+- [ADD] Web のコスト画面に CSV ダウンロードを追加する (Cost Explorer と Datadog / TiDB の Cost タブのクロス集計表を、画面表示と同じ集計値から `lib/download.ts` の `crossTableCsv` と `downloadCsv` でファイル保存する。CLI の `-o csv` と同等の利便性を Web に持たせる。issue 0192)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 

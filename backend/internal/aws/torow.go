@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ToRow implementations for util.Row compatibility.
@@ -33,4 +34,52 @@ func (r CostResource) ToRow() []string {
 
 func (r ForecastResource) ToRow() []string {
 	return []string{r.TimePeriod, fmt.Sprintf("%.4f", r.Amount), r.Unit}
+}
+
+func (r DynamoResource) ToRow() []string {
+	return []string{
+		r.Name,
+		r.State,
+		r.Mode,
+		fmt.Sprintf("%d", r.ItemCount),
+		fmt.Sprintf("%d", r.SizeBytes),
+		fmt.Sprintf("%d", r.GSICount),
+	}
+}
+
+func (r APIGatewayResource) ToRow() []string {
+	return []string{r.Name, r.State, r.Type, r.Stage, r.Endpoint}
+}
+
+func (r NATGatewayResource) ToRow() []string {
+	return []string{
+		r.Name,
+		r.State,
+		r.ID,
+		r.VpcID,
+		r.ElasticIP,
+		r.LaunchTime.Format(time.RFC3339),
+	}
+}
+
+func (r SQSResource) ToRow() []string {
+	return []string{
+		r.Name,
+		r.State,
+		r.Type,
+		fmt.Sprintf("%d", r.AvailableMessages),
+		fmt.Sprintf("%d", r.InFlight),
+		fmt.Sprintf("%d", r.RetentionDays),
+	}
+}
+
+func (r WAFResource) ToRow() []string {
+	return []string{
+		r.Name,
+		r.Description,
+		r.State,
+		r.Scope,
+		fmt.Sprintf("%d", r.RuleCount),
+		fmt.Sprintf("%d", r.AssociatedCount),
+	}
 }

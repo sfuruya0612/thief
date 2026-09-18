@@ -2,6 +2,7 @@ package cli
 
 import (
 	"testing"
+	"time"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 	"github.com/sfuruya0612/thief/backend/internal/util"
@@ -27,6 +28,9 @@ import (
 //
 // 非 AWS (BigQuery / Datadog / TiDB) の列定義と、internal/aws/torow.go にあるが
 // internal/cli から到達しない ToRow メソッドは対象外とする (issue 0100 の完了条件)。
+//
+// issue 0188 で DynamoResource / APIGatewayResource / NATGatewayResource / SQSResource /
+// WAFResource の一覧コマンドを追加したため、この 5 型を対象に加える (経路 1)。
 
 // colValue は 1 列分の期待値 (列ヘッダと ToRow() の値) の組。
 type colValue struct {
@@ -243,6 +247,104 @@ func TestColumnsToRowOrder(t *testing.T) {
 				{"Runtime", "provided.al2023"},
 				{"Memory(MB)", "128"},
 				{"Timeout(s)", "30"},
+			},
+		},
+		{
+			name:    "dynamoColumns / DynamoResource",
+			columns: dynamoColumns,
+			row: awsinternal.DynamoResource{
+				Name:      "table-1",
+				State:     "ACTIVE",
+				Mode:      "on-demand",
+				ItemCount: 10,
+				SizeBytes: 2048,
+				GSICount:  2,
+			}.ToRow(),
+			want: []colValue{
+				{"Table", "table-1"},
+				{"State", "ACTIVE"},
+				{"Mode", "on-demand"},
+				{"Items", "10"},
+				{"Size", "2048"},
+				{"GSI", "2"},
+			},
+		},
+		{
+			name:    "apigwColumns / APIGatewayResource",
+			columns: apigwColumns,
+			row: awsinternal.APIGatewayResource{
+				Name:     "api-1",
+				State:    "AVAILABLE",
+				Type:     "HTTP",
+				Stage:    "prod",
+				Endpoint: "https://api-1.execute-api.ap-northeast-1.amazonaws.com",
+			}.ToRow(),
+			want: []colValue{
+				{"API", "api-1"},
+				{"State", "AVAILABLE"},
+				{"Type", "HTTP"},
+				{"Stage", "prod"},
+				{"Endpoint", "https://api-1.execute-api.ap-northeast-1.amazonaws.com"},
+			},
+		},
+		{
+			name:    "natgwColumns / NATGatewayResource",
+			columns: natgwColumns,
+			row: awsinternal.NATGatewayResource{
+				Name:       "nat-1",
+				State:      "available",
+				ID:         "nat-0123456789abcdef0",
+				VpcID:      "vpc-123",
+				ElasticIP:  "203.0.113.1",
+				LaunchTime: time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC),
+			}.ToRow(),
+			want: []colValue{
+				{"Name", "nat-1"},
+				{"State", "available"},
+				{"GatewayID", "nat-0123456789abcdef0"},
+				{"VPC", "vpc-123"},
+				{"ElasticIP", "203.0.113.1"},
+				{"LaunchTime", "2026-01-13T00:00:00Z"},
+			},
+		},
+		{
+			name:    "sqsColumns / SQSResource",
+			columns: sqsColumns,
+			row: awsinternal.SQSResource{
+				Name:              "queue-1",
+				State:             "active",
+				Type:              "Standard",
+				AvailableMessages: 3,
+				InFlight:          4,
+				RetentionDays:     14,
+			}.ToRow(),
+			want: []colValue{
+				{"Queue", "queue-1"},
+				{"State", "active"},
+				{"Type", "Standard"},
+				{"Available", "3"},
+				{"InFlight", "4"},
+				{"Retention(d)", "14"},
+			},
+		},
+		{
+			name:    "wafColumns / WAFResource",
+			columns: wafColumns,
+			row: awsinternal.WAFResource{
+				Name:            "acl-1",
+				Description:     "web acl",
+				State:           "active",
+				Scope:           "REGIONAL",
+				RuleCount:       5,
+				AssociatedCount: 2,
+			}.ToRow(),
+			want: []colValue{
+				{"WebACL", "acl-1"},
+				{"Description", "web acl"},
+				{"State", "active"},
+				{"Scope", "REGIONAL"},
+				{"Rules", "5"},
+				{"Associated", "2"},
 			},
 		},
 		{
