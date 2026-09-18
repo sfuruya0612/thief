@@ -1,5 +1,5 @@
-// 台数の推移を描く折れ線グラフ。EC2 は Running インスタンス数、ECS はクラスタごとの
-// タスク数を 1 本ずつの系列として表示する。
+// 台数の推移を描く折れ線グラフ。EC2 は Auto Scaling グループごとの InService
+// インスタンス数、ECS はクラスタごとのタスク数を 1 本ずつの系列として表示する。
 //
 // 取得は一覧 (useResources) とは別の useQuery で行うため、一覧の表示は時系列の取得完了を
 // 待たない。取得中はグラフ領域に読み込み中を出し、失敗したときは理由だけを出して
@@ -17,6 +17,8 @@ export interface ResourceCountChartProps {
   region: string;
   // グラフの見出し。何を数えた値なのかを示す。
   title: string;
+  // グラフの右下に出す注記。値の対象範囲など、見出しだけでは伝わらない補足に使う。
+  caption?: string;
 }
 
 // RANGE_OPTIONS は切り替えられる期間。粒度は backend が期間から決めるため、
@@ -29,11 +31,17 @@ const RANGE_OPTIONS: { label: string; value: TimeseriesRange }[] = [
 
 const CHART_HEIGHT = 220;
 
-// DEFAULT_RANGE は開いた直後に表示する期間。EC2 の台数は一覧の取得時にだけ記録されるため、
-// 1 日の窓では点が少なく推移が読めない。7 日を既定にして直近の推移が入るようにする。
+// DEFAULT_RANGE は開いた直後に表示する期間。クラウド側の保持期間と相談し、直近の推移が
+// 読みやすい 7 日を既定にする。
 const DEFAULT_RANGE: TimeseriesRange = '7d';
 
-export function ResourceCountChart({ service, profile, region, title }: ResourceCountChartProps) {
+export function ResourceCountChart({
+  service,
+  profile,
+  region,
+  title,
+  caption,
+}: ResourceCountChartProps) {
   const [range, setRange] = useState<TimeseriesRange>(DEFAULT_RANGE);
   const { data, isLoading, error } = useResourceTimeseries(service, profile, region, range);
 
@@ -62,17 +70,20 @@ export function ResourceCountChart({ service, profile, region, title }: Resource
             Loading timeseries…
           </div>
         ) : (
-          // X 軸の範囲は応答の時間窓に合わせる。点の範囲から決めると、記録された点が
-          // 少ない EC2 の台数では期間を切り替えても軸が変わらない。
+          // X 軸の範囲は応答の時間窓に合わせる。点の範囲から決めると、グリッドの点が
+          // 期間の全体を覆わない場合に期間を切り替えても軸が変わらない。
           // 窓が正の幅を持たない応答 (start / end を返さない古い backend など) では渡さず、
           // 軸が 0 に潰れて全系列が消えるのを避ける。
-          <TimeseriesChart
-            series={data?.series ?? []}
-            height={CHART_HEIGHT}
-            xRange={
-              data && data.end > data.start ? { start: data.start, end: data.end } : undefined
-            }
-          />
+          <div className="timeseries-chart-wrap">
+            <TimeseriesChart
+              series={data?.series ?? []}
+              height={CHART_HEIGHT}
+              xRange={
+                data && data.end > data.start ? { start: data.start, end: data.end } : undefined
+              }
+            />
+            {caption && <div className="timeseries-caption">{caption}</div>}
+          </div>
         )}
       </div>
     </div>

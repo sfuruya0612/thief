@@ -1,214 +1,225 @@
 package aws
 
 import (
-	"sync"
+	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestCountRunningEC2(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []EC2Resource
-		want int
-	}{
-		{name: "empty", in: nil, want: 0},
+// fakeAutoScalingClient は DescribeAutoScalingGroups の応答を固定で返すモック。
+// NextToken によるページ送りを模すため、pages を順に返す。
+type fakeAutoScalingClient struct {
+	pages []*autoscaling.DescribeAutoScalingGroupsOutput
+	calls []*autoscaling.DescribeAutoScalingGroupsInput
+	err   error
+}
+
+func (f *fakeAutoScalingClient) DescribeAutoScalingGroups(_ context.Context, in *autoscaling.DescribeAutoScalingGroupsInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error) {
+	f.calls = append(f.calls, in)
+	if f.err != nil {
+		return nil, f.err
+	}
+	if len(f.pages) == 0 {
+		return &autoscaling.DescribeAutoScalingGroupsOutput{}, nil
+	}
+	out := f.pages[0]
+	f.pages = f.pages[1:]
+	return out, nil
+}
+
+func TestListAutoScalingGroupNamesWith(t *testing.T) {
+	client := &fakeAutoScalingClient{pages: []*autoscaling.DescribeAutoScalingGroupsOutput{
 		{
-			name: "mixed states",
-			in: []EC2Resource{
-				{State: "running"},
-				{State: "stopped"},
-				{State: "running"},
-				{State: "terminated"},
+			AutoScalingGroups: []autoscalingtypes.AutoScalingGroup{
+				{AutoScalingGroupName: aws.String("web-asg")},
+				{AutoScalingGroupName: nil},
+				{AutoScalingGroupName: aws.String("")},
 			},
-			want: 2,
+			NextToken: aws.String("next"),
 		},
 		{
-			// 表記ゆれは ResourceState (NormalizeState) が吸収する。
-			name: "uppercase running is normalized",
-			in:   []EC2Resource{{State: "RUNNING"}, {State: "pending"}},
-			want: 1,
+			AutoScalingGroups: []autoscalingtypes.AutoScalingGroup{
+				{AutoScalingGroupName: aws.String("api-asg")},
+			},
 		},
+	}}
+
+	names, err := listAutoScalingGroupNamesWith(context.Background(), client)
+	if err != nil {
+		t.Fatalf("listAutoScalingGroupNamesWith: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := CountRunningEC2(tt.in); got != tt.want {
-				t.Errorf("count = %d, want %d", got, tt.want)
-			}
-		})
+	// 空名と nil は落とし、ページを跨いで順に並べる。
+	if diff := cmp.Diff([]string{"web-asg", "api-asg"}, names); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
 	}
-}
-
-// seriesValues は系列の値だけを取り出す (欠測は NaN ではなく -1 に置き換える)。
-func seriesValues(t *testing.T, points []MetricPoint) []float64 {
-	t.Helper()
-	out := make([]float64, 0, len(points))
-	for _, p := range points {
-		if p.V == nil {
-			out = append(out, -1)
-			continue
-		}
-		out = append(out, *p.V)
-	}
-	return out
-}
-
-func TestEC2CountRecorderSeries(t *testing.T) {
-	now := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)
-	rec := NewEC2CountRecorder()
-
-	// 記録は観測した順に追記される (一覧の取得ごとに 1 点)。
-	// 最初の 1 点は 1 日の期間からは外れる。
-	rec.Record("prod", "ap-northeast-1", 1, now.Add(-30*time.Hour))
-	rec.Record("prod", "ap-northeast-1", 5, now.Add(-2*time.Hour))
-	rec.Record("prod", "ap-northeast-1", 7, now.Add(-time.Hour))
-	// 別の region は混ざらない
-	rec.Record("prod", "us-east-1", 99, now.Add(-time.Hour))
-
-	t.Run("1d cuts out older points", func(t *testing.T) {
-		got := rec.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))
-		if diff := cmp.Diff([]float64{5, 7}, seriesValues(t, got)); diff != "" {
-			t.Errorf("mismatch (-want +got):\n%s", diff)
-		}
-		if got[0].T != now.Add(-2*time.Hour).UnixMilli() {
-			t.Errorf("points[0].T = %d, want %d", got[0].T, now.Add(-2*time.Hour).UnixMilli())
-		}
-	})
-
-	t.Run("7d includes the older point", func(t *testing.T) {
-		got := rec.Series("prod", "ap-northeast-1", Range7Days.RecordedWindow(now))
-		if diff := cmp.Diff([]float64{1, 5, 7}, seriesValues(t, got)); diff != "" {
-			t.Errorf("mismatch (-want +got):\n%s", diff)
-		}
-	})
-
-	t.Run("region is part of the key", func(t *testing.T) {
-		got := rec.Series("prod", "us-east-1", Range1Day.RecordedWindow(now))
-		if diff := cmp.Diff([]float64{99}, seriesValues(t, got)); diff != "" {
-			t.Errorf("mismatch (-want +got):\n%s", diff)
-		}
-	})
-
-	t.Run("unknown profile returns an empty series", func(t *testing.T) {
-		if got := rec.Series("other", "ap-northeast-1", Range1Day.RecordedWindow(now)); len(got) != 0 {
-			t.Errorf("series = %+v, want empty", got)
-		}
-	})
-
-	t.Run("window includes both ends and drops points after the end", func(t *testing.T) {
-		// 窓を確定した後に別リクエストの一覧取得が記録した点は、応答の窓 (X 軸の範囲) の外に
-		// なるため返さない。終端ちょうどの点は窓に含める。
-		late := NewEC2CountRecorder()
-		late.Record("prod", "ap-northeast-1", 2, now.Add(-Range1Day.Duration()))
-		late.Record("prod", "ap-northeast-1", 3, now)
-		late.Record("prod", "ap-northeast-1", 4, now.Add(time.Millisecond))
-
-		got := late.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))
-		if diff := cmp.Diff([]float64{2, 3}, seriesValues(t, got)); diff != "" {
-			t.Errorf("mismatch (-want +got):\n%s", diff)
-		}
-	})
-}
-
-// TestEC2CountRingSizeCovers30Days はリングバッファが定期サンプリングだけで 30 日分を
-// 保持できる大きさであることを検証する。ec2CountRingSize は定数式で求めているため、
-// Range30Days.Duration() の値とずれていないことをテストで固定する。
-func TestEC2CountRingSizeCovers30Days(t *testing.T) {
-	samples := int(Range30Days.Duration() / EC2CountSampleInterval)
-	if ec2CountRingSize < 2*samples {
-		t.Errorf("ec2CountRingSize = %d, want >= %d (2 * %d samples in 30 days)", ec2CountRingSize, 2*samples, samples)
+	if len(client.calls) != 2 {
+		t.Errorf("calls = %d, want 2", len(client.calls))
 	}
 }
 
-func TestEC2CountRecorderKeys(t *testing.T) {
-	rec := NewEC2CountRecorder()
-	if got := rec.Keys(); len(got) != 0 {
-		t.Fatalf("keys = %+v, want empty", got)
+func TestListAutoScalingGroupNamesWithError(t *testing.T) {
+	sentinel := errors.New("denied")
+	client := &fakeAutoScalingClient{err: sentinel}
+	if _, err := listAutoScalingGroupNamesWith(context.Background(), client); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
+}
 
-	now := time.Now()
-	rec.Record("prod", "ap-northeast-1", 1, now)
-	rec.Record("prod", "us-east-1", 2, now)
-	// 同じ組への追記で組が増えない。
-	rec.Record("prod", "ap-northeast-1", 3, now)
+// TestEC2InstanceCountSeriesQueries は GetMetricData に載せるクエリの形を検証する。
+// グループ 1 つにつき 1 クエリで、AWS/AutoScaling の GroupInServiceInstances を
+// MetricStat で直接引く (SEARCH 式は使わない)。
+func TestEC2InstanceCountSeriesQueries(t *testing.T) {
+	now := time.Date(2026, 9, 18, 10, 42, 30, 0, time.UTC)
+	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{}}}
 
-	got := rec.Keys()
-	if len(got) != 2 {
-		t.Fatalf("len = %d, want 2: %+v", len(got), got)
+	window := NewTimeseriesWindow(Range7Days.Window(now))
+	if _, err := ec2InstanceCountSeries(context.Background(), client, []string{"beta", "alpha"}, Range7Days, window); err != nil {
+		t.Fatalf("ec2InstanceCountSeries: %v", err)
 	}
-	seen := map[EC2CountTarget]bool{}
-	for _, target := range got {
-		seen[target] = true
+	if len(client.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(client.calls))
 	}
-	for _, want := range []EC2CountTarget{
-		{Profile: "prod", Region: "ap-northeast-1"},
-		{Profile: "prod", Region: "us-east-1"},
-	} {
-		if !seen[want] {
-			t.Errorf("keys missing %+v: %+v", want, got)
+	queries := client.calls[0].MetricDataQueries
+	if len(queries) != 2 {
+		t.Fatalf("queries = %d, want 2", len(queries))
+	}
+	// グループ名の昇順に並べ、Id はバッチ内の添字から決める。
+	wantIDs := []string{"q0", "q1"}
+	wantGroups := []string{"alpha", "beta"}
+	for i, q := range queries {
+		if ptrStr(q.Id) != wantIDs[i] {
+			t.Errorf("queries[%d].Id = %q, want %q", i, ptrStr(q.Id), wantIDs[i])
+		}
+		if ptrStr(q.Label) != wantGroups[i] {
+			t.Errorf("queries[%d].Label = %q, want %q", i, ptrStr(q.Label), wantGroups[i])
+		}
+		ms := q.MetricStat
+		if ms == nil {
+			t.Fatalf("queries[%d].MetricStat is nil", i)
+		}
+		if ptrStr(ms.Metric.Namespace) != autoscalingMetricNamespace {
+			t.Errorf("queries[%d] namespace = %q, want %q", i, ptrStr(ms.Metric.Namespace), autoscalingMetricNamespace)
+		}
+		if ptrStr(ms.Metric.MetricName) != autoscalingInServiceInstancesMetric {
+			t.Errorf("queries[%d] metric = %q, want %q", i, ptrStr(ms.Metric.MetricName), autoscalingInServiceInstancesMetric)
+		}
+		dims := ms.Metric.Dimensions
+		if len(dims) != 1 || ptrStr(dims[0].Name) != "AutoScalingGroupName" || ptrStr(dims[0].Value) != wantGroups[i] {
+			t.Errorf("queries[%d] dimensions = %+v, want AutoScalingGroupName=%q", i, dims, wantGroups[i])
+		}
+		if ms.Period == nil || *ms.Period != 300 {
+			t.Errorf("queries[%d].Period = %v, want 300", i, ms.Period)
+		}
+		if ptrStr(ms.Stat) != ec2InstanceCountStatistic {
+			t.Errorf("queries[%d].Stat = %q, want %q", i, ptrStr(ms.Stat), ec2InstanceCountStatistic)
 		}
 	}
 }
 
-// TestEC2CountRecorderDropsOldest は上限到達時に最古の点が捨てられることを検証する。
-func TestEC2CountRecorderDropsOldest(t *testing.T) {
-	base := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)
-	rec := NewEC2CountRecorder()
+// TestEC2InstanceCountSeriesPoints は欠測が null のまま残ること、点がグリッド上に並ぶことを検証する。
+func TestEC2InstanceCountSeriesPoints(t *testing.T) {
+	now := time.Date(2026, 9, 18, 10, 3, 0, 0, time.UTC)
+	start, end := Range1Day.Window(now)
+	window := NewTimeseriesWindow(start, end)
+	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{
+		MetricDataResults: []cwtypes.MetricDataResult{{
+			Id:         aws.String("q0"),
+			Timestamps: []time.Time{end.Add(-2 * time.Minute), end.Add(-time.Minute)},
+			Values:     []float64{3, 5},
+		}},
+	}}}
 
-	total := ec2CountRingSize + 3
-	for i := 0; i < total; i++ {
-		rec.Record("prod", "ap-northeast-1", i, base.Add(time.Duration(i)*time.Millisecond))
+	series, err := ec2InstanceCountSeries(context.Background(), client, []string{"web-asg"}, Range1Day, window)
+	if err != nil {
+		t.Fatalf("ec2InstanceCountSeries: %v", err)
+	}
+	if len(series) != 1 || series[0].Name != "web-asg" {
+		t.Fatalf("series = %+v, want 1 series named web-asg", series)
 	}
 
-	got := rec.Series("prod", "ap-northeast-1", Range30Days.RecordedWindow(base.Add(time.Duration(total)*time.Millisecond)))
-	if len(got) != ec2CountRingSize {
-		t.Fatalf("len = %d, want %d", len(got), ec2CountRingSize)
+	points := series[0].Points
+	want := int(end.Sub(start).Seconds()) / 60
+	if len(points) != want {
+		t.Fatalf("points = %d, want %d", len(points), want)
 	}
-	// 残るのは新しい ec2CountRingSize 点で、古い順に並ぶ。
-	if got[0].V == nil || *got[0].V != float64(total-ec2CountRingSize) {
-		t.Errorf("oldest kept = %v, want %d", got[0].V, total-ec2CountRingSize)
+	if points[0].T != start.UnixMilli() {
+		t.Errorf("points[0].T = %d, want %d", points[0].T, start.UnixMilli())
 	}
-	last := got[len(got)-1]
-	if last.V == nil || *last.V != float64(total-1) {
-		t.Errorf("newest = %v, want %d", last.V, total-1)
+	if points[0].V != nil {
+		t.Errorf("points[0].V = %v, want nil", *points[0].V)
 	}
-	for i := 1; i < len(got); i++ {
-		if got[i].T < got[i-1].T {
-			t.Fatalf("points are not in chronological order at %d", i)
-		}
+	last := points[len(points)-1]
+	if want := end.Add(-time.Minute).UnixMilli(); last.T != want {
+		t.Errorf("last point T = %d, want %d", last.T, want)
+	}
+	if last.V == nil || *last.V != 5 {
+		t.Errorf("last point = %v, want 5", last.V)
+	}
+	prev := points[len(points)-2]
+	if prev.V == nil || *prev.V != 3 {
+		t.Errorf("second to last point = %v, want 3", prev.V)
 	}
 }
 
-// TestEC2CountRecorderConcurrent は複数 goroutine からの同時アクセスで競合しないことを検証する
-// (go test -race で検出させる)。
-func TestEC2CountRecorderConcurrent(t *testing.T) {
-	rec := NewEC2CountRecorder()
-	now := time.Now()
-
-	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func(n int) {
-			defer wg.Done()
-			for j := 0; j < 200; j++ {
-				rec.Record("prod", "ap-northeast-1", n, now)
-				rec.Record("stg", "us-east-1", n, now)
-			}
-		}(i)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 200; j++ {
-				rec.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))
-				rec.Series("stg", "us-east-1", Range30Days.RecordedWindow(now))
-			}
-		}()
+// TestEC2InstanceCountSeriesNoGroups はグループが無ければ AWS を呼ばず空の系列を返すことを検証する。
+func TestEC2InstanceCountSeriesNoGroups(t *testing.T) {
+	client := &fakeMetricDataClient{}
+	series, err := ec2InstanceCountSeries(context.Background(), client, nil, Range1Day,
+		NewTimeseriesWindow(Range1Day.Window(time.Now())))
+	if err != nil {
+		t.Fatalf("ec2InstanceCountSeries: %v", err)
 	}
-	wg.Wait()
+	if len(series) != 0 {
+		t.Errorf("series = %+v, want empty", series)
+	}
+	if len(client.calls) != 0 {
+		t.Errorf("calls = %d, want 0", len(client.calls))
+	}
+}
 
-	if got := len(rec.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))); got != 8*200 {
-		t.Errorf("recorded = %d, want %d", got, 8*200)
+// TestEC2InstanceCountSeriesBatches はクエリ数の上限でリクエストを分割することを検証する。
+func TestEC2InstanceCountSeriesBatches(t *testing.T) {
+	groups := make([]string, ec2MetricDataBatchSize+2)
+	for i := range groups {
+		// 桁を揃えて文字列の昇順と添字の昇順を一致させる。
+		groups[i] = fmt.Sprintf("g%04d", i)
+	}
+	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{}, {}}}
+
+	series, err := ec2InstanceCountSeries(context.Background(), client, groups, Range30Days,
+		NewTimeseriesWindow(Range30Days.Window(time.Now())))
+	if err != nil {
+		t.Fatalf("ec2InstanceCountSeries: %v", err)
+	}
+	if len(series) != len(groups) {
+		t.Errorf("series = %d, want %d", len(series), len(groups))
+	}
+	if len(client.calls) != 2 {
+		t.Fatalf("calls = %d, want 2", len(client.calls))
+	}
+	if got := len(client.calls[0].MetricDataQueries); got != ec2MetricDataBatchSize {
+		t.Errorf("first batch = %d, want %d", got, ec2MetricDataBatchSize)
+	}
+	if got := len(client.calls[1].MetricDataQueries); got != 2 {
+		t.Errorf("second batch = %d, want 2", got)
+	}
+}
+
+// TestEC2InstanceCountSeriesError は GetMetricData のエラーが伝播することを検証する。
+func TestEC2InstanceCountSeriesError(t *testing.T) {
+	sentinel := errors.New("denied")
+	client := &fakeMetricDataClient{err: sentinel}
+	window := NewTimeseriesWindow(Range1Day.Window(time.Now()))
+	if _, err := ec2InstanceCountSeries(context.Background(), client, []string{"web-asg"}, Range1Day, window); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
 }

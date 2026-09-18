@@ -123,36 +123,6 @@ func TestTimeseriesRangeWindow(t *testing.T) {
 	}
 }
 
-// TestTimeseriesRangeRecordedWindow は記録用の窓が終端を切り下げないことを検証する。
-// 切り下げると、切り下げた後に記録された直近の点が窓から外れる。
-func TestTimeseriesRangeRecordedWindow(t *testing.T) {
-	now := time.Date(2026, 9, 17, 10, 42, 37, 500_000_000, time.UTC)
-	tests := []struct {
-		name string
-		in   TimeseriesRange
-	}{
-		{name: "1d", in: Range1Day},
-		{name: "7d", in: Range7Days},
-		{name: "30d", in: Range30Days},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.in.RecordedWindow(now)
-			want := TimeseriesWindow{
-				Start: now.Add(-tt.in.Duration()).UnixMilli(),
-				End:   now.UnixMilli(),
-			}
-			if diff := cmp.Diff(want, got); diff != "" {
-				t.Errorf("mismatch (-want +got):\n%s", diff)
-			}
-			// 粒度で切り下げる Window とは違い、終端は now のままである。
-			if _, end := tt.in.Window(now); got.End == end.UnixMilli() {
-				t.Errorf("end = %d, want an end that is not truncated to the period", got.End)
-			}
-		})
-	}
-}
-
 func TestTimeseriesGrid(t *testing.T) {
 	start := time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC)
 	tests := []struct {
