@@ -1,142 +1,110 @@
 package aws
 
 import (
-	"strings"
-	"sync"
+	"context"
+	"sort"
+	"strconv"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 )
 
-// EC2CountSampleInterval は Running な EC2 インスタンス数を定期的にサンプリングする間隔。
-// 7 日の期間の粒度 (300 秒) と同じにし、1 日で 288 点、30 日で 8,640 点になる。
-const EC2CountSampleInterval = 5 * time.Minute
+// autoscalingMetricNamespace は GroupInServiceInstances が発行される CloudWatch の名前空間。
+const autoscalingMetricNamespace = "AWS/AutoScaling"
 
-// ec2CountRingSize は profile と region の組ごとに保持する記録の最大点数。
-// 記録の契機は 2 つあり、一覧を AWS から取得したとき (handleEC2) と、一定間隔の
-// 定期サンプリング (runEC2CountSampler) である。定期サンプリングだけで最長の期間
-// (30 日) を覆える必要があるため、30 日をサンプリング間隔で割った点数 (8,640) の
-// 2 倍を持たせ、Refresh で増える点と合わせても 30 日分が残るようにする。
-const ec2CountRingSize = 2 * int(30*24*time.Hour/EC2CountSampleInterval)
+// autoscalingInServiceInstancesMetric は Auto Scaling グループの InService 台数を表す指標名。
+const autoscalingInServiceInstancesMetric = "GroupInServiceInstances"
 
-// EC2CountRecorder は Running な EC2 インスタンス数の推移を、profile と region の組ごとに
-// プロセス内のリングバッファへ記録する。
+// ec2MetricDataBatchSize は 1 回の GetMetricData に載せるクエリ数の上限。
+// CloudWatch の GetMetricData は 1 リクエストあたり 500 件までしか受け付けない。
+const ec2MetricDataBatchSize = 500
+
+// ec2InstanceCountStatistic は台数を丸める統計値。台数は瞬間値であり、
+// 粒度の間の代表値としては平均が素直である。
+const ec2InstanceCountStatistic = "Average"
+
+// ListEC2InstanceCountSeries は Auto Scaling グループごとの InService インスタンス数の
+// 時系列を返す。
 //
-// AWS/EC2 名前空間にはアカウント全体の台数を表す標準メトリクスが無いため、一覧 API が
-// AWS から取得した結果をその場で数え、加えて起動中は runEC2CountSampler が一定間隔で
-// 一覧を取得して数えた値を残す。プロセスを再起動すると履歴は消える
-// (thief は利用者の手元で起動する API サーバであり、常時起動を前提にしていない)。
-type EC2CountRecorder struct {
-	mu    sync.Mutex
-	rings map[string]*ec2CountRing
-}
-
-// NewEC2CountRecorder は空の記録器を返す。
-func NewEC2CountRecorder() *EC2CountRecorder {
-	return &EC2CountRecorder{rings: map[string]*ec2CountRing{}}
-}
-
-// Record は profile と region の組に台数 1 点を追記する。呼び出し元は一覧を AWS から
-// 取得した handleEC2 と、定期サンプリングの runEC2CountSampler である。一覧のキャッシュ
-// から応答を返したとき (handleEC2 のキャッシュ HIT) に呼んではならない (同じ値が観測
-// 時刻だけ変えて並び、推移を歪めるため)。
-func (r *EC2CountRecorder) Record(profile, region string, count int, at time.Time) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	key := ec2CountKey(profile, region)
-	ring, ok := r.rings[key]
-	if !ok {
-		ring = &ec2CountRing{}
-		r.rings[key] = ring
+// AWS/EC2 名前空間にはアカウントやリージョン単位の Running インスタンス数を表す標準
+// メトリクスが無い (issues/closed/0177)。代わりに AWS/AutoScaling 名前空間の
+// GroupInServiceInstances をグループ単位で取得する。したがって Auto Scaling グループに
+// 属さないインスタンスは含まれない。
+//
+// 時間窓 w は呼び出し側が決める。応答に載せる窓とグリッドの窓を同じ値にするためである。
+func ListEC2InstanceCountSeries(ctx context.Context, profile, region string, r TimeseriesRange, w TimeseriesWindow) ([]TimeseriesSeries, error) {
+	names, err := ListAutoScalingGroupNames(ctx, profile, region)
+	if err != nil {
+		return nil, err
 	}
-	value := float64(count)
-	ring.add(MetricPoint{T: at.UnixMilli(), V: &value})
-}
-
-// EC2CountTarget はサンプリングと記録の対象になる profile と region の組。
-type EC2CountTarget struct {
-	Profile string
-	Region  string
-}
-
-// Keys は記録を持つ profile と region の組を返す。順序は保証しない。
-// 定期サンプリングが対象を決めるために使う (利用者が一度開いた組だけを回す)。
-func (r *EC2CountRecorder) Keys() []EC2CountTarget {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	targets := make([]EC2CountTarget, 0, len(r.rings))
-	for key := range r.rings {
-		profile, region, _ := strings.Cut(key, "\x00")
-		targets = append(targets, EC2CountTarget{Profile: profile, Region: region})
+	cwClient, err := newCloudWatchClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
 	}
-	return targets
+	return ec2InstanceCountSeries(ctx, cwClient, names, r, w)
 }
 
-// Series は profile と region の組の記録のうち、窓 w に収まる点を記録した順
-// (観測時刻の昇順) で返す。
-// 窓を呼び出し側から受け取るのは、応答が返す窓と絞り込みの境界を同じ値にするためである。
-// 記録は一覧の取得と定期サンプリングで増えるため時刻は等間隔ではない。CloudWatch 由来の系列と違い
-// グリッドへ並べ直さないのは、観測していない時刻を欠測として捏造しないためである。
-func (r *EC2CountRecorder) Series(profile, region string, w TimeseriesWindow) []MetricPoint {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	ring, ok := r.rings[ec2CountKey(profile, region)]
-	if !ok {
-		return []MetricPoint{}
+// ec2InstanceCountSeries は生成済みクライアントで時系列を組み立てるコア。
+// GetMetricData に載せるクエリを単体テストで固定できるよう、クライアントの生成と分離してある。
+func ec2InstanceCountSeries(
+	ctx context.Context,
+	client cloudwatch.GetMetricDataAPIClient,
+	groups []string,
+	r TimeseriesRange,
+	w TimeseriesWindow,
+) ([]TimeseriesSeries, error) {
+	targets := append([]string(nil), groups...)
+	sort.Strings(targets)
+	if len(targets) == 0 {
+		return []TimeseriesSeries{}, nil
 	}
-	points := make([]MetricPoint, 0, ec2CountRingSize)
-	for _, p := range ring.snapshot() {
-		// 両端を含めて絞る。終端も見るのは、窓を確定した後に別リクエストの一覧取得が
-		// Record を呼ぶと終端より後の点が生じ、応答の窓 (X 軸の範囲) の外に点が混ざるためである。
-		// 時計の後退で直近の点が終端より後になった場合も落とすが、X 軸の max は窓の終端なので
-		// その点は応答に入れても描かれず、表示は変わらない。時計が追い付いた次の応答から戻る。
-		// 終端を最新の点までずらすと窓の幅が期間と一致しなくなるため、そうしない。
-		if p.T >= w.Start && p.T <= w.End {
-			points = append(points, p)
+
+	start, end := time.UnixMilli(w.Start), time.UnixMilli(w.End)
+	period := r.PeriodSeconds()
+	grid := timeseriesGrid(w, period)
+
+	series := make([]TimeseriesSeries, 0, len(targets))
+	for i := 0; i < len(targets); i += ec2MetricDataBatchSize {
+		batch := targets[i:min(i+ec2MetricDataBatchSize, len(targets))]
+		queries := make([]cwtypes.MetricDataQuery, 0, len(batch))
+		for j, name := range batch {
+			queries = append(queries, cwtypes.MetricDataQuery{
+				Id:    aws.String(ec2InstanceCountQueryID(j)),
+				Label: aws.String(name),
+				// GroupInServiceInstances はグループ単独のディメンションを持つため、
+				// SEARCH 式ではなく MetricStat で直接引く。ディメンションを構造体で渡す
+				// ので、名前に式の構文を壊す文字があっても注入にならない。
+				MetricStat: &cwtypes.MetricStat{
+					Metric: &cwtypes.Metric{
+						Namespace:  aws.String(autoscalingMetricNamespace),
+						MetricName: aws.String(autoscalingInServiceInstancesMetric),
+						Dimensions: []cwtypes.Dimension{
+							{Name: aws.String("AutoScalingGroupName"), Value: aws.String(name)},
+						},
+					},
+					Period: aws.Int32(period),
+					Stat:   aws.String(ec2InstanceCountStatistic),
+				},
+			})
+		}
+		values, err := getMetricDataValues(ctx, client, queries, start, end)
+		if err != nil {
+			return nil, err
+		}
+		for j, name := range batch {
+			series = append(series, TimeseriesSeries{
+				Name:   name,
+				Points: metricPointsOnGrid(grid, values[ec2InstanceCountQueryID(j)]),
+			})
 		}
 	}
-	return points
+	return series, nil
 }
 
-// ec2CountKey は profile と region の組をリングバッファのキーにする。
-// 区切りに使う "\x00" は profile 名にも region 名にも現れないため、異なる組が同じキーに
-// 衝突しない。
-func ec2CountKey(profile, region string) string {
-	return profile + "\x00" + region
-}
-
-// ec2CountRing は固定長のリングバッファ。上限に達したあとは最古の点を上書きする。
-type ec2CountRing struct {
-	points [ec2CountRingSize]MetricPoint
-	// next は次に書き込む位置。full が true のときは最古の点の位置でもある。
-	next int
-	full bool
-}
-
-func (b *ec2CountRing) add(p MetricPoint) {
-	b.points[b.next] = p
-	b.next = (b.next + 1) % ec2CountRingSize
-	if b.next == 0 {
-		b.full = true
-	}
-}
-
-// snapshot は保持している点を古い順に複製して返す。
-func (b *ec2CountRing) snapshot() []MetricPoint {
-	if !b.full {
-		return append([]MetricPoint(nil), b.points[:b.next]...)
-	}
-	out := make([]MetricPoint, 0, ec2CountRingSize)
-	out = append(out, b.points[b.next:]...)
-	return append(out, b.points[:b.next]...)
-}
-
-// CountRunningEC2 は一覧のうち Running 状態のインスタンス数を返す。
-// 状態の表記ゆれは ResourceState (NormalizeState) が吸収する。
-func CountRunningEC2(resources []EC2Resource) int {
-	n := 0
-	for _, r := range resources {
-		if r.ResourceState() == "running" {
-			n++
-		}
-	}
-	return n
+// ec2InstanceCountQueryID は GetMetricData のクエリ Id を返す。Id は小文字始まりの
+// 英数字でなければならないため、バッチ内の添字に接頭辞を付ける。
+func ec2InstanceCountQueryID(index int) string {
+	return "q" + strconv.Itoa(index)
 }

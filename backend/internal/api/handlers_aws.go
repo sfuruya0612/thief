@@ -73,14 +73,7 @@ func (s *Server) handleProfileIdentity(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEC2(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	s.serveCached(w, r, cacheKey("ec2", profile, region), cacheTTL, writeAWSError, func() (any, error) {
-		resources, err := s.ec2Resources(r.Context(), profile, region)
-		if err != nil {
-			return nil, err
-		}
-		// 記録はこのクロージャの中でだけ行う。serveCached がキャッシュから応答を返した
-		// ときはクロージャを呼ばないため、同じ値が観測時刻だけ変えて積み上がらない。
-		s.ec2Counts.Record(profile, region, awsinternal.CountRunningEC2(resources), time.Now())
-		return resources, nil
+		return s.ec2Resources(r.Context(), profile, region)
 	})
 }
 

@@ -84,13 +84,6 @@ func (r TimeseriesRange) Window(now time.Time) (start, end time.Time) {
 	return end.Add(-r.Duration()), end
 }
 
-// RecordedWindow は now をそのまま終端とし、そこから Duration だけ遡った開始を持つ窓を返す。
-// Window の切り下げた終端を使うと、切り下げた後に記録された直近の点が窓の外に出るため、
-// 任意の時刻に点が記録される系列 (EC2 の台数) にはこちらを使う。
-func (r TimeseriesRange) RecordedWindow(now time.Time) TimeseriesWindow {
-	return NewTimeseriesWindow(now.Add(-r.Duration()), now)
-}
-
 // TimeseriesWindow は時系列が覆う時間窓をエポックミリ秒 (MetricPoint.T と同じ単位) で表す。
 // 点の絞り込みやグリッドの境界と、応答に載せて frontend が X 軸の範囲に使う値を同じ値に
 // するために、窓を 1 つの値として持ち回る。
