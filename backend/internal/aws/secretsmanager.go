@@ -47,6 +47,28 @@ func ListSecretResources(ctx context.Context, profile, region string) ([]SecretR
 	return resources, nil
 }
 
+// SecretValue は CLI の `secretsmanager get` 表示用に、シークレット名と復号済みの値を
+// 保持する。値は機密情報であり、エラーメッセージやログには含めない。
+type SecretValue struct {
+	Name  string
+	Value string
+}
+
+// ToRow converts SecretValue to a string slice for table output.
+func (v SecretValue) ToRow() []string {
+	return []string{v.Name, v.Value}
+}
+
+// GetSecretValueDetail は単一シークレットの復号済みの値を SecretValue として返す。
+// 値は機密情報であり、エラーメッセージやログには含めない。
+func GetSecretValueDetail(ctx context.Context, profile, region, name string) (SecretValue, error) {
+	value, err := GetSecretValue(ctx, profile, region, name)
+	if err != nil {
+		return SecretValue{}, err
+	}
+	return SecretValue{Name: name, Value: value}, nil
+}
+
 // GetSecretValue は単一シークレットの復号済みの値を返す。値をキャッシュに載せずオンデマンドで
 // 取得する経路。エラーメッセージや slog に value を含めないこと (機密値のため)。
 func GetSecretValue(ctx context.Context, profile, region, name string) (string, error) {

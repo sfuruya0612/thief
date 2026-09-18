@@ -15,6 +15,11 @@ var secretListColumns = []util.Column{
 	{Header: "LastChanged"},
 }
 
+var secretGetColumns = []util.Column{
+	{Header: "Name"},
+	{Header: "Value"},
+}
+
 func newSecretsManagerCmd() *cobra.Command {
 	secretsCmd := &cobra.Command{
 		Use:     "secretsmanager",
@@ -35,6 +40,24 @@ func newSecretsManagerCmd() *cobra.Command {
 					return awsinternal.ListSecretInfos(ctx, cfg.Profile, cfg.Region)
 				},
 			})
+		},
+	}
+
+	getCmd := &cobra.Command{
+		Use:   "get <name>",
+		Short: "Get a Secrets Manager secret value",
+		Long:  "Retrieves the decrypted value of a single Secrets Manager secret.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			value, err := awsinternal.GetSecretValueDetail(commandContext(cmd), cfg.Profile, cfg.Region, args[0])
+			if err != nil {
+				return err
+			}
+			return printRowsOrGroupBy(cfg, secretGetColumns, [][]string{value.ToRow()})
 		},
 	}
 
@@ -63,6 +86,6 @@ func newSecretsManagerCmd() *cobra.Command {
 	}
 	putCmd.Flags().StringP("value", "", "", "New secret value (if omitted, read from stdin)")
 
-	secretsCmd.AddCommand(lsCmd, putCmd)
+	secretsCmd.AddCommand(lsCmd, getCmd, putCmd)
 	return secretsCmd
 }

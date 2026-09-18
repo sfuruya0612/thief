@@ -154,6 +154,18 @@ func TestColumnsToRowOrder(t *testing.T) {
 			},
 		},
 		{
+			name:    "secretGetColumns / SecretValue",
+			columns: secretGetColumns,
+			row: awsinternal.SecretValue{
+				Name:  "secret-1",
+				Value: "secret-value",
+			}.ToRow(),
+			want: []colValue{
+				{"Name", "secret-1"},
+				{"Value", "secret-value"},
+			},
+		},
+		{
 			name:    "elasticacheColumns / ElastiCacheClusterInfo",
 			columns: elasticacheColumns,
 			row: awsinternal.ElastiCacheClusterInfo{
