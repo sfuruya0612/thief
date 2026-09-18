@@ -39,14 +39,11 @@ func newTestServer(t *testing.T) *Server {
 		// 差し替えること。
 		ddLoginSessions: newDatadogLoginSessionStore(),
 		ddAuth:          unconfiguredDatadogAuthDeps(),
-		// 時系列も NewServer と同様に初期化する。ec2Resources / ec2InstanceCountSeries /
-		// ecsTaskCountSeries は実 AWS へ接続する既定の実装ではなく、呼ばれたらエラーを
-		// 返すダミーにする (時系列のテストは差し替えること)。
+		// 時系列も NewServer と同様に初期化する。ec2Resources と ecsTaskCountSeries は
+		// 実 AWS へ接続する既定の実装ではなく、呼ばれたらエラーを返すダミーにする
+		// (時系列のテストは差し替えること)。
 		ec2Resources: func(context.Context, string, string) ([]awsinternal.EC2Resource, error) {
 			return nil, errors.New("ec2 resources is not configured in newTestServer")
-		},
-		ec2InstanceCountSeries: func(context.Context, string, string, awsinternal.TimeseriesRange, awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error) {
-			return nil, errors.New("ec2 instance count series is not configured in newTestServer")
 		},
 		ecsTaskCountSeries: func(context.Context, string, string, awsinternal.TimeseriesRange, awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error) {
 			return nil, errors.New("ecs task count series is not configured in newTestServer")

@@ -40,9 +40,6 @@ type Server struct {
 
 	// ec2Resources は EC2 の一覧を取得する関数。テストで差し替えられるよう、関数として持つ。
 	ec2Resources func(ctx context.Context, profile, region string) ([]awsinternal.EC2Resource, error)
-	// ec2InstanceCountSeries は Auto Scaling グループごとの InService 台数の時系列を
-	// 取得する関数。テストで実 AWS へ接続せずに差し替えられるよう、関数として持つ。
-	ec2InstanceCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, w awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error)
 	// ecsTaskCountSeries は ECS のタスク数の時系列を取得する関数。テストで実 AWS へ
 	// 接続せずに差し替えられるよう、関数として持つ。
 	ecsTaskCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, w awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error)
@@ -64,15 +61,14 @@ type Server struct {
 // if projectID is empty or ADC fails, BigQuery endpoints return 503.
 func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	s := &Server{
-		cfg:                    cfg,
-		resourceCache:          cache.New[any](5 * time.Minute),
-		ssoLoginSessions:       newSSOLoginSessionStore(),
-		ssoLogin:               defaultSSOLoginDeps(),
-		ddLoginSessions:        newDatadogLoginSessionStore(),
-		ddAuth:                 defaultDatadogAuthDeps(),
-		ec2Resources:           awsinternal.ListEC2Resources,
-		ec2InstanceCountSeries: awsinternal.ListEC2InstanceCountSeries,
-		ecsTaskCountSeries:     awsinternal.ListECSTaskCountSeries,
+		cfg:                cfg,
+		resourceCache:      cache.New[any](5 * time.Minute),
+		ssoLoginSessions:   newSSOLoginSessionStore(),
+		ssoLogin:           defaultSSOLoginDeps(),
+		ddLoginSessions:    newDatadogLoginSessionStore(),
+		ddAuth:             defaultDatadogAuthDeps(),
+		ec2Resources:       awsinternal.ListEC2Resources,
+		ecsTaskCountSeries: awsinternal.ListECSTaskCountSeries,
 	}
 
 	// BigQuery: try to initialise but don't fail server startup.

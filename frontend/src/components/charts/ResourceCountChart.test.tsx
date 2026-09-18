@@ -118,41 +118,6 @@ describe('ResourceCountChart', () => {
     expect(captured.xRange).toBeUndefined();
   });
 
-  it('caption を渡すとグラフの右下に注記を出す', () => {
-    mocks.useResourceTimeseries.mockReturnValue({
-      data: { range: '7d', periodSeconds: 300, start: WINDOW.start, end: WINDOW.end, series },
-      isLoading: false,
-      error: null,
-    });
-
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <ResourceCountChart
-          service="ec2"
-          profile="prod"
-          region="ap-northeast-1"
-          title="In-service instances"
-          caption="Only instances in an Auto Scaling group"
-        />
-      </QueryClientProvider>,
-    );
-
-    expect(screen.getByText('Only instances in an Auto Scaling group')).toBeInTheDocument();
-  });
-
-  it('caption を渡さなければ注記を出さない', () => {
-    mocks.useResourceTimeseries.mockReturnValue({
-      data: { range: '7d', periodSeconds: 300, start: WINDOW.start, end: WINDOW.end, series },
-      isLoading: false,
-      error: null,
-    });
-
-    renderChart();
-
-    expect(screen.queryByText('Only instances in an Auto Scaling group')).not.toBeInTheDocument();
-  });
-
   it('期間ボタンで 1 日と 1 か月に切り替えて取得し直す', () => {
     renderChart();
 

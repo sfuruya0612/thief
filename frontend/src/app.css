@@ -4226,15 +4226,3 @@ td.qe-rt-empty {
 .timeseries-head .seg {
   flex: 0 0 auto;
 }
-.timeseries-chart-wrap {
-  position: relative;
-}
-/* グラフの右下に重ねる注記。値の対象範囲を見出しだけでは伝えられないときに使う。 */
-.timeseries-caption {
-  position: absolute;
-  right: 12px;
-  bottom: 2px;
-  font-size: 10px;
-  color: var(--text-3);
-  pointer-events: none;
-}

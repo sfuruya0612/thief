@@ -98,8 +98,6 @@ interface ServicePanelProps<TRaw, TRow extends BaseRow> {
   // 台数の推移グラフの見出し。渡したサービスだけグラフを表示する
   // (時系列エンドポイントを持つ ec2 と ecs のみ)。
   countChartTitle?: string;
-  // 台数の推移グラフの右下に出す注記。値の対象範囲の補足に使う。
-  countChartCaption?: string;
 }
 
 // 汎用サービスパネル: useResources 呼び出し + Stats/Facet/Table/Drawer 描画
@@ -114,7 +112,6 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   selectedId,
   onSelectId,
   countChartTitle,
-  countChartCaption,
 }: ServicePanelProps<TRaw, TRow>) {
   const { data, isLoading, error, dataUpdatedAt } = useResources<TRaw, TRow>(
     service,
@@ -185,7 +182,6 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
           profile={profile}
           region={region}
           title={countChartTitle}
-          caption={countChartCaption}
         />
       )}
 
@@ -263,8 +259,6 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
-          countChartTitle="In-service instances"
-          countChartCaption="Only instances in an Auto Scaling group"
         />
       )}
       {activeService === 'ecr' && (
