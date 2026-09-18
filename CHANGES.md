@@ -391,6 +391,9 @@
 - [FIX] EC2 の Running instances のグラフの X 軸が期間の切り替え (1 day / 7 days / 1 month) に追随せず、記録された点の時刻の前後に固定される不具合を修正する (ECharts の time 軸は `min` と `max` が無いと全系列の点の最小時刻と最大時刻から範囲を決める。一覧の取得時にだけ記録される EC2 の点列は期間を変えても同じため、軸も変わらなかった。時系列 API の応答 `TimeseriesResponse` に時間窓の開始と終了 `start` / `end` をエポックミリ秒で追加し、`TimeseriesChart` に省略可能な `xRange` を足して、`ResourceCountChart` が応答の窓を xAxis の `min` / `max` に渡すようにする。窓は handler で 1 回だけ計算し、点の絞り込み (EC2) またはグリッド (ECS) と応答に同じ値を渡す。EC2 の窓は終端を粒度で切り下げず現在時刻のままにし、切り下げた後に記録された直近の点が窓の外に出ないようにする。`xRange` を渡さない Datadog Metrics と Datadog Dashboards の時系列グラフは従来どおり点の範囲から軸を決める)
   - @sfuruya0612
 
+- [FIX] 時系列グラフの系列過多で Other に集約するとき、集約対象の全系列が欠測の時刻が Other の点列から落ち、観測していない区間の前後の点が 1 本の線分で繋がる不具合を修正する (`frontend/src/lib/timeseries.ts` の `sumPoints` が欠測の点を読み飛ばしてその時刻を出力に登録していなかった。値を持つ点がまだ現れていない時刻だけ `v: null` の点として残し、ECharts が線を途切れさせるために必要な欠測を保持する。一部の系列だけが値を持つ時刻は従来どおりその値の和にする。ECS の `LiveTaskCount` のように集約対象の全クラスタが同じ時刻で欠測になる場合に影響していた)
+  - @sfuruya0612
+
 ### misc
 
 - SSM セッションの切断 (`TerminateSSMSession`) に与える猶予 5 秒が `internal/session/bridge.go` の `terminateTimeout`、`internal/api/handlers_session.go` の `sessionTerminateTimeout` (`internal/api/logtail.go` からも参照)、`internal/cli/ec2.go` の `ec2TerminateTimeout` (`internal/cli/ecs.go` からも参照) の 3 箇所に同じ値・同じ目的で別名定義され、5 箇所 (定義 3 箇所 + `logtail.go`/`ecs.go` からの参照 2 箇所) で使われていたのを、`internal/aws/ssm_session.go` の公開定数 `TerminateSessionGracePeriod` 1 箇所に統合する。5 箇所とも `context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)` を自分で組み立てる形は変えない (値は従来どおり 5 秒のまま、挙動は変えない)。統合後の値そのものを検証するテストがどこにも無かったため、`internal/aws/ssm_session_test.go` に値を固定するテストを追加する

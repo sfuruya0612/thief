@@ -134,6 +134,32 @@ describe('TimeseriesChart の option', () => {
     ]);
   });
 
+  it('Other に集約された欠測に挟まれた点にも symbol を付ける (集約後も孤立点を判定する)', () => {
+    const T = 1_700_000_000_000;
+    const grid = (vals: (number | null)[]) => vals.map((v, i) => ({ t: T + i * 60_000, v }));
+    render(
+      <TimeseriesChart
+        maxSeries={2}
+        series={[
+          { name: 'big', points: grid([100, 100, 100, 100, 100]) },
+          { name: 'a', points: grid([1, null, null, null, 1]) },
+          { name: 'b', points: grid([1, null, null, null, 1]) },
+        ]}
+      />,
+    );
+    const series = captured.option.series as SeriesOption[];
+    const other = series[series.length - 1];
+    expect(other.name).toBe(OTHER_SERIES_NAME);
+    // 中央 3 時刻は null として残り、両端の孤立点だけに symbol が付く。
+    expect(other.data).toEqual([
+      { value: [T, 2], symbol: 'circle' },
+      [T + 60_000, null],
+      [T + 120_000, null],
+      [T + 180_000, null],
+      { value: [T + 240_000, 2], symbol: 'circle' },
+    ]);
+  });
+
   it('値が連続する系列には symbol を付けない (marker が線を覆わない)', () => {
     render(<TimeseriesChart series={manySeries(1)} />);
     const series = captured.option.series as SeriesOption[];

@@ -45,11 +45,20 @@ function seriesMagnitude(s: TimeseriesSeries): number {
 
 // sumPoints は複数系列を時刻ごとに足し合わせる。時刻が揃っていない系列があっても、
 // 値を持つ系列だけを足す (欠測を 0 とみなして足し込まない)。
+//
+// 集約対象のどの系列にも値が無い時刻は、欠測 (v: null) の点として残す。
+// 落とすと前後の値を持つ点が配列上で隣接し、ECharts が観測していない区間を
+// 1 本の線分で結んでしまう (折れ線は間の null でしか途切れない)。
 function sumPoints(series: TimeseriesSeries[]): TimeseriesPoint[] {
-  const totals = new Map<number, number>();
+  const totals = new Map<number, number | null>();
   for (const s of series) {
     for (const p of s.points) {
-      if (p.v === null) continue;
+      if (p.v === null) {
+        // まだ値を持つ系列が現れていない時刻だけ欠測として登録する。既に値があれば
+        // その時刻は値を持つ点として残す。
+        if (!totals.has(p.t)) totals.set(p.t, null);
+        continue;
+      }
       totals.set(p.t, (totals.get(p.t) ?? 0) + p.v);
     }
   }

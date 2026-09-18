@@ -79,6 +79,32 @@ describe('collapseSeries', () => {
       { t: 2_000, v: 4 },
     ]);
   });
+
+  it('集約対象の全系列が欠測の時刻を null として残す (前後の点が線で繋がらない)', () => {
+    const T = 1_700_000_000_000;
+    const grid = (vals: (number | null)[]) => vals.map((v, i) => ({ t: T + i * 60_000, v }));
+    const series: TimeseriesSeries[] = [
+      { name: 'big', points: grid([100, 100, 100, 100, 100]) },
+      { name: 'a', points: grid([1, null, null, null, 1]) },
+      { name: 'b', points: grid([1, null, null, null, 1]) },
+      { name: 'c', points: grid([null, null, null, null, null]) },
+    ];
+    const other = collapseSeries(series, 2)[1];
+    expect(other.name).toBe(OTHER_SERIES_NAME);
+    expect(other.points).toEqual(grid([2, null, null, null, 2]));
+  });
+
+  it('一部の系列だけが値を持つ時刻は、その値の和になる', () => {
+    const T = 1_700_000_000_000;
+    const grid = (vals: (number | null)[]) => vals.map((v, i) => ({ t: T + i * 60_000, v }));
+    const series: TimeseriesSeries[] = [
+      { name: 'big', points: grid([100, 100, 100]) },
+      { name: 'a', points: grid([1, 2, null]) },
+      { name: 'b', points: grid([null, 3, null]) },
+    ];
+    const other = collapseSeries(series, 2)[1];
+    expect(other.points).toEqual(grid([1, 5, null]));
+  });
 });
 
 describe('seriesColors', () => {
