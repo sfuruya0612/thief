@@ -4,10 +4,12 @@ import {
   collapseSeries,
   DEFAULT_MAX_SERIES,
   DEFAULT_METRICS_SPAN_SECONDS,
+  isolatedPointFlags,
   metricsWindow,
   OTHER_SERIES_NAME,
   seriesColors,
   unitFormatter,
+  type TimeseriesPoint,
   type TimeseriesSeries,
 } from './timeseries';
 
@@ -98,6 +100,57 @@ describe('seriesColors', () => {
     const colors = seriesColors(manySeries(DEFAULT_MAX_SERIES + 2));
     expect(colors).toHaveLength(DEFAULT_MAX_SERIES + 2);
     expect(colors.every((c) => typeof c === 'string' && c !== '')).toBe(true);
+  });
+});
+
+describe('isolatedPointFlags', () => {
+  // points は [t, v] の並びから系列の点列を作る。孤立点の判定は値の並びだけで決まる。
+  function points(values: (number | null)[]): TimeseriesPoint[] {
+    return values.map((v, i) => ({ t: (i + 1) * 1_000, v }));
+  }
+
+  it('点が 1 つだけの系列はその点が孤立点になる', () => {
+    expect(isolatedPointFlags(points([2]))).toEqual([true]);
+  });
+
+  it('先頭の点は次が欠測なら孤立点になる', () => {
+    expect(isolatedPointFlags(points([1, null, null]))).toEqual([true, false, false]);
+  });
+
+  it('末尾の点は前が欠測なら孤立点になる', () => {
+    expect(isolatedPointFlags(points([null, null, 1]))).toEqual([false, false, true]);
+  });
+
+  it('中間の点は前後とも欠測なら孤立点になる', () => {
+    expect(isolatedPointFlags(points([1, null, 5, null, 1]))).toEqual([
+      true,
+      false,
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  it('値の連続する区間の点は孤立点にならない (線分を持つため)', () => {
+    expect(isolatedPointFlags(points([1, 2, 3]))).toEqual([false, false, false]);
+  });
+
+  it('片側だけ値が続く点も孤立点にならない', () => {
+    expect(isolatedPointFlags(points([1, 2, null, 3, 4]))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it('全点が欠測なら孤立点は無い (欠測に marker を出さない)', () => {
+    expect(isolatedPointFlags(points([null, null, null]))).toEqual([false, false, false]);
+  });
+
+  it('点が無ければ空を返す', () => {
+    expect(isolatedPointFlags([])).toEqual([]);
   });
 });
 

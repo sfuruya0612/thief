@@ -71,6 +71,21 @@ export function collapseSeries(
   ];
 }
 
+// isolatedPointFlags は、点ごとに「孤立点かどうか」を points と同じ順序の配列で返す。
+// 孤立点とは値を持つ (v !== null) 点のうち、前後のどちらにも値を持つ点が無いものを指す。
+//
+// 折れ線は隣接する 2 点を結んで初めて線分になるため、孤立点は線分を持たない。
+// 描画側はこの判定を使って孤立点にだけ marker を出し、点が 1 つしか無い系列や
+// 欠測に挟まれた点が何も描かれない状態を避ける。
+export function isolatedPointFlags(points: TimeseriesPoint[]): boolean[] {
+  return points.map((p, i) => {
+    if (p.v === null) return false;
+    const prevHasValue = i > 0 && points[i - 1].v !== null;
+    const nextHasValue = i + 1 < points.length && points[i + 1].v !== null;
+    return !prevHasValue && !nextHasValue;
+  });
+}
+
 // seriesColors は表示する系列に割り当てる色を index の順で返す。Other だけは専用の
 // 無彩色にして、集約された残りであることを色でも区別できるようにする。
 export function seriesColors(series: TimeseriesSeries[]): string[] {

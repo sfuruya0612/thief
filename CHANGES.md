@@ -382,6 +382,8 @@
   - @sfuruya0612
 - [FIX] `THIEF_DATADOG_OAUTH_REDIRECT_BASE` (`Datadog.OAuthRedirectBase`) に末尾スラッシュ付きの URL を設定すると Datadog OAuth の redirect_uri が二重スラッシュになり、登録済みの redirect_uri と文字列一致しなくなる不具合を修正する (`config.Load()` が既定値・YAML・環境変数をすべて反映し終えた後、`Datadog.OAuthRedirectBase` の前後の空白と末尾のスラッシュを 1 か所で正規化する。正規化後に空文字になる場合 (スラッシュや空白だけの値) は既定値にフォールバックする。AWS SSO の start URL や `Datadog.Site`、`ListenAddr`、`WebOrigins`、frontend の `VITE_API_BASE` はパスと連結しない、またはパスの連結方法が異なるため対象としない)
   - @sfuruya0612
+- [FIX] EC2 の Running instances のグラフで、記録が 1 点だけの系列や欠測に挟まれた孤立点が描かれず、空の座標軸だけが表示される不具合を修正する (折れ線は隣接する 2 点が無いと線分を持たず、全系列に指定していた `showSymbol: false` が点の marker も消していた。系列を `showSymbol: true` と `symbol: 'none'` の組にし、前後のどちらにも値を持つ点が無い孤立点のデータ項目だけ symbol を circle に上書きして描く。値の連続する区間には marker を出さないため、1 日で 1440 点ある ECS の Tasks per cluster の見え方は変わらない。あわせて、AWS サービス共通の `ServicePanel` で一覧の取得が成功したときに同じ profile と region の時系列クエリを無効化して取り直すようにし、Refresh 直後の EC2 のグラフに今回の記録が入らない 1 点遅れも解消する。この無効化は EC2 に限らず `ServicePanel` を使う全サービスで行うが、時系列クエリを持たないサービスでは一致するクエリが無く何も起きない)
+  - @sfuruya0612
 
 ### misc
 
