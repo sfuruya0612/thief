@@ -46,7 +46,7 @@ type Server struct {
 	ec2Resources func(ctx context.Context, profile, region string) ([]awsinternal.EC2Resource, error)
 	// ecsTaskCountSeries は ECS のタスク数の時系列を取得する関数。テストで実 AWS へ
 	// 接続せずに差し替えられるよう、関数として持つ。
-	ecsTaskCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, now time.Time) ([]awsinternal.TimeseriesSeries, error)
+	ecsTaskCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, w awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error)
 
 	// SSO デバイス認可 (start / complete エンドポイント) の進行中セッションと外部依存。
 	ssoLoginSessions *ssoLoginSessionStore

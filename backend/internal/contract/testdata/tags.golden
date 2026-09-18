@@ -249,6 +249,8 @@ Points "points"
 == TimeseriesResponse
 Range "range"
 PeriodSeconds "period_seconds"
+Start "start"
+End "end"
 Series "series"
 == ElastiCacheResource
 ID "id"

@@ -42,21 +42,26 @@ func (r *EC2CountRecorder) Record(profile, region string, count int, at time.Tim
 	ring.add(MetricPoint{T: at.UnixMilli(), V: &value})
 }
 
-// Series は profile と region の組の記録のうち、期間 rng に収まる点を記録した順
+// Series は profile と region の組の記録のうち、窓 w に収まる点を記録した順
 // (観測時刻の昇順) で返す。
+// 窓を呼び出し側から受け取るのは、応答が返す窓と絞り込みの境界を同じ値にするためである。
 // 記録は一覧の取得ごとに増えるため時刻は等間隔ではない。CloudWatch 由来の系列と違い
 // グリッドへ並べ直さないのは、観測していない時刻を欠測として捏造しないためである。
-func (r *EC2CountRecorder) Series(profile, region string, rng TimeseriesRange, now time.Time) []MetricPoint {
+func (r *EC2CountRecorder) Series(profile, region string, w TimeseriesWindow) []MetricPoint {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ring, ok := r.rings[ec2CountKey(profile, region)]
 	if !ok {
 		return []MetricPoint{}
 	}
-	since := now.Add(-rng.Duration()).UnixMilli()
 	points := make([]MetricPoint, 0, ec2CountRingSize)
 	for _, p := range ring.snapshot() {
-		if p.T >= since {
+		// 両端を含めて絞る。終端も見るのは、窓を確定した後に別リクエストの一覧取得が
+		// Record を呼ぶと終端より後の点が生じ、応答の窓 (X 軸の範囲) の外に点が混ざるためである。
+		// 時計の後退で直近の点が終端より後になった場合も落とすが、X 軸の max は窓の終端なので
+		// その点は応答に入れても描かれず、表示は変わらない。時計が追い付いた次の応答から戻る。
+		// 終端を最新の点までずらすと窓の幅が期間と一致しなくなるため、そうしない。
+		if p.T >= w.Start && p.T <= w.End {
 			points = append(points, p)
 		}
 	}

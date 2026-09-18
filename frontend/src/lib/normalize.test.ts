@@ -1118,11 +1118,13 @@ describe('kinesisFromRaw', () => {
 });
 
 describe('timeseriesResponseFromRaw', () => {
-  it('期間と粒度を camelCase へ移し、欠測を null のまま残す', () => {
+  it('期間と粒度と時間窓を camelCase へ移し、欠測を null のまま残す', () => {
     expect(
       timeseriesResponseFromRaw({
         range: '7d',
         period_seconds: 300,
+        start: 1_699_395_200_000,
+        end: 1_700_000_000_000,
         series: [
           {
             name: 'prod-cluster',
@@ -1137,6 +1139,8 @@ describe('timeseriesResponseFromRaw', () => {
     ).toEqual({
       range: '7d',
       periodSeconds: 300,
+      start: 1_699_395_200_000,
+      end: 1_700_000_000_000,
       series: [
         {
           name: 'prod-cluster',
@@ -1151,17 +1155,35 @@ describe('timeseriesResponseFromRaw', () => {
   });
 
   it('series と points の null を空配列に正規化する', () => {
-    expect(timeseriesResponseFromRaw({ range: '1d', period_seconds: 60, series: null })).toEqual({
+    expect(
+      timeseriesResponseFromRaw({
+        range: '1d',
+        period_seconds: 60,
+        start: 1_699_913_600_000,
+        end: 1_700_000_000_000,
+        series: null,
+      }),
+    ).toEqual({
       range: '1d',
       periodSeconds: 60,
+      start: 1_699_913_600_000,
+      end: 1_700_000_000_000,
       series: [],
     });
     expect(
       timeseriesResponseFromRaw({
         range: '1d',
         period_seconds: 60,
+        start: 1_699_913_600_000,
+        end: 1_700_000_000_000,
         series: [{ name: 'Running', points: null }],
       }),
-    ).toEqual({ range: '1d', periodSeconds: 60, series: [{ name: 'Running', points: [] }] });
+    ).toEqual({
+      range: '1d',
+      periodSeconds: 60,
+      start: 1_699_913_600_000,
+      end: 1_700_000_000_000,
+      series: [{ name: 'Running', points: [] }],
+    });
   });
 });

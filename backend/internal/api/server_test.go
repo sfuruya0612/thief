@@ -47,7 +47,7 @@ func newTestServer(t *testing.T) *Server {
 		ec2Resources: func(context.Context, string, string) ([]awsinternal.EC2Resource, error) {
 			return nil, errors.New("ec2 resources is not configured in newTestServer")
 		},
-		ecsTaskCountSeries: func(context.Context, string, string, awsinternal.TimeseriesRange, time.Time) ([]awsinternal.TimeseriesSeries, error) {
+		ecsTaskCountSeries: func(context.Context, string, string, awsinternal.TimeseriesRange, awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error) {
 			return nil, errors.New("ecs task count series is not configured in newTestServer")
 		},
 	}

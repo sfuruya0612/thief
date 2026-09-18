@@ -386,6 +386,8 @@
   - @sfuruya0612
 - [FIX] EC2 の Running instances のグラフで、記録が 1 点だけの系列や欠測に挟まれた孤立点が描かれず、空の座標軸だけが表示される不具合を修正する (折れ線は隣接する 2 点が無いと線分を持たず、全系列に指定していた `showSymbol: false` が点の marker も消していた。系列を `showSymbol: true` と `symbol: 'none'` の組にし、前後のどちらにも値を持つ点が無い孤立点のデータ項目だけ symbol を circle に上書きして描く。値の連続する区間には marker を出さないため、1 日で 1440 点ある ECS の Tasks per cluster の見え方は変わらない。あわせて、AWS サービス共通の `ServicePanel` で一覧の取得が成功したときに同じ profile と region の時系列クエリを無効化して取り直すようにし、Refresh 直後の EC2 のグラフに今回の記録が入らない 1 点遅れも解消する。この無効化は EC2 に限らず `ServicePanel` を使う全サービスで行うが、時系列クエリを持たないサービスでは一致するクエリが無く何も起きない)
   - @sfuruya0612
+- [FIX] EC2 の Running instances のグラフの X 軸が期間の切り替え (1 day / 7 days / 1 month) に追随せず、記録された点の時刻の前後に固定される不具合を修正する (ECharts の time 軸は `min` と `max` が無いと全系列の点の最小時刻と最大時刻から範囲を決める。一覧の取得時にだけ記録される EC2 の点列は期間を変えても同じため、軸も変わらなかった。時系列 API の応答 `TimeseriesResponse` に時間窓の開始と終了 `start` / `end` をエポックミリ秒で追加し、`TimeseriesChart` に省略可能な `xRange` を足して、`ResourceCountChart` が応答の窓を xAxis の `min` / `max` に渡すようにする。窓は handler で 1 回だけ計算し、点の絞り込み (EC2) またはグリッド (ECS) と応答に同じ値を渡す。EC2 の窓は終端を粒度で切り下げず現在時刻のままにし、切り下げた後に記録された直近の点が窓の外に出ないようにする。`xRange` を渡さない Datadog Metrics と Datadog Dashboards の時系列グラフは従来どおり点の範囲から軸を決める)
+  - @sfuruya0612
 
 ### misc
 

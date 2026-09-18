@@ -1,13 +1,15 @@
 {
   "range": "s1",
   "period_seconds": 2,
+  "start": 3,
+  "end": 4,
   "series": [
     {
-      "name": "s3",
+      "name": "s5",
       "points": [
         {
-          "t": 4,
-          "v": 5.5
+          "t": 6,
+          "v": 7.5
         }
       ]
     }

@@ -84,16 +84,38 @@ func (r TimeseriesRange) Window(now time.Time) (start, end time.Time) {
 	return end.Add(-r.Duration()), end
 }
 
-// timeseriesGrid は start から end の手前までを粒度間隔で並べた時刻をエポックミリ秒で返す。
+// RecordedWindow は now をそのまま終端とし、そこから Duration だけ遡った開始を持つ窓を返す。
+// Window の切り下げた終端を使うと、切り下げた後に記録された直近の点が窓の外に出るため、
+// 任意の時刻に点が記録される系列 (EC2 の台数) にはこちらを使う。
+func (r TimeseriesRange) RecordedWindow(now time.Time) TimeseriesWindow {
+	return NewTimeseriesWindow(now.Add(-r.Duration()), now)
+}
+
+// TimeseriesWindow は時系列が覆う時間窓をエポックミリ秒 (MetricPoint.T と同じ単位) で表す。
+// 点の絞り込みやグリッドの境界と、応答に載せて frontend が X 軸の範囲に使う値を同じ値に
+// するために、窓を 1 つの値として持ち回る。
+type TimeseriesWindow struct {
+	// Start は窓の開始。この時刻を含む。
+	Start int64
+	// End は窓の終端。グリッドはこの時刻を含まない。
+	End int64
+}
+
+// NewTimeseriesWindow は時刻の組をエポックミリ秒の窓にする。
+func NewTimeseriesWindow(start, end time.Time) TimeseriesWindow {
+	return TimeseriesWindow{Start: start.UnixMilli(), End: end.UnixMilli()}
+}
+
+// timeseriesGrid は窓の開始から終端の手前までを粒度間隔で並べた時刻をエポックミリ秒で返す。
 // CloudWatch はデータ点の無い時刻を応答に含めないため、欠測を null として返すには
 // 応答とは独立にグリッドを組む必要がある。
-func timeseriesGrid(start, end time.Time, periodSeconds int32) []int64 {
-	if periodSeconds <= 0 || !start.Before(end) {
+func timeseriesGrid(w TimeseriesWindow, periodSeconds int32) []int64 {
+	if periodSeconds <= 0 || w.Start >= w.End {
 		return nil
 	}
 	step := int64(periodSeconds) * 1000
-	grid := make([]int64, 0, (end.UnixMilli()-start.UnixMilli())/step)
-	for t := start.UnixMilli(); t < end.UnixMilli(); t += step {
+	grid := make([]int64, 0, (w.End-w.Start)/step)
+	for t := w.Start; t < w.End; t += step {
 		grid = append(grid, t)
 	}
 	return grid
@@ -120,9 +142,16 @@ type TimeseriesSeries struct {
 
 // TimeseriesResponse は時系列エンドポイントの応答。粒度を添えるのは、点の間隔を
 // フロント側が知らないと欠測と「取得していない区間」を区別できないためである。
+//
+// Start と End は系列が覆う時間窓をエポックミリ秒 (MetricPoint.T と同じ単位) で表す。
+// 窓を決めているのは backend なので、frontend が期間から窓を計算し直さずに済むよう
+// 応答に載せる。点の範囲から X 軸を決めると、点が少ない系列 (EC2 の台数) では期間を
+// 切り替えても軸の範囲が変わらない。
 type TimeseriesResponse struct {
 	Range         string             `json:"range"`
 	PeriodSeconds int32              `json:"period_seconds"`
+	Start         int64              `json:"start"`
+	End           int64              `json:"end"`
 	Series        []TimeseriesSeries `json:"series"`
 }
 

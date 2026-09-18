@@ -62,7 +62,17 @@ export function ResourceCountChart({ service, profile, region, title }: Resource
             Loading timeseries…
           </div>
         ) : (
-          <TimeseriesChart series={data?.series ?? []} height={CHART_HEIGHT} />
+          // X 軸の範囲は応答の時間窓に合わせる。点の範囲から決めると、記録された点が
+          // 少ない EC2 の台数では期間を切り替えても軸が変わらない。
+          // 窓が正の幅を持たない応答 (start / end を返さない古い backend など) では渡さず、
+          // 軸が 0 に潰れて全系列が消えるのを避ける。
+          <TimeseriesChart
+            series={data?.series ?? []}
+            height={CHART_HEIGHT}
+            xRange={
+              data && data.end > data.start ? { start: data.start, end: data.end } : undefined
+            }
+          />
         )}
       </div>
     </div>

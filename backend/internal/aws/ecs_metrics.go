@@ -41,7 +41,9 @@ var ecsClusterNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
 // Container Insights 有効化と追加課金を利用者に要求することになるため)。
 //
 // LiveTaskCount は ACTIVATING / RUNNING / DEACTIVATING の合計であり、状態別の内訳は持たない。
-func ListECSTaskCountSeries(ctx context.Context, profile, region string, r TimeseriesRange, now time.Time) ([]TimeseriesSeries, error) {
+//
+// 時間窓 w は呼び出し側が決める。応答に載せる窓とグリッドの窓を同じ値にするためである。
+func ListECSTaskCountSeries(ctx context.Context, profile, region string, r TimeseriesRange, w TimeseriesWindow) ([]TimeseriesSeries, error) {
 	ecsClient, err := newECSClient(ctx, profile, region)
 	if err != nil {
 		return nil, err
@@ -59,7 +61,7 @@ func ListECSTaskCountSeries(ctx context.Context, profile, region string, r Times
 	if err != nil {
 		return nil, err
 	}
-	return ecsTaskCountSeries(ctx, cwClient, names, r, now)
+	return ecsTaskCountSeries(ctx, cwClient, names, r, w)
 }
 
 // ecsTaskCountSeries は生成済みクライアントで時系列を組み立てるコア。
@@ -69,7 +71,7 @@ func ecsTaskCountSeries(
 	client cloudwatch.GetMetricDataAPIClient,
 	clusters []string,
 	r TimeseriesRange,
-	now time.Time,
+	w TimeseriesWindow,
 ) ([]TimeseriesSeries, error) {
 	targets := make([]string, 0, len(clusters))
 	for _, name := range clusters {
@@ -82,9 +84,9 @@ func ecsTaskCountSeries(
 		return []TimeseriesSeries{}, nil
 	}
 
-	start, end := r.Window(now)
+	start, end := time.UnixMilli(w.Start), time.UnixMilli(w.End)
 	period := r.PeriodSeconds()
-	grid := timeseriesGrid(start, end, period)
+	grid := timeseriesGrid(w, period)
 
 	series := make([]TimeseriesSeries, 0, len(targets))
 	for i := 0; i < len(targets); i += ecsMetricDataBatchSize {

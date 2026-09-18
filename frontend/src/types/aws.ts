@@ -1210,14 +1210,20 @@ export interface TimeseriesSeriesRaw {
   points: MetricPointRaw[] | null;
 }
 
+// start と end は系列が覆う時間窓 (エポックミリ秒)。窓を決めているのは backend なので、
+// 期間から計算し直さずにそのまま X 軸の範囲に使う。
 export interface TimeseriesResponseRaw {
   range: string;
   period_seconds: number;
+  start: number;
+  end: number;
   series: TimeseriesSeriesRaw[] | null;
 }
 
 export interface TimeseriesResponseRow {
   range: string;
   periodSeconds: number;
+  start: number;
+  end: number;
   series: TimeseriesSeries[];
 }
