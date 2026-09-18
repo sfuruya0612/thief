@@ -11,6 +11,12 @@ import {
 } from '../../lib/timeseries';
 import type { TimeseriesSeries } from '../../lib/timeseries';
 
+// XRange は X 軸に固定する時間窓 (エポックミリ秒)。
+export interface XRange {
+  start: number;
+  end: number;
+}
+
 export interface TimeseriesChartProps {
   series: TimeseriesSeries[];
   height?: number;
@@ -18,6 +24,9 @@ export interface TimeseriesChartProps {
   valueFormatter?: (v: number) => string;
   // 個別に色を割り当てる系列の上限。これを超えた分は Other へ集約する。
   maxSeries?: number;
+  // X 軸に固定する時間窓。渡さなければ ECharts が点の範囲から軸を決める。
+  // 点が少ない系列では点の範囲と期間が一致しないため、窓を持つ呼び出し側は渡すこと。
+  xRange?: XRange;
 }
 
 // ダークテーマ時の軸・凡例文字色 (CostChart と同じ直値。ECharts は CSS 変数を解釈しない)
@@ -31,6 +40,7 @@ export function TimeseriesChart({
   height = 260,
   valueFormatter,
   maxSeries = DEFAULT_MAX_SERIES,
+  xRange,
 }: TimeseriesChartProps) {
   const { tweaks } = useTweaks();
   const textColor = THEME_TEXT_COLOR[tweaks.theme];
@@ -60,8 +70,12 @@ export function TimeseriesChart({
       valueFormatter: (v: number | null) => (v === null ? '—' : format(v)),
     },
     legend: { type: 'scroll', bottom: 0, textStyle: { color: textColor } },
+    // min と max を渡さない time 軸は、点の最小時刻と最大時刻から範囲を決める。
+    // 点が期間全体を覆わない系列では、期間を切り替えても軸が変わらないため、窓を持つ
+    // 呼び出し側は xRange を渡して軸の範囲を期間に合わせる。
     xAxis: {
       type: 'time',
+      ...(xRange ? { min: xRange.start, max: xRange.end } : {}),
       axisLine: { lineStyle: { color: textColor } },
       axisLabel: { color: textColor },
     },

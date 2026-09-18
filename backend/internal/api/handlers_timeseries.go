@@ -21,12 +21,18 @@ func (s *Server) handleEC2Timeseries(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// 記録は任意の時刻に行われるため、終端を粒度で切り下げない RecordedWindow を使う。
+	// 切り下げると、切り下げた後に記録された直近の点が窓の外に出る。
+	// 同じ窓を絞り込みと応答の両方に渡し、軸の範囲と点の絞り込みの境界を一致させる。
+	window := rng.RecordedWindow(time.Now())
 	writeJSON(w, awsinternal.TimeseriesResponse{
 		Range:         string(rng),
 		PeriodSeconds: rng.PeriodSeconds(),
+		Start:         window.Start,
+		End:           window.End,
 		Series: []awsinternal.TimeseriesSeries{{
 			Name:   ec2RunningSeriesName,
-			Points: s.ec2Counts.Series(profile, region, rng, time.Now()),
+			Points: s.ec2Counts.Series(profile, region, window),
 		}},
 	})
 }
@@ -45,13 +51,17 @@ func (s *Server) handleECSTimeseries(w http.ResponseWriter, r *http.Request) {
 	// 時間窓は TimeseriesRange.Window が粒度で切り下げるため、TTL の間は同じ窓になる。
 	key := cacheKey("ecs-timeseries", profile, region, string(rng))
 	s.serveCached(w, r, key, cacheTTL, writeAWSError, func() (any, error) {
-		series, err := s.ecsTaskCountSeries(r.Context(), profile, region, rng, time.Now())
+		// 窓の計算はここだけで行い、同じ値をグリッドの生成と応答の両方に渡す。
+		window := awsinternal.NewTimeseriesWindow(rng.Window(time.Now()))
+		series, err := s.ecsTaskCountSeries(r.Context(), profile, region, rng, window)
 		if err != nil {
 			return nil, err
 		}
 		return awsinternal.TimeseriesResponse{
 			Range:         string(rng),
 			PeriodSeconds: rng.PeriodSeconds(),
+			Start:         window.Start,
+			End:           window.End,
 			Series:        series,
 		}, nil
 	})

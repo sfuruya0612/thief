@@ -740,6 +740,8 @@ export function timeseriesResponseFromRaw(raw: TimeseriesResponseRaw): Timeserie
   return {
     range: raw.range ?? '',
     periodSeconds: raw.period_seconds ?? 0,
+    start: raw.start ?? 0,
+    end: raw.end ?? 0,
     series: (raw.series ?? []).map((s) => ({
       name: s.name ?? '',
       points: (s.points ?? []).map((p) => ({ t: p.t, v: p.v ?? null })),

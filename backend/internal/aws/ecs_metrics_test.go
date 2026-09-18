@@ -28,7 +28,8 @@ func TestEcsTaskCountSeriesQueries(t *testing.T) {
 	now := time.Date(2026, 9, 17, 10, 42, 30, 0, time.UTC)
 	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{}}}
 
-	if _, err := ecsTaskCountSeries(context.Background(), client, []string{"beta", "alpha"}, Range7Days, now); err != nil {
+	window := NewTimeseriesWindow(Range7Days.Window(now))
+	if _, err := ecsTaskCountSeries(context.Background(), client, []string{"beta", "alpha"}, Range7Days, window); err != nil {
 		t.Fatalf("ecsTaskCountSeries: %v", err)
 	}
 	if len(client.calls) != 1 {
@@ -62,6 +63,7 @@ func TestEcsTaskCountSeriesQueries(t *testing.T) {
 func TestEcsTaskCountSeriesPoints(t *testing.T) {
 	now := time.Date(2026, 9, 17, 10, 3, 0, 0, time.UTC)
 	start, end := Range1Day.Window(now)
+	window := NewTimeseriesWindow(start, end)
 	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{
 		MetricDataResults: []cwtypes.MetricDataResult{{
 			Id:         aws.String("q0"),
@@ -70,7 +72,7 @@ func TestEcsTaskCountSeriesPoints(t *testing.T) {
 		}},
 	}}}
 
-	series, err := ecsTaskCountSeries(context.Background(), client, []string{"prod"}, Range1Day, now)
+	series, err := ecsTaskCountSeries(context.Background(), client, []string{"prod"}, Range1Day, window)
 	if err != nil {
 		t.Fatalf("ecsTaskCountSeries: %v", err)
 	}
@@ -90,6 +92,10 @@ func TestEcsTaskCountSeriesPoints(t *testing.T) {
 		t.Errorf("points[0].V = %v, want nil", *points[0].V)
 	}
 	last := points[len(points)-1]
+	// グリッドは渡した窓をそのまま覆う (終端は含まない)。
+	if want := end.Add(-time.Minute).UnixMilli(); last.T != want {
+		t.Errorf("last point T = %d, want %d", last.T, want)
+	}
 	if last.V == nil || *last.V != 5 {
 		t.Errorf("last point = %v, want 5", last.V)
 	}
@@ -102,7 +108,8 @@ func TestEcsTaskCountSeriesPoints(t *testing.T) {
 // TestEcsTaskCountSeriesNoClusters はクラスタが無ければ AWS を呼ばず空の系列を返すことを検証する。
 func TestEcsTaskCountSeriesNoClusters(t *testing.T) {
 	client := &fakeMetricDataClient{}
-	series, err := ecsTaskCountSeries(context.Background(), client, nil, Range1Day, time.Now())
+	series, err := ecsTaskCountSeries(context.Background(), client, nil, Range1Day,
+		NewTimeseriesWindow(Range1Day.Window(time.Now())))
 	if err != nil {
 		t.Fatalf("ecsTaskCountSeries: %v", err)
 	}
@@ -118,7 +125,7 @@ func TestEcsTaskCountSeriesNoClusters(t *testing.T) {
 func TestEcsTaskCountSeriesSkipsUnsafeNames(t *testing.T) {
 	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{}}}
 	series, err := ecsTaskCountSeries(context.Background(), client,
-		[]string{`bad"name`, "ok-cluster", ""}, Range1Day, time.Now())
+		[]string{`bad"name`, "ok-cluster", ""}, Range1Day, NewTimeseriesWindow(Range1Day.Window(time.Now())))
 	if err != nil {
 		t.Fatalf("ecsTaskCountSeries: %v", err)
 	}
@@ -145,7 +152,8 @@ func TestEcsTaskCountSeriesBatches(t *testing.T) {
 	}
 	client := &fakeMetricDataClient{pages: []*cloudwatch.GetMetricDataOutput{{}, {}}}
 
-	series, err := ecsTaskCountSeries(context.Background(), client, clusters, Range30Days, time.Now())
+	series, err := ecsTaskCountSeries(context.Background(), client, clusters, Range30Days,
+		NewTimeseriesWindow(Range30Days.Window(time.Now())))
 	if err != nil {
 		t.Fatalf("ecsTaskCountSeries: %v", err)
 	}
@@ -167,7 +175,8 @@ func TestEcsTaskCountSeriesBatches(t *testing.T) {
 func TestEcsTaskCountSeriesError(t *testing.T) {
 	sentinel := errors.New("denied")
 	client := &fakeMetricDataClient{err: sentinel}
-	if _, err := ecsTaskCountSeries(context.Background(), client, []string{"prod"}, Range1Day, time.Now()); !errors.Is(err, sentinel) {
+	window := NewTimeseriesWindow(Range1Day.Window(time.Now()))
+	if _, err := ecsTaskCountSeries(context.Background(), client, []string{"prod"}, Range1Day, window); !errors.Is(err, sentinel) {
 		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
 }

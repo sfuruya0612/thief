@@ -68,7 +68,7 @@ func TestEC2CountRecorderSeries(t *testing.T) {
 	rec.Record("prod", "us-east-1", 99, now.Add(-time.Hour))
 
 	t.Run("1d cuts out older points", func(t *testing.T) {
-		got := rec.Series("prod", "ap-northeast-1", Range1Day, now)
+		got := rec.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))
 		if diff := cmp.Diff([]float64{5, 7}, seriesValues(t, got)); diff != "" {
 			t.Errorf("mismatch (-want +got):\n%s", diff)
 		}
@@ -78,22 +78,36 @@ func TestEC2CountRecorderSeries(t *testing.T) {
 	})
 
 	t.Run("7d includes the older point", func(t *testing.T) {
-		got := rec.Series("prod", "ap-northeast-1", Range7Days, now)
+		got := rec.Series("prod", "ap-northeast-1", Range7Days.RecordedWindow(now))
 		if diff := cmp.Diff([]float64{1, 5, 7}, seriesValues(t, got)); diff != "" {
 			t.Errorf("mismatch (-want +got):\n%s", diff)
 		}
 	})
 
 	t.Run("region is part of the key", func(t *testing.T) {
-		got := rec.Series("prod", "us-east-1", Range1Day, now)
+		got := rec.Series("prod", "us-east-1", Range1Day.RecordedWindow(now))
 		if diff := cmp.Diff([]float64{99}, seriesValues(t, got)); diff != "" {
 			t.Errorf("mismatch (-want +got):\n%s", diff)
 		}
 	})
 
 	t.Run("unknown profile returns an empty series", func(t *testing.T) {
-		if got := rec.Series("other", "ap-northeast-1", Range1Day, now); len(got) != 0 {
+		if got := rec.Series("other", "ap-northeast-1", Range1Day.RecordedWindow(now)); len(got) != 0 {
 			t.Errorf("series = %+v, want empty", got)
+		}
+	})
+
+	t.Run("window includes both ends and drops points after the end", func(t *testing.T) {
+		// 窓を確定した後に別リクエストの一覧取得が記録した点は、応答の窓 (X 軸の範囲) の外に
+		// なるため返さない。終端ちょうどの点は窓に含める。
+		late := NewEC2CountRecorder()
+		late.Record("prod", "ap-northeast-1", 2, now.Add(-Range1Day.Duration()))
+		late.Record("prod", "ap-northeast-1", 3, now)
+		late.Record("prod", "ap-northeast-1", 4, now.Add(time.Millisecond))
+
+		got := late.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))
+		if diff := cmp.Diff([]float64{2, 3}, seriesValues(t, got)); diff != "" {
+			t.Errorf("mismatch (-want +got):\n%s", diff)
 		}
 	})
 }
@@ -108,7 +122,7 @@ func TestEC2CountRecorderDropsOldest(t *testing.T) {
 		rec.Record("prod", "ap-northeast-1", i, base.Add(time.Duration(i)*time.Millisecond))
 	}
 
-	got := rec.Series("prod", "ap-northeast-1", Range30Days, base.Add(time.Duration(total)*time.Millisecond))
+	got := rec.Series("prod", "ap-northeast-1", Range30Days.RecordedWindow(base.Add(time.Duration(total)*time.Millisecond)))
 	if len(got) != ec2CountRingSize {
 		t.Fatalf("len = %d, want %d", len(got), ec2CountRingSize)
 	}
@@ -147,14 +161,14 @@ func TestEC2CountRecorderConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
-				rec.Series("prod", "ap-northeast-1", Range1Day, now)
-				rec.Series("stg", "us-east-1", Range30Days, now)
+				rec.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))
+				rec.Series("stg", "us-east-1", Range30Days.RecordedWindow(now))
 			}
 		}()
 	}
 	wg.Wait()
 
-	if got := len(rec.Series("prod", "ap-northeast-1", Range1Day, now)); got != 8*200 {
+	if got := len(rec.Series("prod", "ap-northeast-1", Range1Day.RecordedWindow(now))); got != 8*200 {
 		t.Errorf("recorded = %d, want %d", got, 8*200)
 	}
 }

@@ -143,6 +143,31 @@ describe('TimeseriesChart の option', () => {
     ]);
   });
 
+  it('X 軸の範囲を渡すと xAxis の min と max に入る (軸が期間に追随する)', () => {
+    const xRange = { start: 1_699_913_600_000, end: 1_700_000_000_000 };
+    render(
+      <TimeseriesChart
+        series={[{ name: 'Running', points: [{ t: 1_699_999_000_000, v: 2 }] }]}
+        xRange={xRange}
+      />,
+    );
+    expect(captured.option.xAxis).toMatchObject({
+      type: 'time',
+      min: xRange.start,
+      max: xRange.end,
+    });
+  });
+
+  it('X 軸の範囲を渡さないと min と max を入れない (点の範囲から軸を決める従来どおりの挙動)', () => {
+    render(
+      <TimeseriesChart series={[{ name: 'Running', points: [{ t: 1_699_999_000_000, v: 2 }] }]} />,
+    );
+    const xAxis = captured.option.xAxis as Record<string, unknown>;
+    expect(xAxis).toMatchObject({ type: 'time' });
+    expect(xAxis).not.toHaveProperty('min');
+    expect(xAxis).not.toHaveProperty('max');
+  });
+
   it('系列が無いときは軸だけのグラフを描かず No data を出す', () => {
     const { getByText } = render(<TimeseriesChart series={[]} />);
     expect(getByText('No data')).toBeInTheDocument();

@@ -10,11 +10,18 @@ const mocks = vi.hoisted(() => ({ useResourceTimeseries: vi.fn() }));
 
 // echarts-for-react は jsdom (canvas 未実装) では描画できないため、渡された系列を
 // 捕まえるスタブに差し替える。
-const captured = vi.hoisted(() => ({ series: [] as { name: string }[] }));
+const captured = vi.hoisted(() => ({
+  series: [] as { name: string }[],
+  xRange: undefined as { start: number; end: number } | undefined,
+}));
 
 vi.mock('./TimeseriesChart', () => ({
-  TimeseriesChart: (props: { series: { name: string }[] }) => {
+  TimeseriesChart: (props: {
+    series: { name: string }[];
+    xRange?: { start: number; end: number };
+  }) => {
     captured.series = props.series;
+    captured.xRange = props.xRange;
     return <div data-testid="timeseries-chart-stub" />;
   },
 }));
@@ -34,6 +41,9 @@ const series: TimeseriesSeries[] = [
   },
 ];
 
+// WINDOW は backend が返す時間窓 (エポックミリ秒)。7 日分の幅を持たせてある。
+const WINDOW = { start: 1_699_395_200_000, end: 1_700_000_000_000 };
+
 function renderChart() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -52,12 +62,13 @@ describe('ResourceCountChart', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     captured.series = [];
+    captured.xRange = undefined;
     mocks.useResourceTimeseries.mockReturnValue({ data: undefined, isLoading: false, error: null });
   });
 
   it('既定は 7 日で取得し、欠測を含む系列をそのままグラフへ渡す', () => {
     mocks.useResourceTimeseries.mockReturnValue({
-      data: { range: '7d', periodSeconds: 300, series },
+      data: { range: '7d', periodSeconds: 300, start: WINDOW.start, end: WINDOW.end, series },
       isLoading: false,
       error: null,
     });
@@ -71,6 +82,40 @@ describe('ResourceCountChart', () => {
     expect(screen.getByTestId('timeseries-chart-stub')).toBeInTheDocument();
     // 欠測は null のまま渡す (0 に潰すと「台数が 0 だった」と読めてしまう)。
     expect(captured.series).toEqual(series);
+  });
+
+  it('応答の時間窓を X 軸の範囲としてグラフへ渡す', () => {
+    mocks.useResourceTimeseries.mockReturnValue({
+      data: { range: '7d', periodSeconds: 300, start: WINDOW.start, end: WINDOW.end, series },
+      isLoading: false,
+      error: null,
+    });
+
+    renderChart();
+
+    // 軸の範囲を点の範囲から決めると、点が少ない系列では期間を切り替えても軸が変わらない。
+    expect(captured.xRange).toEqual(WINDOW);
+  });
+
+  it('応答が無いときは X 軸の範囲を渡さない', () => {
+    renderChart();
+
+    expect(captured.xRange).toBeUndefined();
+  });
+
+  it('窓が正の幅を持たない応答では X 軸の範囲を渡さない (start / end を返さない古い backend)', () => {
+    // 旧形状の応答は正規化で start / end が 0 になる。そのまま渡すと軸が 0 に潰れて
+    // 全系列が消えるため、渡さずに点の範囲から軸を決めさせる。
+    mocks.useResourceTimeseries.mockReturnValue({
+      data: { range: '7d', periodSeconds: 300, start: 0, end: 0, series },
+      isLoading: false,
+      error: null,
+    });
+
+    renderChart();
+
+    expect(captured.series).toEqual(series);
+    expect(captured.xRange).toBeUndefined();
   });
 
   it('期間ボタンで 1 日と 1 か月に切り替えて取得し直す', () => {
