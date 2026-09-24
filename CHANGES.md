@@ -12,6 +12,8 @@
   - @sfuruya0612
 - [ADD] Web のコスト画面に CSV ダウンロードを追加する (Cost Explorer と Datadog / TiDB の Cost タブのクロス集計表を、画面表示と同じ集計値から `lib/download.ts` の `crossTableCsv` と `downloadCsv` でファイル保存する。CLI の `-o csv` と同等の利便性を Web に持たせる。issue 0192)
   - @sfuruya0612
+- [ADD] CLI に Athena の一覧とクエリ実行コマンド (`thief athena catalogs` / `databases` / `workgroups` / `tables` / `query`) を追加する (Web の Athena ビューにある一覧とクエリ実行をシェルやスクリプトから使えるようにする。一覧は既存の `ListAthena*` を `[][]string` に組み立てて `printRowsOrGroupBy` で tab / CSV / `--group-by` 出力し、`query` は既存の `StartAthenaQuery` の後に新設した `WaitAthenaQuery` (GetQueryExecution を 2 秒間隔でポーリング、context のキャンセルで中断) と `GetAthenaQueryResultsAll` (GetQueryResults を最終ページまで結合) で完了後の結果を動的な列で出力する。issue 0193)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 

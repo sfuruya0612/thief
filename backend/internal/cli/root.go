@@ -57,6 +57,7 @@ including AWS, BigQuery, Datadog, and TiDB.`,
 		newELBCmd(),
 		newLogsCmd(),
 		newGCPCmd(),
+		newAthenaCmd(),
 		newServerCmd(),
 	)
 	return root

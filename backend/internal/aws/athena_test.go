@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -463,5 +464,263 @@ func TestGetAthenaQueryResultsClampsMaxResults(t *testing.T) {
 	}
 	if gotMax != athenaResultsMaxDefault {
 		t.Errorf("MaxResults = %d, want %d", gotMax, athenaResultsMaxDefault)
+	}
+}
+
+// TestWaitAthenaQueryPollsUntilTerminal は QUEUED / RUNNING の間は間隔を空けて問い合わせを
+// 繰り返し、SUCCEEDED でその実行情報を返すことを検証する。
+func TestWaitAthenaQueryPollsUntilTerminal(t *testing.T) {
+	states := []athenatypes.QueryExecutionState{
+		athenatypes.QueryExecutionStateQueued,
+		athenatypes.QueryExecutionStateRunning,
+		athenatypes.QueryExecutionStateSucceeded,
+	}
+	calls := 0
+	client := &fakeAthena{
+		getQueryExecution: func(p *athena.GetQueryExecutionInput) (*athena.GetQueryExecutionOutput, error) {
+			state := states[calls]
+			calls++
+			return &athena.GetQueryExecutionOutput{QueryExecution: &athenatypes.QueryExecution{
+				QueryExecutionId: p.QueryExecutionId,
+				Status:           &athenatypes.QueryExecutionStatus{State: state},
+			}}, nil
+		},
+	}
+
+	exec, err := waitAthenaQuery(context.Background(), client, "exec-1", time.Millisecond)
+	if err != nil {
+		t.Fatalf("waitAthenaQuery: %v", err)
+	}
+	if calls != len(states) {
+		t.Errorf("GetQueryExecution called %d times, want %d", calls, len(states))
+	}
+	if exec.ID != "exec-1" || exec.State != string(athenatypes.QueryExecutionStateSucceeded) {
+		t.Errorf("exec = %+v, want ID=exec-1 State=SUCCEEDED", exec)
+	}
+}
+
+// TestWaitAthenaQueryReturnsErrorOnTerminalFailure は FAILED / CANCELLED を待機の継続では
+// なくエラーとして返し、StateReason があればそれも伝えることを検証する。
+func TestWaitAthenaQueryReturnsErrorOnTerminalFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		state      athenatypes.QueryExecutionState
+		reason     string
+		wantErrMsg []string
+	}{
+		{
+			name:       "failed with reason",
+			state:      athenatypes.QueryExecutionStateFailed,
+			reason:     "line 1:1: Table not found",
+			wantErrMsg: []string{"exec-1", "FAILED", "line 1:1: Table not found"},
+		},
+		{
+			name:       "cancelled without reason",
+			state:      athenatypes.QueryExecutionStateCancelled,
+			wantErrMsg: []string{"exec-1", "CANCELLED"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			client := &fakeAthena{
+				getQueryExecution: func(p *athena.GetQueryExecutionInput) (*athena.GetQueryExecutionOutput, error) {
+					calls++
+					return &athena.GetQueryExecutionOutput{QueryExecution: &athenatypes.QueryExecution{
+						QueryExecutionId: p.QueryExecutionId,
+						Status: &athenatypes.QueryExecutionStatus{
+							State:             tt.state,
+							StateChangeReason: aws.String(tt.reason),
+						},
+					}}, nil
+				},
+			}
+
+			// 待機に進まないよう間隔は長くする。終端状態は最初の確認で判定できる。
+			_, err := waitAthenaQuery(context.Background(), client, "exec-1", time.Hour)
+			if err == nil {
+				t.Fatal("waitAthenaQuery returned no error, want a terminal state error")
+			}
+			for _, want := range tt.wantErrMsg {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to contain %q", err.Error(), want)
+				}
+			}
+			if calls != 1 {
+				t.Errorf("GetQueryExecution called %d times, want 1", calls)
+			}
+		})
+	}
+}
+
+// TestWaitAthenaQueryStopsOnContextCancel は待機中の context キャンセルがその場で
+// context.Canceled として返ることを検証する。間隔を長くしてあるため、キャンセルを
+// 見ずに待機を続ける実装ではテストが終わらない。
+func TestWaitAthenaQueryStopsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	polled := make(chan struct{})
+	client := &fakeAthena{
+		getQueryExecution: func(p *athena.GetQueryExecutionInput) (*athena.GetQueryExecutionOutput, error) {
+			close(polled)
+			return &athena.GetQueryExecutionOutput{QueryExecution: &athenatypes.QueryExecution{
+				QueryExecutionId: p.QueryExecutionId,
+				Status:           &athenatypes.QueryExecutionStatus{State: athenatypes.QueryExecutionStateRunning},
+			}}, nil
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := waitAthenaQuery(ctx, client, "exec-1", time.Hour)
+		done <- err
+	}()
+
+	<-polled
+	cancel()
+
+	err := <-done
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want it to wrap %v", err, context.Canceled)
+	}
+}
+
+// TestWaitAthenaQueryPropagatesGetError は状態取得の失敗を再試行せず呼び出し元へ返すことを
+// 検証する。権限不足のように待っても直らない失敗を握り潰さないため。
+func TestWaitAthenaQueryPropagatesGetError(t *testing.T) {
+	wantErr := errors.New("boom")
+	client := &fakeAthena{
+		getQueryExecution: func(*athena.GetQueryExecutionInput) (*athena.GetQueryExecutionOutput, error) {
+			return nil, wantErr
+		},
+	}
+	_, err := waitAthenaQuery(context.Background(), client, "exec-1", time.Millisecond)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want it to wrap %v", err, wantErr)
+	}
+}
+
+// TestGetAllAthenaQueryResultsMergesPages は next token が尽きるまでページを取得し、
+// 列は最初のページから、行は全ページ分を順にまとめることを検証する。ヘッダ行の除去は
+// 最初のページにだけ効く (2 ページ目の行はそのまま残る)。
+func TestGetAllAthenaQueryResultsMergesPages(t *testing.T) {
+	meta := &athenatypes.ResultSetMetadata{ColumnInfo: []athenatypes.ColumnInfo{
+		{Name: aws.String("status"), Type: aws.String("integer")},
+		{Name: aws.String("requests"), Type: aws.String("bigint")},
+	}}
+	header := athenatypes.Row{Data: []athenatypes.Datum{
+		{VarCharValue: aws.String("status")},
+		{VarCharValue: aws.String("requests")},
+	}}
+	row1 := athenatypes.Row{Data: []athenatypes.Datum{
+		{VarCharValue: aws.String("502")},
+		{VarCharValue: aws.String("1204")},
+	}}
+	row2 := athenatypes.Row{Data: []athenatypes.Datum{
+		{VarCharValue: aws.String("503")},
+		{VarCharValue: aws.String("77")},
+	}}
+
+	calls := 0
+	client := &fakeAthena{
+		getQueryResults: func(p *athena.GetQueryResultsInput) (*athena.GetQueryResultsOutput, error) {
+			calls++
+			if p.NextToken == nil {
+				return &athena.GetQueryResultsOutput{
+					ResultSet: &athenatypes.ResultSet{ResultSetMetadata: meta, Rows: []athenatypes.Row{header, row1}},
+					NextToken: aws.String("token-2"),
+				}, nil
+			}
+			if got := ptrStr(p.NextToken); got != "token-2" {
+				t.Errorf("NextToken = %q, want %q", got, "token-2")
+			}
+			return &athena.GetQueryResultsOutput{
+				ResultSet: &athenatypes.ResultSet{ResultSetMetadata: meta, Rows: []athenatypes.Row{row2}},
+			}, nil
+		},
+	}
+
+	got, err := getAllAthenaQueryResults(context.Background(), client, "exec-1", 0)
+	if err != nil {
+		t.Fatalf("getAllAthenaQueryResults: %v", err)
+	}
+	want := &AthenaResultPage{
+		Columns: []AthenaResultColumn{
+			{Name: "status", Type: "integer"},
+			{Name: "requests", Type: "bigint"},
+		},
+		Rows: [][]string{{"502", "1204"}, {"503", "77"}},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("getAllAthenaQueryResults mismatch (-want +got):\n%s", diff)
+	}
+	if calls != 2 {
+		t.Errorf("GetQueryResults called %d times, want 2", calls)
+	}
+}
+
+// TestWaitAthenaQueryRejectsUnknownState は QUEUED / RUNNING / 終端のどれでもない状態
+// (Status の欠落による空文字、SDK が知らない状態) を待機の継続ではなくエラーにすることを
+// 検証する。壊れた応答で Ctrl-C まで待ち続ける失敗を防ぐため。
+func TestWaitAthenaQueryRejectsUnknownState(t *testing.T) {
+	tests := []struct {
+		name   string
+		status *athenatypes.QueryExecutionStatus
+		want   string
+	}{
+		{name: "missing status", status: nil, want: `unexpected state ""`},
+		{
+			name:   "unknown state",
+			status: &athenatypes.QueryExecutionStatus{State: athenatypes.QueryExecutionState("PAUSED")},
+			want:   `unexpected state "PAUSED"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			client := &fakeAthena{
+				getQueryExecution: func(p *athena.GetQueryExecutionInput) (*athena.GetQueryExecutionOutput, error) {
+					calls++
+					return &athena.GetQueryExecutionOutput{QueryExecution: &athenatypes.QueryExecution{
+						QueryExecutionId: p.QueryExecutionId,
+						Status:           tt.status,
+					}}, nil
+				},
+			}
+			_, err := waitAthenaQuery(context.Background(), client, "exec-1", time.Millisecond)
+			if err == nil {
+				t.Fatal("waitAthenaQuery returned no error, want an unexpected state error")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("error = %q, want it to contain %q", err.Error(), tt.want)
+			}
+			if calls != 1 {
+				t.Errorf("GetQueryExecution called %d times, want 1 (no retry on unknown state)", calls)
+			}
+		})
+	}
+}
+
+// TestGetAllAthenaQueryResultsFailsOnLaterPage は 2 ページ目の取得失敗を部分結果として
+// 返さず、エラーとして呼び出し元へ伝えることを検証する。
+func TestGetAllAthenaQueryResultsFailsOnLaterPage(t *testing.T) {
+	wantErr := errors.New("throttled")
+	client := &fakeAthena{
+		getQueryResults: func(p *athena.GetQueryResultsInput) (*athena.GetQueryResultsOutput, error) {
+			if p.NextToken == nil {
+				return &athena.GetQueryResultsOutput{
+					ResultSet: &athenatypes.ResultSet{Rows: []athenatypes.Row{{Data: []athenatypes.Datum{{VarCharValue: aws.String("status")}}}}},
+					NextToken: aws.String("token-2"),
+				}, nil
+			}
+			return nil, wantErr
+		},
+	}
+	page, err := getAllAthenaQueryResults(context.Background(), client, "exec-1", 0)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want it to wrap %v", err, wantErr)
+	}
+	if page != nil {
+		t.Errorf("page = %+v, want nil on error", page)
 	}
 }

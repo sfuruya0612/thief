@@ -26,6 +26,9 @@ const athenaHistoryMaxDefault = 50
 // athenaBatchGetMax は BatchGetQueryExecution の 1 回あたり上限件数。
 const athenaBatchGetMax = 50
 
+// athenaQueryPollInterval はクエリが終端状態になるまでのポーリング間隔。
+const athenaQueryPollInterval = 2 * time.Second
+
 // AthenaCatalog represents an Athena data catalog.
 type AthenaCatalog struct {
 	Name string `json:"name"`
@@ -167,6 +170,17 @@ func GetAthenaQuery(ctx context.Context, profile, region, id string) (*AthenaQue
 	return getAthenaQuery(ctx, client, id)
 }
 
+// WaitAthenaQuery は実行が終端状態 (SUCCEEDED / FAILED / CANCELLED) になるまで
+// GetQueryExecution をポーリングし、成功した実行情報を返す。FAILED と CANCELLED は
+// StateReason を含むエラーにする。ctx のキャンセルで待機を中断する。
+func WaitAthenaQuery(ctx context.Context, profile, region, id string) (*AthenaQueryExecution, error) {
+	client, err := newAthenaClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return waitAthenaQuery(ctx, client, id, athenaQueryPollInterval)
+}
+
 // StopAthenaQuery requests cancellation of the given query execution.
 func StopAthenaQuery(ctx context.Context, profile, region, id string) error {
 	client, err := newAthenaClient(ctx, profile, region)
@@ -188,6 +202,16 @@ func GetAthenaQueryResults(ctx context.Context, profile, region, id, nextToken s
 		return nil, err
 	}
 	return getAthenaQueryResults(ctx, client, id, nextToken, maxResults)
+}
+
+// GetAthenaQueryResultsAll は完了した実行の結果を最終ページまでまとめて返す。
+// 先頭のヘッダ行の除去は最初のページにだけ適用される。
+func GetAthenaQueryResultsAll(ctx context.Context, profile, region, id string, maxResults int) (*AthenaResultPage, error) {
+	client, err := newAthenaClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getAllAthenaQueryResults(ctx, client, id, maxResults)
 }
 
 // ListAthenaQueryHistory returns up to maxItems recent query executions
@@ -344,6 +368,39 @@ func getAthenaQuery(ctx context.Context, client athenaAPI, id string) (*AthenaQu
 	return &exec, nil
 }
 
+// waitAthenaQuery は生成済みクライアントで終端状態までポーリングするコア。最初の確認は
+// 間隔を待たずに行い、interval を引数に取るのは単体テストから待機を短くするため。
+func waitAthenaQuery(ctx context.Context, client athenaAPI, id string, interval time.Duration) (*AthenaQueryExecution, error) {
+	for {
+		exec, err := getAthenaQuery(ctx, client, id)
+		if err != nil {
+			return nil, err
+		}
+		// State は API 応答用の文字列で保持しているため、判定のたびに SDK の列挙へ戻す。
+		switch athenatypes.QueryExecutionState(exec.State) {
+		case athenatypes.QueryExecutionStateSucceeded:
+			return exec, nil
+		case athenatypes.QueryExecutionStateFailed, athenatypes.QueryExecutionStateCancelled:
+			// 失敗理由は StateReason に入る。CANCELLED では空のこともある。
+			if exec.StateReason != "" {
+				return nil, fmt.Errorf("athena query %s %s: %s", id, exec.State, exec.StateReason)
+			}
+			return nil, fmt.Errorf("athena query %s %s", id, exec.State)
+		case athenatypes.QueryExecutionStateQueued, athenatypes.QueryExecutionStateRunning:
+			// 進行中。間隔を空けて次の確認へ進む。
+		default:
+			// Status の欠落 (空文字) や SDK が知らない状態で待ち続けないよう、ここで打ち切る。
+			return nil, fmt.Errorf("athena query %s: unexpected state %q", id, exec.State)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+}
+
 func getAthenaQueryResults(ctx context.Context, client athenaAPI, id, nextToken string, maxResults int) (*AthenaResultPage, error) {
 	if maxResults <= 0 || maxResults > athenaResultsMaxLimit {
 		maxResults = athenaResultsMaxDefault
@@ -360,6 +417,26 @@ func getAthenaQueryResults(ctx context.Context, client athenaAPI, id, nextToken 
 		return nil, fmt.Errorf("get athena query results for %s: %w", id, err)
 	}
 	return athenaResultPageFrom(out, nextToken == ""), nil
+}
+
+// getAllAthenaQueryResults は生成済みクライアントで結果を最終ページまでまとめるコア。
+// ページをまたいでクライアントを共有し、確認のたびに新しいクライアントを作らない。
+func getAllAthenaQueryResults(ctx context.Context, client athenaAPI, id string, maxResults int) (*AthenaResultPage, error) {
+	merged := &AthenaResultPage{}
+	for {
+		page, err := getAthenaQueryResults(ctx, client, id, merged.NextToken, maxResults)
+		if err != nil {
+			return nil, err
+		}
+		if len(merged.Columns) == 0 {
+			merged.Columns = page.Columns
+		}
+		merged.Rows = append(merged.Rows, page.Rows...)
+		merged.NextToken = page.NextToken
+		if page.NextToken == "" {
+			return merged, nil
+		}
+	}
 }
 
 func listAthenaQueryHistory(ctx context.Context, client athenaAPI, workgroup string, maxItems int) ([]AthenaQueryExecution, error) {
