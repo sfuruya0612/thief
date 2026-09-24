@@ -31,6 +31,8 @@ import (
 //
 // issue 0188 で DynamoResource / APIGatewayResource / NATGatewayResource / SQSResource /
 // WAFResource の一覧コマンドを追加したため、この 5 型を対象に加える (経路 1)。
+//
+// issue 0194 で `thief logs events` を追加したため、LogEventInfo を対象に加える (経路 1)。
 
 // colValue は 1 列分の期待値 (列ヘッダと ToRow() の値) の組。
 type colValue struct {
@@ -241,6 +243,24 @@ func TestColumnsToRowOrder(t *testing.T) {
 				{"StoredBytes", "2048"},
 				{"RetentionDays", "30"},
 				{"CreationTime", "2026-01-03"},
+			},
+		},
+		{
+			name:    "cwLogsEventColumns / LogEventInfo",
+			columns: cwLogsEventColumns,
+			row: awsinternal.LogEventInfo{
+				Timestamp:     "2026-01-14T00:00:00Z",
+				IngestionTime: "2026-01-14T00:00:01Z",
+				Message:       "ERROR boom",
+				LogGroup:      "/aws/lambda/fn",
+				LogStream:     "stream-1",
+				EventID:       "evt-1",
+			}.ToRow(),
+			want: []colValue{
+				{"Timestamp", "2026-01-14T00:00:00Z"},
+				{"Severity", "ERROR"},
+				{"LogStream", "stream-1"},
+				{"Message", "ERROR boom"},
 			},
 		},
 		{

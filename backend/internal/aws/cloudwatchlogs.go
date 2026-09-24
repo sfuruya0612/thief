@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -41,6 +43,54 @@ type LogEventInfo struct {
 	LogGroup      string `json:"log_group"`
 	LogStream     string `json:"log_stream"`
 	EventID       string `json:"event_id"`
+}
+
+// ToRow は CLI のテーブル表示用に 1 行分の文字列スライスを返す。
+func (e LogEventInfo) ToRow() []string {
+	return []string{e.Timestamp, cwLogsSeverityFromMessage(e.Message), e.LogStream, e.Message}
+}
+
+// cwLogsSeverityHeadUnits は severity 推定に使うメッセージ先頭の長さ (UTF-16 コード単位)。
+// 本文の後方に現れるレベル語による誤検出を抑える。単位を Web の
+// String.prototype.slice(0, 200) と揃えることで、multibyte 文字を含むメッセージでも
+// Web と CLI の切り出し位置が一致する。
+const cwLogsSeverityHeadUnits = 200
+
+// レベル語は単語境界で判定する ("ERRORING" のような派生語を拾わない)。
+var (
+	cwLogsErrPattern  = regexp.MustCompile(`\b(ERROR|ERR|FATAL|CRITICAL|CRIT|EMERG|EMERGENCY|ALERT|PANIC|EXCEPTION)\b`)
+	cwLogsWarnPattern = regexp.MustCompile(`\b(WARN|WARNING)\b`)
+)
+
+// cwLogsSeverityFromMessage はメッセージ本文から severity を推定し ERROR / WARN / INFO の
+// 3 段階で返す。FilterLogEvents のイベントは Cloud Logging のような構造化 severity を持たない
+// ため、Web の CloudWatch Logs ビュー (frontend/src/lib/logSeverity.ts の
+// cwSeverityFromMessage) と同じ語彙・同じ判定範囲 (メッセージ先頭 200 コード単位のレベル語) を
+// CLI でも使う。大文字化だけは JS の toUpperCase (full case mapping) と strings.ToUpper (simple
+// case mapping) で写像が異なり、ß や合字の直後にレベル語が来る場合は結果が異なりうる。
+// レベル語や判定範囲を変えるときは両方を揃えること。
+func cwLogsSeverityFromMessage(message string) string {
+	head := strings.ToUpper(cwLogsSeverityHead(message))
+	switch {
+	case cwLogsErrPattern.MatchString(head):
+		return "ERROR"
+	case cwLogsWarnPattern.MatchString(head):
+		return "WARN"
+	default:
+		return "INFO"
+	}
+}
+
+// cwLogsSeverityHead はメッセージの先頭 cwLogsSeverityHeadUnits コード単位を返す。
+// バイトや rune ではなく UTF-16 で数えるのは Web の slice(0, 200) と同じ位置で切るため。
+// サロゲートペアの途中で切れた場合、Web は孤立サロゲートのまま、Go は utf16.Decode で U+FFFD に
+// なるが、どちらもレベル語には一致しないため判定は変わらない。
+func cwLogsSeverityHead(message string) string {
+	units := utf16.Encode([]rune(message))
+	if len(units) <= cwLogsSeverityHeadUnits {
+		return message
+	}
+	return string(utf16.Decode(units[:cwLogsSeverityHeadUnits]))
 }
 
 // LogEventPage は 1 ページ分の検索結果。NextPageToken は複数ロググループ横断検索の
@@ -82,7 +132,8 @@ type cwLogsFilterEventsClient interface {
 }
 
 // FilterLogEvents は選択されたロググループ群を横断してログイベントを検索し、時刻降順で
-// 1 ページ分返す。groupIdentifiers はロググループの ARN (末尾 :* を含まない版)。
+// 1 ページ分返す。groupIdentifiers はロググループの名前または ARN (ARN は末尾 :* を含まない
+// 版)。Web はロググループ一覧が持つ ARN を、CLI は利用者が指定した名前をそのまま渡す。
 // pageToken は前回返した NextPageToken (空なら初回)。perGroupLimit が 0 以下なら既定値を使う。
 func FilterLogEvents(ctx context.Context, profile, region string, groupIdentifiers []string, pattern, start, end, pageToken string, perGroupLimit int) (*LogEventPage, error) {
 	// ロググループ未選択なら API を呼ぶ必要が無いため、クライアント生成 (資格情報の解決) の
@@ -142,7 +193,9 @@ func filterLogEvents(ctx context.Context, client cwLogsFilterEventsClient, group
 		if startMs != 0 {
 			in.StartTime = aws.Int64(startMs)
 			// startFromHead=false (最新優先) は startTime が 2024-01-01 以降のときのみ許可される。
-			// UI の期間指定は常に直近のため成立するが、startTime 未指定時は既定 (最古優先) に委ねる。
+			// UI の期間プリセットと CLI の --since は現在時刻からの相対指定なので通常は成立する
+			// (それより古い開始時刻を渡すと API がエラーを返す)。startTime 未指定時は既定
+			// (最古優先) に委ねる。
 			in.StartFromHead = aws.Bool(false)
 		}
 		if endMs != 0 {

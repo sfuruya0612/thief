@@ -15,14 +15,59 @@ import (
 )
 
 // mockCWLogsFilterEventsClient は cwLogsFilterEventsClient の手書きモック。受け取った Input を
-// 呼び出し順に記録し、イベントを含まない空のレスポンスを返す。
+// 呼び出し順に記録し、err が nil ならイベントを含まない空のレスポンスを、そうでなければ err を返す。
 type mockCWLogsFilterEventsClient struct {
 	inputs []*cloudwatchlogs.FilterLogEventsInput
+	err    error
 }
 
 func (m *mockCWLogsFilterEventsClient) FilterLogEvents(_ context.Context, params *cloudwatchlogs.FilterLogEventsInput, _ ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error) {
 	m.inputs = append(m.inputs, params)
+	if m.err != nil {
+		return nil, m.err
+	}
 	return &cloudwatchlogs.FilterLogEventsOutput{}, nil
+}
+
+// TestFilterLogEventsDefaultsPerGroupLimit は perGroupLimit が 0 以下のとき API の Limit が
+// defaultLogEventPerGroupLimit になることを検証する。API ハンドラは limit クエリ欠落時に 0 を渡す
+// ため到達する経路で、CLI の cwLogsDefaultEventLimit が揃える対象の値でもある。
+func TestFilterLogEventsDefaultsPerGroupLimit(t *testing.T) {
+	for _, perGroupLimit := range []int{0, -1} {
+		client := &mockCWLogsFilterEventsClient{}
+		if _, err := filterLogEvents(context.Background(), client, []string{"/aws/lambda/fn"}, "", "", "", "", perGroupLimit); err != nil {
+			t.Fatalf("perGroupLimit %d: unexpected error: %v", perGroupLimit, err)
+		}
+		if len(client.inputs) != 1 {
+			t.Fatalf("perGroupLimit %d: FilterLogEvents called %d times, want 1", perGroupLimit, len(client.inputs))
+		}
+		if diff := cmp.Diff(aws.Int32(100), client.inputs[0].Limit); diff != "" {
+			t.Errorf("perGroupLimit %d: Limit mismatch (-want +got):\n%s", perGroupLimit, diff)
+		}
+	}
+}
+
+// TestFilterLogEventsWrapsClientError は API の失敗 (権限不足やロググループの不存在) が対象の
+// グループ識別子を含めてラップされ、errors.Is で元のエラーへ辿れること、最初の失敗で残りの
+// グループを問い合わせずに打ち切ることを検証する。
+func TestFilterLogEventsWrapsClientError(t *testing.T) {
+	sentinel := errors.New("AccessDeniedException")
+	client := &mockCWLogsFilterEventsClient{err: sentinel}
+	groups := []string{"/aws/lambda/first", "/aws/lambda/second"}
+
+	page, err := filterLogEvents(context.Background(), client, groups, "", "", "", "", 50)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want to wrap %v", err, sentinel)
+	}
+	if !strings.Contains(err.Error(), "/aws/lambda/first") {
+		t.Errorf("err = %q, want the failed log group identifier in the message", err.Error())
+	}
+	if page != nil {
+		t.Errorf("page = %+v, want nil", page)
+	}
+	if len(client.inputs) != 1 {
+		t.Errorf("FilterLogEvents called %d times, want 1 (stop at the first failure)", len(client.inputs))
+	}
 }
 
 // TestFilterLogEventsSendsRequestParams は検索条件が FilterLogEventsInput へ設定されることを
@@ -95,8 +140,9 @@ func TestFilterLogEventsSendsRequestParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 検索条件はグループごとの全呼び出しへ等しく載る必要があるため 2 グループを渡す。
-			// 末尾の perGroupLimit はこのテストの検証対象ではなく、既定値フォールバックへ
-			// 落ちない正の値であればよい。
+			// perGroupLimit は CLI の `thief logs events --limit` が届く先なので、そのまま API の
+			// Limit に載ることまで固定する (0 以下の既定値フォールバックは
+			// TestFilterLogEventsDefaultsPerGroupLimit で固定する)。
 			groups := []string{"arn:aws:logs:ap-northeast-1:123456789012:log-group:app", "arn:aws:logs:ap-northeast-1:123456789012:log-group:worker"}
 			client := &mockCWLogsFilterEventsClient{}
 			if _, err := filterLogEvents(context.Background(), client, groups, tt.pattern, tt.start, tt.end, "", 50); err != nil {
@@ -106,6 +152,9 @@ func TestFilterLogEventsSendsRequestParams(t *testing.T) {
 				t.Fatalf("FilterLogEvents called %d times, want %d", len(client.inputs), len(groups))
 			}
 			for i, in := range client.inputs {
+				if diff := cmp.Diff(aws.Int32(50), in.Limit); diff != "" {
+					t.Errorf("call %d: Limit mismatch (-want +got):\n%s", i+1, diff)
+				}
 				if diff := cmp.Diff(tt.wantFilterPattern, in.FilterPattern); diff != "" {
 					t.Errorf("call %d: FilterPattern mismatch (-want +got):\n%s", i+1, diff)
 				}
@@ -333,6 +382,87 @@ func TestLogGroupInfoToRow(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Errorf("ToRow()[%d] = %q, want %q", i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+// TestLogEventInfoToRow は CLI のログイベント表示の列順と値の対応を検証する。
+// Severity は構造化された値ではなくメッセージ本文から推定するため、本文も併せて固定する。
+func TestLogEventInfoToRow(t *testing.T) {
+	tests := []struct {
+		name string
+		info LogEventInfo
+		want []string
+	}{
+		{
+			name: "level word in the message",
+			info: LogEventInfo{
+				Timestamp: "2026-07-18T03:04:05.678Z",
+				Message:   "ERROR boom",
+				LogStream: "stream-1",
+			},
+			want: []string{"2026-07-18T03:04:05.678Z", "ERROR", "stream-1", "ERROR boom"},
+		},
+		{
+			name: "no level word falls back to info",
+			info: LogEventInfo{
+				Timestamp: "2026-07-18T03:04:05.678Z",
+				Message:   "listening on :8080",
+				LogStream: "stream-2",
+			},
+			want: []string{"2026-07-18T03:04:05.678Z", "INFO", "stream-2", "listening on :8080"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.info.ToRow()
+			if len(got) != len(tt.want) {
+				t.Fatalf("ToRow len = %d, want %d", len(got), len(tt.want))
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("ToRow()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestCWLogsSeverityFromMessage は Web の CloudWatch Logs ビュー
+// (frontend/src/lib/logSeverity.ts) と同じ語彙・同じ判定範囲 (先頭 200 UTF-16 コード単位) で
+// 判定することを検証する。大文字化の写像は JS と Go で異なるため、ß や合字の直後にレベル語が
+// 来る入力の一致までは固定しない。
+func TestCWLogsSeverityFromMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		want    string
+	}{
+		{name: "error", message: "ERROR boom", want: "ERROR"},
+		{name: "lowercase level word", message: "2026-07-18 level=error request failed", want: "ERROR"},
+		{name: "bracketed level word", message: "[ERROR] request failed", want: "ERROR"},
+		{name: "fatal", message: "FATAL: cannot start", want: "ERROR"},
+		{name: "warning", message: "WARN slow query", want: "WARN"},
+		{name: "lowercase warning", message: "warning: disk almost full", want: "WARN"},
+		{name: "no level word", message: "listening on :8080", want: "INFO"},
+		// 単語境界の判定。派生語の一部では severity を上げない。
+		{name: "derived word does not match", message: "erroring out", want: "INFO"},
+		// 判定対象はメッセージ先頭のみ。後方のレベル語では上げない。
+		{name: "level word after the head is ignored", message: strings.Repeat("a", 200) + " ERROR", want: "INFO"},
+		{name: "level word within the head", message: "ERROR " + strings.Repeat("a", 300), want: "ERROR"},
+		// 判定範囲は Web の slice(0, 200) と同じ UTF-16 コード単位で数える。multibyte の前置きが
+		// 194 文字 (582 バイト) なら空白と ERROR がちょうど 200 単位に収まるので拾い、200 文字なら拾わない。
+		{name: "multibyte head counts in utf-16 units", message: strings.Repeat("あ", 194) + " ERROR", want: "ERROR"},
+		{name: "multibyte head pushes the level word out", message: strings.Repeat("あ", 200) + " ERROR", want: "INFO"},
+		// サロゲートペア (U+1F600) は 2 単位で数える。100 個で 200 単位になり、後続のレベル語は拾わない。
+		{name: "surrogate pairs count as two units", message: strings.Repeat("\U0001F600", 100) + " ERROR", want: "INFO"},
+		{name: "cut inside a surrogate pair does not panic", message: strings.Repeat("a", 199) + "\U0001F600 ERROR", want: "INFO"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cwLogsSeverityFromMessage(tt.message); got != tt.want {
+				t.Errorf("cwLogsSeverityFromMessage(%q) = %q, want %q", tt.message, got, tt.want)
 			}
 		})
 	}
