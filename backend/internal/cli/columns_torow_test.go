@@ -33,6 +33,10 @@ import (
 // WAFResource の一覧コマンドを追加したため、この 5 型を対象に加える (経路 1)。
 //
 // issue 0194 で `thief logs events` を追加したため、LogEventInfo を対象に加える (経路 1)。
+//
+// issue 0195 で ELB のリスナー・ルール・ターゲットグループ・ターゲットヘルスの一覧
+// コマンドを追加したため、ELBListenerResource / ELBRuleResource / ELBTargetGroupResource /
+// ELBTargetHealthResource の 4 型を対象に加える (経路 1)。
 
 // colValue は 1 列分の期待値 (列ヘッダと ToRow() の値) の組。
 type colValue struct {
@@ -399,6 +403,87 @@ func TestColumnsToRowOrder(t *testing.T) {
 				{"DNS", "lb-1.example.com"},
 				{"VPC", "vpc-123"},
 				{"AZs", "ap-northeast-1a,ap-northeast-1c"},
+			},
+		},
+		{
+			name:    "elbListenerColumns / ELBListenerResource",
+			columns: elbListenerColumns,
+			row: awsinternal.ELBListenerResource{
+				ARN:                   "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/lb-1/abc/def",
+				LoadBalancerArn:       "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:loadbalancer/app/lb-1/abc",
+				Protocol:              "HTTPS",
+				Port:                  443,
+				DefaultActionType:     "forward",
+				DefaultTargetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/tg-1/ghi",
+			}.ToRow(),
+			want: []colValue{
+				{"Port", "443"},
+				{"Protocol", "HTTPS"},
+				{"DefaultAction", "forward"},
+				{"TargetGroup", "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/tg-1/ghi"},
+				{"ARN", "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/lb-1/abc/def"},
+			},
+		},
+		{
+			name:    "elbRuleColumns / ELBRuleResource",
+			columns: elbRuleColumns,
+			row: awsinternal.ELBRuleResource{
+				ARN:            "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener-rule/app/lb-1/abc/def/xyz",
+				Priority:       "10",
+				IsDefault:      false,
+				Conditions:     []string{"host-header=example.com", "path-pattern=/api/*"},
+				ActionType:     "forward",
+				TargetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/tg-1/ghi",
+			}.ToRow(),
+			want: []colValue{
+				{"Priority", "10"},
+				{"Conditions", "host-header=example.com path-pattern=/api/*"},
+				{"Action", "forward"},
+				{"TargetGroup", "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/tg-1/ghi"},
+				{"ARN", "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener-rule/app/lb-1/abc/def/xyz"},
+			},
+		},
+		{
+			name:    "elbTargetGroupColumns / ELBTargetGroupResource",
+			columns: elbTargetGroupColumns,
+			row: awsinternal.ELBTargetGroupResource{
+				ARN:              "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/tg-1/ghi",
+				Name:             "tg-1",
+				Protocol:         "HTTP",
+				Port:             8080,
+				TargetType:       "ip",
+				VpcID:            "vpc-123",
+				HealthCheckPath:  "/health",
+				LoadBalancerArns: []string{"arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:loadbalancer/app/lb-1/abc"},
+			}.ToRow(),
+			want: []colValue{
+				{"Name", "tg-1"},
+				{"Protocol", "HTTP"},
+				{"Port", "8080"},
+				{"TargetType", "ip"},
+				{"VPC", "vpc-123"},
+				{"HealthCheckPath", "/health"},
+				{"ARN", "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/tg-1/ghi"},
+			},
+		},
+		{
+			name:    "elbTargetHealthColumns / ELBTargetHealthResource",
+			columns: elbTargetHealthColumns,
+			row: awsinternal.ELBTargetHealthResource{
+				TargetID:         "10.0.1.5",
+				Port:             8080,
+				AvailabilityZone: "ap-northeast-1a",
+				State:            "healthy",
+				Reason:           "Target.ResponseCodeMismatch",
+				Description:      "Health checks failed with these codes: [500]",
+			}.ToRow(),
+			want: []colValue{
+				{"Target", "10.0.1.5"},
+				{"Port", "8080"},
+				{"AZ", "ap-northeast-1a"},
+				{"State", "healthy"},
+				{"Reason", "Target.ResponseCodeMismatch"},
+				{"Description", "Health checks failed with these codes: [500]"},
 			},
 		},
 		{

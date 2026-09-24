@@ -16,6 +16,8 @@
   - @sfuruya0612
 - [ADD] CLI に CloudWatch Logs のイベント取得コマンド (`thief logs events <log-group> [--filter] [--since] [--limit]`) を追加する (Web の CloudWatch Logs ビューで見ているログイベントをシェルやスクリプトから取得できるようにする。`gcp logging ls` と同じ名前・型のフラグで、既存の `FilterLogEvents` を 1 ロググループ・1 ページで呼び、Timestamp / Severity / LogStream / Message の 4 列を tab / CSV / `--group-by` で出力する。Severity は Web と同じ語彙・同じ判定範囲でメッセージ本文から推定する。`--limit` の既定値は backend の 1 ページ上限に合わせた 100 (`gcp logging ls` は 200) で、`--since` は正の値、`--limit` は 1 から 10000 だけを受け付ける。Live Tail と複数グループの横断、ページングは扱わない。issue 0194)
   - @sfuruya0612
+- [ADD] CLI に ELB のリスナー・ルール・ターゲットグループ・ターゲットヘルスの一覧コマンド (`thief elb listeners --lb` / `rules --listener` / `target-groups --lb` / `target-health --target-group`) を追加する (Web の ELB Drawer の Listeners タブと Targets タブで見られる 4 種類の情報をシェルやスクリプトから取得できるようにする。既存の `ListELBListeners` / `ListELBRules` / `ListELBTargetGroups` / `DescribeELBTargetHealth` を `runList` から呼び、tab / CSV / `--group-by` で出力する。`--lb` はロードバランサの名前でも ARN でもよく、名前は `ListELBResources` の結果で ARN へ解決する。`thief elb` 単体の一覧は従来どおり動き、綴りを誤ったサブコマンド名はエラーになる。issue 0195)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 

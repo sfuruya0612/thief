@@ -83,3 +83,48 @@ func (r WAFResource) ToRow() []string {
 		fmt.Sprintf("%d", r.AssociatedCount),
 	}
 }
+
+func (r ELBListenerResource) ToRow() []string {
+	return []string{
+		fmt.Sprintf("%d", r.Port),
+		r.Protocol,
+		r.DefaultActionType,
+		r.DefaultTargetGroupArn,
+		r.ARN,
+	}
+}
+
+// Conditions は 1 条件の中でも "," を使う ("field=value1,value2") ため、
+// 複数の条件は "," ではなく空白で連結する。
+func (r ELBRuleResource) ToRow() []string {
+	return []string{
+		r.Priority,
+		strings.Join(r.Conditions, " "),
+		r.ActionType,
+		r.TargetGroupArn,
+		r.ARN,
+	}
+}
+
+func (r ELBTargetGroupResource) ToRow() []string {
+	return []string{
+		r.Name,
+		r.Protocol,
+		fmt.Sprintf("%d", r.Port),
+		r.TargetType,
+		r.VpcID,
+		r.HealthCheckPath,
+		r.ARN,
+	}
+}
+
+func (r ELBTargetHealthResource) ToRow() []string {
+	return []string{
+		r.TargetID,
+		fmt.Sprintf("%d", r.Port),
+		r.AvailabilityZone,
+		r.State,
+		r.Reason,
+		r.Description,
+	}
+}
