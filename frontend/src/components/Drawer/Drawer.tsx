@@ -1,5 +1,5 @@
 // drawer.jsx Drawer の移植: 右/下ドッキング可能な詳細パネル
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BaseRow, DrawerPos } from '../../types/common';
 import { AwsIcons } from '../icons/AwsIcons';
 import { GcpIcons } from '../icons/GcpIcons';
@@ -105,6 +105,12 @@ export interface DrawerProps {
   region: string;
   position?: DrawerPos;
   overviewRows: OverviewEntry[];
+  // 分割表示中はペインの中に収める (position: absolute + ペイン基準の % 上限)。
+  // 既定値は現状と同じ position: fixed。
+  contained?: boolean;
+  // 分割表示中はフォーカス中のペインの Drawer だけが ESC を受け取る。既定値は true
+  // (1 ペインでは分割前と同じく ESC で閉じる)。
+  closeOnEscape?: boolean;
   onClose: () => void;
 }
 
@@ -115,10 +121,13 @@ export function Drawer({
   region,
   position = 'right',
   overviewRows,
+  contained = false,
+  closeOnEscape = true,
   onClose,
 }: DrawerProps) {
   const [tab, setTab] = useState('Overview');
   const [size, setSize] = useState<DrawerSize>(loadDrawerSize);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
   const open = !!resource;
 
   useEffect(() => {
@@ -127,31 +136,46 @@ export function Drawer({
     }
   }, [resource?.id]);
 
-  // レイアウト崩れ等で閉じるボタンに届かない場合の復旧手段として ESC でも閉じられるようにする
+  // レイアウト崩れ等で閉じるボタンに届かない場合の復旧手段として ESC でも閉じられるようにする。
+  // 分割表示中は closeOnEscape を false で受け取った側 (フォーカスしていないペイン) が
+  // リスナーを登録しない (両ペインの Drawer が開いていても ESC で閉じるのは 1 つだけ)。
   useEffect(() => {
-    if (!open) return;
+    if (!open || !closeOnEscape) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, closeOnEscape, onClose]);
+
+  // リサイズの基準になる矩形。contained のときは包含ブロック (offsetParent = ペインの
+  // .main) の矩形を使い、ドラッグ位置と上限をペイン基準で計算する。offsetParent を
+  // 持たない環境 (jsdom 等) と 1 ペインではウィンドウ基準にフォールバックする。
+  const resizeBounds = () => {
+    const block = contained ? drawerRef.current?.offsetParent : null;
+    if (block) {
+      const rect = block.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    }
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  };
 
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     const move = (ev: PointerEvent) => {
       setSize((prev) => {
+        const bounds = resizeBounds();
         let next: DrawerSize;
         if (position === 'bottom') {
           const h = Math.min(
-            Math.max(window.innerHeight - ev.clientY - 8, 220),
-            window.innerHeight * 0.85,
+            Math.max(bounds.height - (ev.clientY - bounds.top) - 8, 220),
+            bounds.height * 0.85,
           );
           next = { ...prev, height: Math.round(h) };
         } else {
           const w = Math.min(
-            Math.max(window.innerWidth - ev.clientX - 8, 380),
-            window.innerWidth * 0.85,
+            Math.max(bounds.width - (ev.clientX - bounds.left) - 8, 380),
+            bounds.width * 0.85,
           );
           next = { ...prev, width: Math.round(w) };
         }
@@ -189,12 +213,18 @@ export function Drawer({
 
   return (
     <>
-      <div className={`drawer-backdrop ${open ? 'open' : ''}`} onClick={onClose} />
+      <div
+        className={`drawer-backdrop ${open ? 'open' : ''} ${contained ? 'contained' : ''}`}
+        onClick={onClose}
+      />
       {/* 開閉位置 (transform) は app.css の .drawer / .drawer.open / .drawer.pos-bottom /
           .drawer.pos-bottom.open だけで定義する。inline で重複させると、下配置の閉じ位置が
           参照する --terminal-dock-h の加算を片方だけ直す余地が生まれる (issue 0174 の reopen)。 */}
       <div
-        className={`drawer ${position === 'bottom' ? 'pos-bottom' : ''} ${open ? 'open' : ''}`}
+        ref={drawerRef}
+        className={`drawer ${position === 'bottom' ? 'pos-bottom' : ''} ${open ? 'open' : ''} ${
+          contained ? 'contained' : ''
+        }`}
         style={sizeStyle}
       >
         <div

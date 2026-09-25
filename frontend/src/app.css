@@ -333,6 +333,11 @@ textarea {
   background: var(--bg-3);
   color: var(--text-1);
 }
+/* 分割表示中は分割ボタンを押下状態にする */
+.topbar .iconbtn.active {
+  background: var(--accent-dim);
+  color: var(--text-1);
+}
 
 /* ============================================================
    Body grid
@@ -724,6 +729,74 @@ textarea {
   grid-template-columns: var(--sidebar-w, 216px) 1fr;
   min-height: 0;
 }
+/* 分割表示 (issue 0175): サイドバーの右にペインを 2 つ等幅で並べる (幅のリサイズは持たない) */
+.body.split {
+  grid-template-columns: var(--sidebar-w, 216px) minmax(0, 1fr) minmax(0, 1fr);
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+/* 分割していないときのペインは display: contents にして .body のグリッドに影響させない
+   (1 ペインでも同じ div.pane で包み、ペインを閉じたときに残ったペインが
+   再マウントされないようにするため。issue 0175) */
+.pane.single {
+  display: contents;
+}
+/* 2 つ目のペインにだけ左の境界線を引く (1 つ目はサイドバーの border-right が担う) */
+.body.split .pane + .pane {
+  border-left: 1px solid var(--line-1);
+}
+.pane > .main {
+  flex: 1;
+  min-height: 0;
+}
+/* フォーカス中のペインはアクセントカラーの内側の枠線で示す (レイアウトを動かさない) */
+.pane.focused {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.pane-bar {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--line-1);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.pane-bar .pane-index {
+  font-variant-numeric: tabular-nums;
+}
+.pane-bar .pane-close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.pane-bar .pane-close:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+/* サービス未選択のペインの案内 */
+.main.pane-empty {
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
 .sidebar {
   background: var(--bg-0);
   border-right: 1px solid var(--line-1);
@@ -812,6 +885,17 @@ textarea {
 }
 .sidebar .nav-item.active .count {
   color: var(--text-2);
+}
+/* 分割中に、そのサービスを表示中のペイン番号を示す印 */
+.sidebar .nav-item .pane-mark {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--accent-dim);
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebar .profile-card {
@@ -1509,6 +1593,35 @@ table.dt.cost-cross-table thead th:nth-child(2) {
 }
 .drawer.pos-bottom .dbody {
   padding-bottom: 20px;
+}
+
+/* 分割表示中 (issue 0175): Drawer を包含ブロック (ペインの .main、position: relative と
+   overflow: hidden を持つ) の中に収める。位置と上限を vw / vh から % に変えることで、
+   もう一方のペインへはみ出さない。 */
+.drawer-backdrop.contained {
+  position: absolute;
+}
+.drawer.contained {
+  position: absolute;
+  /* .main はターミナルドックより上の領域なので、ドックの高さ (--terminal-dock-h) を足さない */
+  bottom: 8px;
+  width: min(600px, 85%);
+  /* インラインの px 指定 (永続化されたリサイズ値) をペイン幅の 85% で切るガードレール */
+  max-width: 85%;
+}
+.drawer.contained.pos-bottom {
+  left: 8px;
+  right: 8px;
+  width: auto;
+  max-width: none;
+  height: min(46%, 520px);
+  max-height: 85%;
+  /* 閉じ位置も .main の中に収まるため、ドックの高さは足さない */
+  transform: translateY(calc(100% + 16px));
+}
+/* 上記の閉じ位置より後に置く必要がある (.drawer.pos-bottom.open と同じ詳細度のため) */
+.drawer.contained.pos-bottom.open {
+  transform: translateY(0);
 }
 
 /* Resize handles */

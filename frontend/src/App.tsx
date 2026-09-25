@@ -10,6 +10,7 @@ import { useProfiles } from './hooks/useProfiles';
 import { useActiveDatadogOrg } from './hooks/useDatadogOrgs';
 import { useActiveGcpProject } from './hooks/useGcpProjects';
 import { useTweaks } from './hooks/useTweaks';
+import { useSplitPanes } from './hooks/useSplitPanes';
 import { createViewRefresher } from './lib/refreshView';
 import { resolveDatadogRequestOrg } from './lib/sessionMeta';
 import { loadPersisted, savePersisted } from './lib/storage';
@@ -91,9 +92,32 @@ export function App() {
   const { view, setView } = usePersistedView();
   const { setWidth: setSidebarWidth } = usePersistedSidebarWidth();
   const [tweaksOpen, setTweaksOpen] = useState(false);
-  const [activeService, setActiveService] = useState('ec2');
-  const [activeGcpService, setActiveGcpService] = useState('cloudrun');
+  // 分割表示 (2 ペイン) の状態。AWS 用と Google Cloud 用を別々に持つことで、ビューを
+  // 切り替えても分割と各ペインのサービスが残る (現状の activeService と同じ振る舞い)。
+  const awsPanes = useSplitPanes('ec2');
+  const gcpPanes = useSplitPanes('cloudrun');
+  const awsSplit = awsPanes.panes.services.length === 2;
+  const gcpSplit = gcpPanes.panes.services.length === 2;
   const queryClient = useQueryClient();
+
+  // 分割ボタン: 1 ペインで押すと分割を開始し、2 ペインで押すとフォーカスしていない
+  // ペインを閉じる (見ているペインを残す)。
+  const toggleAwsSplit = () => {
+    if (awsSplit) awsPanes.closePane(1 - awsPanes.panes.focused);
+    else awsPanes.openSplit();
+  };
+  const toggleGcpSplit = () => {
+    if (gcpSplit) gcpPanes.closePane(1 - gcpPanes.panes.focused);
+    else gcpPanes.openSplit();
+  };
+  // 分割ボタンはセッションがある AWS / Google Cloud のビューにだけ渡す
+  // (Datadog / TiDB とセッション未選択では出さない)。
+  const splitProp =
+    view === 'aws' && activeProfile
+      ? { active: awsSplit, onToggle: toggleAwsSplit }
+      : view === 'gcp' && gcpProject
+        ? { active: gcpSplit, onToggle: toggleGcpSplit }
+        : undefined;
 
   useEffect(() => {
     if (error) {
@@ -132,6 +156,7 @@ export function App() {
         refreshing={refreshing}
         view={view}
         onViewChange={setView}
+        split={splitProp}
       />
       {view === 'aws' && <AwsSessionTabs sessions={aws} />}
       {view === 'gcp' && <GcpSessionTabs sessions={gcp} />}
@@ -147,8 +172,10 @@ export function App() {
             region={region}
             profiles={profiles}
             onRegionChange={setRegion}
-            activeService={activeService}
-            onServiceChange={setActiveService}
+            panes={awsPanes.panes}
+            onSelectService={awsPanes.selectService}
+            onFocusPane={awsPanes.focusPane}
+            onClosePane={awsPanes.closePane}
             drawerPos={tweaks.drawerPos}
             onSidebarWidthChange={setSidebarWidth}
           />
@@ -161,8 +188,10 @@ export function App() {
             key={gcpProject}
             activeProject={gcpProject}
             projects={gcpProjects}
-            activeService={activeGcpService}
-            onServiceChange={setActiveGcpService}
+            panes={gcpPanes.panes}
+            onSelectService={gcpPanes.selectService}
+            onFocusPane={gcpPanes.focusPane}
+            onClosePane={gcpPanes.closePane}
             drawerPos={tweaks.drawerPos}
             onSidebarWidthChange={setSidebarWidth}
           />

@@ -1,7 +1,11 @@
 // app.css のうち、jsdom がレイアウトと transform を計算しないために DOM からは検証できない
-// 2 つの不変条件を、規則のテキストで固定する (issue 0174 の reopen で崩れていたもの)。
+// 不変条件を、規則のテキストで固定する。
 // 1. 下配置の Drawer の閉じ位置が、bottom を持ち上げるドックの高さ (--terminal-dock-h) の分も下がる
+//    (issue 0174 の reopen で崩れていたもの)
 // 2. 常駐ターミナルドック (.terminal-dock) が .drawer と .drawer-backdrop より前面にある
+//    (issue 0174 の reopen で崩れていたもの)
+// 3. 分割していないときのペインのラッパー (.pane.single) がレイアウトに箱を作らない
+//    (display: contents。issue 0175)
 // 表示状態そのものの検証は TerminalDock.test.tsx の冒頭コメントのとおり手動確認に委ねる。
 import { describe, expect, it } from 'vitest';
 // raw import が空文字列にならないよう、vite.config.ts の test.css.include で `.css?raw` を通している。
@@ -114,5 +118,13 @@ describe('app.css のターミナルドックの高さ変更', () => {
     expect(declarationOf('.terminal-panel', 'display')).toBe('flex');
     expect(declarationOf('.terminal-panel', 'flex-direction')).toBe('column');
     expect(declarationOf('.terminal-panel', 'height')).toBe('100%');
+  });
+});
+
+// issue 0175: 分割していないときのペインのラッパーはレイアウトに影響させない。
+// jsdom は display: contents を解釈しないため、規則のテキストで固定する。
+describe('app.css の分割表示', () => {
+  it('.pane.single は display: contents で .body のグリッドに影響させない', () => {
+    expect(declarationOf('.pane.single', 'display')).toBe('contents');
   });
 });

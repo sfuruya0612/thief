@@ -1,6 +1,7 @@
 // app.jsx TopBar の移植
 // + AWS/GCP/Datadog/TiDB のトップレベルビュー切替
 // profile/region セレクタはサイドバーの profile-card へ移設済み (Sidebar.tsx を参照)
+import { useTranslation } from 'react-i18next';
 import type { AppView } from '../types/common';
 import { Icons } from './icons/Icons';
 
@@ -18,9 +19,20 @@ export interface TopBarProps {
   refreshing: boolean;
   view: AppView;
   onViewChange: (view: AppView) => void;
+  // 分割表示の開始 / 終了。渡されたときだけ分割ボタンを出す (セッションがある
+  // AWS / Google Cloud のビューだけ。Datadog / TiDB とセッション未選択では出さない)。
+  split?: { active: boolean; onToggle: () => void };
 }
 
-export function TopBar({ onToggleTweaks, onRefresh, refreshing, view, onViewChange }: TopBarProps) {
+export function TopBar({
+  onToggleTweaks,
+  onRefresh,
+  refreshing,
+  view,
+  onViewChange,
+  split,
+}: TopBarProps) {
+  const { t } = useTranslation('topbar');
   return (
     <div className="topbar">
       <div className="brand">
@@ -40,6 +52,16 @@ export function TopBar({ onToggleTweaks, onRefresh, refreshing, view, onViewChan
         ))}
       </div>
       <div className="spacer" />
+      {split && (
+        <button
+          className={`iconbtn${split.active ? ' active' : ''}`}
+          title={t('split')}
+          aria-pressed={split.active}
+          onClick={split.onToggle}
+        >
+          <Icons.split />
+        </button>
+      )}
       <button className="iconbtn" title="Refresh" onClick={onRefresh} disabled={refreshing}>
         <Icons.refresh />
       </button>

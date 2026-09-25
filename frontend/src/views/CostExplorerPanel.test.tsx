@@ -209,8 +209,10 @@ describe('CostExplorerPanel', () => {
           region={region}
           profiles={[]}
           onRegionChange={() => {}}
-          activeService="costexplorer"
-          onServiceChange={() => {}}
+          panes={{ services: ['costexplorer'], ids: [0], focused: 0 }}
+          onSelectService={() => {}}
+          onFocusPane={() => {}}
+          onClosePane={() => {}}
           drawerPos="right"
         />
       </QueryClientProvider>

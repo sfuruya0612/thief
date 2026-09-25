@@ -24,8 +24,13 @@ const SECTIONS = GCP_SERVICE_GROUPS.map((g) => ({
 export interface GcpSidebarProps {
   project: string;
   projects: GcpProject[];
-  activeService: string;
+  // フォーカス中のペインが表示中のサービス。分割中にサービス未選択のペインが
+  // フォーカス中なら null (強調する項目が無い)。
+  activeService: string | null;
   onService: (svc: string) => void;
+  // 分割中に各ペインが表示中のサービスへペイン番号の印を出す。長さが 2 のときだけ
+  // 印を出し、未指定・1 ペインでは現状と同じ描画にする。
+  paneServices?: (string | null)[];
   onWidthChange?: (width: number) => void;
 }
 
@@ -34,9 +39,12 @@ export function GcpSidebar({
   projects,
   activeService,
   onService,
+  paneServices,
   onWidthChange,
 }: GcpSidebarProps) {
   const { t } = useTranslation('sidebar');
+  // 分割中だけ、サービスが表示中のペインの添字を返す (どちらのペインにも無ければ -1)
+  const paneOf = (svc: string) => (paneServices?.length === 2 ? paneServices.indexOf(svc) : -1);
   return (
     <aside className="sidebar">
       <div className="profile-card">
@@ -55,6 +63,7 @@ export function GcpSidebar({
               svc={svc}
               project={project}
               active={activeService}
+              paneIndex={paneOf(svc)}
               onService={onService}
             />
           ))}
@@ -73,11 +82,13 @@ export function GcpSidebar({
 interface SvcItemProps {
   svc: string;
   project: string;
-  active: string;
+  active: string | null;
+  // 分割中にこのサービスを表示しているペインの添字 (-1 はどのペインにも無い)
+  paneIndex: number;
   onService: (svc: string) => void;
 }
 
-function SvcItem({ svc, project, active, onService }: SvcItemProps) {
+function SvcItem({ svc, project, active, paneIndex, onService }: SvcItemProps) {
   const meta = GCP_SERVICES.find((s) => s.key === svc);
   // bigquery / cloudlogging は専用ビュー・専用フックで fetch され useGcpResources を
   // 経由しないため、件数バッジは他所からのキャッシュ観測が期待できない。ハイフンのみ表示にする。
@@ -93,6 +104,7 @@ function SvcItem({ svc, project, active, onService }: SvcItemProps) {
     <div className={`nav-item ${active === svc ? 'active' : ''}`} onClick={() => onService(svc)}>
       <span className="svc-icon">{IconEl ? <IconEl size={16} /> : null}</span>
       <span>{meta?.name}</span>
+      {paneIndex >= 0 && <span className="pane-mark">{paneIndex + 1}</span>}
       <span className="count">{count}</span>
     </div>
   );

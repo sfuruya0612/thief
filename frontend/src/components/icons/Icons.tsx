@@ -217,6 +217,18 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  // 分割表示の切り替え。枠を縦線で 2 分割した形にする
+  split: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M12 4v16" />
+        </>
+      }
+    />
+  ),
   filter: (p = {}) => <Icon {...p} d="M3 5h18l-7 9v6l-4-2v-4z" />,
   plus: (p = {}) => <Icon {...p} d="M12 5v14M5 12h14" />,
   x: (p = {}) => <Icon {...p} d="M6 6l12 12M6 18L18 6" />,

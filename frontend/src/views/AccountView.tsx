@@ -1,7 +1,10 @@
 // app.jsx AccountView の移植
 // サービスごとに useResources<TRaw,TRow> の型引数が異なるため、汎用 ServicePanel を用意し
-// activeService に応じて 15 分岐で呼び分ける (各分岐は normalizer/columns/overviewRows を渡すだけ)
+// service に応じて 19 分岐で呼び分ける (各分岐は normalizer/columns/overviewRows を渡すだけ)。
+// 分割表示 (issue 0175) ではペインごとに AwsServicePane を 1 つ描画し、選択リソース
+// (Drawer で開く対象) もペインごとに持つ。
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   apigwFromRaw,
@@ -70,8 +73,10 @@ import {
 } from '../components/Drawer/overviewRows';
 import { ResourceCountChart } from '../components/charts/ResourceCountChart';
 import { Drawer } from '../components/Drawer/Drawer';
+import { Icons } from '../components/icons/Icons';
 import { useCost, useResources } from '../api/queries';
 import { SERVICES } from '../lib/serviceMeta';
+import type { SplitPanesState } from '../lib/splitPanes';
 import type { BaseRow, DrawerPos, Profile } from '../types/common';
 import { isSSOExpiredError } from '../lib/ssoError';
 import { Sidebar } from '../components/Sidebar';
@@ -95,6 +100,10 @@ interface ServicePanelProps<TRaw, TRow extends BaseRow> {
   drawerPos: DrawerPos;
   selectedId: string | null;
   onSelectId: (id: string | null) => void;
+  // 分割中は Drawer をペインの中に収め、ESC はフォーカス中のペインだけが受け取る
+  // (未指定なら Drawer の既定値 = 現状の position: fixed と ESC で閉じる)。
+  contained?: boolean;
+  closeOnEscape?: boolean;
   // 台数の推移グラフの見出し。渡したサービスだけグラフを表示する
   // (時系列エンドポイントを持つ ec2 と ecs のみ)。
   countChartTitle?: string;
@@ -111,6 +120,8 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   drawerPos,
   selectedId,
   onSelectId,
+  contained,
+  closeOnEscape,
   countChartTitle,
 }: ServicePanelProps<TRaw, TRow>) {
   const { data, isLoading, error, dataUpdatedAt } = useResources<TRaw, TRow>(
@@ -202,53 +213,48 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
         region={region}
         position={drawerPos}
         overviewRows={selected ? overviewRows(selected) : []}
+        contained={contained}
+        closeOnEscape={closeOnEscape}
         onClose={() => onSelectId(null)}
       />
     </div>
   );
 }
 
-export interface AccountViewProps {
+interface AwsServicePaneProps {
+  service: string;
   profile: string;
   region: string;
-  profiles: Profile[];
   onRegionChange: (region: string) => void;
-  activeService: string;
-  onServiceChange: (service: string) => void;
   drawerPos: DrawerPos;
-  onSidebarWidthChange?: (width: number) => void;
+  // 分割中だけ渡す (設計判断 5)。1 ペインでは未指定のまま Drawer の既定値に任せる。
+  contained?: boolean;
+  closeOnEscape?: boolean;
 }
 
-export function AccountView({
+// 1 ペイン分のサービス表示。Drawer で開く選択リソースはペインごとに持つため、
+// コンポーネントのインスタンスが分かれることでフィルタ (ServicePanel の filters) と
+// Drawer のタブ (Drawer の tab) も自然にペインごとになる。
+function AwsServicePane({
+  service,
   profile,
   region,
-  profiles,
   onRegionChange,
-  activeService,
-  onServiceChange,
   drawerPos,
-  onSidebarWidthChange,
-}: AccountViewProps) {
+  contained,
+  closeOnEscape,
+}: AwsServicePaneProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // サービス切替時は選択状態をリセットする (mock の setService 相当)
+  // サービス切替時は選択状態をリセットする (mock の setService 相当)。
+  // ペイン単位のコンポーネントなので、もう一方のペインの選択には影響しない。
   useEffect(() => {
     setSelectedId(null);
-  }, [activeService]);
+  }, [service]);
 
   return (
-    <div className="body">
-      <Sidebar
-        profile={profile}
-        region={region}
-        profiles={profiles}
-        onRegionChange={onRegionChange}
-        onWidthChange={onSidebarWidthChange}
-        activeService={activeService}
-        onService={onServiceChange}
-      />
-
-      {activeService === 'ec2' && (
+    <>
+      {service === 'ec2' && (
         <ServicePanel
           service="ec2"
           profile={profile}
@@ -259,9 +265,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'ecr' && (
+      {service === 'ecr' && (
         <ServicePanel
           service="ecr"
           profile={profile}
@@ -272,9 +280,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'cfn' && (
+      {service === 'cfn' && (
         <ServicePanel
           service="cfn"
           profile={profile}
@@ -285,9 +295,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'rds' && (
+      {service === 'rds' && (
         <ServicePanel
           service="rds"
           profile={profile}
@@ -298,9 +310,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'dynamo' && (
+      {service === 'dynamo' && (
         <ServicePanel
           service="dynamo"
           profile={profile}
@@ -311,9 +325,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'cache' && (
+      {service === 'cache' && (
         <ServicePanel
           service="cache"
           profile={profile}
@@ -324,9 +340,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'lambda' && (
+      {service === 'lambda' && (
         <ServicePanel
           service="lambda"
           profile={profile}
@@ -337,9 +355,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'ecs' && (
+      {service === 'ecs' && (
         <ServicePanel
           service="ecs"
           profile={profile}
@@ -350,10 +370,12 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
           countChartTitle="Tasks per cluster"
         />
       )}
-      {activeService === 's3' && (
+      {service === 's3' && (
         <ServicePanel
           service="s3"
           profile={profile}
@@ -364,9 +386,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'iam' && (
+      {service === 'iam' && (
         <ServicePanel
           service="iam"
           profile={profile}
@@ -377,9 +401,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'elb' && (
+      {service === 'elb' && (
         <ServicePanel
           service="elb"
           profile={profile}
@@ -390,9 +416,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'cloudfront' && (
+      {service === 'cloudfront' && (
         <ServicePanel
           service="cloudfront"
           profile={profile}
@@ -403,9 +431,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'apigw' && (
+      {service === 'apigw' && (
         <ServicePanel
           service="apigw"
           profile={profile}
@@ -416,9 +446,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'natgw' && (
+      {service === 'natgw' && (
         <ServicePanel
           service="natgw"
           profile={profile}
@@ -429,9 +461,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'sqs' && (
+      {service === 'sqs' && (
         <ServicePanel
           service="sqs"
           profile={profile}
@@ -442,9 +476,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'kinesis' && (
+      {service === 'kinesis' && (
         <ServicePanel
           service="kinesis"
           profile={profile}
@@ -455,9 +491,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'waf' && (
+      {service === 'waf' && (
         <ServicePanel
           service="waf"
           profile={profile}
@@ -468,9 +506,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'ssm' && (
+      {service === 'ssm' && (
         <ServicePanel
           service="ssm"
           profile={profile}
@@ -481,9 +521,11 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'secrets' && (
+      {service === 'secrets' && (
         <ServicePanel
           service="secrets"
           profile={profile}
@@ -494,21 +536,114 @@ export function AccountView({
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
         />
       )}
-      {activeService === 'athena' && <AthenaView profile={profile} region={region} />}
-      {activeService === 'cloudwatchlogs' && (
-        <CloudWatchLogsView profile={profile} region={region} />
-      )}
+      {service === 'athena' && <AthenaView profile={profile} region={region} />}
+      {service === 'cloudwatchlogs' && <CloudWatchLogsView profile={profile} region={region} />}
       {/* key= でリージョン切り替え時に再マウントし、絞り込み state (フィルタ / 日付レンジ /
           granularity 等) を初期値へ戻す。プロファイル切り替えは App.tsx の key={activeProfile}
           による AccountView ごとの再マウントで既に初期化される。 */}
-      {activeService === 'costexplorer' && (
+      {service === 'costexplorer' && (
         <CostExplorerPanel key={region} profile={profile} region={region} />
       )}
-      {activeService === 'pricing' && (
+      {service === 'pricing' && (
         <PricingPanel profile={profile} region={region} onRegionChange={onRegionChange} />
       )}
+    </>
+  );
+}
+
+export interface AccountViewProps {
+  profile: string;
+  region: string;
+  profiles: Profile[];
+  onRegionChange: (region: string) => void;
+  // 分割表示のペイン状態 (services の長さ 1 = 分割なし / 2 = 分割中)
+  panes: SplitPanesState;
+  onSelectService: (service: string) => void;
+  onFocusPane: (index: number) => void;
+  onClosePane: (index: number) => void;
+  drawerPos: DrawerPos;
+  onSidebarWidthChange?: (width: number) => void;
+}
+
+export function AccountView({
+  profile,
+  region,
+  profiles,
+  onRegionChange,
+  panes,
+  onSelectService,
+  onFocusPane,
+  onClosePane,
+  drawerPos,
+  onSidebarWidthChange,
+}: AccountViewProps) {
+  const { t } = useTranslation('app');
+  const split = panes.services.length === 2;
+  // サイドバーが強調するサービスはフォーカス中のペインのもの (サービス未選択なら null)
+  const focusedService = panes.services[panes.focused] ?? null;
+
+  return (
+    <div className={`body${split ? ' split' : ''}`}>
+      <Sidebar
+        profile={profile}
+        region={region}
+        profiles={profiles}
+        onRegionChange={onRegionChange}
+        onWidthChange={onSidebarWidthChange}
+        activeService={focusedService}
+        onService={onSelectService}
+        paneServices={split ? panes.services : undefined}
+      />
+
+      {panes.services.map((service, index) => {
+        const focused = split && index === panes.focused;
+        return (
+          <div
+            key={panes.ids[index]}
+            // 分割していないときは display: contents のラッパーとして置き、レイアウトに
+            // 影響させない。1 ペインでも同じ要素で包むのは、ペインの閉じる操作で DOM 構造が
+            // 変わって残ったペインが再マウントされる (選択リソースと Drawer が初期化される)
+            // のを防ぐためである。
+            className={`pane${split ? '' : ' single'}${focused ? ' focused' : ''}`}
+            // ペイン内のどこを操作してもフォーカスが移るようにする (1 ペインでは常に 0)
+            onPointerDownCapture={split ? () => onFocusPane(index) : undefined}
+          >
+            {/* 分割中だけペイン番号と閉じるボタンを出す。分割していないときも位置を空けて
+                後ろのペインの中身の位置を変えない。 */}
+            {split && (
+              <div className="pane-bar">
+                <span className="pane-index" aria-label={t('panes.label', { index: index + 1 })}>
+                  {index + 1}
+                </span>
+                <button
+                  className="pane-close"
+                  aria-label={t('panes.close', { index: index + 1 })}
+                  onClick={() => onClosePane(index)}
+                >
+                  <Icons.x size={12} />
+                </button>
+              </div>
+            )}
+            {service ? (
+              <AwsServicePane
+                service={service}
+                profile={profile}
+                region={region}
+                onRegionChange={onRegionChange}
+                drawerPos={drawerPos}
+                contained={split || undefined}
+                closeOnEscape={split ? focused : undefined}
+              />
+            ) : (
+              <div className="main pane-empty">{t('panes.empty')}</div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -146,6 +146,74 @@ describe('Sidebar SvcItem (キャッシュ読み取り専用)', () => {
   });
 });
 
+// issue 0175: 分割表示中は各ペインが表示中のサービスへペイン番号の印を出す。
+describe('Sidebar の分割表示のペイン番号の印', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  function navItem(container: HTMLElement, text: string): Element | undefined {
+    return Array.from(container.querySelectorAll('.nav-item')).find((el) =>
+      el.textContent?.includes(text),
+    );
+  }
+
+  it('paneServices の長さが 2 のとき、各ペインが表示中のサービスに番号の印が出る', () => {
+    const { container } = renderWithQC(
+      <Sidebar
+        profile="test"
+        region="ap-northeast-1"
+        profiles={[{ name: 'test' }]}
+        onRegionChange={() => {}}
+        activeService="ec2"
+        onService={() => {}}
+        paneServices={['ec2', 'ssm']}
+      />,
+    );
+
+    expect(navItem(container, 'EC2')?.querySelector('.pane-mark')?.textContent).toBe('1');
+    expect(navItem(container, 'Parameter Store')?.querySelector('.pane-mark')?.textContent).toBe(
+      '2',
+    );
+    // どのペインにも表示していないサービスには印を出さない
+    expect(navItem(container, 'S3')?.querySelector('.pane-mark')).toBeNull();
+  });
+
+  it('paneServices が未指定または長さ 1 のときは印を出さない (分割なしの現状の描画)', () => {
+    const withoutPanes = renderWithQC(
+      <Sidebar
+        profile="test"
+        region="ap-northeast-1"
+        profiles={[{ name: 'test' }]}
+        onRegionChange={() => {}}
+        activeService="ec2"
+        onService={() => {}}
+      />,
+    );
+    expect(withoutPanes.container.querySelector('.pane-mark')).toBeNull();
+
+    const singlePane = renderWithQC(
+      <Sidebar
+        profile="test"
+        region="ap-northeast-1"
+        profiles={[{ name: 'test' }]}
+        onRegionChange={() => {}}
+        activeService="ec2"
+        onService={() => {}}
+        paneServices={['ec2']}
+      />,
+    );
+    expect(singlePane.container.querySelector('.pane-mark')).toBeNull();
+  });
+});
+
 // issue 0187 の回帰テスト。SvcItem が同一 queryKey のクエリ options を skipToken で
 // 上書きしていたため、invalidateQueries(['aws']) の再取得が Missing queryFn で失敗し、
 // SSO 期限切れ (401 SSO_TOKEN_EXPIRED) が SSOExpiredBanner に届かなかった。

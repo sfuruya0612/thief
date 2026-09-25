@@ -19,5 +19,10 @@
   },
   "dataTable": {
     "filterPlaceholder": "Filter…"
+  },
+  "panes": {
+    "label": "Pane {{index}}",
+    "close": "Close pane {{index}}",
+    "empty": "Select a service from the sidebar"
   }
 }

@@ -27,8 +27,13 @@ export interface SidebarProps {
   region: string;
   profiles: Profile[];
   onRegionChange: (region: string) => void;
-  activeService: string;
+  // フォーカス中のペインが表示中のサービス。分割中にサービス未選択のペインが
+  // フォーカス中なら null (強調する項目が無い)。
+  activeService: string | null;
   onService: (svc: string) => void;
+  // 分割中に各ペインが表示中のサービスへペイン番号の印を出す。長さが 2 のときだけ
+  // 印を出し、未指定・1 ペインでは現状と同じ描画にする。
+  paneServices?: (string | null)[];
   onWidthChange?: (width: number) => void;
 }
 
@@ -39,6 +44,7 @@ export function Sidebar({
   onRegionChange,
   activeService,
   onService,
+  paneServices,
   onWidthChange,
 }: SidebarProps) {
   const { t } = useTranslation('sidebar');
@@ -46,6 +52,8 @@ export function Sidebar({
   // 取得前は現在選択中の region のみを単一オプションとして表示するフォールバックにする
   const { data: regions } = useRegions(profile);
   const regionOptions = regions && regions.length > 0 ? regions : [{ code: region, name: region }];
+  // 分割中だけ、サービスが表示中のペインの添字を返す (どちらのペインにも無ければ -1)
+  const paneOf = (svc: string) => (paneServices?.length === 2 ? paneServices.indexOf(svc) : -1);
 
   return (
     <aside className="sidebar">
@@ -81,6 +89,7 @@ export function Sidebar({
               profile={profile}
               region={region}
               active={activeService}
+              paneIndex={paneOf(svc)}
               onService={onService}
             />
           ))}
@@ -100,11 +109,13 @@ interface SvcItemProps {
   svc: string;
   profile: string;
   region: string;
-  active: string;
+  active: string | null;
+  // 分割中にこのサービスを表示しているペインの添字 (-1 はどのペインにも無い)
+  paneIndex: number;
   onService: (svc: string) => void;
 }
 
-function SvcItem({ svc, profile, region, active, onService }: SvcItemProps) {
+function SvcItem({ svc, profile, region, active, paneIndex, onService }: SvcItemProps) {
   const meta = SERVICES.find((s) => s.key === svc);
   // fetch は発生させず、他所で埋まったキャッシュを読み取るだけの読み取り専用フック。
   const data = useCachedQueryData<unknown[]>(['aws', svc, profile, region]);
@@ -115,6 +126,7 @@ function SvcItem({ svc, profile, region, active, onService }: SvcItemProps) {
     <div className={`nav-item ${active === svc ? 'active' : ''}`} onClick={() => onService(svc)}>
       <span className="svc-icon">{IconEl ? <IconEl size={16} /> : null}</span>
       <span>{meta?.name}</span>
+      {paneIndex >= 0 && <span className="pane-mark">{paneIndex + 1}</span>}
       <span className="count">{count}</span>
     </div>
   );

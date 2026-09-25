@@ -105,6 +105,109 @@ describe('Drawer の ESC キー', () => {
   });
 });
 
+// issue 0175: 分割表示中は Drawer をペインの中に収める (contained) ため、配置と
+// リサイズの基準をビューポートから包含ブロック (ペインの .main) へ切り替える。
+describe('Drawer の分割表示向けの contained / closeOnEscape', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  // jsdom は offsetParent を実装しない (常に null) ため、包含ブロックを差し込んで
+  // リサイズがペインの矩形を基準にすることを検証する。
+  function stubContainingBlock(el: HTMLElement, rect: DOMRect) {
+    const block = document.createElement('div');
+    block.getBoundingClientRect = () => rect;
+    Object.defineProperty(el, 'offsetParent', { value: block, configurable: true });
+  }
+
+  function rect(left: number, top: number, width: number, height: number): DOMRect {
+    return {
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    } as DOMRect;
+  }
+
+  it('contained を渡すと .drawer と .drawer-backdrop に contained が付き、既定値では付かない', () => {
+    const contained = renderDrawer({ contained: true });
+    expect(drawerElement(contained.container).classList.contains('contained')).toBe(true);
+    expect(
+      contained.container.querySelector('.drawer-backdrop')?.classList.contains('contained'),
+    ).toBe(true);
+
+    const plain = renderDrawer();
+    expect(drawerElement(plain.container).classList.contains('contained')).toBe(false);
+    expect(plain.container.querySelector('.drawer-backdrop')?.classList.contains('contained')).toBe(
+      false,
+    );
+  });
+
+  it('closeOnEscape=false のとき ESC で onClose を呼ばない (フォーカスしていないペイン用)', () => {
+    const onClose = vi.fn();
+    renderDrawer({ closeOnEscape: false, onClose });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('contained の右配置は包含ブロックの矩形を基準に幅を計算する', () => {
+    const { container } = renderDrawer({ contained: true, position: 'right' });
+    const drawer = drawerElement(container);
+    stubContainingBlock(drawer, rect(100, 50, 1000, 800));
+
+    fireEvent.pointerDown(drawer.querySelector('.resize-handle')!);
+    fireEvent(document, new MouseEvent('pointermove', { clientX: 300 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    // 1000 - (300 - 100) - 8。ウィンドウ幅 (jsdom 既定の 1024) 基準なら 716 になる
+    expect(drawer.style.width).toBe('792px');
+  });
+
+  it('contained の右配置の上限は包含ブロック幅の 85% になる', () => {
+    const { container } = renderDrawer({ contained: true, position: 'right' });
+    const drawer = drawerElement(container);
+    stubContainingBlock(drawer, rect(0, 0, 400, 800));
+
+    fireEvent.pointerDown(drawer.querySelector('.resize-handle')!);
+    fireEvent(document, new MouseEvent('pointermove', { clientX: 1000 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    expect(drawer.style.width).toBe('340px'); // 400 * 0.85
+  });
+
+  it('contained の下配置は包含ブロックの矩形を基準に高さを計算する', () => {
+    const { container } = renderDrawer({ contained: true, position: 'bottom' });
+    const drawer = drawerElement(container);
+    stubContainingBlock(drawer, rect(0, 50, 800, 600));
+
+    fireEvent.pointerDown(drawer.querySelector('.resize-handle')!);
+    fireEvent(document, new MouseEvent('pointermove', { clientY: 200 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    // 600 - (200 - 50) - 8。ウィンドウ高さ (jsdom 既定の 768) 基準なら 610 になる
+    expect(drawer.style.height).toBe('442px');
+  });
+
+  it('contained の下配置の上限は包含ブロック高さの 85% になる', () => {
+    const { container } = renderDrawer({ contained: true, position: 'bottom' });
+    const drawer = drawerElement(container);
+    stubContainingBlock(drawer, rect(0, 0, 800, 200));
+
+    fireEvent.pointerDown(drawer.querySelector('.resize-handle')!);
+    fireEvent(document, new MouseEvent('pointermove', { clientY: 0 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    expect(drawer.style.height).toBe('170px'); // 200 * 0.85
+  });
+});
+
 describe('Drawer の開閉クラスと transform の定義元', () => {
   beforeEach(() => {
     localStorage.clear();
