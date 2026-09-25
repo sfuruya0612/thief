@@ -33,7 +33,14 @@ export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProp
   );
 
   return (
+    // region が変わったら DrawerObjectBrowser を作り直す。バケットの一覧は region を問わず
+    // 同じため選択が残り、prefix と開いているパネルもそのままになる。SQL 検索のパネルが
+    // 開いたままだと、OPFS のファイルと Web Locks のロックが解放されない。
+    // 作り直しにより prefix の入力、選択中のアップロードファイル、開いている Preview も
+    // リセットされる。region はオブジェクト一覧の取得条件 (queryKey) に入るため、選択と
+    // パネルを残さないことを意図した挙動とする。
     <DrawerObjectBrowser
+      key={region}
       useObjects={useObjects}
       toTableRow={toTableRow}
       baseColumns={baseColumns}
@@ -42,6 +49,7 @@ export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProp
       previewKeyOf={previewKeyOf}
       sizeOf={sizeOf}
       usePreview={usePreview}
+      profile={profile}
     />
   );
 }

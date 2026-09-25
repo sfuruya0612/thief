@@ -6,6 +6,9 @@ func (s *Server) registerRoutes() {
 	// 接続確認
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 
+	// frontend 向けの実行時設定 (オブジェクト SQL 検索のサイズ上限など)
+	s.mux.HandleFunc("GET /api/config", s.handleClientConfig)
+
 	// リソースキャッシュの view 単位の一括破棄 (TopBar の Refresh から呼ばれる)
 	s.mux.HandleFunc("POST /api/cache/invalidate", s.handleCacheInvalidate)
 

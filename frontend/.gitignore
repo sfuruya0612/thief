@@ -10,3 +10,7 @@ dist/
 
 # Google Cloud 公式アイコン (ライセンス上リポジトリに含めない、scripts/fetch-gcp-icons.mjs で取得する)
 /public/assets/gcp-icons/
+
+# DuckDB Wasm の json / parquet 拡張 (約 3.9 MB のバイナリのためリポジトリに含めず、
+# scripts/fetch-duckdb-extensions.mjs で取得する)
+/public/assets/duckdb-extensions/

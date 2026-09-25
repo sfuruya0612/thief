@@ -474,3 +474,5 @@ Statement "statement"
 RuleJSON "rule_json"
 == ValueResponse
 Value "value"
+== ClientConfigResponse
+ObjectQueryMaxBytes "object_query_max_bytes"

@@ -3,8 +3,16 @@
     "binaryNotPreviewable": "Binary files cannot be previewed",
     "tooLarge": "Objects 5 MB or larger cannot be previewed"
   },
+  "objectQuery": {
+    "browserUnsupported": "This browser does not support SQL queries on objects",
+    "configFailed": "Cannot run queries because the configuration could not be loaded",
+    "configLoading": "Loading configuration",
+    "unsupportedFormat": "This file format is not supported for SQL queries",
+    "tooLarge": "Objects larger than the size limit ({{limit}}) cannot be queried"
+  },
   "drawerObjectBrowser": {
     "openPreview": "Open preview",
+    "openQuery": "Run SQL against this object",
     "search": "Search",
     "truncatedNotice": "Reached the maximum of 1000 results; only some are shown. Narrow down with a prefix and search again.",
     "selectOrDropFile": "Select or drop a file"
@@ -15,6 +23,22 @@
     "cancel": "Cancel",
     "saving": "Saving…",
     "save": "Save"
+  },
+  "drawerObjectQuery": {
+    "title": "Query: {{fileName}}",
+    "ingesting": "Loading {{written}} / {{total}} ({{percent}}%)",
+    "ingestingUnknownTotal": "Loading {{written}}",
+    "run": "Run",
+    "running": "Running…",
+    "rowCount": "{{rows}} rows",
+    "elapsed": "{{ms}} ms",
+    "truncated": "Truncated at {{max}} rows. Use LIMIT to narrow the result",
+    "ingestFailed": "Failed to load the object",
+    "unsupported": "This browser does not support writing to OPFS",
+    "tooLarge": "Cancelled because the object exceeds the size limit ({{limit}})",
+    "quotaExceeded": "Not enough browser storage to start loading the object",
+    "opfsFailed": "Failed to write to OPFS",
+    "queryFailed": "Query failed"
   },
   "drawerTerminal": {
     "loadingTasks": "Loading tasks...",

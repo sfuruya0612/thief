@@ -3,8 +3,16 @@
     "binaryNotPreviewable": "バイナリファイルはプレビューできません",
     "tooLarge": "5 MB 以上のオブジェクトはプレビューできません"
   },
+  "objectQuery": {
+    "browserUnsupported": "このブラウザはオブジェクトの SQL 検索に対応していません",
+    "configFailed": "設定を取得できないため実行できません",
+    "configLoading": "設定を取得中です",
+    "unsupportedFormat": "SQL 検索の対象外の形式です",
+    "tooLarge": "サイズ上限 ({{limit}}) を超えるオブジェクトは SQL 検索できません"
+  },
   "drawerObjectBrowser": {
     "openPreview": "プレビューを開く",
+    "openQuery": "オブジェクトに SQL を実行",
     "search": "検索",
     "truncatedNotice": "取得件数が上限 (1000 件) に達したため一部のみ表示しています。prefix で絞り込んで再検索してください。",
     "selectOrDropFile": "ファイルを選択またはドロップ"
@@ -15,6 +23,22 @@
     "cancel": "キャンセル",
     "saving": "保存中…",
     "save": "保存"
+  },
+  "drawerObjectQuery": {
+    "title": "Query: {{fileName}}",
+    "ingesting": "取り込み中 {{written}} / {{total}} ({{percent}}%)",
+    "ingestingUnknownTotal": "取り込み中 {{written}}",
+    "run": "実行",
+    "running": "実行中…",
+    "rowCount": "{{rows}} 行",
+    "elapsed": "{{ms}} ms",
+    "truncated": "{{max}} 行を超えたため打ち切りました。LIMIT で件数を絞ってください",
+    "ingestFailed": "取り込みに失敗しました",
+    "unsupported": "このブラウザは OPFS への書き込みに対応していません",
+    "tooLarge": "オブジェクトがサイズ上限 ({{limit}}) を超えているため取り込みを中止しました",
+    "quotaExceeded": "ブラウザの空き容量が足りないため取り込みを開始できません",
+    "opfsFailed": "OPFS への書き込みに失敗しました",
+    "queryFailed": "クエリに失敗しました"
   },
   "drawerTerminal": {
     "loadingTasks": "タスク一覧を取得中...",

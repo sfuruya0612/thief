@@ -32,6 +32,7 @@ import type {
 import type {
   AppView,
   CallerIdentityRaw,
+  ClientConfigRaw,
   ObjectListEnvelopeRaw,
   ObjectPreviewRaw,
   ProfileRaw,
@@ -83,6 +84,12 @@ export function getProfiles(): Promise<ProfileRaw[]> {
 // backend 起動待ちの疎通確認用。認証やクラウド呼び出しを伴わない。
 export function getHealth(): Promise<{ status: string }> {
   return apiGet('/api/health');
+}
+
+// frontend が参照する実行時設定 (オブジェクト SQL 検索のサイズ上限など) を取得する。
+// 認証やクラウド呼び出しを伴わない。
+export function getClientConfig(): Promise<ClientConfigRaw> {
+  return apiGet<ClientConfigRaw>('/api/config');
 }
 
 // backend のリソースキャッシュを view 単位で一括破棄する (TopBar の Refresh 用)。

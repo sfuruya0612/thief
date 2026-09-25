@@ -38,6 +38,10 @@ const (
 	DatadogOAuthCallbackPath        = "/api/datadog/auth/callback"
 
 	DefaultDatadogOAuthCLIRedirectURI = "http://127.0.0.1:8400/callback"
+
+	// DefaultObjectQueryMaxBytes は frontend のオブジェクト SQL 検索が取り込める
+	// オブジェクトのサイズ上限 (1 GiB)。THIEF_OBJECT_QUERY_MAX_BYTES で上書きする。
+	DefaultObjectQueryMaxBytes int64 = 1 << 30
 )
 
 // Config holds all application configuration.
@@ -70,6 +74,12 @@ type Config struct {
 	// THIEF_S3_PATH_STYLE 環境変数を直接参照して行う (internal/aws/s3.go 参照)ため、
 	// このフィールド自体は設定値の保持・可視化のために存在する。
 	S3PathStyle bool `yaml:"-"`
+
+	// ObjectQueryMaxBytes は frontend のオブジェクト SQL 検索 (S3 / GCS のオブジェクトを
+	// DuckDB Wasm に取り込む機能) が取り込める 1 オブジェクトのサイズ上限 (バイト)。
+	// THIEF_OBJECT_QUERY_MAX_BYTES で上書きし、GET /api/config で frontend へ渡す。
+	// 設定ファイル (YAML) からは読まない (yaml:"-")。設定経路を 1 つに保つためである。
+	ObjectQueryMaxBytes int64 `yaml:"-"`
 
 	BigQuery BigQueryConfig
 	Datadog  DatadogConfig `yaml:"datadog"`
@@ -143,12 +153,13 @@ var defaultWebOrigins = []string{"localhost:8088", "127.0.0.1:8088"}
 // Defaults returns a Config with built-in default values.
 func Defaults() *Config {
 	return &Config{
-		Region:        "ap-northeast-1",
-		Output:        "tab",
-		ListenAddr:    "127.0.0.1:8089",
-		WebOrigins:    defaultWebOrigins,
-		SnippetsDir:   filepath.Join(".thief", "snippets"),
-		PriceCacheDir: "/tmp/thief/price",
+		Region:              "ap-northeast-1",
+		Output:              "tab",
+		ListenAddr:          "127.0.0.1:8089",
+		WebOrigins:          defaultWebOrigins,
+		SnippetsDir:         filepath.Join(".thief", "snippets"),
+		PriceCacheDir:       "/tmp/thief/price",
+		ObjectQueryMaxBytes: DefaultObjectQueryMaxBytes,
 		Datadog: DatadogConfig{
 			Site:              "datadoghq.com",
 			View:              "summary",
@@ -166,7 +177,9 @@ func Load() (*Config, error) {
 	}
 	cfg := Defaults()
 	applyFile(cfg, fc)
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		return nil, err
+	}
 	// 正規化は既定値・YAML・環境変数をすべて反映し終えた後の 1 か所で行う。
 	// applyFile と applyEnv に分けて置くと、片方だけを通る経路で抜けが出る。
 	cfg.Datadog.OAuthRedirectBase = normalizeURLBase(cfg.Datadog.OAuthRedirectBase)
@@ -235,7 +248,9 @@ func applyFile(cfg *Config, fc fileConfig) {
 	}
 }
 
-func applyEnv(cfg *Config) {
+// applyEnv は環境変数の値を cfg へ反映する。値の解釈に失敗した場合は、不正な値を
+// cfg に載せずエラーを返す (起動時に設定を検証し、不正なら終了するという規約に従う)。
+func applyEnv(cfg *Config) error {
 	// AWS: 公式 env に加え、レガシー CLI (ルート cmd/) 互換の THIEF_PROFILE/THIEF_REGION を解決する。
 	// THIEF_REGION はレガシー CLI で唯一のリージョン env だったため AWS_REGION より優先する。
 	if v := firstEnv("AWS_PROFILE", "THIEF_PROFILE"); v != "" {
@@ -255,6 +270,16 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("THIEF_PRICE_CACHE_DIR"); v != "" {
 		cfg.PriceCacheDir = v
+	}
+	if v := os.Getenv("THIEF_OBJECT_QUERY_MAX_BYTES"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return fmt.Errorf("parse THIEF_OBJECT_QUERY_MAX_BYTES %q: %w", v, err)
+		}
+		if n <= 0 {
+			return fmt.Errorf("THIEF_OBJECT_QUERY_MAX_BYTES must be a positive integer in bytes, got %d", n)
+		}
+		cfg.ObjectQueryMaxBytes = n
 	}
 	if v := os.Getenv("THIEF_S3_PATH_STYLE"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
@@ -286,6 +311,7 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("TIDB_PRIVATE_KEY"); v != "" {
 		cfg.TiDB.PrivateKey = redacted(v)
 	}
+	return nil
 }
 
 func loadFile() (fileConfig, error) {

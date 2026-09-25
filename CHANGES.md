@@ -20,6 +20,8 @@
   - @sfuruya0612
 - [ADD] Web の AWS / Google Cloud のビューを左右 2 ペインに分割し、2 つのサービスを同時に表示できるようにする (トップバーの分割ボタンで分割を開始し、2 ペインで押すとフォーカスしていないペインを閉じる。各ペインは選択リソース、フィルタ、Drawer のタブを別々に持つ。サイドバーのクリックはフォーカス中のペインのサービスを変え、各ペインが表示中のサービスにペイン番号の印を出す。分割中の Drawer はペインの中に収まり、ESC はフォーカス中のペインの Drawer だけを閉じる。分割状態は永続化しない。issue 0175)
   - @sfuruya0612
+- [ADD] Web の S3 / GCS のオブジェクトブラウザに、オブジェクトをブラウザ内で SQL 検索する Query を追加する (DuckDB Wasm と OPFS を使い、csv / tsv / json / jsonl / ndjson とそれぞれの gzip、parquet の 11 形式を対象にする。オブジェクトは Worker がダウンロード API から OPFS へ書き、DuckDB が `obj` ビューとして読む。検索できる容量の上限は `THIEF_OBJECT_QUERY_MAX_BYTES` (既定 1 GiB) で、新設した `GET /api/config` で frontend に渡す。Wasm と拡張は同一オリジンから配信し、拡張は `mise run frontend:fetch-duckdb-extensions` で取得する。結果は 10,000 行で打ち切る。issue 0196)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 

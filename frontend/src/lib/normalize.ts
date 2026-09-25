@@ -3,6 +3,8 @@ import { formatUptime } from './format';
 import type {
   CallerIdentity,
   CallerIdentityRaw,
+  ClientConfigRaw,
+  ClientConfigRow,
   ObjectPreviewRaw,
   ObjectPreviewRow,
   Profile,
@@ -517,6 +519,12 @@ export function objectPreviewFromRaw(raw: ObjectPreviewRaw): ObjectPreviewRow {
     content: raw.content,
     contentType: raw.content_type,
     size: raw.size,
+  };
+}
+
+export function clientConfigFromRaw(raw: ClientConfigRaw): ClientConfigRow {
+  return {
+    objectQueryMaxBytes: raw.object_query_max_bytes,
   };
 }
 

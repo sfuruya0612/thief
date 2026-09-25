@@ -61,3 +61,24 @@ if (globalThis.ResizeObserver === undefined) {
     configurable: true,
   });
 }
+
+// jsdom は Web Worker を持たない。@duckdb/duckdb-wasm のブラウザ用ビルド
+// (duckdb-browser.mjs) は import 時に Worker を参照するため、未定義だと
+// lib/duckdb.ts を import するテストが ReferenceError で落ちる。テストは Worker を
+// 生成しない (オブジェクト SQL 検索のエンジンと取り込み処理はモックに差し替える) ため、
+// 参照を満たすだけの no-op 実装を与える。
+if (globalThis.Worker === undefined) {
+  class NoopWorker {
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    onerror: ((event: ErrorEvent) => void) | null = null;
+    postMessage() {}
+    terminate() {}
+    addEventListener() {}
+    removeEventListener() {}
+  }
+  Object.defineProperty(globalThis, 'Worker', {
+    value: NoopWorker,
+    writable: true,
+    configurable: true,
+  });
+}

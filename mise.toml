@@ -14,7 +14,7 @@ node = "26.4.0"
 # === 全体 (ルート) ===
 [tasks.setup]
 description = "初期セットアップ (backend + frontend 依存取得)"
-depends = ["backend:setup", "frontend:setup"]
+depends = ["backend:setup", "frontend:setup", "frontend:fetch-duckdb-extensions"]
 
 [tasks.fmt]
 description = "backend + frontend フォーマット"
@@ -159,6 +159,14 @@ description = "Google Cloud 公式アイコン (zip) を public/assets/gcp-icons
 dir = "frontend"
 usage = "arg \"<zip>\" var=#true help=\"Google Cloud 公式アイコンパッケージの zip ファイルパス (複数指定可)\""
 run = "node scripts/fetch-gcp-icons.mjs $usage_zip"
+
+# --use-system-ca: TLS 傍受環境 (macOS のシステムルート証明書にのみ信頼がある場合) でも
+# Node 標準の fetch が通るようにする。node_modules の有無を確認するため frontend:setup に依存する。
+[tasks."frontend:fetch-duckdb-extensions"]
+description = "DuckDB Wasm の json / parquet 拡張を public/assets/duckdb-extensions/ に取得する"
+dir = "frontend"
+depends = ["frontend:setup"]
+run = "node --use-system-ca scripts/fetch-duckdb-extensions.mjs"
 
 [tasks."frontend:update"]
 description = "frontend 依存更新"

@@ -86,6 +86,8 @@ import type {
   AthenaResultPageRaw,
 } from './query';
 
+import type { ClientConfigRaw } from './common';
+
 import apigw from './__contract__/APIGatewayResource.json';
 import athenaCatalog from './__contract__/AthenaCatalog.json';
 import athenaDatabase from './__contract__/AthenaDatabase.json';
@@ -150,6 +152,7 @@ import ssmParam from './__contract__/SSMParameterResource.json';
 import waf from './__contract__/WAFResource.json';
 import wafRule from './__contract__/WAFRule.json';
 import valueResponse from './__contract__/ValueResponse.json';
+import clientConfig from './__contract__/ClientConfigResponse.json';
 
 // NonUndef は optional フィールドの型から undefined を除く (keyof は optional のキーも
 // 含むため、キー集合の検査は optional の宣言に影響されない)。
@@ -209,7 +212,7 @@ type Expect<T extends true> = T;
 type PriceRateRawWidened = Omit<PriceRateRaw, 'model'> & { model: string };
 type PriceTableRawWidened = Omit<PriceTableRaw, 'rates'> & { rates: PriceRateRawWidened[] };
 
-// 契約対象 64 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
+// 契約対象 65 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
 export type ContractChecks = [
   Expect<Contract<typeof apigw, APIGWRaw>>,
   Expect<Contract<typeof athenaCatalog, AthenaCatalogRaw>>,
@@ -275,4 +278,5 @@ export type ContractChecks = [
   Expect<Contract<typeof waf, WAFRaw>>,
   Expect<Contract<typeof wafRule, WAFRuleRaw>>,
   Expect<Contract<typeof valueResponse, ValueRaw>>,
+  Expect<Contract<typeof clientConfig, ClientConfigRaw>>,
 ];

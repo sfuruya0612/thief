@@ -3,15 +3,28 @@
 // (取得結果・アップロードフック・キー項目・列定義・ダウンロード URL) は props で注入する。
 // 一覧取得は backend 側で最大 1000 件に打ち切られるため、prefix 絞り込みは
 // フロントエンドでのフィルタではなく検索ボタン押下でサーバへ再取得を要求する。
+//
+// Query ボタンはオブジェクト 1 つを DuckDB Wasm に取り込んで SQL を実行する (issues/0196)。
+// 押せる条件は対象形式・サイズ上限以下・設定の取得完了・ブラウザ対応の 4 つで、押せない行は
+// title に理由を出す。押下すると一覧を置き換えて DrawerObjectQuery を表示する。
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { ColumnDef } from '../tables/columns';
 import { DataTable } from '../DataTable';
 import { DrawerObjectPreview } from './DrawerObjectPreview';
+import { DrawerObjectQuery } from './DrawerObjectQuery';
 import { Loading } from '../Loading';
 import { ApiError } from '../../types/common';
 import { isPreviewEligible, previewDisabledReason } from '../../lib/objectPreview';
+import {
+  isObjectQuerySupported,
+  objectQueryDisabledReason,
+  type ObjectQueryConfigState,
+} from '../../lib/objectQuery';
+import { objectQueryEngine } from '../../lib/duckdb';
+import { createOpfsIngestor } from '../../lib/opfsIngest';
+import { useClientConfig } from '../../api/queries';
 
 // normalizeSearchPrefix は検索確定時に送る prefix を正規化する。先頭スラッシュのみを
 // 取り除く (末尾は加工しない。"logs" でも "logs-2024/..." に前方一致させないためではなく、
@@ -64,11 +77,15 @@ export interface DrawerObjectBrowserProps<TObject, TRow extends { id: string }> 
   // コンポーネント描画ごとに必ず 1 回呼ばれる。
   useUpload: (uploadPrefix: string | undefined) => ObjectUploadMutation;
   // previewKeyOf / sizeOf は行データからプレビュー可否判定 (拡張子・サイズ) に使う値を取り出す。
+  // previewKeyOf はオブジェクトのキーそのものなので、SQL 検索の対象判定にも使う。
   previewKeyOf: (row: TRow) => string;
   sizeOf: (row: TRow) => number;
   // usePreview はプレビュー対象の key (未確定時は undefined) を受け取るカスタムフック。
   // コンポーネント描画ごとに必ず 1 回呼ばれる (react-query の enabled: !!key で遅延取得する)。
   usePreview: (key: string | undefined) => ObjectPreviewQuery;
+  // profile は S3 の SSO 期限切れバナー (SSOExpiredBanner) に使う。GCS には SSO が無いため
+  // DrawerS3Objects だけが渡す。
+  profile?: string;
 }
 
 export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
@@ -80,6 +97,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   previewKeyOf,
   sizeOf,
   usePreview,
+  profile,
 }: DrawerObjectBrowserProps<TObject, TRow>) {
   const { t } = useTranslation('drawerStorage');
   const [prefixInput, setPrefixInput] = useState('');
@@ -94,26 +112,42 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   const [selected, setSelected] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [previewRow, setPreviewRow] = useState<TRow | null>(null);
+  const [queryRow, setQueryRow] = useState<TRow | null>(null);
   const previewKey = previewRow ? previewKeyOf(previewRow) : undefined;
   const preview = usePreview(previewKey);
+  // オブジェクト SQL 検索のサイズ上限。取得中と取得失敗では上限が分からないため Query を
+  // 無効化する (既定値で仮に判定すると backend の設定と食い違う)。
+  const clientConfig = useClientConfig();
+  const configState = useMemo<ObjectQueryConfigState>(
+    () =>
+      clientConfig.isError
+        ? { status: 'error' }
+        : clientConfig.data
+          ? { status: 'ready', maxBytes: clientConfig.data.objectQueryMaxBytes }
+          : { status: 'loading' },
+    [clientConfig.isError, clientConfig.data],
+  );
+  const maxBytes = clientConfig.data?.objectQueryMaxBytes;
+  const browserSupported = isObjectQuerySupported();
 
   const runSearch = () => setCommittedPrefix(normalizeSearchPrefix(prefixInput));
 
   const rows = useMemo<TRow[]>(() => (data?.objects ?? []).map(toTableRow), [data, toTableRow]);
 
-  // 共通列に Preview / Download の Actions 列を末尾に追加する
+  // 共通列に Preview / Query / Download の Actions 列を末尾に追加する
   const columns = useMemo<ColumnDef<TRow>[]>(
     () => [
       ...baseColumns,
       {
         key: 'actions',
         header: '',
-        width: '16%',
+        width: '24%',
         cell: (r) => {
           const key = previewKeyOf(r);
           const size = sizeOf(r);
           const eligible = isPreviewEligible(key, size);
           const reason = previewDisabledReason(key, size);
+          const queryReason = objectQueryDisabledReason(key, size, configState, browserSupported);
           return (
             <span style={{ display: 'flex', gap: 6 }}>
               <button
@@ -124,6 +158,14 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
               >
                 Preview
               </button>
+              <button
+                className="btn sm"
+                disabled={queryReason !== ''}
+                title={queryReason || t('drawerObjectBrowser.openQuery')}
+                onClick={() => setQueryRow(r)}
+              >
+                Query
+              </button>
               <a href={downloadHref(r)} download className="btn sm" style={{ padding: '2px 8px' }}>
                 Download
               </a>
@@ -132,7 +174,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
         },
       },
     ],
-    [baseColumns, downloadHref, previewKeyOf, sizeOf, t],
+    [baseColumns, browserSupported, configState, downloadHref, previewKeyOf, sizeOf, t],
   );
 
   const onUpload = () => {
@@ -169,6 +211,21 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
           });
           await editUpload.mutateAsync({ key: previewKeyForSave, file });
         }}
+      />
+    );
+  }
+
+  if (queryRow && maxBytes !== undefined) {
+    return (
+      <DrawerObjectQuery
+        fileName={previewKeyOf(queryRow)}
+        url={downloadHref(queryRow)}
+        maxBytes={maxBytes}
+        size={sizeOf(queryRow)}
+        profile={profile}
+        engine={objectQueryEngine}
+        createIngestor={createOpfsIngestor}
+        onClose={() => setQueryRow(null)}
       />
     );
   }

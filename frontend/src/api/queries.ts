@@ -47,6 +47,7 @@ import {
   cfnStackDetailFromRaw,
   cfnStackEventFromRaw,
   cfnStackResourceFromRaw,
+  clientConfigFromRaw,
   cwLogGroupFromRaw,
   dynamoTableSchemaFromRaw,
   ecrImageFromRaw,
@@ -91,6 +92,7 @@ import {
   getCFNStackDetail,
   getCFNStackEvents,
   getCFNStackResources,
+  getClientConfig,
   getCost,
   getCostForecast,
   type CWLogEventsQuery,
@@ -188,6 +190,18 @@ export function useHealthCheck() {
 export function useCacheInvalidate() {
   return useMutation({
     mutationFn: (view: AppView) => postCacheInvalidate(view),
+  });
+}
+
+// frontend が参照する実行時設定。サーバ起動中は値が変わらないため staleTime: Infinity とし、
+// 初回マウント時に 1 回だけ取得する。値は ClientConfigRow へ正規化して返す
+// (コンポーネントに snake_case を渡さない規約)。
+export function useClientConfig() {
+  return useQuery({
+    queryKey: ['config'],
+    queryFn: () => getClientConfig(),
+    select: clientConfigFromRaw,
+    staleTime: Infinity,
   });
 }
 

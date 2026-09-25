@@ -6,6 +6,15 @@ import (
 	"testing"
 )
 
+// mustApplyEnv は applyEnv を実行し、エラーならテストを失敗させる。環境変数の値が
+// 妥当なテストで使う。
+func mustApplyEnv(t *testing.T, cfg *Config) {
+	t.Helper()
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() error = %v", err)
+	}
+}
+
 func TestDefaultsPriceCacheDir(t *testing.T) {
 	got := Defaults().PriceCacheDir
 	want := "/tmp/thief/price"
@@ -37,7 +46,7 @@ func TestApplyFilePriceCacheDir(t *testing.T) {
 func TestApplyEnvPriceCacheDir(t *testing.T) {
 	t.Setenv("THIEF_PRICE_CACHE_DIR", "/custom/price/dir")
 	cfg := Defaults()
-	applyEnv(cfg)
+	mustApplyEnv(t, cfg)
 	if cfg.PriceCacheDir != "/custom/price/dir" {
 		t.Errorf("PriceCacheDir = %q, want %q", cfg.PriceCacheDir, "/custom/price/dir")
 	}
@@ -74,7 +83,7 @@ func TestApplyFileSnippetsDir(t *testing.T) {
 func TestApplyEnvSnippetsDir(t *testing.T) {
 	t.Setenv("THIEF_SNIPPETS_DIR", "/custom/snippets/dir")
 	cfg := Defaults()
-	applyEnv(cfg)
+	mustApplyEnv(t, cfg)
 	if cfg.SnippetsDir != "/custom/snippets/dir" {
 		t.Errorf("SnippetsDir = %q, want %q", cfg.SnippetsDir, "/custom/snippets/dir")
 	}
@@ -116,7 +125,7 @@ func TestDatadogOAuthRedirectBase(t *testing.T) {
 	t.Run("env overrides the default", func(t *testing.T) {
 		t.Setenv("THIEF_DATADOG_OAUTH_REDIRECT_BASE", "https://thief.example.com:9443")
 		cfg := Defaults()
-		applyEnv(cfg)
+		mustApplyEnv(t, cfg)
 		if want := "https://thief.example.com:9443"; cfg.Datadog.OAuthRedirectBase != want {
 			t.Errorf("Datadog.OAuthRedirectBase = %q, want %q", cfg.Datadog.OAuthRedirectBase, want)
 		}
@@ -217,4 +226,60 @@ func TestDatadogOAuthCLIRedirectURI(t *testing.T) {
 	if want := "/api/datadog/auth/callback"; DatadogOAuthCallbackPath != want {
 		t.Errorf("DatadogOAuthCallbackPath = %q, want %q", DatadogOAuthCallbackPath, want)
 	}
+}
+
+// TestObjectQueryMaxBytes はオブジェクト SQL 検索のサイズ上限の既定値、環境変数での
+// 上書き、不正値の拒否を確認する。不正値で Load がエラーを返すのは、設定の検証を
+// config パッケージに集約し、不正な値を Config に載せたまま他のコードへ渡さないためである。
+func TestObjectQueryMaxBytes(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		if got := Defaults().ObjectQueryMaxBytes; got != DefaultObjectQueryMaxBytes {
+			t.Errorf("Defaults().ObjectQueryMaxBytes = %d, want %d", got, DefaultObjectQueryMaxBytes)
+		}
+		if want := int64(1 << 30); DefaultObjectQueryMaxBytes != want {
+			t.Errorf("DefaultObjectQueryMaxBytes = %d, want %d", DefaultObjectQueryMaxBytes, want)
+		}
+		isolateConfigFiles(t)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.ObjectQueryMaxBytes; got != DefaultObjectQueryMaxBytes {
+			t.Errorf("Load().ObjectQueryMaxBytes = %d, want %d", got, DefaultObjectQueryMaxBytes)
+		}
+	})
+
+	t.Run("env override", func(t *testing.T) {
+		isolateConfigFiles(t)
+		t.Setenv("THIEF_OBJECT_QUERY_MAX_BYTES", "1048576")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if got := cfg.ObjectQueryMaxBytes; got != 1048576 {
+			t.Errorf("Load().ObjectQueryMaxBytes = %d, want 1048576", got)
+		}
+	})
+
+	t.Run("invalid env", func(t *testing.T) {
+		tests := []struct {
+			name string
+			env  string
+		}{
+			{name: "not an integer", env: "1GiB"},
+			{name: "empty digits", env: "-"},
+			{name: "float", env: "1.5"},
+			{name: "zero", env: "0"},
+			{name: "negative", env: "-1"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				isolateConfigFiles(t)
+				t.Setenv("THIEF_OBJECT_QUERY_MAX_BYTES", tt.env)
+				if _, err := Load(); err == nil {
+					t.Fatalf("Load() error = nil, want error for %q", tt.env)
+				}
+			})
+		}
+	})
 }

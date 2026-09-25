@@ -17,6 +17,16 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
+    // Vitest は Node 条件でパッケージを解決するため、@duckdb/duckdb-wasm の bare import が
+    // Node 用ビルド (dist/duckdb-node.cjs) に解決され、Worker の生成に失敗する。jsdom の
+    // テストではブラウザ用ビルドを使う。サブパスの import (dist/*.wasm?url など) は
+    // 正規表現で一致させない (文字列のエイリアスは前方一致するため)。
+    alias: [
+      {
+        find: /^@duckdb\/duckdb-wasm$/,
+        replacement: '@duckdb/duckdb-wasm/dist/duckdb-browser.mjs',
+      },
+    ],
     // 既定の `pool: 'forks'` ではテストファイルごとに jsdom を作り直すため、実行時間の 74% を
     // その生成が占めていた (95 ファイル 987 テストで 71.98 秒)。`vmThreads` はワーカーごとに
     // VM コンテキストを用意しつつファイルごとの分離を保ち、同じ 987 テストが 9.58 秒 (再実行時
