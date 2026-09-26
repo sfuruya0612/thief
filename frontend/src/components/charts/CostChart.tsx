@@ -3,6 +3,7 @@
 // このコンポーネントは描画のみを担う (Raw/Row 分離と同じ関心の分離)。
 import ReactECharts from 'echarts-for-react';
 import { useTweaks } from '../../hooks/useTweaks';
+import { THEME_TEXT_COLOR } from './chartTheme';
 
 export interface CostChartSeries {
   name: string;
@@ -14,12 +15,6 @@ export interface CostChartProps {
   series: CostChartSeries[];
   height?: number;
 }
-
-// ダークテーマ時の軸・凡例文字色 (app.css の --text-2 相当を直値で持つ。ECharts は CSS 変数を解釈しないため)
-const THEME_TEXT_COLOR: Record<'dark' | 'light', string> = {
-  dark: '#a8a8b0',
-  light: '#5c5c66',
-};
 
 export function CostChart({ categories, series, height = 320 }: CostChartProps) {
   const { tweaks } = useTweaks();

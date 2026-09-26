@@ -2,6 +2,7 @@
 // クライアントサイドページング (50 行/ページ)、未取得ページの追加読み込みを提供する。
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { isNumericCell, parseNumericCell } from '../../lib/numericCell';
 
 export interface ResultTableProps {
   columns: string[];
@@ -15,16 +16,6 @@ export interface ResultTableProps {
 }
 
 const PAGE_SIZE = 50;
-
-// 数値セル判定 (カンマ区切りを許容)
-function isNumericCell(v: string): boolean {
-  return /^-?[\d,]+(\.\d+)?$/.test(v);
-}
-
-function parseNumericCell(v: string): number {
-  const n = Number(v.replace(/,/g, ''));
-  return Number.isFinite(n) ? n : 0;
-}
 
 export function ResultTable({
   columns,

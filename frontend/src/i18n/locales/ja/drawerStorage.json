@@ -38,7 +38,19 @@
     "tooLarge": "オブジェクトがサイズ上限 ({{limit}}) を超えているため取り込みを中止しました",
     "quotaExceeded": "ブラウザの空き容量が足りないため取り込みを開始できません",
     "opfsFailed": "OPFS への書き込みに失敗しました",
-    "queryFailed": "クエリに失敗しました"
+    "queryFailed": "クエリに失敗しました",
+    "chart": {
+      "table": "表",
+      "chart": "グラフ",
+      "xColumn": "X 列",
+      "yColumn": "Y 列",
+      "typeBar": "棒グラフ",
+      "typeLine": "折れ線グラフ",
+      "noColumns": "列が無いためグラフを表示できません",
+      "noNumericColumns": "数値列が無いためグラフを表示できません",
+      "selectY": "Y 列を 1 つ以上選んでください",
+      "tooManyCategories": "X 列の値が {{max}} 種類を超えているためグラフを表示できません。SQL で集計するか LIMIT で絞ってください"
+    }
   },
   "drawerTerminal": {
     "loadingTasks": "タスク一覧を取得中...",

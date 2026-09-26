@@ -16,8 +16,16 @@ import { ErrorBanner } from '../ErrorBanner';
 import { SSOExpiredBanner } from '../SSOExpiredBanner';
 import { SqlEditor } from '../query/SqlEditor';
 import { ResultTable } from '../query/ResultTable';
+import { QueryResultChart } from '../charts/QueryResultChart';
 import { formatBytes } from '../tables/columns';
 import { isSSOExpiredError } from '../../lib/ssoError';
+import {
+  initialChartSelection,
+  QUERY_CHART_MAX_CATEGORIES,
+  queryChartCapabilities,
+  queryChartOverCategoryLimit,
+} from '../../lib/queryChart';
+import type { QueryChartSelection, QueryResultChartType } from '../../lib/queryChart';
 import {
   formatObjectQueryLimit,
   isAbortError,
@@ -69,6 +77,16 @@ interface ObjectQueryPanelProps extends DrawerObjectQueryProps {
   format: ObjectQueryFormat;
 }
 
+// CHART_HEIGHT はグラフの高さ。グラフを出せないときの案内も同じ高さにして、切り替えや
+// 選択のたびにレイアウトが跳ねるのを防ぐ。
+const CHART_HEIGHT = 320;
+
+// CHART_TYPE_OPTIONS は選べるグラフの種類。値は ECharts の系列型名をそのまま使う。
+const CHART_TYPE_OPTIONS: { value: QueryResultChartType; labelKey: string }[] = [
+  { value: 'bar', labelKey: 'drawerObjectQuery.chart.typeBar' },
+  { value: 'line', labelKey: 'drawerObjectQuery.chart.typeLine' },
+];
+
 function ObjectQueryPanel({
   fileName,
   url,
@@ -98,6 +116,13 @@ function ObjectQueryPanel({
   const [result, setResult] = useState<ObjectQueryResult | null>(null);
   const [queryError, setQueryError] = useState<unknown>(null);
   const [running, setRunning] = useState(false);
+  // 結果部の表示 (表 / グラフ) と、グラフの軸の選択と種類。
+  const [resultView, setResultView] = useState<'table' | 'chart'>('table');
+  const [chartSelection, setChartSelection] = useState<QueryChartSelection>({
+    xIndex: 0,
+    yIndexes: [],
+  });
+  const [chartType, setChartType] = useState<QueryResultChartType>('bar');
 
   // teardown と開始処理は依存を空にした effect から呼ぶため、最新の props を ref で参照する。
   const latestRef = useRef({
@@ -142,6 +167,14 @@ function ObjectQueryPanel({
       const res = await latestRef.current.engine.run(text);
       if (generationRef.current !== generation) return;
       setResult(res);
+      // 列構成が変わりうるため、クエリの実行ごとに軸の選択を初期選択 (X は先頭の列、
+      // Y は先頭の数値列) に戻す。
+      setChartSelection(initialChartSelection(res.columns, res.rows));
+      // グラフを表示できない結果 (列が無い、数値列が無い) になったときは表へ戻す。グラフ
+      // 表示のままだと、切り替えが無効なのに選択されたままになり、表もグラフも出ない。
+      if (queryChartCapabilities(res.columns, res.rows).disabledReason !== null) {
+        setResultView('table');
+      }
     } catch (err) {
       if (isAbortError(err) || generationRef.current !== generation) return;
       setQueryError(err);
@@ -254,6 +287,37 @@ function ObjectQueryPanel({
     void runQuery(sql, generationRef.current);
   };
 
+  // グラフの候補列と無効の理由は結果から決まる。Chart を選べない結果 (列が無い、数値列が
+  // 無い) では切り替えボタンを無効にし、理由を title に出す。
+  const chartCapabilities = useMemo(
+    () =>
+      result === null
+        ? { numericColumns: [], disabledReason: null }
+        : queryChartCapabilities(result.columns, result.rows),
+    [result],
+  );
+  const chartDisabledReason = chartCapabilities.disabledReason;
+  const chartDisabledTitle =
+    chartDisabledReason === null
+      ? undefined
+      : chartDisabledReason === 'noColumns'
+        ? t('drawerObjectQuery.chart.noColumns')
+        : t('drawerObjectQuery.chart.noNumericColumns');
+  // 上限 (distinct な値の数) はグラフを表示するときにだけ数える。
+  const chartTooManyCategories =
+    result !== null &&
+    resultView === 'chart' &&
+    queryChartOverCategoryLimit(result.rows, chartSelection.xIndex);
+
+  const toggleChartY = (index: number) => {
+    setChartSelection((prev) => ({
+      ...prev,
+      yIndexes: prev.yIndexes.includes(index)
+        ? prev.yIndexes.filter((i) => i !== index)
+        : [...prev.yIndexes, index],
+    }));
+  };
+
   const progressLabel =
     progress.total === null
       ? t('drawerObjectQuery.ingestingUnknownTotal', { written: formatBytes(progress.written) })
@@ -306,17 +370,112 @@ function ObjectQueryPanel({
                   {t('drawerObjectQuery.truncated', { max: OBJECT_QUERY_MAX_ROWS })}
                 </div>
               )}
-              <ResultTable
-                columns={result.columns}
-                rows={result.rows}
-                footerRight={
-                  <span>
-                    {t('drawerObjectQuery.rowCount', { rows: result.rows.length })}
-                    {' · '}
-                    {t('drawerObjectQuery.elapsed', { ms: Math.round(result.elapsedMs) })}
-                  </span>
-                }
-              />
+              <div className="seg" style={{ width: 200, marginBottom: 8 }}>
+                <button
+                  className={resultView === 'table' ? 'active' : ''}
+                  onClick={() => setResultView('table')}
+                >
+                  {t('drawerObjectQuery.chart.table')}
+                </button>
+                <button
+                  className={resultView === 'chart' ? 'active' : ''}
+                  disabled={chartDisabledReason !== null}
+                  title={chartDisabledTitle}
+                  onClick={() => setResultView('chart')}
+                >
+                  {t('drawerObjectQuery.chart.chart')}
+                </button>
+              </div>
+              {resultView === 'table' ? (
+                <ResultTable
+                  columns={result.columns}
+                  rows={result.rows}
+                  footerRight={
+                    <span>
+                      {t('drawerObjectQuery.rowCount', { rows: result.rows.length })}
+                      {' · '}
+                      {t('drawerObjectQuery.elapsed', { ms: Math.round(result.elapsedMs) })}
+                    </span>
+                  }
+                />
+              ) : (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span className="muted">{t('drawerObjectQuery.chart.xColumn')}</span>
+                      <select
+                        className="btn sm"
+                        value={chartSelection.xIndex}
+                        onChange={(e) =>
+                          setChartSelection((prev) => ({
+                            ...prev,
+                            xIndex: Number(e.target.value),
+                          }))
+                        }
+                      >
+                        {result.columns.map((c, i) => (
+                          <option key={i} value={i}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span className="muted">{t('drawerObjectQuery.chart.yColumn')}</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                        {chartCapabilities.numericColumns.map((i) => (
+                          <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              type="checkbox"
+                              checked={chartSelection.yIndexes.includes(i)}
+                              onChange={() => toggleChartY(i)}
+                            />
+                            {result.columns[i]}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="seg" style={{ width: 180 }}>
+                      {CHART_TYPE_OPTIONS.map((o) => (
+                        <button
+                          key={o.value}
+                          className={chartType === o.value ? 'active' : ''}
+                          onClick={() => setChartType(o.value)}
+                        >
+                          {t(o.labelKey)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {chartSelection.yIndexes.length === 0 ? (
+                    <div className="empty-hint" style={{ height: CHART_HEIGHT }}>
+                      {t('drawerObjectQuery.chart.selectY')}
+                    </div>
+                  ) : chartTooManyCategories ? (
+                    <div className="empty-hint" style={{ height: CHART_HEIGHT }}>
+                      {t('drawerObjectQuery.chart.tooManyCategories', {
+                        max: QUERY_CHART_MAX_CATEGORIES,
+                      })}
+                    </div>
+                  ) : (
+                    <QueryResultChart
+                      columns={result.columns}
+                      rows={result.rows}
+                      xIndex={chartSelection.xIndex}
+                      yIndexes={chartSelection.yIndexes}
+                      type={chartType}
+                    />
+                  )}
+                </>
+              )}
             </>
           )}
         </>

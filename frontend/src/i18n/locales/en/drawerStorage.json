@@ -38,7 +38,19 @@
     "tooLarge": "Cancelled because the object exceeds the size limit ({{limit}})",
     "quotaExceeded": "Not enough browser storage to start loading the object",
     "opfsFailed": "Failed to write to OPFS",
-    "queryFailed": "Query failed"
+    "queryFailed": "Query failed",
+    "chart": {
+      "table": "Table",
+      "chart": "Chart",
+      "xColumn": "X column",
+      "yColumn": "Y column",
+      "typeBar": "Bar",
+      "typeLine": "Line",
+      "noColumns": "No columns to chart",
+      "noNumericColumns": "No numeric column to chart",
+      "selectY": "Select at least one Y column",
+      "tooManyCategories": "The X column has more than {{max}} distinct values. Aggregate with SQL or narrow the result with LIMIT"
+    }
   },
   "drawerTerminal": {
     "loadingTasks": "Loading tasks...",

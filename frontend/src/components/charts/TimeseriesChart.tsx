@@ -3,6 +3,7 @@
 // (CostChart と同じ関心の分離)。色の固定順割当と Other 集約は lib/timeseries.ts。
 import ReactECharts from 'echarts-for-react';
 import { useTweaks } from '../../hooks/useTweaks';
+import { THEME_TEXT_COLOR } from './chartTheme';
 import {
   collapseSeries,
   DEFAULT_MAX_SERIES,
@@ -28,12 +29,6 @@ export interface TimeseriesChartProps {
   // 点が少ない系列では点の範囲と期間が一致しないため、窓を持つ呼び出し側は渡すこと。
   xRange?: XRange;
 }
-
-// ダークテーマ時の軸・凡例文字色 (CostChart と同じ直値。ECharts は CSS 変数を解釈しない)
-const THEME_TEXT_COLOR: Record<'dark' | 'light', string> = {
-  dark: '#a8a8b0',
-  light: '#5c5c66',
-};
 
 export function TimeseriesChart({
   series,

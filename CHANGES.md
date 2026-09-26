@@ -22,6 +22,8 @@
   - @sfuruya0612
 - [ADD] Web の S3 / GCS のオブジェクトブラウザに、オブジェクトをブラウザ内で SQL 検索する Query を追加する (DuckDB Wasm と OPFS を使い、csv / tsv / json / jsonl / ndjson とそれぞれの gzip、parquet の 11 形式を対象にする。オブジェクトは Worker がダウンロード API から OPFS へ書き、DuckDB が `obj` ビューとして読む。検索できる容量の上限は `THIEF_OBJECT_QUERY_MAX_BYTES` (既定 1 GiB) で、新設した `GET /api/config` で frontend に渡す。Wasm と拡張は同一オリジンから配信し、拡張は `mise run frontend:fetch-duckdb-extensions` で取得する。結果は 10,000 行で打ち切る。issue 0196)
   - @sfuruya0612
+- [ADD] Web の S3 / GCS のオブジェクト SQL 検索の結果を、列を選んで棒グラフ・折れ線グラフで表示できるようにする (結果部に Table / Chart の切り替えを置き、X 列 (単一選択)、Y 列 (複数選択、数値列だけが候補)、グラフ種類を選べるようにする。数値の判定は結果表と同じ `lib/numericCell.ts` を共有し、空のセルは欠損として点を描かない。列が無い結果と数値列が無い結果では Chart を無効にして理由を出し、グラフの表示中にそうした結果を実行したときは表へ戻す。X 列の値が 5,000 種類を超える結果は SQL での集計か LIMIT を促す。軸・凡例の文字色は `components/charts/chartTheme.ts` に集約して既存の 2 つのグラフと共有する。issue 0197)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 

@@ -1,8 +1,8 @@
 // DrawerObjectQuery のコンポーネントテスト。OPFS / Web Worker / DuckDB Wasm は jsdom で
 // 動かないため、エンジンと取り込み処理は props のインターフェースへモックを差し込む。
 import { StrictMode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DrawerObjectQuery } from './DrawerObjectQuery';
 import { ObjectQueryIngestError } from '../../lib/objectQuery';
@@ -15,6 +15,17 @@ import type {
 import { ApiError } from '../../types/common';
 
 const MAX_BYTES = 1 << 30;
+
+// echarts-for-react は jsdom (canvas 未実装) では描画できないため、option を捕まえる
+// スタブに差し替える (option の内容そのものの検証は QueryResultChart.test.tsx)。
+const capturedChart = vi.hoisted(() => ({ option: {} as Record<string, unknown> }));
+
+vi.mock('echarts-for-react', () => ({
+  default: (props: { option: Record<string, unknown> }) => {
+    capturedChart.option = props.option;
+    return <div data-testid="echarts-stub" />;
+  },
+}));
 
 function makeEngine(overrides: Partial<ObjectQueryEngine> = {}): ObjectQueryEngine {
   return {
@@ -101,6 +112,10 @@ function renderQuery(
 }
 
 describe('DrawerObjectQuery', () => {
+  beforeEach(() => {
+    capturedChart.option = {};
+  });
+
   it('取り込み中の進捗を Content-Length 付きで表示する', async () => {
     const engine = makeEngine();
     const { ingestor, container } = renderQuery(engine, pendingIngestor().ingestor);
@@ -466,5 +481,326 @@ describe('DrawerObjectQuery', () => {
       expect(container.textContent).toContain('alice');
     });
     expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+  });
+
+  it('Chart に切り替えると初期選択 (X は先頭の列、Y は先頭の数値列) でグラフを表示する', async () => {
+    const engine = makeEngine({
+      run: vi.fn(async () => ({
+        columns: ['name', 'count'],
+        rows: [
+          ['a', '1'],
+          ['b', '2'],
+        ],
+        truncated: false,
+        elapsedMs: 5,
+      })),
+    });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    // 既定は表で、切り替えのボタンが結果部にある
+    expect(screen.getByRole('button', { name: '表' })).toHaveClass('active');
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+
+    // X は先頭の列 (name)、Y は先頭の数値列 (count) が選ばれている
+    const xSelect = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(xSelect.selectedOptions[0].textContent).toBe('name');
+    expect(screen.getByRole('checkbox', { name: 'count' })).toBeChecked();
+    // Y 列の候補は数値列だけで、name 列は候補に出ない
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    // 表はグラフに置き換わる
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByTestId('echarts-stub')).toBeInTheDocument();
+    expect(capturedChart.option.xAxis).toMatchObject({ type: 'category', data: ['a', 'b'] });
+    const series = capturedChart.option.series as {
+      name: string;
+      type: string;
+      data: (number | null)[];
+    }[];
+    expect(series.map((s) => [s.name, s.type, s.data])).toEqual([['count', 'bar', [1, 2]]]);
+  });
+
+  it('グラフの種類を折れ線に切り替えられる', async () => {
+    const engine = makeEngine({
+      run: vi.fn(async () => ({
+        columns: ['name', 'count'],
+        rows: [['a', '1']],
+        truncated: false,
+        elapsedMs: 5,
+      })),
+    });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+    expect(capturedChart.option.series).toMatchObject([{ type: 'bar' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: '折れ線グラフ' }));
+
+    expect(screen.getByRole('button', { name: '折れ線グラフ' })).toHaveClass('active');
+    expect(capturedChart.option.series).toMatchObject([{ type: 'line' }]);
+  });
+
+  it('Y 列を全て外すとグラフの代わりに Y 列の選択を促す', async () => {
+    const engine = makeEngine({
+      run: vi.fn(async () => ({
+        columns: ['name', 'count'],
+        rows: [['a', '1']],
+        truncated: false,
+        elapsedMs: 5,
+      })),
+    });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+    expect(screen.getByTestId('echarts-stub')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'count' }));
+
+    expect(screen.getByText('Y 列を 1 つ以上選んでください')).toBeInTheDocument();
+    expect(screen.queryByTestId('echarts-stub')).not.toBeInTheDocument();
+  });
+
+  it('X 列の distinct な値が上限を超える結果ではグラフを描かず集計を促す', async () => {
+    const rows = Array.from({ length: 5001 }, (_, i) => [`v${i}`, '1']);
+    const engine = makeEngine({
+      run: vi.fn(async () => ({
+        columns: ['name', 'count'],
+        rows,
+        truncated: false,
+        elapsedMs: 5,
+      })),
+    });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('v0');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+
+    expect(
+      screen.getByText(
+        'X 列の値が 5000 種類を超えているためグラフを表示できません。SQL で集計するか LIMIT で絞ってください',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('echarts-stub')).not.toBeInTheDocument();
+  });
+
+  it('列が無い結果では Chart を無効にし理由を title に出す', async () => {
+    const engine = makeEngine({
+      run: vi.fn(async () => ({ columns: [], rows: [], truncated: false, elapsedMs: 1 })),
+    });
+    renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(screen.getByText('結果がありません')).toBeInTheDocument();
+    });
+    const chartButton = screen.getByRole('button', { name: 'グラフ' });
+    expect(chartButton).toBeDisabled();
+    expect(chartButton).toHaveAttribute('title', '列が無いためグラフを表示できません');
+  });
+
+  it('数値列が無い結果では Chart を無効にし理由を title に出す', async () => {
+    const engine = makeEngine();
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('alice');
+    });
+    const chartButton = screen.getByRole('button', { name: 'グラフ' });
+    expect(chartButton).toBeDisabled();
+    expect(chartButton).toHaveAttribute('title', '数値列が無いためグラフを表示できません');
+    // 無効なので押してもグラフには切り替わらない
+    fireEvent.click(chartButton);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('再実行すると軸の選択が初期選択に戻る', async () => {
+    const run = vi.fn();
+    run
+      .mockResolvedValueOnce({
+        columns: ['name', 'count'],
+        rows: [['a', '1']],
+        truncated: false,
+        elapsedMs: 3,
+      })
+      .mockResolvedValueOnce({
+        columns: ['name', 'count', 'label'],
+        rows: [['b', '5', 'x']],
+        truncated: false,
+        elapsedMs: 4,
+      });
+    const engine = makeEngine({ run });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+
+    // 選択を初期値から動かす (X を count に、Y を未選択にする)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'count' }));
+    expect(screen.getByText('Y 列を 1 つ以上選んでください')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '実行' }));
+
+    await waitFor(() => {
+      expect(engine.run).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      // X は先頭の列 (name)、Y は先頭の数値列 (count) に戻る
+      const xSelect = screen.getByRole('combobox') as HTMLSelectElement;
+      expect(xSelect.selectedOptions[0].textContent).toBe('name');
+      expect(screen.getByRole('checkbox', { name: 'count' })).toBeChecked();
+    });
+    expect(screen.getByTestId('echarts-stub')).toBeInTheDocument();
+  });
+
+  it('Y 列を追加で選ぶと系列が増える', async () => {
+    const engine = makeEngine({
+      run: vi.fn(async () => ({
+        columns: ['name', 'count', 'size'],
+        rows: [
+          ['a', '1', '10'],
+          ['b', '2', '20'],
+        ],
+        truncated: false,
+        elapsedMs: 5,
+      })),
+    });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+
+    // 初期選択は先頭の数値列 (count) だけで、2 つ目の数値列 (size) は外れている
+    expect(screen.getByRole('checkbox', { name: 'count' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'size' })).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'size' }));
+
+    expect(screen.getByRole('checkbox', { name: 'count' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'size' })).toBeChecked();
+    const series = capturedChart.option.series as {
+      name: string;
+      data: (number | null)[];
+    }[];
+    expect(series.map((s) => [s.name, s.data])).toEqual([
+      ['count', [1, 2]],
+      ['size', [10, 20]],
+    ]);
+  });
+
+  it('グラフから表へ戻せる', async () => {
+    const engine = makeEngine({
+      run: vi.fn(async () => ({
+        columns: ['name', 'count'],
+        rows: [['a', '1']],
+        truncated: false,
+        elapsedMs: 5,
+      })),
+    });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '表' }));
+
+    expect(screen.getByRole('button', { name: '表' })).toHaveClass('active');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByTestId('echarts-stub')).not.toBeInTheDocument();
+    // グラフの軸の選択も消える
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('グラフ表示のまま数値列が無い結果を再実行すると表へ戻る', async () => {
+    const run = vi.fn();
+    run
+      .mockResolvedValueOnce({
+        columns: ['name', 'count'],
+        rows: [['a', '1']],
+        truncated: false,
+        elapsedMs: 3,
+      })
+      .mockResolvedValueOnce({
+        columns: ['label'],
+        rows: [['x']],
+        truncated: false,
+        elapsedMs: 4,
+      });
+    const engine = makeEngine({ run });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+    expect(screen.getByTestId('echarts-stub')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '実行' }));
+
+    await waitFor(() => {
+      expect(engine.run).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain('x');
+    });
+    // グラフを表示できない結果なので表へ戻り、Chart は理由付きで無効になる
+    expect(screen.getByRole('button', { name: '表' })).toHaveClass('active');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByTestId('echarts-stub')).not.toBeInTheDocument();
+    const chartButton = screen.getByRole('button', { name: 'グラフ' });
+    expect(chartButton).toBeDisabled();
+    expect(chartButton).toHaveAttribute('title', '数値列が無いためグラフを表示できません');
+  });
+
+  it('グラフ表示のまま列が無い結果を再実行すると表へ戻る', async () => {
+    const run = vi.fn();
+    run
+      .mockResolvedValueOnce({
+        columns: ['name', 'count'],
+        rows: [['a', '1']],
+        truncated: false,
+        elapsedMs: 3,
+      })
+      .mockResolvedValueOnce({ columns: [], rows: [], truncated: false, elapsedMs: 4 });
+    const engine = makeEngine({ run });
+    const { container } = renderQuery(engine, doneIngestor());
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('a');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'グラフ' }));
+    expect(screen.getByTestId('echarts-stub')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '実行' }));
+
+    await waitFor(() => {
+      expect(engine.run).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('結果がありません')).toBeInTheDocument();
+    });
+    // 列が無い結果でも表へ戻り、空の X 列の select は出ない
+    expect(screen.getByRole('button', { name: '表' })).toHaveClass('active');
+    expect(screen.queryByTestId('echarts-stub')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    const chartButton = screen.getByRole('button', { name: 'グラフ' });
+    expect(chartButton).toBeDisabled();
+    expect(chartButton).toHaveAttribute('title', '列が無いためグラフを表示できません');
   });
 });
