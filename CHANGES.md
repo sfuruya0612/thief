@@ -527,3 +527,5 @@
   - @sfuruya0612
 - `frontend/vite.config.ts` の `test` に `pool: 'vmThreads'` を追加し、`mise run frontend:test` の実行時間を短縮する (既定の `pool: 'forks'` はテストファイルごとに jsdom を作り直しており、95 ファイル 987 テストの実行時間の 74% (71.98 秒中) をその生成が占めていた。`vmThreads` はワーカーごとに 1 回だけ環境を用意しつつファイルごとの分離を保ち、同じテストが 9.58 秒で成功する。`isolate: false` はさらに速いが実行順依存で一部テストが失敗するため採らない。テスト自体とテスト結果は変えない)
   - @sfuruya0612
+- [FIX] `mise run backend:lint` が `~/go/bin` の旧 staticcheck に隠蔽されて古いツールを実行し失敗する不具合を修正する (mise の go プラグインは `GOPATH/bin` を go: ツールの bin ディレクトリより前に PATH へ載せるため、`~/go/bin` に同名のバイナリがあると mise 管理のツールが隠蔽される。`backend:tools` は `mise which` で解決した実体を検査するので、PATH 上で実際に実行されるバイナリを見ておらず隠蔽を検知できなかった。`backend:lint` の staticcheck と govulncheck、`backend:fmt` の goimports、`backend:mocks` の mockery の 4 箇所を `"$(mise which <bin>)"` での実行に変え、検査対象と実行対象を一致させる。実測した時点で実際に隠蔽されていたのは staticcheck と goimports で、govulncheck と mockery は `~/go/bin` に同名バイナリが無く実行されるバイナリは変わらない。この 2 つについては隠蔽が起きうる状態を塞ぐ変更になる。`backend:tools` の判定は変更していない。issues/closed/0198)
+  - @sfuruya0612

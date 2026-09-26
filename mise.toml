@@ -108,8 +108,8 @@ dir = "backend"
 depends = ["backend:tools"]
 run = """
 go vet ./...
-staticcheck ./...
-govulncheck ./...
+"$(mise which staticcheck)" ./...
+"$(mise which govulncheck)" ./...
 """
 
 [tasks."backend:fmt"]
@@ -117,7 +117,7 @@ description = "backend フォーマット"
 dir = "backend"
 run = """
 gofmt -w .
-goimports -w .
+"$(mise which goimports)" -w .
 """
 
 [tasks."backend:tidy"]
@@ -134,7 +134,7 @@ depends_post = ["backend:tidy"]
 [tasks."backend:mocks"]
 description = "mockery でモック生成"
 dir = "backend"
-run = "mockery"
+run = "\"$(mise which mockery)\""
 
 [tasks."backend:run"]
 description = "API サーバー起動 (127.0.0.1:8089)"
