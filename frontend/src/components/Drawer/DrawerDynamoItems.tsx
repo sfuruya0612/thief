@@ -110,7 +110,7 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
     <div className="section">
       <h3>Items</h3>
       {/* query ごとにエラーを表示する: data が無いときはエラー表示のみ、data があるときは
-          既存表示の上部にエラーを出す (issues/0075 で確定した表示規則)。items のエラーは
+          既存表示の上部にエラーを出す (docs/issues/0075 で確定した表示規則)。items のエラーは
           検索フォームを保ったままテーブル部分に表示する。 */}
       {schemaLoading ? (
         <DrawerLoading />

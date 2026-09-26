@@ -11,7 +11,7 @@
 // | PriceRateRaw | model | Raw 側が PriceModel リテラルユニオンで backend 側は string。フィラーの生成値がユニオン外になるため |
 // | PriceTableRaw | rates[].model | 同上 (PriceRateRaw のネストとして現れる) |
 //
-// 検査の限界 (issues/closed/0099 の「決定した設計」のとおり受け入れる):
+// 検査の限界 (docs/issues/closed/0099 の「決定した設計」のとおり受け入れる):
 // - null 許容 (| null) の過不足は検出できない (ゴールデンは全フィールドに非 null の値を持つ)。
 // - backend の omitempty を Raw 側が必須と宣言する食い違いは検出できない (ゴールデンには
 //   キーが常に現れる)。omitempty と optional の対応付けはフィールドを追加する issue 側の

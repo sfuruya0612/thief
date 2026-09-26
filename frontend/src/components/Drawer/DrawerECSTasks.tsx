@@ -180,7 +180,7 @@ export function DrawerECSTasks({ profile, region, cluster, onExec }: DrawerECSTa
   );
 
   // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
-  // (issues/0075 で確定した表示規則)。
+  // (docs/issues/0075 で確定した表示規則)。
   return (
     <div className="section">
       <h3>Tasks{data !== undefined ? ` (${filtered.length})` : ''}</h3>

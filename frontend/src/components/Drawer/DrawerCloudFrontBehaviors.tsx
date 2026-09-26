@@ -28,7 +28,7 @@ export function DrawerCloudFrontBehaviors({ profile, region, id }: DrawerCloudFr
   return (
     <div className="section">
       <h3>Behaviors{row ? ` (${rows.length})` : ''}</h3>
-      {/* 一覧未取得の間は該当行の有無を断定せずローディングを表示する (issues/0085 と同じ規則)。 */}
+      {/* 一覧未取得の間は該当行の有無を断定せずローディングを表示する (docs/issues/0085 と同じ規則)。 */}
       {!row && listLoading ? (
         <DrawerLoading />
       ) : rows.length === 0 ? (

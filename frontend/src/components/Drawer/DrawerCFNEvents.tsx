@@ -17,7 +17,7 @@ export function DrawerCFNEvents({ profile, region, stack }: DrawerCFNEventsProps
   const events = useMemo(() => data ?? [], [data]);
 
   // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
-  // (issues/0075 で確定した表示規則)。
+  // (docs/issues/0075 で確定した表示規則)。
   return (
     <div className="section">
       <h3>Events{data !== undefined ? ` (${events.length})` : ''}</h3>

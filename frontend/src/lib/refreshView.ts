@@ -1,7 +1,7 @@
 // TopBar の Refresh 押下時の処理列。
 // backend のリソースキャッシュを view 単位で破棄してから TanStack Query を
 // 無効化する (先に無効化すると再取得が破棄前の backend キャッシュ HIT を受け取り、
-// 古いデータが表示され続けるため)。issues/0079 を参照。
+// 古いデータが表示され続けるため)。docs/issues/0079 を参照。
 import type { AppView } from '../types/common';
 
 export interface RefreshViewDeps {

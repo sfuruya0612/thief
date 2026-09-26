@@ -11,7 +11,7 @@ export function isNumericCell(v: string): boolean {
 // parseNumericCell はセルを数値にする。カンマを除いたうえで Number() が有限値を返す値は
 // その結果を、返さない値 (数値でない文字列、オーバーフローした指数表記) は 0 を返す。
 // isNumericCell を通らなくても有限値になる値 (指数表記、前後に空白がある値) があるため、
-// その除外は呼び出し側が isNumericCell で行う。空文字列 (issues/0196 の変換規則で null に
+// その除外は呼び出し側が isNumericCell で行う。空文字列 (docs/issues/0196 の変換規則で null に
 // 対応する) を欠損として扱うかも呼び出し側が決める。
 export function parseNumericCell(v: string): number {
   const n = Number(v.replace(/,/g, ''));

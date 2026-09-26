@@ -31,7 +31,7 @@ export function DrawerCacheParameters({ profile, region, cluster }: DrawerCacheP
   const rows = useMemo(() => params ?? [], [params]);
 
   // パラメータ取得の query の data が無いときはエラー表示のみ、data があるときは
-  // 既存表示の上部にエラーを出す (issues/0075 で確定した表示規則)。一覧キャッシュ参照
+  // 既存表示の上部にエラーを出す (docs/issues/0075 で確定した表示規則)。一覧キャッシュ参照
   // (useResources) のエラーは一覧ビュー側が表示するためここでは扱わない。
   return (
     <div className="section">
@@ -40,7 +40,7 @@ export function DrawerCacheParameters({ profile, region, cluster }: DrawerCacheP
         {params !== undefined ? ` (${rows.length})` : ''}
       </h3>
       {/* グループ名は一覧 query のキャッシュから解決するため、一覧未取得の間は
-          「グループ無し」と断定せずローディングを表示する (issues/0085)。 */}
+          「グループ無し」と断定せずローディングを表示する (docs/issues/0085)。 */}
       {!group && listLoading ? (
         <DrawerLoading />
       ) : !group ? (

@@ -402,7 +402,7 @@ describe('cacheColumns', () => {
 // 全列定義の列順序 (key / header) と列幅の合計を一覧で検証する (issue 0104)。
 // wafColumns / cloudfrontColumns / kinesisColumns は前方の個別 describe が
 // 順序と幅の合計を検証済みのため、このブロックには含めない。
-// 個別の width 値は検証しない (issues/closed/0089 の「幅は調整の自由度として残す」方針)。
+// 個別の width 値は検証しない (docs/issues/closed/0089 の「幅は調整の自由度として残す」方針)。
 interface ColumnOrderCase {
   name: string;
   columns: readonly { key: string; header: string; width: string }[];

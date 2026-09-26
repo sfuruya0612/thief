@@ -4,7 +4,7 @@
 // 一覧取得は backend 側で最大 1000 件に打ち切られるため、prefix 絞り込みは
 // フロントエンドでのフィルタではなく検索ボタン押下でサーバへ再取得を要求する。
 //
-// Query ボタンはオブジェクト 1 つを DuckDB Wasm に取り込んで SQL を実行する (issues/0196)。
+// Query ボタンはオブジェクト 1 つを DuckDB Wasm に取り込んで SQL を実行する (docs/issues/0196)。
 // 押せる条件は対象形式・サイズ上限以下・設定の取得完了・ブラウザ対応の 4 つで、押せない行は
 // title に理由を出す。押下すると一覧を置き換えて DrawerObjectQuery を表示する。
 import { useMemo, useRef, useState } from 'react';

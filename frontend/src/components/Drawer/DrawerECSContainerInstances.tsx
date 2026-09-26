@@ -3,7 +3,7 @@
 // グルーピングする。Fargate のタスク (containerInstanceArn が空) はどこにも表示しない。
 // 表示規則: どちらかが loading なら Loading のみ、どちらかが error なら Error のみ
 // (両方 error のときはインスタンス側を優先)。片方のデータだけで見出しやタスクを出すと
-// 誤ったグルーピングに見えるため、issues/0075 の「data があれば上部に Error」規則は採らない。
+// 誤ったグルーピングに見えるため、docs/issues/0075 の「data があれば上部に Error」規則は採らない。
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useECSContainerInstances, useECSTasks } from '../../api/queries';

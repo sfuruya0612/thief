@@ -3,7 +3,7 @@
 // 触れないため単体テストで固定できる。
 import { isNumericCell, parseNumericCell } from './numericCell';
 
-// QUERY_CHART_MAX_CATEGORIES は X 軸に置ける distinct な値の上限。issues/0196 の結果上限
+// QUERY_CHART_MAX_CATEGORIES は X 軸に置ける distinct な値の上限。docs/issues/0196 の結果上限
 // (10000 行) の範囲でも、カテゴリ 10000 本の棒グラフは判読できないため、上限を設けて
 // SQL での集計 (GROUP BY) または LIMIT を促す。
 export const QUERY_CHART_MAX_CATEGORIES = 5000;

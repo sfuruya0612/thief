@@ -16,7 +16,7 @@ export function DrawerCFNTags({ profile, region, stack }: DrawerCFNTagsProps) {
 
   if (isLoading) return <DrawerLoading />;
   // data が無いときはエラー表示のみ、data があるときは既存表示の上部にエラーを出す
-  // (issues/0075 で確定した表示規則)。
+  // (docs/issues/0075 で確定した表示規則)。
   return (
     <>
       {error != null && <DrawerError error={error} />}

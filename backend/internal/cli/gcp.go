@@ -133,7 +133,7 @@ func newGCPCmd() *cobra.Command {
 	})
 
 	// logging サブコマンド (Cloud Logging)。期間指定の一覧取得のみ対応する。Live Tail
-	// (follow) は WebSocket 前提のためスコープ外とする (issues/0022 参照)。
+	// (follow) は WebSocket 前提のためスコープ外とする (docs/issues/0022 参照)。
 	loggingCmd := &cobra.Command{
 		Use:   "logging",
 		Short: "Cloud Logging operations",

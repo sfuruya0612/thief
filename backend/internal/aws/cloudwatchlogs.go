@@ -258,7 +258,7 @@ func StartLiveTail(ctx context.Context, profile, region string, groupIdentifiers
 
 // newStartLiveTailInput は Live Tail セッションの開始リクエストを組み立てる。
 // StartLiveTailOutput はイベントストリームを非公開フィールドに持ち外部から構築できず、
-// API 呼び出し層をモックに差し替えられない (issues/closed/0107 の背景に記録がある)。
+// API 呼び出し層をモックに差し替えられない (docs/issues/closed/0107 の背景に記録がある)。
 // そのため Input の構築だけを純関数として切り出し、単体テストの対象にする。
 // pattern が空のときはフィルタ無し (全イベント) を意味するため、
 // LogEventFilterPattern は nil のままにする。
