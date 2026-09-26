@@ -18,7 +18,9 @@ describe('GcpActiveSessionCard', () => {
   });
 
   it('環境色ドットがプロジェクト ID サフィックスに追随する', () => {
-    const { container } = render(<GcpActiveSessionCard project="example-prod" projects={projects} />);
+    const { container } = render(
+      <GcpActiveSessionCard project="example-prod" projects={projects} />,
+    );
     expect(container.querySelector('.session-tab-dot')).toHaveClass('env-prod');
   });
 

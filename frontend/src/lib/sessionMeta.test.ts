@@ -164,7 +164,13 @@ describe('awsPickerItems', () => {
 describe('gcpPickerItems', () => {
   const projects: GcpProject[] = [
     { id: 'example-dev', name: 'Example Dev', projectNumber: '1', state: 'ACTIVE', createTime: '' },
-    { id: 'example-prod', name: 'example-prod', projectNumber: '2', state: 'ACTIVE', createTime: '' },
+    {
+      id: 'example-prod',
+      name: 'example-prod',
+      projectNumber: '2',
+      state: 'ACTIVE',
+      createTime: '',
+    },
   ];
 
   it('開設済みプロジェクトは disabled になる', () => {
