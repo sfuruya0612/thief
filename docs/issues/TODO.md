@@ -1,0 +1,140 @@
+- [x] Google Cloud Logging のサービス追加
+    - 期間指定、Live Tail でログの可視化ができるようにする
+    - ログのフィルターができるようにする
+- [x] AWS CloudFormation のサービス追加
+    - Stack の一覧と、Stack を選択した際に Drawer で Event、作成済みリソースの表示ができるようにする
+    - AWS API の都合で CloudFormation の API 以外を実行しないと情報の取得ができない場合はユーザに相談すること
+- [x] [floci](https://floci.io/floci/) を使用して AWS のローカル環境を立ち上げて、ローカルでの動作確認をできるようにしたい
+    - example/ ディレクトリを作成して、そのなかにローカルでの動作確認に必要な Config などは配置する
+- [x] S3,  GCS のオブジェクトをブラウザ上でプレビューできるようにしたい
+    - 5 MB 以上のものはプレビュー不可
+    - 拡張子は csv, txt, json のみ対応
+- [x] ECS の Terminal を Task ID から絞り込むのは Task ID がランダム文字列なためわかりにくい
+    - Tasks 一覧からコンテナを指定した exec できるとわかりやすいかもしれない
+- [x] CloudFormation のサイドバーのカテゴリは Management & Governance
+    - AWS, Google Cloud ともにサイドバーのカテゴリを適切なものにする
+- [x] フッターを始め CLI コマンドのサンプルを表示している箇所は全て削除する
+- [x] S3,  GCS のプレビューできる拡張子を増やしたい
+    - バイナリ以外はできるようにしたい
+    - プレビュー不可のオブジェクトは Preview ボタンを押下できないだけでなく、グレーアウトして欲しい
+- [x] AWS のセッションの期限が SSO ログイン後に更新されず、ログインしてもリロードするまでずっと期限切れのまま
+- [x] docker 起動は要件から落ちたらから docker 起動に関連するファイル、記述は削除して
+- [x] frontend の起動ポートを 8088, backend の起動ポートを 8089 となるべく被りにくいものにしたい
+- [x] backend のサーバが起動する前に Frontend が起動した場合、ローディングバーなどを出してユーザに接続待ちであることを伝える
+- [x] S3, GCS のプレビュー可能なオブジェクトは Preview 時に Edit できるようにしたい
+- [x] S3 のオブジェクトが膨大(1000件以上)の場合は MAX 1000件で取得をやめるようにして。
+    - prefix 指定した時に再取得を走らせるようにするといいかも
+- [x] CloudRun のデータ取得に時間がかかる(50秒くらい)のはなぜ (docs/issues/closed/0041, docs/issues/closed/0043)
+    - 原因はロケーションごとの ListJobs の逐次実行。errgroup で並列化し
+      44.9 秒 → 6.3 秒に短縮
+- [x] Athena, Cloudwatch Logs, BigQuery, Cloud Logging のリソースバーを横方向にスケールできるようにしたい
+    - Log Group 名など長い文字列の場合、判別がつかない場合がある
+- [x] Cloud Logging のログのレコードの1行が長い場合に先頭の方しか一覧でみれなくて視認性が悪い
+    - 横スクロールをできるようにする
+    - Google 公式のようにフィールド指定でフィールドを先頭に表示できるようにしたい
+- [x] 日本語、英語で表記を切り替えられるようにして (docs/issues/closed/0050)
+- [x] AWS Pricing の RI/SP を選択した時に見積りに、期間と購入タイプもでるようにして (docs/issues/closed/0051)
+- [x] Theme の選択は Tweaks の中だけにする (docs/issues/closed/0062)
+- [x] AWS Pricing のサービスの順番は EC2, EC2 Spot, RDS, Elasticache, Compute Savings Plans, EC2 Instance Savings Plans, Database Savings Plans とする。ECS は EC2 Spot の後ろに残すとユーザー確認済み (docs/issues/closed/0063)
+- [x] Tweaks の順は Theme, Language, Detail panel, Accent にする (docs/issues/closed/0064)
+- [x] Secret Managet, Parameter Store の登録内容を更新できるようにしたい (docs/issues/closed/0065)
+- [x] RDS, Elasticache の紐づいているパラメータグループの中身を参照できるようにしたい (docs/issues/closed/0066)
+- [x] S3 の一覧を取得する画面のロードが遅い (docs/issues/closed/0067)
+    - リージョンごとに取りに行っているなら、Cloud Run 同様に並列呼び出しにして
+- [x] docs/issues/closed/0065 の延長で、Secret Manager, Parameter Store の Value の編集の導線を変えたい (docs/issues/closed/0068)
+    - 一覧には Value を出さず、S3 のように Preview 表示から Edit,  Close ボタンで編集ができるようにしたい
+- [x] Elasticache の OnDemand の項目で cache.r7g, cache.m6g ファミリーなど複数行表示されてしまっているノードがあるから確認して修正して (docs/issues/closed/0069)
+- [x] RDS のパラメータグループは Cluster, Instance どちらも欲しい (docs/issues/closed/0071)
+- [x] RDS,  Elassticache はクラスター、グループにインスタンス(ノード)が紐づく構成だから一覧の見え方を変えて欲しい (docs/issues/closed/0070, 0072)
+- [x] WAF のルールを Drawer でみれるようにしたい (docs/issues/closed/0075)
+- [x] WAF の一覧に Description も含めて (docs/issues/closed/0074)
+- [x] Frontend, Backend の処理の最適化をしたい。 (docs/issues/closed/0078, 0080, 0081)
+    - 具体的には処理の共通化、frontend はキャッシュの利用頻度をあげ API コールによるユーザの体験向上、backend は処理速度の向上を目指す
+- [x] RDS の Parameter Group は現在1つのタブになってしまっているところを Cluster,  Instance の Parameter Group のタブを分ける (docs/issues/closed/0076)
+- [x] WAF の個々のルールの詳細もみれるようにしたい (docs/issues/closed/0086)
+- [x] WAF の一覧のカラムは Web ACL, Description, State, Scope, Region, Rules, Associated の順にして欲しい (docs/issues/closed/0087)
+- [x] WAF の Associated が 0 になってしまっていてどこかおかしい (docs/issues/closed/0088)
+- [x] CloudFront の一覧のカラムは Destibution, State, Domain, Alternate domains, Origins にして欲しい (docs/issues/closed/0089)
+　　- Alternate domains に Destribution の値が入ってしまっていそう
+- [x] CloudFront のビヘイビアの一覧を Drawer に足してリストでみれるようにしたい (docs/issues/closed/0090)
+- [x] Kinesis の Mode (ON_DEMAND or PROVISIONED) を一覧に表示したい (docs/issues/closed/0092)
+- [x] Elasticache の各ノードのリージョンと AZ を一覧に表示したい (docs/issues/closed/0093)
+- [x] CostExplorer の画面で AWS アカウント、AWS サービスでの絞り込み機能を追加したい (docs/issues/closed/0094)
+- [x] Kinesis の Drawer (overviewRows.tsx の kinesisOverviewRows) に Mode 行を追加したい (issue 0092 のスコープ外として送り) (docs/issues/closed/0097)
+    - 一覧には Mode 列があるが Drawer の Overview には無く、表示項目に差がある
+- [x] "on-demand" / "provisioned" のリテラルが dynamo.go と kinesis.go に重複しているので共通定数化したい (issue 0092 のスコープ外として送り) (docs/issues/closed/0098)
+    - 未知の enum 値に対するフォールバックの実装が両者で非対称になっていないかも併せて確認する
+- [x] backend の JSON タグと frontend の Raw 型の対応を検証する contract テストを整備したい (issue 0092 のスコープ外として送り) (docs/issues/closed/0099, docs/issues/closed/0110)
+    - 現状は対応を検証するテストが皆無で、片側だけの変更に気付けない
+- [x] internal/cli/*.go の Columns と torow.go の ToRow() の順序対応を検証するテストを整備したい (issue 0092 のスコープ外として送り) (docs/issues/closed/0100)
+    - Kinesis に限らず internal/cli 全体に共通する問題
+- [x] torow.go の到達不能な ToRow() 実装を削除するか CLI が使う型を統一したい (issue 0093 のスコープ外として送り、削除案を採用) (docs/issues/closed/0101)
+    - ElastiCacheResource / EC2Resource / RDSResource / ECSResource / S3Resource 等の ToRow() は呼び出し元が無く、構造体のフィールド追加に追従しないまま放置されている
+    - ElastiCacheResource.ToRow() は 13 フィールドのうち 6 つを既に欠いている
+- [x] DescribeXxxInput に渡すパラメータを検証するモックテストを整備したい (issue 0093 のスコープ外として送り) (docs/issues/closed/0102)
+    - ShowCacheNodeInfo のようなリクエストパラメータを消してもテストが落ちない状態で、internal/aws 全体に共通する
+- [x] Elasticache の Drawer (overviewRows.tsx の cacheOverviewRows) にノードの AZ 行を追加したい (issue 0093 のスコープ外として送り) (docs/issues/closed/0103)
+    - 一覧には AZs 列があるが Drawer の Overview には無く、ELB (elbOverviewRows) が azs を表示しているのと不揃い
+- [x] columns.tsx の各サービスの列順序を検証するテストを整備したい (issue 0093 のスコープ外として送り) (docs/issues/closed/0104)
+    - 列の追加時に順序が意図通りかを検証する手段が無い
+- [x] Cost Explorer 系ハンドラの SSO トークン期限切れを 401 SSO_TOKEN_EXPIRED にマップしたい (issue 0094 のスコープ外として送り) (docs/issues/closed/0105)
+    - handlers_cost.go:25,51 は serveCached のエラー writer に writeInternalFromError を渡しており、他の AWS ハンドラ (handlers_aws.go の writeAWSError) と違って SSO 期限切れが 500 INTERNAL_ERROR になる
+    - frontend の isSSOExpiredError は code === 'SSO_TOKEN_EXPIRED' で判定するため、Cost Explorer 画面では SSOExpiredBanner が出ず原因の分からない 500 エラーとして見える
+- [x] Cost Explorer の絞り込み state を profile/region の切り替えで初期化したい (issue 0094 のスコープ外として送り) (docs/issues/closed/0106)
+    - AccountView.tsx:471 の CostExplorerPanel に key が無く、profile/region を切り替えても service/account の確定値や granularity/groupBy/日付レンジが保持される
+    - 別プロファイルに該当データが無いと「コストが 0」に見えて誤解を招く。granularity 等を含む 0094 以前からの既存挙動である
+- [x] internal/aws/cloudwatchlogs.go の StartLiveTail に単体テストを整備したい (issue 0095 のスコープ外として送り) (docs/issues/closed/0107)
+    - StartLiveTail はテストが皆無で、GCP 側の TailLogEntries が fakeTailStream による間接テストを持つのと非対称である
+    - ストリーミング系はモックを差し込む口が無いと退行に気付けない
+- [x] github.com/klauspost/compress を v1.18.7 以上に追随更新したい (issue 0095 のスコープ外として送り) (docs/issues/closed/0108)
+    - govulncheck が GO-2026-5841 (klauspost/compress/s2) をモジュールレベルで報告する。コードから到達しないため exit code には影響しないが、修正版は v1.18.7 で提供済みである
+    - 同時に報告される GO-2026-5932 (golang.org/x/crypto/openpgp) は Fixed in N/A であり、バージョン更新では解消できない
+- [x] BigQuery, Athena, CloudLogging のスニペット保存先が /tmp/ になってるせいで永続化できてない。 (docs/issues/closed/0143)
+    - サーバが起動しているディレクトリ配下をデフォルトの保存先としたい
+- [x] mise.toml の [tools].go と backend/go.mod の toolchain 行を、将来のパッチ更新時に揃える運用ルールを明文化したい (issue 0144 のスコープ外として送り) (docs/issues/closed/0145)
+    - 揃え忘れると mise 未経由のシェル (CI 等) で GOTOOLCHAIN=auto が古いパッチバージョンを解決し、govulncheck の脆弱性検知が再発しうる
+- [x] mise.toml の go バージョンを上げるたびに go: 管理下のツール (staticcheck 等) を自動で再ビルドする仕組みを追加したい (issue 0144 のスコープ外として送り) (docs/issues/closed/0146)
+    - 旧ツールチェインでビルドされたバイナリが残ると、go vet は通るのに staticcheck だけ「file requires newer Go version」で失敗する原因不明な事象になる
+- [x] Frontend で SSO Login をして別タブで開いたリダイレクト先の AWS のページでの認証が通ったあと Frontend のタブに切り替わるようにしたい (docs/issues/closed/0147, docs/issues/closed/0148, docs/issues/closed/0149)
+- [x] BigQuery の Snippets 保存で `virtual_money_issue_refund / virtual_money_use_refund（取消・返金）` を保存しようとするとサーバーが 400 エラーになっている (docs/issues/closed/0150)
+    - 確認はしていないがおそらく Athena でも同様の現象になると思われる
+- [x] backend 起動時の標準出力がアクセスログだけなので、標準エラー出力など 4xx, 5xx 系のエラーが発生した場合にコンソール出力するようにして欲しい (docs/issues/closed/0151)
+- [x] Frontend に SSO のログアウトボタンがほしい (docs/issues/closed/0153, docs/issues/closed/0154)
+    - issue 0149 の手動確認で `thief sso logout` コマンドを使ってログアウト状態を作った際に、Frontend からログアウトできると便利だと気付いた
+- [x] Amazon ECS のタスクの詳細にコンテナの CPU, memory も載せるようにしてほしい (docs/issues/closed/0155)
+- [x] ECS on EC2 の場合は EC2 ごとにどのタスクが動いているかをみたい (docs/issues/closed/0156, docs/issues/closed/0157)
+- [x] thief sso logout と Frontend の SSO ログアウトで、削除前に sso:Logout を呼んで AWS 側のサインインセッションも失効させたい (docs/issues/closed/0159)
+    - issue 0153 の設計判断で、ローカルのキャッシュ削除だけでは AWS 側のセッションが有効なまま残ると気付いた。CLI の ssoLogout を ssoauth.Logout に寄せる統合も同じ issue で扱う
+- [x] CostExplorer のフィルターがその時選択している Group にしか効いてなさそう。Usage type を表示している時に AWS サービス名でヒットしない (docs/issues/closed/0162)
+- [x] フィルターはサービス名、アカウント名でわけず取得している Service,  Usage type,  LinkedAccount 全部に効くようにしたい (docs/issues/closed/0162)
+- [x] CostExplorer で Group by に Linked account を選択したとき、表に Account ID だけでなく Account Name (Account ID) の形でアカウント名も出したい (docs/issues/closed/0163)
+- [x] EC2 Instance / ECS Tasks の台数の増減をグラフで表示したい (docs/issues/closed/0177)
+    - EC2 は Running なインスタンス数、ECS は各クラスター、サービスごとに Running のタスク数を描画するようにしたい
+- [x] Datadog の認証を DD_API_KEY / DD_APP_KEY の静的キーに加えて、DataDog 公式 CLI pup の pup auth login と同じ OAuth 2.0 (Authorization Code + PKCE + Dynamic Client Registration) ログインにも対応させたい (docs/issues/closed/0164, docs/issues/closed/0165)
+    - スコープは CLI (thief datadog auth login/logout/refresh) と API サーバ (frontend の DatadogView 向け) の両方
+    - トークンの保存方式は OS キーチェーンではなくファイル権限 (0600) 方式にする
+    - 既存の DD_API_KEY / DD_APP_KEY 方式は残し、OAuth トークンがあれば優先、無ければ静的キーにフォールバックする非破壊的な変更にする
+- [x] Datadog OAuth の `THIEF_DATADOG_OAUTH_REDIRECT_BASE` (`Datadog.OAuthRedirectBase`) を含む URL 系設定値に末尾スラッシュのトリム処理を入れたい (issue 0165 のスコープ外として送り) (docs/issues/closed/0178)
+    - 末尾にスラッシュを付けて設定すると redirect_uri が二重スラッシュになり、Datadog 側に登録済みの redirect_uris と文字列一致せず認可要求が拒否される
+    - 同種のトリム欠如は AWS SSO start URL 等、他の URL 系設定にも既存
+- [x] Frontend で Datadog の認証 (OAuth トークン/静的キーとも) が無効・期限切れのときに、AWS SSO ログインの SSOExpiredBanner と同じように、ブラウザ上で再ログインできる導線を追加したい (docs/issues/closed/0166)
+    - issue 0165 で frontend の UI 変更は明示的にスコープ外とされている
+    - `GET /api/datadog/cost/historical`/`estimated` を呼ぶと、OAuth トークン未ログイン・静的キー未設定の場合に `500 INTERNAL_ERROR no usable Datadog credentials: no Datadog OAuth token is stored; run 'thief datadog auth login', and DATADOG_API_KEY / DATADOG_APP_KEY are not both set` が返ることを確認済み
+    - backend は issue 0165 で `POST /api/datadog/auth/login/start`/`GET /api/datadog/auth/callback`/`GET /api/datadog/auth/login/status`/`POST /api/datadog/auth/logout` の 4 エンドポイントを実装済み
+- [x] internal/datadog パッケージの exported 識別子の godoc コメントを日本語化したい (docs/issues/closed/0179)
+    - issue 0169 のレビューで判明。issue 0164〜0168 で追加された既存の exported 識別子 (ListOrgs, OrgInfo 等) が英語の godoc のままで、グローバル規約の日本語コメント原則に反している
+    - issue 0169 自身が追加した新規識別子だけを日本語化すると同一パッケージ内で英語/日本語が混在し不統一になるため、パッケージ全体をまとめて対応する
+- [x] Datadog Metrics 画面の入力クエリを Cost/Dashboards セクションの切り替えをまたいで保持したい (docs/issues/closed/0180)
+    - issue 0170 のレビューで判明。`DatadogMetricsView` はセクション切り替えで条件レンダリングによりアンマウントされるため、入力中のクエリが失われ最後に Dashboards から引き継いだ値に戻る
+- [x] AWS, Google Cloud で特定のサービスを開いた状態で、別のサービスの状態を画面をセパレートするなどして同時に 2 つ以上のサービスを参照できるようにしたい (docs/issues/closed/0174, docs/issues/closed/0175)
+    - 例えば、AWS EC2 や ECS の Session Manager を繋いだ状態で Parameter Store や Secret Manager の値を確認したい時に、一度ページ遷移を挟む必要があり、session の繋ぎ直しが都度必要
+    - EC2, ECS の Session Manager を開いた状態を別画面に遷移しても維持できればそれだけでもいいかも
+- [x] `App.tsx` 100 行目付近の `no-console` の eslint-disable ディレクティブが未使用になっている (issue 0174 のレビューで判明。対象のコードが既に無くなっており警告として検出されている) (docs/issues/closed/0181)
+- [x] frontend のテストで jsdom 環境が実行ごとに作り直されておりテスト全体の実行時間の大半を占めている (issue 0174 のレビューで判明。vitest の `pool: 'vmThreads'` または `isolate: false` の採用でファイルごとの分離を保ったまま高速化できる可能性がある) (docs/issues/closed/0182)
+- [x] Terminal の画面 (常駐ターミナルドック) もサイズ変更できるようにしたい (docs/issues/closed/0176)
+    - Drawer はドラッグで高さ / 幅を変えられるが、docs/issues/closed/0174 で作ったターミナルドックは高さが 352px 固定 (0174 の設計判断 8 で高さのドラッグ変更を扱わない範囲にし、必要になれば別 issue で扱うとした)
+- [x] Frontend で Object Storage の Object を DuckDB Wasm + OPFS で検索、可視化できるようにしたい。 (docs/issues/closed/0196, docs/issues/closed/0197)
+    - 検索可能なデータ容量は 1 GB までとしておき、これは環境変数で調整可能。
+    - 対象とすファイルは csv,  parquet, jsonl, json など、AWS, Google Cloud の Managed サービスが出力する拡張子で代表的なものとする
+- [ ] `thief athena query` の結果取得に行数の上限を指定できるようにしたい (issue 0193 のレビューで判明。`GetAthenaQueryResultsAll` は NextToken が尽きるまで全ページを取得し、大量行を返す SELECT では実行時間とメモリが無制限に増える)
+- [ ] Google Cloud のサイドバーの件数バッジも AWS 側と同じ `useCachedQueryData` に揃えたい (`frontend/src/views/GcpSidebar.tsx` の `SvcItem` は `useQuery({ queryKey: ["gcp", svc, project], enabled: false })` で QueryObserver を作り、同一 queryKey の共有 options に queryFn 無しのオブザーバを足している。docs/issues/closed/0187 のとおり `query-core` の「queryFn が無ければ他オブザーバの options から補う」フォールバックが効くため現時点で不具合は出ないが、ライブラリの実装詳細への依存であり、AWS 側だけが対策済みという非対称も残る)

@@ -12,6 +12,19 @@
 
 - backend/  : Go で実装された API サーバ・CLI
 - frontend/ : Vite + React + TypeScript で実装された Web クライアント
+- docs/     : PRD、ADR、issue
+
+## ドキュメントの配置
+
+| パス | 中身 | git 管理 |
+| --- | --- | --- |
+| `docs/prd/` | PRD (プロダクト要求文書) | 対象 |
+| `docs/adr/` | ADR (アーキテクチャ決定記録)。`NNNN-<kebab-case>.md` で連番を振る | 対象 |
+| `docs/issues/` | issue (`closed/`、`pending/`、`SEQUENCE`、`TODO.md` を含む) | 対象 |
+
+- グローバル規約 (`~/.codex/AGENTS.md`) とスキル (`todo-to-issue`、`implement-issues`、`write-prd` など) が `issues/` と書いている箇所は、このリポジトリでは `docs/issues/` と読み替える。`issues/closed/` と `issues/pending/` も同様に `docs/issues/closed/` と `docs/issues/pending/` と読み替える。
+- コミットメッセージ末尾の issue 参照は `(docs/issues/closed/NNNN)` とする。
+- issue には組織を特定できる記述 (AWS のプロファイル名、Google Cloud のプロジェクト ID、社内のホスト名など) を書かない。実環境で確認した結果は `example-common` のような仮の名前に置き換えて書く (docs/adr/0028)。
 
 ## backend / frontend の型契約 (golden JSON)
 
@@ -248,7 +261,7 @@ backend/
 - **対象スタック**: Vite + React 18 + TypeScript (strict)。ビルド対象は **Web ブラウザのみ**(Flutter 時代の macOS Desktop 対応は廃止済み)。
 - **状態管理**: サーバ状態は **TanStack Query (`@tanstack/react-query`)**、UI 状態は `useState`/`useReducer` + カスタムフック。Redux/Zustand/Riverpod 相当のライブラリは導入しない(YAGNI)。
 - **ルーティング**: react-router 等は導入しない。profile タブ・サービス選択・トップレベルビュー (`AppView`: `aws`/`gcp`/`datadog`/`tidb`) は React state + `localStorage`(`cloudlens:v1` キー、`lib/storage.ts`)で管理する。
-- **多言語対応**: react-i18next 導入済み。翻訳リソースは `src/i18n/locales/ja/` に 14 ネームスペース (account / app / cost / drawerAws / drawerStorage / errors / gcp / logviewer / pricing / query / session / sidebar / topbar / tweaks)。Drawer のタブ名や AWS 由来の英語メッセージを表示する部品 (`DrawerError` 等) は英語ハードコードとし i18n に載せない (issues/closed/0066 の方針)。
+- **多言語対応**: react-i18next 導入済み。翻訳リソースは `src/i18n/locales/ja/` に 14 ネームスペース (account / app / cost / drawerAws / drawerStorage / errors / gcp / logviewer / pricing / query / session / sidebar / topbar / tweaks)。Drawer のタブ名や AWS 由来の英語メッセージを表示する部品 (`DrawerError` 等) は英語ハードコードとし i18n に載せない (docs/issues/closed/0066 の方針)。
 
 ### ディレクトリ構造
 

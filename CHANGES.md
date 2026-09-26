@@ -85,7 +85,7 @@
   - @sfuruya0612
 - [UPDATE] 4xx / 5xx 応答の発生時に、応答ボディの写し (writeError 経由の JSON または http.Error 経由の text/plain、上限 2048 バイトで切り詰め) を添えたログを 4xx は Warn、5xx は Error でコンソール (標準エラー出力) に出力するようにする (従来の Info のアクセスログは 2xx / 3xx のみになり、4xx / 5xx では Warn / Error の 1 行に統合される。http.ServeMux 自体が返す 404 / 405 も対象になる)
   - @sfuruya0612
-- [UPDATE] Datadog 組織一覧のログイン状態表示 (`GET /api/datadog/orgs` の `logged_in`) を、親組織自身だけでなく Sub Organization のエントリでも `DATADOG_API_KEY`/`DATADOG_APP_KEY` の静的キーの有無を反映するようにする (`datadogOrgsWithLoginState` から `IsSelf` による静的キー判定の制限を外す)。これは一覧の表示だけの変更で、Sub Organization の実データ取得 (`datadogAuthContext`/`datadogFallbackContext`) は引き続き親組織のときしか静的キーへフォールバックしない (issue 0171 参照)。そのため、静的キーを設定していても OAuth 未ログインの Sub Organization タブは、一覧では「ログイン済み」と表示されつつ実際にタブを開くとデータ取得がエラーになりうる (issues/closed/0172)
+- [UPDATE] Datadog 組織一覧のログイン状態表示 (`GET /api/datadog/orgs` の `logged_in`) を、親組織自身だけでなく Sub Organization のエントリでも `DATADOG_API_KEY`/`DATADOG_APP_KEY` の静的キーの有無を反映するようにする (`datadogOrgsWithLoginState` から `IsSelf` による静的キー判定の制限を外す)。これは一覧の表示だけの変更で、Sub Organization の実データ取得 (`datadogAuthContext`/`datadogFallbackContext`) は引き続き親組織のときしか静的キーへフォールバックしない (issue 0171 参照)。そのため、静的キーを設定していても OAuth 未ログインの Sub Organization タブは、一覧では「ログイン済み」と表示されつつ実際にタブを開くとデータ取得がエラーになりうる (docs/issues/closed/0172)
   - @sfuruya0612
 - [UPDATE] Datadog Metrics のクエリ入力・実行済みクエリ・期間の状態を `DatadogMetricsView` から `DatadogView` へリフトアップし、Cost/Dashboards セクションへ切り替えてから Metrics に戻っても入力が失われないようにする (`DatadogMetricsView` はセクション切り替えで条件レンダリングによりアンマウントされ、ローカル state を持っていたため従来は戻るたびに空欄と既定期間に戻っていた。組織タブを切り替えたときにクエリが持ち越されない挙動は `DatadogView` を再マウントする既存の `key={datadogOrg}` により従来どおり変わらない)
   - @sfuruya0612
@@ -305,7 +305,7 @@
   - @sfuruya0612
 - [CHANGE] SSO 再ログインをデバイス認可フロー (start/complete API) に切り替え、認可完了後に認可タブを自動で閉じて frontend のタブへフォーカスを戻すようにする (認可タブは frontend 自身が開くため、ポップアップブロック時や認可タブを自動制御できない場合は認可 URL をバナー内のリンクとして表示するフォールバックに切り替わる)。0148 で経過措置として並存させていた旧 `POST /api/aws/profiles/{profile}/sso/login` (aws sso login の exec 方式) は削除する
   - @sfuruya0612
-- [FIX] Datadog の組織タブとピッカーのラベルが表示名ではなく組織 ID (UUID) のまま表示される不具合を修正する (`ListOrgs` は `GET /api/v2/org` の `included[]` から id と `attributes.name` の対応表を作って名前解決しているが、SDK (`datadog-api-client-go/v2 v2.65.0`) の `OrgAttributes` は 8 フィールドすべてを必須として検証し、実環境のレスポンスがその要求を満たさないと該当の組織を `UnparsedObject` に退避してゼロ値にするため、対応表が空になり全組織が id へフォールバックしていた。SDK のレスポンスを一度 JSON に戻し、必須フィールドの検証を行わない最小限の型で読み直すことで、SDK が解釈できなかった組織やレスポンス全体からも id と表示名を取り出せるようにする。SDK が拒否した組織については、どのフィールドが原因か (`required field description missing` など SDK 自身のエラー文言) を警告ログに残す。frontend は変更しない。issues/closed/0173)
+- [FIX] Datadog の組織タブとピッカーのラベルが表示名ではなく組織 ID (UUID) のまま表示される不具合を修正する (`ListOrgs` は `GET /api/v2/org` の `included[]` から id と `attributes.name` の対応表を作って名前解決しているが、SDK (`datadog-api-client-go/v2 v2.65.0`) の `OrgAttributes` は 8 フィールドすべてを必須として検証し、実環境のレスポンスがその要求を満たさないと該当の組織を `UnparsedObject` に退避してゼロ値にするため、対応表が空になり全組織が id へフォールバックしていた。SDK のレスポンスを一度 JSON に戻し、必須フィールドの検証を行わない最小限の型で読み直すことで、SDK が解釈できなかった組織やレスポンス全体からも id と表示名を取り出せるようにする。SDK が拒否した組織については、どのフィールドが原因か (`required field description missing` など SDK 自身のエラー文言) を警告ログに残す。frontend は変更しない。docs/issues/closed/0173)
   - @sfuruya0612
 - [FIX] スニペット一覧 (`GET /api/snippets/{service}`) が、一覧取得と同時に同じスニペットを上書き保存すると、上書き前の `sql` と上書き後の `updated_at` を組にして返すことがある問題を修正する (`Store.List` が本文を `os.ReadFile`、更新日時を `DirEntry.Info` と別々にパス解決していたため、その間に `Save` の rename が入ると別の版の値が組になっていた。ファイルを 1 回だけ開き、同じファイル記述子から `Stat` と `ReadAll` で両方を取得するようにする。読み取り前に削除されたファイルを一覧から外す挙動は維持する。副次的に、手動配置したシンボリックリンクの `updated_at` はリンク自体ではなくリンク先の更新日時になる)
   - @sfuruya0612
@@ -331,7 +331,7 @@
   - @sfuruya0612
 - [FIX] CORS の `Access-Control-Allow-Methods` に DELETE が含まれず、クロスオリジンの削除系 API (Athena クエリの停止、BigQuery ジョブのキャンセル、スニペットの削除) が preflight で拒否されていたのを修正する
   - @sfuruya0612
-- [FIX] Drawer のサブタブ (CloudFormation の Events / Resources / Tags、ECR の Images、ECS の Services / Tasks、ELB の Listeners / Rules / Target groups / Targets、DynamoDB の Items、ElastiCache の Parameters) が取得エラーを空表示にしてしまい 0 件と区別できなかった不具合を、query ごとの取得エラーを DrawerError で表示するように修正する (data が無いときはエラー表示のみ、キャッシュ済み data があるときは既存表示の上部にエラーを出す。issues/0075 で確定した表示規則に統一する)
+- [FIX] Drawer のサブタブ (CloudFormation の Events / Resources / Tags、ECR の Images、ECS の Services / Tasks、ELB の Listeners / Rules / Target groups / Targets、DynamoDB の Items、ElastiCache の Parameters) が取得エラーを空表示にしてしまい 0 件と区別できなかった不具合を、query ごとの取得エラーを DrawerError で表示するように修正する (data が無いときはエラー表示のみ、キャッシュ済み data があるときは既存表示の上部にエラーを出す。docs/issues/0075 で確定した表示規則に統一する)
   - @sfuruya0612
 - [FIX] AWS API の権限不足 (AccessDenied) エラーが 401 SSO_TOKEN_EXPIRED に誤マップされて SSO 再ログインを促していたのを、403 ACCESS_DENIED として返し ErrorBanner で権限不足が分かるように修正する
   - @sfuruya0612
@@ -527,7 +527,9 @@
   - @sfuruya0612
 - `frontend/vite.config.ts` の `test` に `pool: 'vmThreads'` を追加し、`mise run frontend:test` の実行時間を短縮する (既定の `pool: 'forks'` はテストファイルごとに jsdom を作り直しており、95 ファイル 987 テストの実行時間の 74% (71.98 秒中) をその生成が占めていた。`vmThreads` はワーカーごとに 1 回だけ環境を用意しつつファイルごとの分離を保ち、同じテストが 9.58 秒で成功する。`isolate: false` はさらに速いが実行順依存で一部テストが失敗するため採らない。テスト自体とテスト結果は変えない)
   - @sfuruya0612
-- [FIX] `mise run backend:lint` が `~/go/bin` の旧 staticcheck に隠蔽されて古いツールを実行し失敗する不具合を修正する (mise の go プラグインは `GOPATH/bin` を go: ツールの bin ディレクトリより前に PATH へ載せるため、`~/go/bin` に同名のバイナリがあると mise 管理のツールが隠蔽される。`backend:tools` は `mise which` で解決した実体を検査するので、PATH 上で実際に実行されるバイナリを見ておらず隠蔽を検知できなかった。`backend:lint` の staticcheck と govulncheck、`backend:fmt` の goimports、`backend:mocks` の mockery の 4 箇所を `"$(mise which <bin>)"` での実行に変え、検査対象と実行対象を一致させる。実測した時点で実際に隠蔽されていたのは staticcheck と goimports で、govulncheck と mockery は `~/go/bin` に同名バイナリが無く実行されるバイナリは変わらない。この 2 つについては隠蔽が起きうる状態を塞ぐ変更になる。`backend:tools` の判定は変更していない。issues/closed/0198)
+- [FIX] `mise run backend:lint` が `~/go/bin` の旧 staticcheck に隠蔽されて古いツールを実行し失敗する不具合を修正する (mise の go プラグインは `GOPATH/bin` を go: ツールの bin ディレクトリより前に PATH へ載せるため、`~/go/bin` に同名のバイナリがあると mise 管理のツールが隠蔽される。`backend:tools` は `mise which` で解決した実体を検査するので、PATH 上で実際に実行されるバイナリを見ておらず隠蔽を検知できなかった。`backend:lint` の staticcheck と govulncheck、`backend:fmt` の goimports、`backend:mocks` の mockery の 4 箇所を `"$(mise which <bin>)"` での実行に変え、検査対象と実行対象を一致させる。実測した時点で実際に隠蔽されていたのは staticcheck と goimports で、govulncheck と mockery は `~/go/bin` に同名バイナリが無く実行されるバイナリは変わらない。この 2 つについては隠蔽が起きうる状態を塞ぐ変更になる。`backend:tools` の判定は変更していない。docs/issues/closed/0198)
   - @sfuruya0612
-- [FIX] `mise run backend:mocks` が設定ファイル不在で必ず失敗する不具合を、タスクごと削除して解消する (mockery は生成対象を決める設定ファイル (`backend/.mockery.yaml` 等) も `--name` / `--all` の指定も無いまま起動されるため、`FTL Use --name to specify the name of the interface or --all for all interfaces found` で必ず終了コード 1 になっていた。`backend/` には mockery が生成したモックを使うテストが 1 件も無く (mockery / `go.uber.org/mock` / gomock への参照は 0 件)、`AGENTS.md` の backend テストの規約が指定する手書きモックで足りているため、設定ファイルを追加せずタスクを削除する。`[tools]` の `go:github.com/vektra/mockery/v2` も、生成タスクが無くなれば導入の理由が残らないため併せて外す。`AGENTS.md` のタスク表から該当行を削除し、記載を `mise.toml` の実態に揃える。issues/closed/0199)
+- [FIX] `mise run backend:mocks` が設定ファイル不在で必ず失敗する不具合を、タスクごと削除して解消する (mockery は生成対象を決める設定ファイル (`backend/.mockery.yaml` 等) も `--name` / `--all` の指定も無いまま起動されるため、`FTL Use --name to specify the name of the interface or --all for all interfaces found` で必ず終了コード 1 になっていた。`backend/` には mockery が生成したモックを使うテストが 1 件も無く (mockery / `go.uber.org/mock` / gomock への参照は 0 件)、`AGENTS.md` の backend テストの規約が指定する手書きモックで足りているため、設定ファイルを追加せずタスクを削除する。`[tools]` の `go:github.com/vektra/mockery/v2` も、生成タスクが無くなれば導入の理由が残らないため併せて外す。`AGENTS.md` のタスク表から該当行を削除し、記載を `mise.toml` の実態に揃える。docs/issues/closed/0199)
+  - @sfuruya0612
+- issues/ を docs/issues/ へ移動して git で管理し、PRD (docs/prd/thief.md) と ADR (docs/adr/) を追加する
   - @sfuruya0612
