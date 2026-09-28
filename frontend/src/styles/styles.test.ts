@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import shell from './shell.css?raw';
 import drawer from './features/drawer.css?raw';
 import terminal from './features/terminal.css?raw';
+import tokens from './tokens.css?raw';
 
 const css = [shell, drawer, terminal].join('\n');
 
@@ -144,5 +145,18 @@ describe('features/terminal.css のターミナルドックの高さ変更', () 
 describe('shell.css の分割表示', () => {
   it('.pane.single は display: contents で .body のグリッドに影響させない', () => {
     expect(declarationOf('.pane.single', 'display')).toBe('contents');
+  });
+});
+
+// issue 0210: workbench の行高 (28px) は既定の密度のときだけ効き、明示的に cozy / comfortable を
+// 選んだときはそちらが勝つ。同じ詳細度の属性セレクタなので、ブロックの順序がその前提を決める。
+describe('tokens.css の Layout と密度の順序', () => {
+  it("[data-layout='workbench'] のブロックは [data-density] のブロックより前にある", () => {
+    const source = tokens.replace(/\/\*[\s\S]*?\*\//g, '');
+    const layout = source.indexOf("[data-layout='workbench'] {");
+    const cozy = source.indexOf("[data-density='cozy'] {");
+    expect(layout).toBeGreaterThan(-1);
+    expect(cozy).toBeGreaterThan(layout);
+    expect(declarationOf("[data-layout='workbench']", '--row-h', source)).toBe('28px');
   });
 });

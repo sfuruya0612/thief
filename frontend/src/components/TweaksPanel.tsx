@@ -1,6 +1,6 @@
 // tweaks.jsx を TSX に移植し useTweaks と接続する
 import { useTranslation } from 'react-i18next';
-import type { Accent, DrawerPos, Lang, Theme, Tweaks } from '../types/common';
+import type { Accent, DrawerPos, Lang, Layout, Theme, Tweaks } from '../types/common';
 import { useTweaks } from '../hooks/useTweaks';
 import { Icons } from './icons/Icons';
 import { Button } from './primitives';
@@ -42,6 +42,20 @@ function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
                 onClick={() => update({ theme: t })}
               >
                 {t === 'dark' ? 'Dark' : 'Light'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="trow">
+          <span className="lbl">Layout</span>
+          <div className="seg">
+            {(['standard', 'workbench'] as Layout[]).map((l) => (
+              <button
+                key={l}
+                className={tweaks.layout === l ? 'active' : ''}
+                onClick={() => update({ layout: l })}
+              >
+                {l === 'standard' ? 'Standard' : 'Workbench'}
               </button>
             ))}
           </div>

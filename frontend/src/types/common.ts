@@ -38,6 +38,8 @@ export type Theme = 'dark' | 'light';
 export type Density = 'compact' | 'cozy' | 'comfortable';
 export type Accent = 'indigo' | 'amber' | 'blue' | 'green' | 'purple' | 'pink';
 export type DrawerPos = 'right' | 'bottom';
+// シェルのレイアウト (issue 0210)。standard = 従来、workbench = 高密度 (寸法・ヘッダ・rail・docked Drawer)。
+export type Layout = 'standard' | 'workbench';
 // UI 表示言語 (issue 0050)。既定は 'ja' (既存の日本語ハードコード UI と挙動を変えない)。
 export type Lang = 'ja' | 'en';
 
@@ -47,6 +49,7 @@ export interface Tweaks {
   accent: Accent;
   drawerPos: DrawerPos;
   lang: Lang;
+  layout: Layout;
 }
 
 // GET /api/aws/profiles のバックエンド JSON 形状。

@@ -19,7 +19,7 @@
   align-items: center;
   gap: var(--sp-3);
   padding: 0 var(--sp-4);
-  height: 46px;
+  height: var(--topbar-h);
   background: var(--bg-0);
   border-bottom: 1px solid var(--line-1);
   flex-shrink: 0;
@@ -75,7 +75,7 @@
   display: flex;
   align-items: stretch;
   gap: 2px;
-  height: 38px;
+  height: var(--session-bar-h);
   padding: 0 12px;
   background: var(--session-bar-bg);
   border-bottom: 1px solid var(--line-1);
@@ -576,7 +576,7 @@
   align-items: center;
   gap: 9px;
   padding: 0 10px;
-  height: 30px;
+  height: var(--nav-item-h);
   font-size: 13px;
   color: var(--text-2);
   border-radius: var(--radius);
@@ -667,7 +667,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--toolbar-pad);
   border-bottom: 1px solid var(--line-1);
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -680,7 +680,7 @@
 }
 .toolbar .title h1 {
   margin: 0;
-  font-size: 14.5px;
+  font-size: var(--font-size-title);
   font-weight: 600;
   letter-spacing: -0.012em;
 }

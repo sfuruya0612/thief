@@ -111,6 +111,23 @@
   --sp-6: 24px;
 
   --row-h: 36px;
+
+  /* シェルと部品の寸法 (issue 0210)。[data-layout='workbench'] が上書きする。 */
+  --font-size-base: 13px; /* body */
+  --font-size-table: 12.5px; /* table.dt */
+  --font-size-title: 14.5px; /* .toolbar h1 */
+  --font-size-stat: 19px; /* .stat .value */
+  --topbar-h: 46px;
+  --session-bar-h: 38px;
+  --th-h: 32px; /* table.dt thead th。列フィルタ行の sticky の top もこれ */
+  --btn-h: 28px;
+  --btn-sm-h: 24px;
+  --facet-h: 26px; /* .facet と .chip-search */
+  --facets-min-h: 42px;
+  --nav-item-h: 30px;
+  --toolbar-pad: var(--sp-3) var(--sp-4);
+  --stats-pad: 12px 16px;
+  --stat-pad: 10px 14px;
   --radius-sm: 5px;
   --radius: 7px;
   --radius-lg: 10px;
@@ -198,6 +215,34 @@
 
   --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.05);
   --shadow-pop: 0 16px 50px rgba(24, 24, 40, 0.14), 0 0 0 1px var(--line-1);
+}
+
+/* Layout = workbench (issue 0210): 案 B の密度。寸法だけをここで上書きし、構造の差分は
+   App.tsx (ヘッダ) / Sidebar (rail) / ServicePanel の上段 / DrawerFrame の 4 か所が持つ。
+   [data-density] のブロックより前に置く: 行高 28px は既定 (compact) のときだけで、
+   明示的に cozy / comfortable を選んだときはそちらが勝つ。 */
+[data-layout='workbench'] {
+  --font-size-base: 12.5px;
+  --font-size-table: 12px;
+  --font-size-title: 13px;
+  --font-size-stat: 16px;
+  --topbar-h: 40px;
+  --session-bar-h: 34px;
+  --th-h: 28px;
+  --row-h: 28px;
+  --btn-h: 26px;
+  --btn-sm-h: 22px;
+  --facet-h: 24px;
+  --facets-min-h: 34px;
+  --nav-item-h: 26px;
+  --toolbar-pad: 6px 10px;
+  --stats-pad: 8px 10px;
+  --stat-pad: 6px 10px;
+  --radius-sm: 3px;
+  --radius: 4px;
+  --radius-lg: 6px;
+  --shadow-sm: none;
+  --shadow-pop: 0 0 0 1px var(--line-2);
 }
 
 [data-density='cozy'] {

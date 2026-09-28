@@ -30,18 +30,32 @@ describe('useTweaks', () => {
     expect(result.current.tweaks.theme).toBe(DEFAULT_TWEAKS.theme);
   });
 
-  it('保存済みの layout (docs/issues/closed/0205 で削除) は読み捨て、次の保存で書き戻さない', () => {
+  it('保存済みの layout が未知の値 (0205 以前の tabs-top) なら standard に読み替え、次の保存で standard を書く (issue 0210)', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ tweaks: { ...DEFAULT_TWEAKS, layout: 'tabs-top', drawerPos: 'right' } }),
     );
     const { result } = renderHook(() => useTweaks());
-    expect(result.current.tweaks).not.toHaveProperty('layout');
+    expect(result.current.tweaks.layout).toBe('standard');
     expect(result.current.tweaks.drawerPos).toBe('right');
 
     act(() => result.current.update({ theme: 'dark' }));
-    expect(loadStoredTweaks()).not.toHaveProperty('layout');
+    expect(loadStoredTweaks()?.layout).toBe('standard');
     expect(loadStoredTweaks()?.theme).toBe('dark');
+  });
+
+  it('layout の既定は standard で、workbench に切り替えると data-layout に反映され永続化される (issue 0210)', () => {
+    const { result } = renderHook(() => useTweaks());
+    expect(result.current.tweaks.layout).toBe('standard');
+    expect(document.documentElement.getAttribute('data-layout')).toBe('standard');
+
+    act(() => result.current.update({ layout: 'workbench' }));
+    expect(document.documentElement.getAttribute('data-layout')).toBe('workbench');
+    expect(loadStoredTweaks()?.layout).toBe('workbench');
+
+    resetTweaksForTest();
+    const again = renderHook(() => useTweaks());
+    expect(again.result.current.tweaks.layout).toBe('workbench');
   });
 
   it('別インスタンスの update が全インスタンスへ即時反映される (Detail panel 切り替えの回帰テスト)', () => {

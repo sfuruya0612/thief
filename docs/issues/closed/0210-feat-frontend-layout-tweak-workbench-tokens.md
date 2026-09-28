@@ -1,6 +1,7 @@
 # frontend に Tweaks の Layout (standard / workbench) を足し、寸法をトークン化して workbench の密度を CSS で切り替える
 
 Created: 2026-09-29
+Completed: 2026-09-29
 Model: Claude Fable 5.1
 
 ## 背景
@@ -50,3 +51,11 @@ Model: Claude Fable 5.1
 - docs/issues/0211 (ヘッダの統合とサイドバーの rail)、0212 (ツールバーの 1 行化)、0213 (Drawer の docked) が続く。番号順に実装する。
 - docs/issues/closed/0064 (Tweaks の行順)、0205 (`layout` の削除と読み捨て)。
 - docs/adr/0006: 状態は React の state と `localStorage`。ルーターは入れない。本 issue は方針を変えない。
+
+## 解決方法
+
+- `types/common.ts` に `Layout = 'standard' | 'workbench'` と `Tweaks.layout` を足し、`hooks/useTweaks.ts` の `DEFAULT_TWEAKS.layout = 'standard'`。`getSnapshot` は保存済みの `layout` が既知の 2 値以外なら `standard` に正規化する (0205 の読み捨てをこの正規化に置き換えた)。`useEffect` で `html` の `data-layout` に反映する。`useTweaks.test.tsx` に正規化 (`tabs-top` → `standard`) と切替・反映・永続化のテストを足した。
+- `TweaksPanel` に「Layout」の行 (`Standard` / `Workbench`) を Theme の直後に足し、`TweaksPanel.test.tsx` で行の位置と切替を固定した。Density の UI は足していない。
+- `tokens.css` の `:root` に「シェルと部品の寸法」の群 (`--font-size-base` / `-table` / `-title` / `-stat`、`--topbar-h`、`--session-bar-h`、`--th-h`、`--btn-h`、`--btn-sm-h`、`--facet-h`、`--facets-min-h`、`--nav-item-h`、`--toolbar-pad`、`--stats-pad`、`--stat-pad`) を現行と同じ値で足し、`base.css` (body)、`shell.css` (`.topbar` / `.session-tabs` / `.nav-item` / `.toolbar` / `h1`)、`primitives.css` (`.btn` / `.btn.sm` / `.stats` / `.stat` / `.stat .value` / `.facets` / `.facet` / `.chip-search` / `table.dt` / `th` / 列フィルタ行の `top`) の直書きを置き換えた。`standard` の解決後の値は同じ。
+- `[data-layout='workbench']` のブロックを `[data-density]` のブロックより前に足し、設計判断の値 (行高 28px、TopBar 40px、角 3 / 4 / 6px、`--shadow-sm: none`、`--shadow-pop` は縁だけ、など) を上書きする。`styles.test.ts` にブロックの順序と `--row-h: 28px` を固定するテストを足した。
+- 完了条件の「開発サーバでの目視」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (117 ファイル 1,313 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

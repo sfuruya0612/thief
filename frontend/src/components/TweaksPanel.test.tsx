@@ -33,4 +33,21 @@ describe('TweaksPanel', () => {
     expect(enButton.className).toContain('active');
     expect(jaButton.className).not.toContain('active');
   });
+
+  it('Layout 行は Theme の直後にあり、Workbench を選ぶと data-layout が切り替わる (issue 0210)', () => {
+    const { container } = render(<TweaksPanel />);
+
+    const labels = Array.from(container.querySelectorAll('.trow .lbl')).map((el) => el.textContent);
+    expect(labels.slice(0, 2)).toEqual(['Theme', 'Layout']);
+
+    const standard = screen.getByRole('button', { name: 'Standard' });
+    const workbench = screen.getByRole('button', { name: 'Workbench' });
+    expect(standard.className).toContain('active');
+    expect(document.documentElement.getAttribute('data-layout')).toBe('standard');
+
+    fireEvent.click(workbench);
+    expect(workbench.className).toContain('active');
+    expect(standard.className).not.toContain('active');
+    expect(document.documentElement.getAttribute('data-layout')).toBe('workbench');
+  });
 });

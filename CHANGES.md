@@ -424,6 +424,8 @@
   - @sfuruya0612
 - [UPDATE] Web の既定テーマ (ライト + green) で文字と地の対比が 4.5:1 に届かなかった 4 組を直す (ラベル・表のヘッダの文字 `--text-3` を `#8b8b95` から `#6f7079` に、エラーの文字に `--err-ink` (`#d2373d`)、accent を文字に使う箇所 (絞り込みチップの選択中など) に accent ごとの `--accent-ink`、primary ボタンの面に `--accent-strong` を足す。面の色と状態の点の色は変えない。あわせて `styles/tokens.css` の外にあった色の直書き 30 か所をトークンに寄せ、`[data-theme='dark'] .xxx` の部品ごとの上書き 7 ブロックを `--surface-main` に置き換えた。docs/issues/closed/0202)
   - @sfuruya0612
+- [ADD] Web の Tweaks に Layout (Standard / Workbench) を追加する (Workbench は案 B「ワークベンチ」の密度で、TopBar 40px・行高 28px・th 28px・角 4px・影なしなど寸法を詰める。第 1 段としてシェルと部品の寸法を `styles/tokens.css` の変数にし、`[data-layout='workbench']` の 1 ブロックで上書きする。Standard の見た目は変わらない。保存済みの `layout` が未知の値なら Standard に読み替える。docs/issues/closed/0210)
+  - @sfuruya0612
 
 ### misc
 
