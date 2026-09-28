@@ -140,3 +140,4 @@
 - [ ] Google Cloud のサイドバーの件数バッジも AWS 側と同じ `useCachedQueryData` に揃えたい (`frontend/src/views/GcpSidebar.tsx` の `SvcItem` は `useQuery({ queryKey: ["gcp", svc, project], enabled: false })` で QueryObserver を作り、同一 queryKey の共有 options に queryFn 無しのオブザーバを足している。docs/issues/closed/0187 のとおり `query-core` の「queryFn が無ければ他オブザーバの options から補う」フォールバックが効くため現時点で不具合は出ないが、ライブラリの実装詳細への依存であり、AWS 側だけが対策済みという非対称も残る)
 - [x] Object Storage (S3 / GCS) の Object をぜんぶ一覧で表示するのではなく、フォルダごとに階層構造で表示できるようにしたい (docs/issues/closed/0207)
 - [x] Object Storage の DuckDB によるクエリを複数ファイルに対してかけられるようにしたい (docs/issues/closed/0208)
+- [ ] オブジェクト SQL 検索で、取り込み後の `written` の合計が上限を超えたときのエラー文言を合計用の言い回しにしたい (issue 0208 の実装で既存の `drawerObjectQuery.tooLarge` (1 オブジェクト分の言い回し) を流用した)
