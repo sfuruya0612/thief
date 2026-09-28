@@ -30,6 +30,13 @@ import { TiDBView } from './views/nonaws/TiDBView';
 const DEFAULT_REGION = 'ap-northeast-1';
 const DEFAULT_SIDEBAR_WIDTH = 216;
 
+// キー入力の対象が入力欄なら、ショートカット (⌘B / Ctrl+B) を奪わない
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+}
+
 function usePersistedView() {
   const [view, setViewState] = useState<AppView>(() => loadPersisted().view ?? 'aws');
 
@@ -75,6 +82,20 @@ function usePersistedSidebarWidth() {
   return { width, setWidth };
 }
 
+// サイドバーの折りたたみ (rail) の永続化状態 (storage.ts の sidebarCollapsed フィールド)。
+// workbench レイアウトでだけ効く (issue 0211)。
+function usePersistedSidebarCollapsed() {
+  const [collapsed, setCollapsedState] = useState<boolean>(
+    () => loadPersisted().sidebarCollapsed ?? false,
+  );
+  const setCollapsed = useCallback((next: boolean) => {
+    setCollapsedState(next);
+    const prev = loadPersisted();
+    savePersisted({ ...prev, sidebarCollapsed: next });
+  }, []);
+  return { collapsed, setCollapsed };
+}
+
 export function App() {
   const { t } = useTranslation('app');
   const health = useHealthCheck();
@@ -91,6 +112,28 @@ export function App() {
   const { region, setRegion } = usePersistedRegion();
   const { view, setView } = usePersistedView();
   const { setWidth: setSidebarWidth } = usePersistedSidebarWidth();
+  const workbench = tweaks.layout === 'workbench';
+  const { collapsed: sidebarCollapsedState, setCollapsed: setSidebarCollapsed } =
+    usePersistedSidebarCollapsed();
+  // rail は workbench でだけ有効。standard では折りたたみ状態を持っていても展開して描画する。
+  const sidebarCollapsed = workbench && sidebarCollapsedState;
+  const toggleSidebar = useCallback(
+    () => setSidebarCollapsed(!sidebarCollapsedState),
+    [setSidebarCollapsed, sidebarCollapsedState],
+  );
+  // ⌘B / Ctrl+B でサイドバーを畳む (workbench のみ。入力中は無視)
+  useEffect(() => {
+    if (!workbench) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        if (isTypingTarget(e.target)) return;
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [workbench, toggleSidebar]);
   const [tweaksOpen, setTweaksOpen] = useState(false);
   // 分割表示 (2 ペイン) の状態。AWS 用と Google Cloud 用を別々に持つことで、ビューを
   // 切り替えても分割と各ペインのサービスが残る (現状の activeService と同じ振る舞い)。
@@ -148,6 +191,17 @@ export function App() {
     return <ConnectionWaiting />;
   }
 
+  // セッションタブ (AWS / Google Cloud / Datadog のみ)。standard では TopBar の下の行、
+  // workbench では TopBar の中に置く (issue 0211)。分岐はここだけで、タブ本体は同じ部品。
+  const sessionTabs =
+    view === 'aws' ? (
+      <AwsSessionTabs sessions={aws} />
+    ) : view === 'gcp' ? (
+      <GcpSessionTabs sessions={gcp} />
+    ) : view === 'datadog' ? (
+      <DatadogOrgSessionTabs sessions={datadog} />
+    ) : null;
+
   return (
     <div className="app">
       <TopBar
@@ -157,10 +211,9 @@ export function App() {
         view={view}
         onViewChange={setView}
         split={splitProp}
+        sessionTabs={workbench ? sessionTabs : undefined}
       />
-      {view === 'aws' && <AwsSessionTabs sessions={aws} />}
-      {view === 'gcp' && <GcpSessionTabs sessions={gcp} />}
-      {view === 'datadog' && <DatadogOrgSessionTabs sessions={datadog} />}
+      {!workbench && sessionTabs}
       {view === 'aws' &&
         (activeProfile ? (
           // key= でプロファイル切替時に丸ごと再マウントする。ServicePanel の
@@ -178,6 +231,8 @@ export function App() {
             onClosePane={awsPanes.closePane}
             drawerPos={tweaks.drawerPos}
             onSidebarWidthChange={setSidebarWidth}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={workbench ? toggleSidebar : undefined}
           />
         ) : (
           <SessionEmptyState title={t('emptyState.aws.title')} hint={t('emptyState.aws.hint')} />
@@ -194,6 +249,8 @@ export function App() {
             onClosePane={gcpPanes.closePane}
             drawerPos={tweaks.drawerPos}
             onSidebarWidthChange={setSidebarWidth}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={workbench ? toggleSidebar : undefined}
           />
         ) : (
           <SessionEmptyState title={t('emptyState.gcp.title')} hint={t('emptyState.gcp.hint')} />

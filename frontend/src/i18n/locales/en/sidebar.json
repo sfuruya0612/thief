@@ -1,6 +1,8 @@
 {
   "sidebar": {
-    "activeSession": "Active session"
+    "activeSession": "Active session",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
   },
   "gcpSidebar": {
     "activeSession": "Active session"

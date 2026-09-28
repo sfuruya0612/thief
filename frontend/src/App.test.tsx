@@ -6,6 +6,8 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
 import { openTerminalSession, resetTerminalSessionsForTest } from './hooks/useTerminalSessions';
+import { resetTweaksForTest } from './hooks/useTweaks';
+import { STORAGE_KEY } from './lib/storage';
 
 // ServicePanel が使う useResources / useCost と health check だけを差し替える
 // (views/AccountView.test.tsx と同じ方法)。fetch は解決しない Promise にして
@@ -400,5 +402,109 @@ describe('App の分割表示', () => {
     expect(paneEls(container)).toHaveLength(2);
     expect(paneEls(container)[0].querySelector('h1')?.textContent).toBe('EC2');
     expect(paneEls(container)[1].querySelector('h1')?.textContent).toBe('Parameter Store');
+  });
+});
+
+// issue 0211: Layout = workbench では TopBar がセッションタブを内包し、サイドバーを rail に畳める。
+// standard の DOM は変わらない (セッションタブは TopBar の下の別の行)。
+describe('App の Layout (workbench)', () => {
+  const originalMatchMedia = globalThis.matchMedia;
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetTerminalSessionsForTest();
+    resetTweaksForTest();
+    profilesState.hasSession = true;
+    gcpState.activeProject = 'proj-a';
+    vi.clearAllMocks();
+    globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+    globalThis.matchMedia = vi.fn().mockReturnValue({
+      matches: false,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+    }) as unknown as typeof globalThis.matchMedia;
+    mocks.useHealthCheck.mockReturnValue({ isSuccess: true });
+    mocks.useResources.mockReturnValue({ data: [], isLoading: false, error: null });
+    mocks.useCost.mockReturnValue({ data: [], isLoading: false, error: null });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    globalThis.matchMedia = originalMatchMedia;
+    vi.restoreAllMocks();
+    resetTweaksForTest();
+  });
+
+  function setLayout(layout: 'standard' | 'workbench', extra: Record<string, unknown> = {}) {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tweaks: {
+          theme: 'light',
+          density: 'compact',
+          accent: 'green',
+          drawerPos: 'bottom',
+          lang: 'ja',
+          layout,
+        },
+        ...extra,
+      }),
+    );
+    resetTweaksForTest();
+  }
+
+  it('standard ではセッションタブが TopBar の下の行にあり、rail のボタンは出ない', () => {
+    setLayout('standard');
+    const { container } = renderApp();
+    expect(container.querySelector('.app > .session-tabs')).not.toBeNull();
+    expect(container.querySelector('.topbar .topbar-sessions')).toBeNull();
+    expect(container.querySelector('.sidebar-toggle')).toBeNull();
+    expect(container.querySelector('.body')!.classList.contains('rail')).toBe(false);
+  });
+
+  it('workbench ではセッションタブが TopBar の中にあり、Google Cloud に切り替えても中にある', async () => {
+    setLayout('workbench');
+    const { container } = renderApp();
+    expect(container.querySelector('.topbar .topbar-sessions .session-tabs')).not.toBeNull();
+    expect(container.querySelector('.app > .session-tabs')).toBeNull();
+
+    clickByText(container, '.view-switch button', 'Google Cloud');
+    await waitFor(() => {
+      expect(container.querySelector('.view-switch button.active')?.textContent).toBe(
+        'Google Cloud',
+      );
+    });
+    expect(container.querySelector('.topbar .topbar-sessions .session-tabs')).not.toBeNull();
+  });
+
+  it('workbench では畳むボタンと ⌘B / Ctrl+B でサイドバーが rail になり、永続化される', () => {
+    setLayout('workbench');
+    const { container } = renderApp();
+    const body = () => container.querySelector('.body')!;
+    expect(body().classList.contains('rail')).toBe(false);
+
+    fireEvent.click(container.querySelector('.sidebar-toggle')!);
+    expect(body().classList.contains('rail')).toBe(true);
+    expect(container.querySelector('aside.sidebar')!.classList.contains('rail')).toBe(true);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).sidebarCollapsed).toBe(true);
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
+    expect(body().classList.contains('rail')).toBe(false);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).sidebarCollapsed).toBe(false);
+
+    fireEvent.keyDown(document, { key: 'b', metaKey: true });
+    expect(body().classList.contains('rail')).toBe(true);
+  });
+
+  it('保存済みの sidebarCollapsed は standard では効かず、workbench に切り替えたときだけ rail になる', () => {
+    setLayout('standard', { sidebarCollapsed: true });
+    const { container } = renderApp();
+    expect(container.querySelector('.body')!.classList.contains('rail')).toBe(false);
+
+    setLayout('workbench', { sidebarCollapsed: true });
+    const again = renderApp();
+    expect(again.container.querySelector('.body')!.classList.contains('rail')).toBe(true);
   });
 });

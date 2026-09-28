@@ -426,6 +426,8 @@
   - @sfuruya0612
 - [ADD] Web の Tweaks に Layout (Standard / Workbench) を追加する (Workbench は案 B「ワークベンチ」の密度で、TopBar 40px・行高 28px・th 28px・角 4px・影なしなど寸法を詰める。第 1 段としてシェルと部品の寸法を `styles/tokens.css` の変数にし、`[data-layout='workbench']` の 1 ブロックで上書きする。Standard の見た目は変わらない。保存済みの `layout` が未知の値なら Standard に読み替える。docs/issues/closed/0210)
   - @sfuruya0612
+- [ADD] Web の Layout = Workbench で、TopBar とセッションタブを 40px の 1 段にまとめ、サイドバーを 44px の rail (アイコンと件数だけ) に畳めるようにする (畳むボタンと ⌘B / Ctrl+B。折りたたみは `localStorage` に残る。Standard の DOM は変わらない。docs/issues/closed/0211)
+  - @sfuruya0612
 
 ### misc
 

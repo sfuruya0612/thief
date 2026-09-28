@@ -13,6 +13,7 @@ import type { GcpProject } from '../types/gcp';
 import { Icons } from '../components/icons/Icons';
 import { GcpIcons } from '../components/icons/GcpIcons';
 import { GcpActiveSessionCard } from '../components/session/GcpActiveSessionCard';
+import { SidebarToggle } from '../components/SidebarToggle';
 
 // カテゴリ定義 (GCP_SERVICE_GROUPS) の表示順に、各サービスの group から所属サービスを導出する。
 // 該当サービスが 1 つもないカテゴリは表示しない。
@@ -32,6 +33,9 @@ export interface GcpSidebarProps {
   // 印を出し、未指定・1 ペインでは現状と同じ描画にする。
   paneServices?: (string | null)[];
   onWidthChange?: (width: number) => void;
+  // workbench レイアウトの rail (issue 0211)。Sidebar.tsx と同じ。
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 export function GcpSidebar({
@@ -41,12 +45,14 @@ export function GcpSidebar({
   onService,
   paneServices,
   onWidthChange,
+  collapsed = false,
+  onToggleCollapsed,
 }: GcpSidebarProps) {
   const { t } = useTranslation('sidebar');
   // 分割中だけ、サービスが表示中のペインの添字を返す (どちらのペインにも無ければ -1)
   const paneOf = (svc: string) => (paneServices?.length === 2 ? paneServices.indexOf(svc) : -1);
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${collapsed ? ' rail' : ''}`}>
       <div className="profile-card">
         <div className="profile-card-field">
           <span className="label">{t('gcpSidebar.activeSession')}</span>
@@ -70,11 +76,14 @@ export function GcpSidebar({
         </div>
       ))}
 
-      <div
-        className="sidebar-resizer"
-        onPointerDown={startSidebarResize(onWidthChange)}
-        title="Drag to resize"
-      />
+      {!collapsed && (
+        <div
+          className="sidebar-resizer"
+          onPointerDown={startSidebarResize(onWidthChange)}
+          title="Drag to resize"
+        />
+      )}
+      {onToggleCollapsed && <SidebarToggle collapsed={collapsed} onToggle={onToggleCollapsed} />}
     </aside>
   );
 }
@@ -101,9 +110,13 @@ function SvcItem({ svc, project, active, paneIndex, onService }: SvcItemProps) {
   const IconEl = GcpIcons[svc] ?? Icons[svc];
 
   return (
-    <div className={`nav-item ${active === svc ? 'active' : ''}`} onClick={() => onService(svc)}>
+    <div
+      className={`nav-item ${active === svc ? 'active' : ''}`}
+      onClick={() => onService(svc)}
+      title={meta?.name}
+    >
       <span className="svc-icon">{IconEl ? <IconEl size={16} /> : null}</span>
-      <span>{meta?.name}</span>
+      <span className="nav-label">{meta?.name}</span>
       {paneIndex >= 0 && <span className="pane-mark">{paneIndex + 1}</span>}
       <span className="count">{count}</span>
     </div>

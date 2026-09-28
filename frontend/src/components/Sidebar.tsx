@@ -14,6 +14,7 @@ import { useRegions } from '../api/queries';
 import { startSidebarResize } from '../lib/sidebarResize';
 import type { Profile } from '../types/common';
 import { AwsActiveSessionCard } from './session/AwsActiveSessionCard';
+import { SidebarToggle } from './SidebarToggle';
 
 // カテゴリ定義 (AWS_SERVICE_GROUPS) の表示順に、各サービスの group から所属サービスを導出する。
 // 該当サービスが 1 つもないカテゴリは表示しない。
@@ -35,6 +36,10 @@ export interface SidebarProps {
   // 印を出し、未指定・1 ペインでは現状と同じ描画にする。
   paneServices?: (string | null)[];
   onWidthChange?: (width: number) => void;
+  // workbench レイアウトの rail (issue 0211): true でアイコンと件数だけの 44px に畳む。
+  // onToggleCollapsed を渡したときだけ畳むボタンを出す (standard では渡さない)。
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 export function Sidebar({
@@ -46,6 +51,8 @@ export function Sidebar({
   onService,
   paneServices,
   onWidthChange,
+  collapsed = false,
+  onToggleCollapsed,
 }: SidebarProps) {
   const { t } = useTranslation('sidebar');
   // リージョン一覧は DescribeRegions から動的に取得する
@@ -56,7 +63,7 @@ export function Sidebar({
   const paneOf = (svc: string) => (paneServices?.length === 2 ? paneServices.indexOf(svc) : -1);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${collapsed ? ' rail' : ''}`}>
       <div className="profile-card">
         <div className="profile-card-field">
           <span className="label">{t('sidebar.activeSession')}</span>
@@ -96,11 +103,14 @@ export function Sidebar({
         </div>
       ))}
 
-      <div
-        className="sidebar-resizer"
-        onPointerDown={startSidebarResize(onWidthChange)}
-        title="Drag to resize"
-      />
+      {!collapsed && (
+        <div
+          className="sidebar-resizer"
+          onPointerDown={startSidebarResize(onWidthChange)}
+          title="Drag to resize"
+        />
+      )}
+      {onToggleCollapsed && <SidebarToggle collapsed={collapsed} onToggle={onToggleCollapsed} />}
     </aside>
   );
 }
@@ -123,9 +133,13 @@ function SvcItem({ svc, profile, region, active, paneIndex, onService }: SvcItem
   const IconEl = AwsIcons[svc] ?? Icons[svc];
 
   return (
-    <div className={`nav-item ${active === svc ? 'active' : ''}`} onClick={() => onService(svc)}>
+    <div
+      className={`nav-item ${active === svc ? 'active' : ''}`}
+      onClick={() => onService(svc)}
+      title={meta?.name}
+    >
       <span className="svc-icon">{IconEl ? <IconEl size={16} /> : null}</span>
-      <span>{meta?.name}</span>
+      <span className="nav-label">{meta?.name}</span>
       {paneIndex >= 0 && <span className="pane-mark">{paneIndex + 1}</span>}
       <span className="count">{count}</span>
     </div>

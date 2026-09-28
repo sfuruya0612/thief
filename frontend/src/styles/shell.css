@@ -71,6 +71,39 @@
   color: var(--text-1);
 }
 
+/* workbench レイアウト (issue 0211): セッションタブを TopBar の中 (プロバイダ切替の右) に置く。
+   タブ本体は .session-tabs と同じ部品で、ここでは高さ・地・アクティブの印 (上角の丸 → 下線) だけを変える。 */
+.topbar-sessions {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 60%;
+}
+.topbar .session-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--topbar-h);
+  padding: 0 4px;
+  background: transparent;
+  border-bottom: 0;
+}
+.topbar .session-tab {
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.topbar .session-tab.active {
+  background: transparent;
+  border-bottom-color: var(--accent);
+}
+.topbar .session-tabs-hint {
+  display: none;
+}
+
 .session-tabs {
   display: flex;
   align-items: stretch;
@@ -459,6 +492,13 @@
 .body.split {
   grid-template-columns: var(--sidebar-w, 216px) minmax(0, 1fr) minmax(0, 1fr);
 }
+/* workbench で rail に畳んだとき (issue 0211): サイドバーの列を --rail-w にする */
+.body.rail {
+  grid-template-columns: var(--rail-w) 1fr;
+}
+.body.rail.split {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, 1fr);
+}
 .pane {
   display: flex;
   flex-direction: column;
@@ -652,6 +692,57 @@
   color: var(--text-1);
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* サイドバーを畳むボタン (workbench でだけ描画される。issue 0211) */
+.sidebar-toggle {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--nav-item-h);
+  padding: 0 10px;
+  border-radius: var(--radius);
+  color: var(--text-3);
+  font-size: 11.5px;
+  flex-shrink: 0;
+}
+.sidebar-toggle:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+/* rail: アイコンと件数だけの 44px。セッションカードと見出しは畳み、名前は title で示す。 */
+.sidebar.rail {
+  padding: var(--sp-2) 4px;
+  gap: var(--sp-2);
+  overflow: hidden;
+}
+.sidebar.rail .profile-card,
+.sidebar.rail .section-label,
+.sidebar.rail .nav-label {
+  display: none;
+}
+.sidebar.rail .nav-item {
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: auto;
+  padding: 5px 0;
+}
+.sidebar.rail .nav-item .count {
+  margin-left: 0;
+  font-size: 9.5px;
+  line-height: 1;
+}
+.sidebar.rail .nav-item .pane-mark {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  margin: 0;
+}
+.sidebar.rail .sidebar-toggle {
+  justify-content: center;
+  padding: 0;
 }
 
 .main {

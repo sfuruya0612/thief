@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
@@ -285,5 +285,64 @@ describe('Sidebar とリソース一覧クエリの同居', () => {
 
     const query = qc.getQueryCache().find({ queryKey: ['aws', 'ecr', 'test', 'ap-northeast-1'] });
     expect((query?.state.error as Error | null)?.message ?? '').not.toContain('Missing queryFn');
+  });
+});
+
+// issue 0211: workbench レイアウトの rail。collapsed でアイコンと件数だけの幅に畳み、
+// onToggleCollapsed を渡したときだけ畳むボタンを出す (standard では渡さないので出ない)。
+describe('Sidebar の rail (workbench)', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  function renderSidebar(props: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
+    return renderWithQC(
+      <Sidebar
+        profile="test"
+        region="ap-northeast-1"
+        profiles={[{ name: 'test' }]}
+        onRegionChange={() => {}}
+        activeService="ec2"
+        onService={() => {}}
+        {...props}
+      />,
+    );
+  }
+
+  it('collapsed のとき aside に rail が付き、リサイズハンドルを出さず、各項目は title にサービス名を持つ', () => {
+    const { container } = renderSidebar({ collapsed: true, onToggleCollapsed: () => {} });
+    const aside = container.querySelector('aside.sidebar')!;
+    expect(aside.classList.contains('rail')).toBe(true);
+    expect(container.querySelector('.sidebar-resizer')).toBeNull();
+    const ec2 = Array.from(container.querySelectorAll('.nav-item')).find(
+      (el) => el.getAttribute('title') === 'EC2',
+    );
+    expect(ec2).not.toBeUndefined();
+    expect(ec2!.querySelector('.nav-label')?.textContent).toBe('EC2');
+    expect(ec2!.querySelector('.count')).not.toBeNull();
+  });
+
+  it('畳むボタンは onToggleCollapsed を渡したときだけ出て、押すと呼ばれる', () => {
+    const onToggle = vi.fn();
+    const withToggle = renderSidebar({ collapsed: false, onToggleCollapsed: onToggle });
+    const button = withToggle.container.querySelector('.sidebar-toggle')!;
+    expect(button).not.toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(button);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    const standard = renderSidebar();
+    expect(standard.container.querySelector('.sidebar-toggle')).toBeNull();
+    expect(standard.container.querySelector('aside.sidebar')!.classList.contains('rail')).toBe(
+      false,
+    );
+    expect(standard.container.querySelector('.sidebar-resizer')).not.toBeNull();
   });
 });

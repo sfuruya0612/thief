@@ -125,6 +125,7 @@
   --facet-h: 26px; /* .facet と .chip-search */
   --facets-min-h: 42px;
   --nav-item-h: 30px;
+  --rail-w: 44px; /* workbench でサイドバーを畳んだときの幅 (issue 0211) */
   --toolbar-pad: var(--sp-3) var(--sp-4);
   --stats-pad: 12px 16px;
   --stat-pad: 10px 14px;

@@ -1,6 +1,8 @@
 {
   "sidebar": {
-    "activeSession": "アクティブセッション"
+    "activeSession": "アクティブセッション",
+    "collapse": "サイドバーを畳む",
+    "expand": "サイドバーを広げる"
   },
   "gcpSidebar": {
     "activeSession": "アクティブセッション"

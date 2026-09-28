@@ -321,6 +321,9 @@ export interface GcpViewProps {
   onClosePane: (index: number) => void;
   drawerPos: DrawerPos;
   onSidebarWidthChange?: (width: number) => void;
+  // workbench レイアウトの rail (issue 0211)。standard では渡さない。
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export function GcpView({
@@ -332,6 +335,8 @@ export function GcpView({
   onClosePane,
   drawerPos,
   onSidebarWidthChange,
+  sidebarCollapsed = false,
+  onToggleSidebar,
 }: GcpViewProps) {
   const { t } = useTranslation('app');
   const split = panes.services.length === 2;
@@ -339,7 +344,7 @@ export function GcpView({
   const focusedService = panes.services[panes.focused] ?? null;
 
   return (
-    <div className={`body${split ? ' split' : ''}`}>
+    <div className={`body${split ? ' split' : ''}${sidebarCollapsed ? ' rail' : ''}`}>
       <GcpSidebar
         project={activeProject}
         projects={projects}
@@ -347,6 +352,8 @@ export function GcpView({
         activeService={focusedService}
         onService={onSelectService}
         paneServices={split ? panes.services : undefined}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={onToggleSidebar}
       />
 
       {panes.services.map((service, index) => {

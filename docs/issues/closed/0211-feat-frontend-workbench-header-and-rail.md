@@ -1,6 +1,7 @@
 # workbench レイアウトで TopBar とセッションタブを 1 段にし、サイドバーを rail に畳めるようにする
 
 Created: 2026-09-29
+Completed: 2026-09-29
 Model: Claude Fable 5.1
 
 ## 背景
@@ -37,3 +38,13 @@ docs/issues/0210 の第 2 段 (シェルの構造の前半)。`standard` では 
 
 - docs/issues/0210 (先に実装する)、0212、0213。
 - docs/issues/closed/0020 (セッションタブ)、0027 (サイドバーのカテゴリ)、0175 (分割表示のペイン番号)。
+
+## 解決方法
+
+- `TopBar` に `sessionTabs?: ReactNode` を足し、あれば `.view-switch` の右に `.topbar-sessions` として描画する。`App.tsx` は view に応じたセッションタブの要素を 1 度だけ組み立て、`workbench` なら `TopBar` に渡し、`standard` なら従来どおり `TopBar` の下に描画する (分岐はこの 1 か所)。`shell.css` の `.topbar .session-tabs*` で高さ `--topbar-h`、地と下罫線なし、アクティブは `accent` の 2px 下線、`session-tabs-hint` 非表示にした。`.topbar-sessions` は `flex: 1 1 auto; max-width: 60%` で、`SessionTabs` の `ResizeObserver` による畳み (「他 N ▾」) はそのまま効く。
+- rail: `Sidebar` / `GcpSidebar` に `collapsed` / `onToggleCollapsed` を足し、`collapsed` で `aside.sidebar.rail` (幅 `--rail-w` 44px、セッションカード・カテゴリ見出し・名前 `.nav-label` は CSS で非表示、`nav-item` は縦並びでアイコン + 件数、`title` にサービス名、`pane-mark` は右上に重ねる)。リサイズハンドルは畳んだときは出さない。畳むボタンは共通部品 `components/SidebarToggle.tsx` (`sidebar.collapse` / `sidebar.expand` の翻訳を `ja` / `en` に追加) で、`onToggleCollapsed` があるときだけ出す。`AccountView` / `GcpView` は `sidebarCollapsed` で `.body.rail` を付け、`.body.rail` / `.body.rail.split` のグリッドで列幅を `--rail-w` にする。
+- 折りたたみ状態は `PersistedState.sidebarCollapsed` に永続化する (`App.tsx` の `usePersistedSidebarCollapsed`)。`App.tsx` は `workbench` のときだけ `sidebarCollapsed` と `onToggleSidebar` を渡すので、`standard` では保存済みでも rail にならない。`⌘B` / `Ctrl+B` は `App.tsx` の 1 つの `keydown` リスナー (workbench のみ登録、入力欄では無視)。
+- 設計判断からの差分: rail でセッションカードを「マークだけ」にする案は、workbench ではヘッダのタブにアクティブなセッションが見えているため、カードごと非表示にした (リージョンや SSO の操作は展開して行う)。
+- テスト: `App.test.tsx` に Layout の describe (standard の DOM、workbench の TopBar 内タブ、view 切替後も内包、畳むボタンと ⌘B / Ctrl+B と永続化、standard では保存値が効かない) 4 件、`Sidebar.test.tsx` に rail の 2 件を足した。`SessionTabs.test.tsx` の既存テストはそのまま通る。
+- `AGENTS.md` の frontend 「コンポーネント設計」に「Layout による DOM の分岐は 4 か所 (ヘッダ / rail / 一覧の上段 / DrawerFrame) に限る」を書いた。
+- 完了条件の「開発サーバでの目視」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (117 ファイル 1,319 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

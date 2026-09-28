@@ -14,6 +14,8 @@ export interface PersistedState {
   region?: string;
   view?: AppView;
   sidebarWidth?: number;
+  // workbench レイアウトでサイドバーを rail (アイコンだけ) に畳んでいるか (issue 0211)
+  sidebarCollapsed?: boolean;
   // Athena / CloudWatch Logs / BigQuery / Cloud Logging の左パネル (.qe-schema / .lv-tree) 幅
   resourcePanelWidth?: number;
   // 常駐ターミナルドックの本文 (div.terminal-dock-body) の高さ。タブバー (32px) を含まない

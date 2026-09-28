@@ -2,6 +2,7 @@
 // + AWS/GCP/Datadog/TiDB のトップレベルビュー切替
 // profile/region セレクタはサイドバーの profile-card へ移設済み (Sidebar.tsx を参照)
 import { useTranslation } from 'react-i18next';
+import type { ReactNode } from 'react';
 import type { AppView } from '../types/common';
 import { Icons } from './icons/Icons';
 
@@ -22,6 +23,9 @@ export interface TopBarProps {
   // 分割表示の開始 / 終了。渡されたときだけ分割ボタンを出す (セッションがある
   // AWS / Google Cloud のビューだけ。Datadog / TiDB とセッション未選択では出さない)。
   split?: { active: boolean; onToggle: () => void };
+  // workbench レイアウトではセッションタブを TopBar の中 (プロバイダ切替の右) に置く
+  // (issue 0211)。standard では App が TopBar の下に別の行として描画するため渡さない。
+  sessionTabs?: ReactNode;
 }
 
 export function TopBar({
@@ -31,6 +35,7 @@ export function TopBar({
   view,
   onViewChange,
   split,
+  sessionTabs,
 }: TopBarProps) {
   const { t } = useTranslation('topbar');
   return (
@@ -51,6 +56,7 @@ export function TopBar({
           </button>
         ))}
       </div>
+      {sessionTabs && <div className="topbar-sessions">{sessionTabs}</div>}
       <div className="spacer" />
       {split && (
         <button
