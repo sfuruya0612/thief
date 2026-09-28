@@ -30,7 +30,7 @@ Model: Claude Fable 5.1
   - `--toolbar-pad: var(--sp-3) var(--sp-4)`、`--stats-pad: 12px 16px`、`--stat-pad: 10px 14px`
   - `--row-h` は既存。列フィルタ行の `top: 32px` (th の高さに追従する sticky) は `var(--th-h)` にする。
 - `[data-layout='workbench']` のブロック (`tokens.css`、`[data-density]` のブロックより **前** に置く。`--row-h` は workbench で 28px にするが、明示的に `cozy` / `comfortable` を選んだときはそちらを優先させるため): `--font-size-base: 12.5px`、`--font-size-table: 12px`、`--font-size-title: 13px`、`--font-size-stat: 16px`、`--topbar-h: 40px`、`--session-bar-h: 34px`、`--th-h: 28px`、`--row-h: 28px`、`--btn-h: 26px`、`--btn-sm-h: 22px`、`--facet-h: 24px`、`--nav-item-h: 26px`、`--facets-min-h: 34px`、`--toolbar-pad: 6px 10px`、`--stats-pad: 8px 10px`、`--stat-pad: 6px 10px`、`--radius-sm: 3px`、`--radius: 4px`、`--radius-lg: 6px`、`--shadow-sm: none`、`--shadow-pop: 0 0 0 1px var(--line-2)` (浮き影を消し、縁だけ残す)。
-  - サイドバーの幅 (`--sidebar-w`) は利用者がドラッグした値を `App.tsx` が `html` の inline style に書くため、CSS のブロックでは上書きしない (rail への折りたたみは docs/issues/0207)。
+  - サイドバーの幅 (`--sidebar-w`) は利用者がドラッグした値を `App.tsx` が `html` の inline style に書くため、CSS のブロックでは上書きしない (rail への折りたたみは docs/issues/0211)。
   - 却下案: workbench 用の CSS を feature ごとのファイルに散らす。値の上書きは 1 か所 (`tokens.css`) に置く方が、0201 の層の規約に合う。
 - `styles/styles.test.ts` に、`[data-layout='workbench']` ブロックが `[data-density='cozy']` より前にあること (行高の優先の前提) を固定するテストを足す。`useTweaks.test.tsx` に、`layout` の既定・切替・`data-layout` の反映・旧値 (`tabs-top`) の正規化のテストを足す。`TweaksPanel.test.tsx` に Layout の行のテストを足す。
 
@@ -47,6 +47,6 @@ Model: Claude Fable 5.1
 ## 関連
 
 - 刷新案 B (Design System アーティファクト「thief」の「案 B ワークベンチ」)。本 issue はその第 1 段。
-- docs/issues/0207 (ヘッダの統合とサイドバーの rail)、0208 (ツールバーの 1 行化)、0209 (Drawer の docked) が続く。番号順に実装する。
+- docs/issues/0211 (ヘッダの統合とサイドバーの rail)、0212 (ツールバーの 1 行化)、0213 (Drawer の docked) が続く。番号順に実装する。
 - docs/issues/closed/0064 (Tweaks の行順)、0205 (`layout` の削除と読み捨て)。
 - docs/adr/0006: 状態は React の state と `localStorage`。ルーターは入れない。本 issue は方針を変えない。

@@ -5,7 +5,7 @@ Model: Claude Fable 5.1
 
 ## 背景
 
-docs/issues/0206 の第 3 段。`standard` の Drawer はオーバーレイ (`position: fixed`、右 `min(600px, 52vw)` / 下 `min(46vh, 520px)`、分割中は `contained` でペインの中に `absolute`) で、表の上に被さる。案 B は Drawer をターミナルドックと同じ「docked なペイン」にし、表の右 (または下) に列として並べる。表は狭くなるが、backdrop が無く、表と詳細を同時に操作できる。
+docs/issues/0210 の第 3 段。`standard` の Drawer はオーバーレイ (`position: fixed`、右 `min(600px, 52vw)` / 下 `min(46vh, 520px)`、分割中は `contained` でペインの中に `absolute`) で、表の上に被さる。案 B は Drawer をターミナルドックと同じ「docked なペイン」にし、表の右 (または下) に列として並べる。表は狭くなるが、backdrop が無く、表と詳細を同時に操作できる。
 
 docs/issues/closed/0204 で配置は `DrawerFrame` に隔離されている。呼び出し側 (`ServicePanel` / `GcpView`) は `.main` の中に `DataTable` と `Drawer` を並べている。
 
@@ -33,6 +33,6 @@ docs/issues/closed/0204 で配置は `DrawerFrame` に隔離されている。�
 
 ## 関連
 
-- docs/issues/0206〜0208 (先に実装する)。
+- docs/issues/0210〜0212 (先に実装する)。
 - docs/issues/closed/0174 / 0175 / 0176 / 0204 (Drawer の配置の経緯)。
 - docs/adr/0012 (常駐ドック)、0025 (分割表示)。docked は方針の追加なので、実装後に 0025 へ追記する。

@@ -5,7 +5,7 @@ Model: Claude Fable 5.1
 
 ## 背景
 
-docs/issues/0206 の第 2 段 (シェルの構造の前半)。`standard` では `App.tsx` が `TopBar` (46px) の下に `AwsSessionTabs` / `GcpSessionTabs` / `DatadogOrgSessionTabs` (38px) を別の行として描画する。案 B はこの 2 段を 40px の 1 段にまとめ (左にマーク、プロバイダの切替、続けてセッションタブ、右に操作)、サイドバーを 44px の icon rail に畳めるようにする。
+docs/issues/0210 の第 2 段 (シェルの構造の前半)。`standard` では `App.tsx` が `TopBar` (46px) の下に `AwsSessionTabs` / `GcpSessionTabs` / `DatadogOrgSessionTabs` (38px) を別の行として描画する。案 B はこの 2 段を 40px の 1 段にまとめ (左にマーク、プロバイダの切替、続けてセッションタブ、右に操作)、サイドバーを 44px の icon rail に畳めるようにする。
 
 `SessionTabs.tsx` はタブ列の幅を `ResizeObserver` で測り、収まらないタブを「他 N ▾」に畳む (`lib/sessionTabsLayout.ts`)。タブ本体、ドラッグ並べ替え、ピッカーはこのまま使える。`Sidebar.tsx` (AWS) と `views/GcpSidebar.tsx` (Google Cloud) は同じ形 (セッションカード + カテゴリ + `nav-item`) で、幅は `--sidebar-w` (`App.tsx` が永続化) をドラッグで変える (`lib/sidebarResize.ts`)。
 
@@ -21,7 +21,7 @@ docs/issues/0206 の第 2 段 (シェルの構造の前半)。`standard` では 
   - 畳む操作は rail の下端のボタン (`⌘B` の表示付き) と、`⌘B` / `Ctrl+B` のショートカット。ショートカットは `App.tsx` の 1 つの `keydown` リスナーで、入力中 (`input` / `textarea` / `contenteditable`) は無視する。
   - 却下案: 幅を 44px までドラッグで縮める。ラベルの表示 / 非表示が幅から決まって中途半端な状態ができるため、状態として持つ。
 - `.body` のグリッドは `rail` のとき `--rail-w 1fr` にする (`.body.rail`)。`App.tsx` が `data-sidebar` を付けるのではなく、`AccountView` / `GcpView` が `collapsed` を受けて `.body` にクラスを付ける。
-- `AGENTS.md` の frontend 節に「Layout の分岐は `App.tsx` (ヘッダ)、`Sidebar` / `GcpSidebar` (rail)、`ServicePanel` の上段 (0208)、`DrawerFrame` (0209) に限る。他の部品は `data-layout` の CSS 変数で差を吸収する」を書く。
+- `AGENTS.md` の frontend 節に「Layout の分岐は `App.tsx` (ヘッダ)、`Sidebar` / `GcpSidebar` (rail)、`ServicePanel` の上段 (0212)、`DrawerFrame` (0213) に限る。他の部品は `data-layout` の CSS 変数で差を吸収する」を書く。
 
 ## 完了条件
 
@@ -35,5 +35,5 @@ docs/issues/0206 の第 2 段 (シェルの構造の前半)。`standard` では 
 
 ## 関連
 
-- docs/issues/0206 (先に実装する)、0208、0209。
+- docs/issues/0210 (先に実装する)、0212、0213。
 - docs/issues/closed/0020 (セッションタブ)、0027 (サイドバーのカテゴリ)、0175 (分割表示のペイン番号)。
