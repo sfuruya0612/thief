@@ -1,6 +1,9 @@
 /* 汎用の部品: .btn、.stats / .stat、.facets / .facet / .chip-search、table.dt、.cb、.status、.tag、.svc-pill、.cell-bar、.seg、.swatches、.toggle。
    feature 固有の規則は features/ に書き、2 つ以上の feature で同じ形が要るときにここへ昇格させる。 */
 
+/* .btn は components/primitives/Button.tsx が描画する。<button> 以外にボタンの見た目を
+   借りる要素 (<select> 18、<input type="date|month"> 6、<a> 3。docs/issues/closed/0203 時点) は
+   className="btn sm" の直書きを残す。 */
 .btn {
   display: inline-flex;
   align-items: center;

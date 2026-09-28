@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { NamedQuery } from '../../types/query';
+import { Button } from '../primitives';
 
 export interface SnippetDropdownProps {
   snippets: NamedQuery[];
@@ -34,9 +35,9 @@ export function SnippetDropdown({
 
   return (
     <div className="qe-snippet-dd" ref={wrapperRef}>
-      <button className={`btn sm ${open ? 'active' : ''}`} onClick={() => setOpen((v) => !v)}>
+      <Button size="sm" className={open ? 'active' : ''} onClick={() => setOpen((v) => !v)}>
         {t('snippetDropdown.button')}
-      </button>
+      </Button>
       {open && (
         <div className="qe-snippet-menu">
           <div className="qe-snippet-menu-head">{t('snippetDropdown.heading')}</div>

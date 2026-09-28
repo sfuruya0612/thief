@@ -9,7 +9,7 @@ import { DrawerLoading } from './DrawerLoading';
 import { DrawerError } from './drawerError';
 import { FacetBar } from '../FacetBar';
 import type { Filters } from '../FacetBar';
-import { StatusBadge } from '../primitives';
+import { Button, StatusBadge } from '../primitives';
 import { Icons } from '../icons/Icons';
 import type { ECSTaskRow } from '../../types/aws';
 
@@ -133,14 +133,14 @@ function ECSTaskDetail({
                 <td>{c.exitCode ?? '-'}</td>
                 <td className="truncate">{c.reason || '-'}</td>
                 <td>
-                  <button
-                    className="btn sm"
+                  <Button
+                    size="sm"
                     disabled={!c.execEnabled}
                     title={disabledReason || t('ecsTasks.execStartTooltip')}
                     onClick={() => onExec?.({ taskArn: task.arn, container: c.name })}
                   >
                     Exec
-                  </button>
+                  </Button>
                 </td>
               </tr>
             );

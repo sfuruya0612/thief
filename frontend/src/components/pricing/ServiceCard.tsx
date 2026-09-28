@@ -23,6 +23,7 @@ import { ErrorBanner } from '../ErrorBanner';
 import { Loading } from '../Loading';
 import { AttributeFilterBar } from './AttributeFilterBar';
 import { RateGroupSection } from './RateGroupSection';
+import { Button, SearchField } from '../primitives';
 
 export interface ServiceCardProps {
   service: PricingService;
@@ -164,15 +165,16 @@ export function ServiceCard({
         {table?.licenseUnresolved && (
           <span className="pr-card-fetched">{t('serviceCard.licenseUnresolvedBadge')}</span>
         )}
-        <button
+        <Button
           type="button"
-          className="btn sm ghost"
+          size="sm"
+          variant="ghost"
           onClick={onRefresh}
           disabled={refreshing}
           title={t('serviceCard.refreshTitle')}
         >
           <Icons.refresh size={12} />
-        </button>
+        </Button>
       </header>
 
       {!collapsed && (
@@ -182,9 +184,9 @@ export function ServiceCard({
           {!isLoading && Boolean(error) && !table && (
             <div className="pr-card-error">
               <ErrorBanner error={error} />
-              <button className="btn sm" onClick={onRetry}>
+              <Button size="sm" onClick={onRetry}>
                 {t('serviceCard.retry')}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -211,14 +213,11 @@ export function ServiceCard({
               ) : (
                 <>
                   <div className="pr-card-filter">
-                    <span className="chip-search">
-                      <Icons.search size={12} />
-                      <input
-                        value={instanceFilter}
-                        onChange={(e) => setInstanceFilter(e.target.value)}
-                        placeholder={t('serviceCard.filterPlaceholder')}
-                      />
-                    </span>
+                    <SearchField
+                      value={instanceFilter}
+                      onChange={(e) => setInstanceFilter(e.target.value)}
+                      placeholder={t('serviceCard.filterPlaceholder')}
+                    />
                   </div>
                   <AttributeFilterBar
                     specs={attributeSpecs}

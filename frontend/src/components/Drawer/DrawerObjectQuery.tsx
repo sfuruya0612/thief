@@ -46,6 +46,7 @@ import type {
   ObjectQueryResult,
 } from '../../lib/objectQuery';
 import type { ObjectIngestProgress, ObjectIngestor } from '../../lib/opfsIngest';
+import { Button } from '../primitives';
 
 export interface DrawerObjectQueryProps {
   // fileName は元オブジェクトのキー (表示と形式判定に使う)。
@@ -331,9 +332,9 @@ function ObjectQueryPanel({
     <div className="section">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>{t('drawerObjectQuery.title', { fileName })}</h3>
-        <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={onClose}>
+        <Button size="sm" style={{ marginLeft: 'auto' }} onClick={onClose}>
           Close
-        </button>
+        </Button>
       </div>
 
       {phase === 'ingesting' && <div style={{ padding: '8px 0' }}>{progressLabel}</div>}
@@ -352,9 +353,9 @@ function ObjectQueryPanel({
       {phase === 'ready' && (
         <>
           <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
-            <button className="btn sm primary" onClick={onRun} disabled={running}>
+            <Button size="sm" variant="primary" onClick={onRun} disabled={running}>
               {running ? t('drawerObjectQuery.running') : t('drawerObjectQuery.run')}
-            </button>
+            </Button>
           </div>
           <SqlEditor value={sql} onChange={setSql} onRun={onRun} />
           {queryError !== null && (

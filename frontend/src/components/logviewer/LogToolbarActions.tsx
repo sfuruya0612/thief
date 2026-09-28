@@ -2,6 +2,7 @@
 // CloudWatch Logs / Cloud Logging で共通。
 import { useTranslation } from 'react-i18next';
 import { PRESET_OPTIONS, type PresetOption } from '../../lib/logTimeRange';
+import { Button } from '../primitives';
 
 export interface LogToolbarActionsProps {
   live: boolean;
@@ -73,9 +74,9 @@ export function LogToolbarActions({
         </>
       )}
 
-      <button className="btn sm" onClick={onExport} disabled={exportDisabled}>
+      <Button size="sm" onClick={onExport} disabled={exportDisabled}>
         {exportLabel}
-      </button>
+      </Button>
     </>
   );
 }

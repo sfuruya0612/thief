@@ -13,6 +13,7 @@ import { useECSContainers, useECSTasks } from '../../api/queries';
 import { arnSuffix } from '../../lib/format';
 import { openEC2TerminalSession, openECSTerminalSession } from '../../lib/terminalLaunchers';
 import { Icons } from '../icons/Icons';
+import { Button } from '../primitives';
 
 export interface DrawerTerminalProps {
   service: string;
@@ -34,9 +35,9 @@ export function DrawerTerminal({ service, profile, region, resource }: DrawerTer
 function ConnectButton({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
   const { t } = useTranslation('drawerStorage');
   return (
-    <button className="btn sm" disabled={disabled} onClick={onClick}>
+    <Button size="sm" disabled={disabled} onClick={onClick}>
       <Icons.terminal size={12} /> {t('terminal.connect')}
-    </button>
+    </Button>
   );
 }
 

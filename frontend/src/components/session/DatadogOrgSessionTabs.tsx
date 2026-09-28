@@ -12,6 +12,7 @@ import { datadogOrgPickerItems, resolveDatadogRequestOrg } from '../../lib/sessi
 import { Icons } from '../icons/Icons';
 import { AddSessionPicker } from './AddSessionPicker';
 import { SessionTabs, type SessionTabItem } from './SessionTabs';
+import { Button } from '../primitives';
 
 export interface DatadogOrgSessionTabsProps {
   sessions: DatadogOrgSessions;
@@ -62,15 +63,16 @@ export function DatadogOrgSessionTabs({ sessions }: DatadogOrgSessionTabsProps) 
           placeholder={t('datadogOrgSessionTabs.searchPlaceholder')}
           headerNote="GET /api/v2/org"
           headerAction={
-            <button
-              className="btn sm ghost"
+            <Button
+              size="sm"
+              variant="ghost"
               style={{ padding: '1px 4px' }}
               title="Refresh organization list from Datadog"
               disabled={refreshOrgs.isPending}
               onClick={() => refreshOrgs.mutate()}
             >
               <Icons.refresh size={11} />
-            </button>
+            </Button>
           }
           footerHint={t('datadogOrgSessionTabs.footerHint')}
           emptyText={t('datadogOrgSessionTabs.emptyText')}

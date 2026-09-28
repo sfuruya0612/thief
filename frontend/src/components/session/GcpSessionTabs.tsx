@@ -9,6 +9,7 @@ import { gcpPickerItems, projectEnv } from '../../lib/sessionMeta';
 import { Icons } from '../icons/Icons';
 import { AddSessionPicker } from './AddSessionPicker';
 import { SessionTabs, type SessionTabItem } from './SessionTabs';
+import { Button } from '../primitives';
 
 export interface GcpSessionTabsProps {
   sessions: GcpSessions;
@@ -47,15 +48,16 @@ export function GcpSessionTabs({ sessions }: GcpSessionTabsProps) {
           placeholder={t('gcpSessionTabs.searchPlaceholder')}
           headerNote="gcloud projects list"
           headerAction={
-            <button
-              className="btn sm ghost"
+            <Button
+              size="sm"
+              variant="ghost"
               style={{ padding: '1px 4px' }}
               title="Refresh project list from Cloud Resource Manager"
               disabled={refreshProjects.isPending}
               onClick={() => refreshProjects.mutate()}
             >
               <Icons.refresh size={11} />
-            </button>
+            </Button>
           }
           footerHint={t('gcpSessionTabs.footerHint')}
           emptyText={t('gcpSessionTabs.emptyText')}

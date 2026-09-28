@@ -4,6 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { useSSOLogin } from '../api/queries';
 import type { SSOLoginStartRow } from '../types/aws';
 import { Icons } from './icons/Icons';
+import { Button } from './primitives';
 
 export interface SSOExpiredBannerProps {
   profile: string;
@@ -70,9 +71,9 @@ export function SSOExpiredBanner({ profile }: SSOExpiredBannerProps) {
         )}
         {login.isError && <span className="sso-banner-error"> {t('sso.failed')}</span>}
       </div>
-      <button className="btn sm primary" onClick={onLogin} disabled={login.isPending}>
+      <Button size="sm" variant="primary" onClick={onLogin} disabled={login.isPending}>
         {login.isPending ? t('sso.loginButtonPending') : t('sso.loginButton')}
-      </button>
+      </Button>
     </div>
   );
 }

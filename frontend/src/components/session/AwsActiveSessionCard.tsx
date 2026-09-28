@@ -12,6 +12,7 @@ import {
   profileBadge,
 } from '../../lib/sessionMeta';
 import type { Profile } from '../../types/common';
+import { Button } from '../primitives';
 
 export interface AwsActiveSessionCardProps {
   profile: string;
@@ -75,8 +76,9 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
       </div>
       {canLogout && (
         <div className="session-card-logout">
-          <button
-            className="btn sm ghost"
+          <Button
+            size="sm"
+            variant="ghost"
             title={t('awsActiveSessionCard.logoutTitle')}
             disabled={logout.isPending}
             onClick={() => logout.mutate()}
@@ -84,7 +86,7 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
             {logout.isPending
               ? t('awsActiveSessionCard.logoutPending')
               : t('awsActiveSessionCard.logout')}
-          </button>
+          </Button>
           {logout.isError && (
             <span className="session-card-error">{t('awsActiveSessionCard.logoutFailed')}</span>
           )}
@@ -93,8 +95,9 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
       {needsReauth && (
         <div className="session-card-reauth">
           <code title={loginCmd}>{loginCmd}</code>
-          <button
-            className="btn sm ghost"
+          <Button
+            size="sm"
+            variant="ghost"
             title={t('awsActiveSessionCard.copyReauthTitle')}
             onClick={() => {
               void navigator.clipboard.writeText(loginCmd);
@@ -102,7 +105,7 @@ export function AwsActiveSessionCard({ profile, profiles }: AwsActiveSessionCard
             }}
           >
             {copied ? t('awsActiveSessionCard.copied') : t('awsActiveSessionCard.copy')}
-          </button>
+          </Button>
         </div>
       )}
     </div>

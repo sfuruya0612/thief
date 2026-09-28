@@ -3,6 +3,7 @@
 import { useTranslation } from 'react-i18next';
 import { formatFetchedAt } from '../../lib/format';
 import { Icons } from '../icons/Icons';
+import { Button } from '../primitives';
 
 export interface PricingToolbarProps {
   region: string;
@@ -47,10 +48,10 @@ export function PricingToolbar({
             ? t('pricingToolbar.freshnessUpdated', { at: formatFetchedAt(lastFetchedAt) })
             : t('pricingToolbar.freshnessNotFetched')}
         </span>
-        <button className="btn sm" onClick={onRefreshAll} disabled={refreshing}>
+        <Button size="sm" onClick={onRefreshAll} disabled={refreshing}>
           <Icons.refresh size={12} />
           {refreshing ? t('pricingToolbar.refreshing') : t('pricingToolbar.refresh')}
-        </button>
+        </Button>
         <a
           className="btn sm ghost"
           href="https://aws.amazon.com/pricing/"

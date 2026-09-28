@@ -12,6 +12,7 @@ import {
 import { PRICING_SERVICE_LABELS, type PricingService } from '../../lib/pricingSelection';
 import { Icons } from '../icons/Icons';
 import type { PriceRateRow } from '../../types/aws';
+import { Button } from '../primitives';
 
 // RI/SP の行にのみ期間・オファリングクラス (EC2 RI のみ)・購入タイプを表示し、行を区別できる
 // ようにする (同一インスタンスタイプで条件違いの行を複数チェックした場合に必要)。
@@ -69,15 +70,16 @@ export function Estimator({
       <div className="pr-estimator-head">
         <div className="pr-estimator-title-row">
           <h2>{t('estimator.title')}</h2>
-          <button
+          <Button
             type="button"
-            className="btn sm ghost"
+            size="sm"
+            variant="ghost"
             onClick={handleClearAll}
             disabled={!hasEntries}
             title={t('estimator.clearAllTitle')}
           >
             {t('estimator.clearAll')}
-          </button>
+          </Button>
         </div>
         <div className="pr-estimator-totals">
           <div className="pr-estimator-total">

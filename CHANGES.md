@@ -421,6 +421,8 @@
 
 ### misc
 
+- frontend の汎用の見た目を `components/primitives/` の部品にし、className の直書きを置き換える (`Button` (`size` / `variant`、`type` の既定 `button`) で `<button className="btn …">` 57 か所、`SearchField` で `.chip-search` の標準形 6 か所、`Stat` で `.stat` の label / value / delta 形 3 か所と `StatTile` を置き換えた。`<select>` / `<input>` / `<a>` にボタンの見た目を借りる 27 か所と、グラフを載せるカードとしての `.stat` 5 か所は直書きのまま。DOM は `type="button"` が付く以外は同じ。docs/issues/closed/0203)
+  - @sfuruya0612
 - frontend の `app.css` (4,341 行) を `src/styles/` の層 (tokens / base / shell / primitives / utilities / features) に分割し、`styles/index.css` の `@import` の順で読み込むようにする (規則の中身とカスケードに影響する並び順は変えない。位置が変わるのは `.view-switch`、`.seg` / `.swatches` / `.toggle`、`table.dt.cost-cross-table` の 3 群だけで、いずれも同じ要素に当たる規則が移動の前後に無いことを確認した。ビルド成果物の CSS は分割前後で規則の集合が同一。`app.css.test.ts` は `styles/styles.test.ts` に移し、`AGENTS.md` の frontend 節に置き場所の規約を書いた。docs/issues/closed/0201)
   - @sfuruya0612
 - SSM セッションの切断 (`TerminateSSMSession`) に与える猶予 5 秒が `internal/session/bridge.go` の `terminateTimeout`、`internal/api/handlers_session.go` の `sessionTerminateTimeout` (`internal/api/logtail.go` からも参照)、`internal/cli/ec2.go` の `ec2TerminateTimeout` (`internal/cli/ecs.go` からも参照) の 3 箇所に同じ値・同じ目的で別名定義され、5 箇所 (定義 3 箇所 + `logtail.go`/`ecs.go` からの参照 2 箇所) で使われていたのを、`internal/aws/ssm_session.go` の公開定数 `TerminateSessionGracePeriod` 1 箇所に統合する。5 箇所とも `context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)` を自分で組み立てる形は変えない (値は従来どおり 5 秒のまま、挙動は変えない)。統合後の値そのものを検証するテストがどこにも無かったため、`internal/aws/ssm_session_test.go` に値を固定するテストを追加する

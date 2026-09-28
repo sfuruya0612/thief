@@ -7,6 +7,7 @@ import { awsPickerItems } from '../../lib/sessionMeta';
 import { Icons } from '../icons/Icons';
 import { AddSessionPicker } from './AddSessionPicker';
 import { SessionTabs, type SessionTabItem } from './SessionTabs';
+import { Button } from '../primitives';
 
 export interface AwsSessionTabsProps {
   sessions: AwsSessions;
@@ -47,14 +48,15 @@ export function AwsSessionTabs({ sessions }: AwsSessionTabsProps) {
           placeholder={t('awsSessionTabs.searchPlaceholder')}
           headerNote={t('awsSessionTabs.headerNote', { n: profiles.length })}
           headerAction={
-            <button
-              className="btn sm ghost"
+            <Button
+              size="sm"
+              variant="ghost"
               style={{ padding: '1px 4px' }}
               title={t('awsSessionTabs.refreshTitle')}
               onClick={() => refetchProfiles()}
             >
               <Icons.refresh size={11} />
-            </button>
+            </Button>
           }
           footerHint={t('awsSessionTabs.footerHint')}
           emptyText={t('awsSessionTabs.emptyText')}

@@ -39,6 +39,7 @@ import {
 import { formatDurationClock, s3Dir, shortId, toCsv } from '../lib/queryFormat';
 import { isSSOExpiredError } from '../lib/ssoError';
 import type { AthenaTableRow, NamedQuery, QueryHistoryRow } from '../types/query';
+import { Button } from '../components/primitives';
 
 const DEFAULT_CATALOG = 'AwsDataCatalog';
 const DEFAULT_WORKGROUP = 'primary';
@@ -231,9 +232,9 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
         {formatDurationClock(status.elapsedMs)} · {formatBytes(status.bytes)}
       </span>
       <span className="qe-status-mono dim">{shortId(status.id)}</span>
-      <button className="btn sm" onClick={copyCsv} disabled={resultData.rows.length === 0}>
+      <Button size="sm" onClick={copyCsv} disabled={resultData.rows.length === 0}>
         {t('athenaView.copyCsv')}
-      </button>
+      </Button>
     </>
   ) : null;
 
@@ -354,9 +355,9 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
               >
                 Run query
               </button>
-              <button className="btn sm" onClick={doFormat}>
+              <Button size="sm" onClick={doFormat}>
                 Format
-              </button>
+              </Button>
               <SnippetDropdown
                 snippets={snippets.items}
                 onInsert={(s) => insertText(s.sql)}
@@ -451,9 +452,9 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
                 onOpen={openNamedQuery}
                 onDelete={saved.remove}
                 header={
-                  <button className="btn sm" onClick={saveQuery}>
+                  <Button size="sm" onClick={saveQuery}>
                     {t('athenaView.saveCurrentQuery')}
-                  </button>
+                  </Button>
                 }
               />
             )}
@@ -467,9 +468,9 @@ function AthenaEditor({ profile, region }: AthenaViewProps) {
                   onInsert={(s) => insertText(s.sql)}
                   onDelete={snippets.remove}
                   header={
-                    <button className="btn sm" onClick={saveSnippet}>
+                    <Button size="sm" onClick={saveSnippet}>
                       {t('athenaView.saveCurrentSnippet')}
-                    </button>
+                    </Button>
                   }
                 />
               </>

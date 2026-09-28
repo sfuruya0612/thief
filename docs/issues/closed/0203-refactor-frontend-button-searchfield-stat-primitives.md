@@ -1,6 +1,7 @@
 # frontend の Button / SearchField / Stat を TSX の部品にし、className の直書きを置き換える
 
 Created: 2026-09-28
+Completed: 2026-09-28
 Model: Claude Fable 5.1
 
 ## 背景
@@ -52,3 +53,14 @@ Model: Claude Fable 5.1
 - 刷新案 A の「部品の TSX 化は Button と Chip と Stat の 3 つまで」。`Chip` を `SearchField` に差し替えた理由は背景のとおり。
 - docs/issues/closed/0078: `components/tables/cells.tsx` への列セル部品の集約。本 issue はその方針を汎用の見た目に広げるもの。
 - docs/issues/closed/0169: `StatTile` の出所。
+
+## 解決方法
+
+- `components/primitives/Button.tsx` (`size` / `variant`、`type` の既定 `"button"`、`forwardRef`)、`SearchField.tsx` (`chip-search` の span + 検索アイコン + `<input>`、props と `ref` は `<input>` へ)、`Stat.tsx` (`label` / `value` / `unit` / `delta` / `tone` / `title`) を新設し、`index.ts` から再輸出した。それぞれ `*.test.tsx` で変種ごとのクラス列と DOM の形を固定した (15 テスト)。
+- **背景の実測の訂正**: 背景に書いた「`<button>` 84、`<select>` 3、`<a>` 1」は 1 行に収まる要素だけを数えた誤りで、複数行の要素を含めて数え直すと `.btn` 84 か所の内訳は `<button>` 57、`<select>` 18、`<input type="date|month">` 6、`<a>` 3 だった。設計判断 (`Button` は `<button>` だけを描画し、他の要素は `.btn` の直書きを残す) は変えず、例外の一覧は個別列挙ではなく要素の種類と件数で `primitives.css` の `.btn` のコメントに書いた。
+- `<button className="btn …">` 57 か所 (34 ファイル) を `Button` に置き換えた (`btn sm` → `size="sm"`、`btn sm ghost` → `variant="ghost"`、`btn sm primary` → `variant="primary"`、feature 固有のクラス 2 か所は `className`)。置き換えは開始タグと対応する `</button>` を機械的に書き換える一時的なスクリプトで行い、`<button>` は入れ子にならないことを前提にした。`SummaryFieldPicker` / `SnippetDropdown` の `className={\`btn sm ${open ? 'active' : ''}\`}` は `className={open ? 'active' : ''}` にした (CSS に `.btn.active` は無く、開いていないときの末尾の空白が無くなる以外は同じ)。
+- `.chip-search` は 7 か所のうち、標準の形 (アイコン + `<input>`) の 6 か所 (`MonthlyCostPanel` / `pricing/ServiceCard` / `session/AddSessionPicker` / `views/CostExplorerPanel` の `CostFilterInput` / `nonaws/DatadogMetricsView` / `nonaws/TiDBView`) を `SearchField` に置き換えた。`Drawer/DrawerObjectBrowser.tsx` の `chip-search s3-prefix-input` はアイコンが無く検索ボタンを内包する別の形なので、直書きのまま残した (背景で「同じ形を繰り返している」と書いた 7 か所のうち 1 か所はこの例外)。
+- `.stat` は `StatsRow` (内部の型 `Stat` を `StatItem` に改名)、`MonthlyCostPanel`、`views/CostExplorerPanel` の 3 か所と `charts/StatTile` を `Stat` に置き換えた。グラフやウィジェットを載せるカードとして `.stat` を使う 5 か所 (`charts/ResourceCountChart`、`nonaws/DatadogMetricsView`、`nonaws/DatadogDashboardView` の 3 か所) は形が違う (ラベル + 任意の子) ため置き換えず、`Stat.tsx` のコメントにその旨を書いた。`Card` のような部品にするかは別の判断にする。
+- DOM の差分: `Button` が `type="button"` を付けること、`StatsRow` の `delta` のクラスが `tone` 無しのとき `delta ` (末尾に空白) から `delta` になること以外は、要素・クラス・属性・子の順とも同じ。既存のコンポーネントテスト (`getByRole('button')` / `getByPlaceholderText` 等) はすべてそのまま通った。
+- `AGENTS.md` の frontend 「コンポーネント設計」に部品の置き場所と例外の規約を書いた。
+- 完了条件の「開発サーバでの目視」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (116 ファイル 1,249 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

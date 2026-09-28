@@ -40,6 +40,7 @@ import {
 } from '../../lib/queryFormat';
 import type { BQDatasetRow, BQTableRow } from '../../types/nonaws';
 import type { NamedQuery, QueryHistoryRow } from '../../types/query';
+import { Button } from '../../components/primitives';
 
 const DEFAULT_SQL = 'SELECT 1';
 
@@ -204,9 +205,9 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
         {formatDurationSeconds(status.elapsedMs)} · {formatBytes(status.bytes)}
       </span>
       <span className="qe-status-mono dim">{shortId(status.id)}</span>
-      <button className="btn sm" onClick={copyCsv} disabled={resultData.rows.length === 0}>
+      <Button size="sm" onClick={copyCsv} disabled={resultData.rows.length === 0}>
         {t('bigQueryView.copyCsv')}
-      </button>
+      </Button>
     </>
   ) : null;
 
@@ -254,12 +255,12 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
               >
                 Run query
               </button>
-              <button className="btn sm" onClick={runDryRun} disabled={dryRun.isPending}>
+              <Button size="sm" onClick={runDryRun} disabled={dryRun.isPending}>
                 Dry run
-              </button>
-              <button className="btn sm" onClick={doFormat}>
+              </Button>
+              <Button size="sm" onClick={doFormat}>
                 Format
-              </button>
+              </Button>
               <SnippetDropdown
                 snippets={snippets.items}
                 onInsert={(s) => insertText(s.sql)}
@@ -342,9 +343,9 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
                 onOpen={openNamedQuery}
                 onDelete={saved.remove}
                 header={
-                  <button className="btn sm" onClick={saveQuery}>
+                  <Button size="sm" onClick={saveQuery}>
                     {t('bigQueryView.saveCurrentQuery')}
-                  </button>
+                  </Button>
                 }
               />
             )}
@@ -358,9 +359,9 @@ function BigQueryEditor({ projectId }: BigQueryViewProps) {
                   onInsert={(s) => insertText(s.sql)}
                   onDelete={snippets.remove}
                   header={
-                    <button className="btn sm" onClick={saveSnippet}>
+                    <Button size="sm" onClick={saveSnippet}>
                       {t('bigQueryView.saveCurrentSnippet')}
-                    </button>
+                    </Button>
                   }
                 />
               </>

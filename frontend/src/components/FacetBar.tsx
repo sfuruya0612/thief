@@ -1,6 +1,7 @@
 // app.jsx FacetBar の移植
 import { useMemo } from 'react';
 import { Icons } from './icons/Icons';
+import { Button } from './primitives';
 
 export type Filters = Record<string, string[]>;
 
@@ -76,9 +77,9 @@ export function FacetBar({ rows, filters, setFilters }: FacetBarProps) {
       )}
 
       {hasFilters && (
-        <button className="btn sm ghost clear-btn" onClick={clearAll}>
+        <Button size="sm" variant="ghost" className="clear-btn" onClick={clearAll}>
           Clear all
-        </button>
+        </Button>
       )}
     </div>
   );

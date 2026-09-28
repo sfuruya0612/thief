@@ -12,9 +12,9 @@ import { useDatadogMetricsQueries } from '../../api/queries';
 import { TimeseriesChart } from '../../components/charts/TimeseriesChart';
 import { DatadogAuthBanner } from '../../components/DatadogAuthBanner';
 import { ErrorBanner } from '../../components/ErrorBanner';
-import { Icons } from '../../components/icons/Icons';
 import { isDatadogAuthError } from '../../lib/datadogAuthError';
 import { DEFAULT_METRICS_SPAN_SECONDS, metricsWindow, unitFormatter } from '../../lib/timeseries';
+import { Button, SearchField } from '../../components/primitives';
 
 export interface DatadogMetricsViewProps {
   // 表示対象の組織 (小文字の public_id)。クエリの実行先と再ログインの対象を決める。
@@ -67,19 +67,16 @@ export function DatadogMetricsView({
   return (
     <>
       <div className="facets">
-        <span className="chip-search">
-          <Icons.search size={12} />
-          <input
-            aria-label="Query"
-            value={queryInput}
-            onChange={(e) => onQueryInputChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') run();
-            }}
-            placeholder="avg:system.cpu.user{*}"
-            style={{ minWidth: 360 }}
-          />
-        </span>
+        <SearchField
+          aria-label="Query"
+          value={queryInput}
+          onChange={(e) => onQueryInputChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') run();
+          }}
+          placeholder="avg:system.cpu.user{*}"
+          style={{ minWidth: 360 }}
+        />
 
         <select
           className="btn sm"
@@ -94,9 +91,9 @@ export function DatadogMetricsView({
           ))}
         </select>
 
-        <button className="btn sm" onClick={run} disabled={!queryInput.trim()}>
+        <Button size="sm" onClick={run} disabled={!queryInput.trim()}>
           Run
-        </button>
+        </Button>
       </div>
 
       {error &&

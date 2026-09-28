@@ -5,13 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { useCost } from '../api/queries';
 import { CostChart } from '../components/charts/CostChart';
 import { CostCrossTable } from '../components/tables/CostCrossTable';
-import { Icons } from '../components/icons/Icons';
 import { Loading } from '../components/Loading';
 import { isSSOExpiredError } from '../lib/ssoError';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { aggregateCost, type CostMetricType } from '../lib/costAggregate';
 import { crossTableCsv, downloadCsv } from '../lib/download';
+import { Button, SearchField, Stat } from '../components/primitives';
 
 export interface CostExplorerPanelProps {
   profile: string;
@@ -79,22 +79,19 @@ function CostFilterInput({ value, onChange, onCommit, placeholder, title }: Cost
   };
 
   return (
-    <span className="chip-search">
-      <Icons.search size={12} />
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            commit();
-          }
-        }}
-        onBlur={commit}
-        placeholder={placeholder}
-        title={title}
-      />
-    </span>
+    <SearchField
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      onBlur={commit}
+      placeholder={placeholder}
+      title={title}
+    />
   );
 }
 
@@ -155,15 +152,11 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
       {!ssoExpired && error && <ErrorBanner error={error} />}
 
       <div className="stats" style={{ gridTemplateColumns: 'repeat(1, 1fr)' }}>
-        <div className="stat">
-          <div className="label">
-            Total ({METRIC_OPTIONS.find((o) => o.value === metric)?.label})
-          </div>
-          <div className="value">
-            ${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </div>
-          <div className="delta"> </div>
-        </div>
+        <Stat
+          label={`Total (${METRIC_OPTIONS.find((o) => o.value === metric)?.label})`}
+          value={`$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+          delta=" "
+        />
       </div>
 
       <div className="facets">
@@ -194,14 +187,15 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
         />
 
         {RANGE_PRESETS.map((p) => (
-          <button
+          <Button
             key={p.labelKey}
-            className="btn sm ghost"
+            size="sm"
+            variant="ghost"
             onClick={() => applyPreset(p.days)}
             title={t(p.labelKey)}
           >
             {t(p.labelKey)}
-          </button>
+          </Button>
         ))}
 
         <select
@@ -243,14 +237,14 @@ export function CostExplorerPanel({ profile, region }: CostExplorerPanelProps) {
           ))}
         </select>
 
-        <button
-          className="btn sm"
+        <Button
+          size="sm"
           onClick={exportCsv}
           disabled={crossTableRows.length === 0}
           title="Download the cross table as CSV"
         >
           Download CSV
-        </button>
+        </Button>
       </div>
 
       {isLoading ? (

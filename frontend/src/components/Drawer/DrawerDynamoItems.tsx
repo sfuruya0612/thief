@@ -9,6 +9,7 @@ import { useDynamoItems, useDynamoSchema } from '../../api/queries';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import { DrawerLoading } from './DrawerLoading';
 import { DrawerError } from './drawerError';
+import { Button } from '../primitives';
 
 const inputStyle = {
   height: 26,
@@ -161,17 +162,17 @@ export function DrawerDynamoItems({ profile, region, table }: DrawerDynamoItemsP
                 </option>
               ))}
             </select>
-            <button
-              className="btn sm"
+            <Button
+              size="sm"
               onClick={handleSearch}
               disabled={!pkInput.trim() && !attrNameInput.trim()}
             >
               Search
-            </button>
+            </Button>
             {!isPreview && (
-              <button className="btn sm ghost" onClick={handleClear}>
+              <Button size="sm" variant="ghost" onClick={handleClear}>
                 Clear
-              </button>
+              </Button>
             )}
           </div>
           <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 8 }}>

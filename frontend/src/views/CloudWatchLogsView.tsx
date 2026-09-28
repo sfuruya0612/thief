@@ -23,6 +23,7 @@ import { cwSeverityFromMessage } from '../lib/logSeverity';
 import { cwLogEventFromRaw } from '../lib/normalize';
 import { isSSOExpiredError } from '../lib/ssoError';
 import type { CWLogEventRaw, CWLogEventRow } from '../types/aws';
+import { Button } from '../components/primitives';
 
 export interface CloudWatchLogsViewProps {
   profile: string;
@@ -340,9 +341,9 @@ function CloudWatchLogsEditor({ profile, region }: CloudWatchLogsViewProps) {
           />
           <div className="lv-filter-actions">
             {FILTER_SNIPPETS.map((s) => (
-              <button key={s.snippet} className="btn sm" onClick={() => setFilterInput(s.snippet)}>
+              <Button key={s.snippet} size="sm" onClick={() => setFilterInput(s.snippet)}>
                 {s.label}
-              </button>
+              </Button>
             ))}
             <button className="lv-run-btn" onClick={runSearch} disabled={selected.size === 0}>
               {t('cloudWatchLogsView.search')}

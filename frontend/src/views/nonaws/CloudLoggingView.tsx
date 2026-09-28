@@ -23,6 +23,7 @@ import { type PresetOption, presetToRange } from '../../lib/logTimeRange';
 import { logEntryFromRaw, logSeverityLevel } from '../../lib/normalizeGcp';
 import { loadPersisted, savePersisted } from '../../lib/storage';
 import type { LogEntryRaw, LogEntryRow } from '../../types/gcp';
+import { Button } from '../../components/primitives';
 
 export interface CloudLoggingViewProps {
   projectId: string;
@@ -444,9 +445,9 @@ function CloudLoggingEditor({ projectId }: CloudLoggingViewProps) {
           />
           <div className="lv-filter-actions">
             {FILTER_SNIPPETS.map((s) => (
-              <button key={s.snippet} className="btn sm" onClick={() => addFilterClause(s.snippet)}>
+              <Button key={s.snippet} size="sm" onClick={() => addFilterClause(s.snippet)}>
                 {t(s.labelKey)}
-              </button>
+              </Button>
             ))}
             <button className="lv-run-btn" onClick={runSearch}>
               {t('cloudLoggingView.run')}

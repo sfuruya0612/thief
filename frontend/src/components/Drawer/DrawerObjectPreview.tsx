@@ -8,6 +8,7 @@ import { ResultTable } from '../query/ResultTable';
 import { ApiError } from '../../types/common';
 import { fileExtension } from '../../lib/objectPreview';
 import { parseCsv } from '../../lib/parseCsv';
+import { Button } from '../primitives';
 
 export interface DrawerObjectPreviewProps {
   fileName: string;
@@ -93,32 +94,33 @@ export function DrawerObjectPreview({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>Preview: {fileName}</h3>
         {!editing && content !== undefined && (
-          <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>
+          <Button size="sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>
             {t('drawerObjectPreview.edit')}
-          </button>
+          </Button>
         )}
         {editing && (
           <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-            <button className="btn sm" onClick={cancelEdit} disabled={isSaving}>
+            <Button size="sm" onClick={cancelEdit} disabled={isSaving}>
               {t('drawerObjectPreview.cancel')}
-            </button>
-            <button
-              className="btn sm primary"
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
               onClick={() => void handleSave()}
               disabled={isSaving}
             >
               {isSaving ? t('drawerObjectPreview.saving') : t('drawerObjectPreview.save')}
-            </button>
+            </Button>
           </span>
         )}
-        <button
-          className="btn sm"
+        <Button
+          size="sm"
           style={editing ? undefined : { marginLeft: 8 }}
           onClick={onClose}
           disabled={isSaving}
         >
           Close
-        </button>
+        </Button>
       </div>
       {saveError !== null && (
         <div style={{ padding: '8px 0', color: 'var(--err)' }}>

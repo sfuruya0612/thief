@@ -9,6 +9,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { aggregateTiDBCost, type TiDBCostGroupBy } from '../../lib/costAggregateTiDB';
 import { defaultMonthRange, lastMonthsRange } from '../../lib/monthRange';
 import type { TiDBCostRow } from '../../types/nonaws';
+import { Button, SearchField } from '../../components/primitives';
 
 type Tab = 'clusters' | 'cost';
 
@@ -110,16 +111,14 @@ export function TiDBView() {
         <div className="nonaws-cols">
           <div className="nonaws-list-pane">
             <div className="nonaws-list-filter">
-              <span className="chip-search">
-                <Icons.search size={12} />
-                <input
-                  value={projectFilter}
-                  onChange={(e) => setProjectFilter(e.target.value)}
-                  placeholder="filter by project name…"
-                />
-              </span>
-              <button
-                className="btn sm ghost"
+              <SearchField
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                placeholder="filter by project name…"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
                 onClick={() => setProjectSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
                 title={projectSortDir === 'asc' ? 'Sort: A → Z' : 'Sort: Z → A'}
               >
@@ -129,7 +128,7 @@ export function TiDBView() {
                     transform: projectSortDir === 'asc' ? 'rotate(-90deg)' : 'rotate(90deg)',
                   }}
                 />
-              </button>
+              </Button>
             </div>
             <div className="nonaws-list">
               {visibleProjects.map((p) => (

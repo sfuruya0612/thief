@@ -7,6 +7,7 @@ import { Fragment, type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatLogClock } from '../../lib/logFormat';
 import type { SeverityLevel } from '../../lib/logSeverity';
+import { Button } from '../primitives';
 
 export interface LogListProps<T> {
   rows: T[];
@@ -66,9 +67,9 @@ export function LogList<T>({
     <div className="lv-list">
       <div className="lv-list-toolbar">
         {headerExtra}
-        <button className="btn sm lv-copy-btn" onClick={onCopy} disabled={rows.length === 0}>
+        <Button size="sm" className="lv-copy-btn" onClick={onCopy} disabled={rows.length === 0}>
           {copyLabel}
-        </button>
+        </Button>
       </div>
       <div className="lv-table-wrap" ref={bodyRef} onScroll={onScroll}>
         <table className="lv-table">

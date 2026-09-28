@@ -5,7 +5,7 @@ import { AwsIcons } from '../icons/AwsIcons';
 import { GcpIcons } from '../icons/GcpIcons';
 import { Icons } from '../icons/Icons';
 import { GCP_SERVICES, SERVICES } from '../../lib/serviceMeta';
-import { StatusBadge } from '../primitives';
+import { Button, StatusBadge } from '../primitives';
 import { DrawerCacheParameters } from './DrawerCacheParameters';
 import { DrawerCFNEvents } from './DrawerCFNEvents';
 import { DrawerCFNOverviewExtra } from './DrawerCFNOverviewExtra';
@@ -263,13 +263,13 @@ export function Drawer({
               <div className="id">{resource.id}</div>
               <div className="actions">
                 {tabs.includes('Terminal') && (
-                  <button className="btn sm" onClick={() => setTab('Terminal')}>
+                  <Button size="sm" onClick={() => setTab('Terminal')}>
                     <Icons.terminal size={12} /> Open CLI
-                  </button>
+                  </Button>
                 )}
-                <button className="btn sm ghost" style={{ marginLeft: 'auto' }}>
+                <Button size="sm" variant="ghost" style={{ marginLeft: 'auto' }}>
                   <Icons.more size={14} />
-                </button>
+                </Button>
               </div>
             </div>
 

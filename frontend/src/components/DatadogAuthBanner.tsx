@@ -7,6 +7,7 @@
 import { Trans, useTranslation } from 'react-i18next';
 import { useDatadogLoginFlow } from '../hooks/useDatadogLogin';
 import { Icons } from './icons/Icons';
+import { Button } from './primitives';
 
 export interface DatadogAuthBannerProps {
   org: string;
@@ -43,9 +44,9 @@ export function DatadogAuthBanner({ org }: DatadogAuthBannerProps) {
           </span>
         )}
       </div>
-      <button className="btn sm primary" onClick={() => flow.begin(org)} disabled={flow.loggingIn}>
+      <Button size="sm" variant="primary" onClick={() => flow.begin(org)} disabled={flow.loggingIn}>
         {flow.loggingIn ? t('datadog.loginButtonPending') : t('datadog.loginButton')}
-      </button>
+      </Button>
     </div>
   );
 }

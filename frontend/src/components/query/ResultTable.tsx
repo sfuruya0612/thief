@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isNumericCell, parseNumericCell } from '../../lib/numericCell';
+import { Button } from '../primitives';
 
 export interface ResultTableProps {
   columns: string[];
@@ -151,9 +152,9 @@ export function ResultTable({
           {totalLabel}
         </span>
         {hasMore && (
-          <button className="btn sm ghost" onClick={onLoadMore} disabled={isFetchingMore}>
+          <Button size="sm" variant="ghost" onClick={onLoadMore} disabled={isFetchingMore}>
             {isFetchingMore ? t('resultTable.loadingMore') : t('resultTable.loadMore')}
-          </button>
+          </Button>
         )}
         <span className="qe-rt-pager">
           <button

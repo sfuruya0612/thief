@@ -1,5 +1,7 @@
-// query_value ウィジェット用の単一値カード。既存の .stat クラス (StatsRow と共通) を
-// 再利用し、値の書式だけをこのコンポーネントが決める。
+// query_value ウィジェット用の単一値カード。描画は primitives の Stat に任せ、
+// 値の書式 (丸め) と hover の文言だけをこのコンポーネントが決める。
+import { Stat } from '../primitives';
+
 export interface StatTileProps {
   title: string;
   // 値が取れていない場合は null (取得前・欠測)。
@@ -19,13 +21,5 @@ export function StatTile({ title, value, unit, precision = 2 }: StatTileProps) {
   // 意味が変わる値 (しきい値付近など) を確かめられない。
   const hover = value === null ? title : `${title}: ${value}${unit ? ` ${unit}` : ''}`;
 
-  return (
-    <div className="stat" title={hover}>
-      <div className="label">{title}</div>
-      <div className="value">
-        {display}
-        {unit && <span className="unit">{unit}</span>}
-      </div>
-    </div>
-  );
+  return <Stat label={title} value={display} unit={unit || undefined} title={hover} />;
 }

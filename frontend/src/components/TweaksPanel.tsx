@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Accent, DrawerPos, Lang, Theme, Tweaks } from '../types/common';
 import { useTweaks } from '../hooks/useTweaks';
 import { Icons } from './icons/Icons';
+import { Button } from './primitives';
 
 interface TweaksPanelInnerProps {
   tweaks: Tweaks;
@@ -26,9 +27,9 @@ function TweaksPanelInner({ tweaks, update, onClose }: TweaksPanelInnerProps) {
     <div className="tweaks-panel open">
       <div className="th">
         <span>Tweaks</span>
-        <button className="btn sm ghost" onClick={onClose} style={{ padding: '0 6px' }}>
+        <Button size="sm" variant="ghost" onClick={onClose} style={{ padding: '0 6px' }}>
           <Icons.x />
-        </button>
+        </Button>
       </div>
       <div className="tb">
         <div className="trow">

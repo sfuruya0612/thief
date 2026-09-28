@@ -25,6 +25,7 @@ import {
 import { objectQueryEngine } from '../../lib/duckdb';
 import { createOpfsIngestor } from '../../lib/opfsIngest';
 import { useClientConfig } from '../../api/queries';
+import { Button } from '../primitives';
 
 // normalizeSearchPrefix は検索確定時に送る prefix を正規化する。先頭スラッシュのみを
 // 取り除く (末尾は加工しない。"logs" でも "logs-2024/..." に前方一致させないためではなく、
@@ -150,22 +151,22 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
           const queryReason = objectQueryDisabledReason(key, size, configState, browserSupported);
           return (
             <span style={{ display: 'flex', gap: 6 }}>
-              <button
-                className="btn sm"
+              <Button
+                size="sm"
                 disabled={!eligible}
                 title={reason || t('drawerObjectBrowser.openPreview')}
                 onClick={() => setPreviewRow(r)}
               >
                 Preview
-              </button>
-              <button
-                className="btn sm"
+              </Button>
+              <Button
+                size="sm"
                 disabled={queryReason !== ''}
                 title={queryReason || t('drawerObjectBrowser.openQuery')}
                 onClick={() => setQueryRow(r)}
               >
                 Query
-              </button>
+              </Button>
               <a href={downloadHref(r)} download className="btn sm" style={{ padding: '2px 8px' }}>
                 Download
               </a>
@@ -243,9 +244,9 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
             if (e.key === 'Enter') runSearch();
           }}
         />
-        <button className="btn sm" onClick={runSearch}>
+        <Button size="sm" onClick={runSearch}>
           {t('drawerObjectBrowser.search')}
-        </button>
+        </Button>
       </span>
 
       {data?.truncated && (
@@ -277,13 +278,14 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
             {selected ? selected.name : t('drawerObjectBrowser.selectOrDropFile')}
           </span>
         </label>
-        <button
-          className="btn sm primary"
+        <Button
+          size="sm"
+          variant="primary"
           onClick={onUpload}
           disabled={!selected || upload.isPending}
         >
           {upload.isPending ? 'Uploading…' : 'Upload'}
-        </button>
+        </Button>
         {upload.error && (
           <span style={{ color: 'var(--err)' }}>
             {upload.error instanceof ApiError ? upload.error.message : String(upload.error)}

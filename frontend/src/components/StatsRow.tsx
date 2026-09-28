@@ -4,8 +4,9 @@
 import type { ReactNode } from 'react';
 import type { CostRow } from '../types/aws';
 import { formatMoney } from '../lib/format';
+import { Stat } from './primitives';
 
-interface Stat {
+interface StatItem {
   label: string;
   value: ReactNode;
   tone?: 'pos' | 'neg';
@@ -59,7 +60,7 @@ function monthlyCostFor(
   };
 }
 
-function costStats(service: string, cost: CostRow[]): Stat[] {
+function costStats(service: string, cost: CostRow[]): StatItem[] {
   const amounts = monthlyCostFor(service, cost);
   return [
     {
@@ -83,7 +84,7 @@ export function StatsRow({ resources, service, cost }: StatsRowProps) {
   const stopped = resources.filter((r) => r.state === 'stopped').length;
   const other = resources.length - running - stopped;
 
-  let stats: Stat[];
+  let stats: StatItem[];
   if (RESOURCES_ONLY.has(service)) {
     stats = [{ label: 'Resources', value: resources.length }];
   } else if (service === 's3') {
@@ -153,11 +154,7 @@ export function StatsRow({ resources, service, cost }: StatsRowProps) {
   return (
     <div className="stats" style={{ gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
       {stats.map((s, i) => (
-        <div key={i} className="stat">
-          <div className="label">{s.label}</div>
-          <div className="value">{s.value}</div>
-          <div className={`delta ${s.tone ?? ''}`}>{s.tone ? '' : ' '}</div>
-        </div>
+        <Stat key={i} label={s.label} value={s.value} delta={s.tone ? '' : ' '} tone={s.tone} />
       ))}
     </div>
   );

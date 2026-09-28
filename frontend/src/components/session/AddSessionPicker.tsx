@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SessionPickerItem } from '../../lib/sessionMeta';
 import { nextEnabledIndex } from '../../lib/sessionTabsState';
-import { Icons } from '../icons/Icons';
+import { Button, SearchField } from '../primitives';
 
 export interface AddSessionPickerProps {
   items: SessionPickerItem[];
@@ -96,16 +96,13 @@ export function AddSessionPicker({
   return (
     <div className={`session-picker ${narrow ? 'narrow' : ''}`}>
       <div className="session-picker-head">
-        <span className="chip-search">
-          <Icons.search size={12} />
-          <input
-            ref={inputRef}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={placeholder}
-          />
-        </span>
+        <SearchField
+          ref={inputRef}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+        />
         <span className="session-picker-note">
           {headerNote}
           {headerAction}
@@ -116,9 +113,9 @@ export function AddSessionPicker({
           <li className="session-picker-empty session-picker-error">
             {t('addSessionPicker.loadError')}
             {onRetry && (
-              <button className="btn sm ghost" onClick={onRetry}>
+              <Button size="sm" variant="ghost" onClick={onRetry}>
                 {t('addSessionPicker.retry')}
-              </button>
+              </Button>
             )}
           </li>
         )}

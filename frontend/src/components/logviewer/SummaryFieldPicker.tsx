@@ -2,6 +2,7 @@
 // Google Cloud Logs Explorer の「サマリー フィールド」相当。選択順がそのまま表示順になる。
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '../primitives';
 
 export interface SummaryFieldPickerProps {
   // 現在ロード済みの行から集めた選択候補のフィールドキー。
@@ -39,10 +40,10 @@ export function SummaryFieldPicker({
 
   return (
     <div className="lv-field-picker" ref={wrapperRef}>
-      <button className={`btn sm ${open ? 'active' : ''}`} onClick={() => setOpen((v) => !v)}>
+      <Button size="sm" className={open ? 'active' : ''} onClick={() => setOpen((v) => !v)}>
         {t('summaryFieldPicker.button')}
         {selected.length > 0 ? ` (${selected.length})` : ''} ▾
-      </button>
+      </Button>
       {open && (
         <div className="lv-field-picker-menu">
           <div className="lv-field-picker-head">{t('summaryFieldPicker.head')}</div>

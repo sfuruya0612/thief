@@ -6,10 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { CostChart } from './charts/CostChart';
 import { CostCrossTable } from './tables/CostCrossTable';
 import { Loading } from './Loading';
-import { Icons } from './icons/Icons';
 import { MONTH_RANGE_PRESETS } from '../lib/monthRange';
 import type { CostAggregateResult } from '../lib/costAggregateCore';
 import { crossTableCsv, downloadCsv } from '../lib/download';
+import { Button, SearchField, Stat } from './primitives';
 
 // 積み上げグラフの系列が多すぎると凡例が読めなくなるため、金額の大きい上位のみ個別系列にし
 // 残りは Other にまとめる
@@ -78,24 +78,19 @@ export function MonthlyCostPanel<R, G extends string>({
   return (
     <>
       <div className="stats" style={{ gridTemplateColumns: 'repeat(1, 1fr)' }}>
-        <div className="stat">
-          <div className="label">Total</div>
-          <div className="value">
-            ${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </div>
-          <div className="delta"> </div>
-        </div>
+        <Stat
+          label="Total"
+          value={`$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+          delta=" "
+        />
       </div>
 
       <div className="facets">
-        <span className="chip-search">
-          <Icons.search size={12} />
-          <input
-            value={groupFilter}
-            onChange={(e) => onGroupFilterChange(e.target.value)}
-            placeholder={`filter by ${groupByOptions.find((o) => o.value === groupBy)?.label.toLowerCase()} name (client-side)…`}
-          />
-        </span>
+        <SearchField
+          value={groupFilter}
+          onChange={(e) => onGroupFilterChange(e.target.value)}
+          placeholder={`filter by ${groupByOptions.find((o) => o.value === groupBy)?.label.toLowerCase()} name (client-side)…`}
+        />
 
         <input
           type="month"
@@ -116,14 +111,15 @@ export function MonthlyCostPanel<R, G extends string>({
         />
 
         {MONTH_RANGE_PRESETS.map((p) => (
-          <button
+          <Button
             key={p.labelKey}
-            className="btn sm ghost"
+            size="sm"
+            variant="ghost"
             onClick={() => onApplyPreset(p.months)}
             title={t(p.labelKey)}
           >
             {t(p.labelKey)}
-          </button>
+          </Button>
         ))}
 
         <select
@@ -139,14 +135,14 @@ export function MonthlyCostPanel<R, G extends string>({
           ))}
         </select>
 
-        <button
-          className="btn sm"
+        <Button
+          size="sm"
           onClick={exportCsv}
           disabled={crossTableRows.length === 0}
           title="Download the cross table as CSV"
         >
           Download CSV
-        </button>
+        </Button>
       </div>
 
       {isLoading ? (

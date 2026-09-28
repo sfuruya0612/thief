@@ -20,6 +20,7 @@ import { ErrorBanner } from '../../components/ErrorBanner';
 import { isDatadogAuthError } from '../../lib/datadogAuthError';
 import { metricsWindow, unitFormatter, type MetricsWindow } from '../../lib/timeseries';
 import type { DatadogMetricSeriesRow, DatadogWidgetRow } from '../../types/nonaws';
+import { Button } from '../../components/primitives';
 
 export interface DatadogDashboardViewProps {
   // 表示対象の組織 (小文字の public_id)。ダッシュボードの取得と再ログインの対象を決める。
@@ -77,14 +78,15 @@ function TimeseriesWidget({ orgId, widget, range, onOpenQuery }: TimeseriesWidge
           開くのかはボタンの位置では区別できないため、アクセシブル名にクエリを含める。 */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {widget.queries.map((q, i) => (
-          <button
+          <Button
             key={`${widget.id}-${i}`}
-            className="btn sm ghost"
+            size="sm"
+            variant="ghost"
             aria-label={`Open in Metrics: ${q}`}
             onClick={() => onOpenQuery(q)}
           >
             Open in Metrics
-          </button>
+          </Button>
         ))}
       </div>
     </div>
