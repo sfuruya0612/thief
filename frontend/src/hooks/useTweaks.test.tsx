@@ -30,6 +30,20 @@ describe('useTweaks', () => {
     expect(result.current.tweaks.theme).toBe(DEFAULT_TWEAKS.theme);
   });
 
+  it('保存済みの layout (docs/issues/closed/0205 で削除) は読み捨て、次の保存で書き戻さない', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ tweaks: { ...DEFAULT_TWEAKS, layout: 'tabs-top', drawerPos: 'right' } }),
+    );
+    const { result } = renderHook(() => useTweaks());
+    expect(result.current.tweaks).not.toHaveProperty('layout');
+    expect(result.current.tweaks.drawerPos).toBe('right');
+
+    act(() => result.current.update({ theme: 'dark' }));
+    expect(loadStoredTweaks()).not.toHaveProperty('layout');
+    expect(loadStoredTweaks()?.theme).toBe('dark');
+  });
+
   it('別インスタンスの update が全インスタンスへ即時反映される (Detail panel 切り替えの回帰テスト)', () => {
     // App 側と TweaksPanel 側の 2 インスタンスを再現する
     const app = renderHook(() => useTweaks());

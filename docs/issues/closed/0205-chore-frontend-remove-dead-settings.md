@@ -1,6 +1,7 @@
 # frontend の使われていない設定・トークン・フォント読み込みを削除する
 
 Created: 2026-09-28
+Completed: 2026-09-28
 Model: Claude Fable 5.1
 
 ## 背景
@@ -39,3 +40,11 @@ Model: Claude Fable 5.1
 - docs/issues/0201〜0204 (先に実装する)。
 - docs/issues/closed/0020: 永続化データの冪等な移行の前例。
 - docs/issues/closed/0062 / 0064: Tweaks パネルの現在の項目。
+
+## 解決方法
+
+- `types/common.ts` から `Layout` 型と `Tweaks.layout` を、`hooks/useTweaks.ts` から `DEFAULT_TWEAKS.layout` を削除した。`getSnapshot` は永続化データを `Partial<Tweaks> & { layout?: unknown }` として複製し `delete persisted.layout` で読み捨ててから既定値とマージする (設計判断の分割代入は ESLint の `no-unused-vars` に掛かるため `delete` にした。冪等性は同じ)。`useTweaks.test.tsx` に、保存済みの `layout` が state に現れず、次の保存で書き戻されないことを確認するテストを足した。
+- `styles/tokens.css` から `--shadow-drawer` (両テーマ) と `--sp-5` を削除し、`[data-theme='light']` の `--accent-hi` を削除して「`[data-accent]` のブロックが accent ごとに持つ」のコメントに置き換えた。`styles/` に参照は残っていない。
+- `index.html` の Google Fonts の URL から `family=Instrument+Serif` を外した (`Geist` と `Geist Mono` は残る)。
+- grep で `frontend/` (node_modules を除く) に `Layout` 型、`Tweaks.layout`、`shadow-drawer`、`sp-5`、`Instrument` が無いことを確認した。
+- 完了条件の「Tweaks パネルの目視」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (117 ファイル 1,252 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

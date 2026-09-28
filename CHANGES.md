@@ -421,6 +421,8 @@
 
 ### misc
 
+- frontend の使われていない定義を削除する (永続化されるだけで参照の無い `Tweaks.layout` (保存済みの値は読み込み時に読み捨てる)、参照の無い `--shadow-drawer` / `--sp-5`、`[data-accent]` が常に上書きするため実効値にならない `[data-theme='light']` の `--accent-hi`、CSS から参照の無い Google Fonts の `Instrument Serif` の読み込み。見た目と挙動は変えない。docs/issues/closed/0205)
+  - @sfuruya0612
 - frontend の Drawer を配置 (`DrawerFrame`: backdrop、右 / 下 / 分割中の内包、リサイズと寸法の永続化、ESC) と中身 (`Drawer`: 見出し、タブ、本文) に分け、CSS の常駐ターミナルドックの高さ (`--terminal-dock-h`) の参照を `.drawer` の `--drawer-lift` の 1 か所にする (下配置の閉じ位置と内包の持ち上げはこの変数から計算する。各配置の計算値は分割前と同じ。`Drawer` の公開 Props と呼び出し側は変えない。docs/issues/closed/0204)
   - @sfuruya0612
 - frontend の汎用の見た目を `components/primitives/` の部品にし、className の直書きを置き換える (`Button` (`size` / `variant`、`type` の既定 `button`) で `<button className="btn …">` 57 か所、`SearchField` で `.chip-search` の標準形 6 か所、`Stat` で `.stat` の label / value / delta 形 3 か所と `StatTile` を置き換えた。`<select>` / `<input>` / `<a>` にボタンの見た目を借りる 27 か所と、グラフを載せるカードとしての `.stat` 5 か所は直書きのまま。DOM は `type="button"` が付く以外は同じ。docs/issues/closed/0203)

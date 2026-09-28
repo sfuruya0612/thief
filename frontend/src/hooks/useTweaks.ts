@@ -8,7 +8,6 @@ export const DEFAULT_TWEAKS: Tweaks = {
   theme: 'light',
   density: 'compact',
   accent: 'green',
-  layout: 'tabs-top',
   drawerPos: 'bottom',
   lang: 'ja',
 };
@@ -22,8 +21,12 @@ const listeners = new Set<() => void>();
 
 function getSnapshot(): Tweaks {
   if (state === null) {
-    const persisted = loadPersisted().tweaks;
-    state = { ...DEFAULT_TWEAKS, ...(persisted ?? {}) };
+    // docs/issues/closed/0205 以前は使われていない layout ('tabs-top') も永続化していた。
+    // 保存済みの値を state に取り込むと次の保存で書き戻され続けるため、読み込み時に落とす
+    // (docs/issues/closed/0020 の migrateSessions と同じ、冪等な読み捨て)。
+    const persisted: Partial<Tweaks> & { layout?: unknown } = { ...(loadPersisted().tweaks ?? {}) };
+    delete persisted.layout;
+    state = { ...DEFAULT_TWEAKS, ...persisted };
   }
   return state;
 }
