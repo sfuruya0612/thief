@@ -3,7 +3,7 @@
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 15, 20, 0.25);
+  background: var(--overlay);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.16s ease;
@@ -329,7 +329,7 @@
   color: var(--warn);
 }
 .logbox .lvl-err {
-  color: var(--err);
+  color: var(--err-ink);
 }
 
 /* Terminal (EC2 Start Session / ECS Exec Command) */

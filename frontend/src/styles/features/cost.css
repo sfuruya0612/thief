@@ -18,14 +18,10 @@ table.dt.cost-cross-table td:first-child,
 table.dt.cost-cross-table td:nth-child(2) {
   position: sticky;
   z-index: 1;
-  background: var(--bg-1);
+  background: var(--surface-main);
 }
 table.dt.cost-cross-table td:nth-child(2) {
   border-right: 1px solid var(--line-1);
-}
-[data-theme='dark'] table.dt.cost-cross-table td:first-child,
-[data-theme='dark'] table.dt.cost-cross-table td:nth-child(2) {
-  background: var(--bg-0);
 }
 /* thead th:first-child / th:nth-child(2) は縦 (top) と横 (left) の両方に sticky する
    角セルのため、横スクロールで流れる他のヘッダーセル (z-index: 2) より手前に表示させる
@@ -34,14 +30,10 @@ table.dt.cost-cross-table thead th:first-child,
 table.dt.cost-cross-table thead th:nth-child(2) {
   position: sticky;
   z-index: 3;
-  background: var(--bg-1);
+  background: var(--surface-main);
 }
 table.dt.cost-cross-table thead th:nth-child(2) {
   border-right: 1px solid var(--line-1);
-}
-[data-theme='dark'] table.dt.cost-cross-table thead th:first-child,
-[data-theme='dark'] table.dt.cost-cross-table thead th:nth-child(2) {
-  background: var(--bg-0);
 }
 
 /* checkbox */

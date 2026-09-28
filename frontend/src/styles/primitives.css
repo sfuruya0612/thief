@@ -32,8 +32,8 @@
   border-color: var(--line-2);
 }
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
   color: var(--accent-text);
 }
 .btn.primary:hover {
@@ -75,9 +75,6 @@
   gap: 3px;
   box-shadow: var(--shadow-sm);
 }
-[data-theme='dark'] .stat {
-  background: var(--bg-1);
-}
 .stat .label {
   font-size: 11px;
   color: var(--text-3);
@@ -112,7 +109,7 @@
   color: var(--ok);
 }
 .stat .delta.neg {
-  color: var(--err);
+  color: var(--err-ink);
 }
 
 .facets {
@@ -149,14 +146,14 @@
 .facet.active {
   background: var(--accent-dim);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .facet .k {
   color: var(--text-3);
   font-weight: 400;
 }
 .facet.active .k {
-  color: var(--accent);
+  color: var(--accent-ink);
   opacity: 0.75;
 }
 .facet .v {
@@ -164,7 +161,7 @@
   font-weight: 500;
 }
 .facet.active .v {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .facet .x {
   opacity: 0.5;
@@ -219,7 +216,7 @@ table.dt thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--bg-1);
+  background: var(--surface-main);
   color: var(--text-3);
   font-weight: 500;
   font-size: 11px;
@@ -233,9 +230,6 @@ table.dt thead th {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-[data-theme='dark'] table.dt thead th {
-  background: var(--bg-0);
 }
 table.dt thead th.sortable {
   cursor: pointer;
@@ -282,12 +276,9 @@ table.dt thead tr.dt-filter-row th {
   position: sticky;
   top: 32px;
   z-index: 2;
-  background: var(--bg-1);
+  background: var(--surface-main);
   padding: 4px 6px;
   border-bottom: 1px solid var(--line-1);
-}
-[data-theme='dark'] table.dt thead tr.dt-filter-row th {
-  background: var(--bg-0);
 }
 table.dt thead tr.dt-filter-row .dt-col-filter {
   width: 100%;
@@ -445,7 +436,7 @@ table.dt tbody td.primary {
   font-weight: 500;
 }
 .tag.env-prod .v {
-  color: var(--err);
+  color: var(--err-ink);
 }
 .tag.env-stg .v {
   color: var(--warn);
@@ -564,10 +555,10 @@ table.dt tbody td.primary {
   top: 2px;
   width: 14px;
   height: 14px;
-  background: #fff;
+  background: var(--accent-text);
   border-radius: 50%;
   transition: transform 0.12s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-knob);
 }
 .toggle.on .tg {
   background: var(--accent);

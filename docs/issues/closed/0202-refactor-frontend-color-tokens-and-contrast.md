@@ -1,6 +1,7 @@
 # frontend の直書きの色とテーマ上書きをトークンに寄せ、既定テーマの対比が弱い組を直す
 
 Created: 2026-09-28
+Completed: 2026-09-28
 Model: Claude Fable 5.1
 
 ## 背景
@@ -76,3 +77,12 @@ Model: Claude Fable 5.1
 - 刷新案 A の「対比が弱い 4 組」。
 - `frontend/src/components/charts/chartTheme.ts` は `--text-2` 相当の値を直値で持つ (コメントに理由がある)。ECharts はカスタムプロパティを読めないため本 issue では扱わない。
 - docs/issues/0205: 使われていない `[data-theme='light']` の `--accent-hi` の削除。
+
+## 解決方法
+
+- `styles/tokens.css` の `:root` に「固定色 (両テーマ共通)」の群 (`--terminal-bg`、`--overlay`、`--shadow-knob`、`--banner-warn-bg`、`--err-dim`、`--warn-dim`、`--warn-line`、`--sev-info` / `--sev-warn` / `--sev-err` / `--sev-warn-text` / `--sev-err-text` / `--sev-warn-dim` / `--sev-err-dim`、`--live-on-text` / `--live-on-dim`) を足し、`tokens.css` の外にあった直書き 30 か所 (16 進 21、`rgba()` 9) をすべて `var(--…)` に置き換えた。`#fff` 3 か所は `--accent-text`、Live Tail と `.lv-run-btn` の緑 `#16a34a` 3 か所は `--qe-run` を使った。設計判断のとおり値は変えていない。
+- `--surface-main` (ライト `#ffffff`、ダーク `#15171c`) を足し、`.main`、`table.dt thead th`、`table.dt thead tr.dt-filter-row th`、`table.dt.cost-cross-table` の固定列 (td / th)、`.lv-table thead th` の `background` を置き換えて、`[data-theme='dark']` の部品上書き 7 ブロックを削除した (`.stat` の上書きは効果が無かったので削除のみ)。`tokens.css` 以外に `[data-theme='dark']` は残っていない。
+- 対比の修正: `[data-theme='light']` の `--text-3` を `#6f7079` にした (白地 4.9:1、`bg-0` 4.8:1、`bg-2` 4.6:1。解決される参照は 79 か所で、`.cb:hover` の枠線 1 か所も同じ変数を使うため一緒に変わる)。`--err-ink` (ライト `#d2373d` 4.8:1、ダーク `#eb5757`) を足して `color: var(--err)` の 16 か所を置き換えた。`--accent-ink` を足し、`[data-accent]` の 6 ブロックに `--accent-ink-light` (indigo `#5a66ca` / amber `#8b6a0d` / blue `#286ecc` / green `#0e7e52` / purple `#7d53dd` / pink `#b24a7d`) と `--accent-ink-dark` (`--accent-hi` と同じ。indigo だけは `bg-2` の上で 4.3:1 だったため `#8590e6` に上げた) を持たせ、`.facet.active` (とその `.k` / `.v`)、`.session-tabs-more.holds-active`、`.lv-tree-leaf.checked` の文字を `var(--accent-ink)` にした。`--accent-strong` (両テーマとも `--accent-ink-light`) を足し、`.btn.primary` の `background` / `border-color` を置き換えた。`[data-accent]` が未設定の初回描画に備え、`--accent-ink` / `--accent-strong` には indigo の値をフォールバックとして書いた。
+- 対比の実測 (WCAG 2 の相対輝度): ライトの `--text-3` 4.9 / 4.8 / 4.6:1 (bg-1 / bg-0 / bg-2)、`--err-ink` 4.8 / 4.7:1、`--accent-ink` は 6 色とも `bg-1` / `bg-0` / `bg-2` の上で 4.6:1 以上、`--accent-text` (白) / `--accent-strong` は 6 色とも 5.0:1 以上。ダークの `--text-3` 4.8 / 5.4:1、`--err-ink` 4.6 / 5.2:1、`--accent-ink` は 6 色とも `bg-1` / `bg-0` / `bg-2` の上で 4.6:1 以上。
+- 検証: 分割前の `app.css` (コミット 5d248c6) と新しい `styles/` を、`:root` / `[data-theme]` / `[data-accent]` の変数を解決した上で規則ごとに突き合わせる一時的なスクリプトで比較した (ライト / ダーク × 6 accent)。差分は設計判断に書いた 4 組 (`--text-3` の参照 79 + `.cb:hover` の枠線、`--err` の文字 16、`.facet.active` 系 3 と `.session-tabs-more.holds-active` / `.lv-tree-leaf.checked` の文字、`.btn.primary` の面と枠) だけで、それ以外の解決後の値はすべて同じだった。ダークでは `.facet.active` 系と上の 2 か所の文字が `--accent` から `--accent-hi` 相当 (明るい側) に変わる (対比は上がる)。
+- 完了条件の「開発サーバでの目視」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (113 ファイル 1,234 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

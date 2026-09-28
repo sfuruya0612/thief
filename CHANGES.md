@@ -416,6 +416,8 @@
 
 - [FIX] 時系列グラフの系列過多で Other に集約するとき、集約対象の全系列が欠測の時刻が Other の点列から落ち、観測していない区間の前後の点が 1 本の線分で繋がる不具合を修正する (`frontend/src/lib/timeseries.ts` の `sumPoints` が欠測の点を読み飛ばしてその時刻を出力に登録していなかった。値を持つ点がまだ現れていない時刻だけ `v: null` の点として残し、ECharts が線を途切れさせるために必要な欠測を保持する。一部の系列だけが値を持つ時刻は従来どおりその値の和にする。ECS の `LiveTaskCount` のように集約対象の全クラスタが同じ時刻で欠測になる場合に影響していた)
   - @sfuruya0612
+- [UPDATE] Web の既定テーマ (ライト + green) で文字と地の対比が 4.5:1 に届かなかった 4 組を直す (ラベル・表のヘッダの文字 `--text-3` を `#8b8b95` から `#6f7079` に、エラーの文字に `--err-ink` (`#d2373d`)、accent を文字に使う箇所 (絞り込みチップの選択中など) に accent ごとの `--accent-ink`、primary ボタンの面に `--accent-strong` を足す。面の色と状態の点の色は変えない。あわせて `styles/tokens.css` の外にあった色の直書き 30 か所をトークンに寄せ、`[data-theme='dark'] .xxx` の部品ごとの上書き 7 ブロックを `--surface-main` に置き換えた。docs/issues/closed/0202)
+  - @sfuruya0612
 
 ### misc
 

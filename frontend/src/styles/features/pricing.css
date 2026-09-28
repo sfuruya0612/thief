@@ -135,14 +135,14 @@
   gap: 8px;
 }
 .pr-card-inline-error {
-  color: var(--err);
+  color: var(--err-ink);
   font-size: 11.5px;
 }
 .pr-card-partial-note {
   color: var(--warn);
   font-size: 11.5px;
-  background: rgba(229, 165, 75, 0.12);
-  border: 1px solid rgba(229, 165, 75, 0.3);
+  background: var(--warn-dim);
+  border: 1px solid var(--warn-line);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
 }
@@ -305,7 +305,7 @@
   white-space: nowrap;
 }
 .pr-rate-savings-negative {
-  color: var(--err);
+  color: var(--err-ink);
 }
 /* ---------- Estimator ---------- */
 .pr-estimator {
@@ -415,7 +415,7 @@
   padding: 2px;
 }
 .pr-estimator-line-remove:hover {
-  color: var(--err);
+  color: var(--err-ink);
 }
 .pr-estimator-line-term {
   font-size: 10.5px;

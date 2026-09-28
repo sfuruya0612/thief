@@ -53,17 +53,17 @@
   width: 6px;
   height: 6px;
   border-radius: 99px;
-  background: #dc2626;
+  background: var(--sev-err);
 }
 .lv-live-toggle.on {
-  border-color: #16a34a;
-  color: #15803d;
-  background: rgba(22, 163, 74, 0.12);
+  border-color: var(--qe-run);
+  color: var(--live-on-text);
+  background: var(--live-on-dim);
   font-weight: 600;
 }
 .lv-live-toggle.on .lv-live-dot,
 .lv-live-dot.on {
-  background: #16a34a;
+  background: var(--qe-run);
 }
 .lv-range-select {
   min-width: 120px;
@@ -151,7 +151,7 @@
 }
 .lv-tree-leaf.checked {
   background: var(--accent-dim);
-  color: var(--accent-hi);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 .lv-tree-leaf input {
@@ -218,8 +218,8 @@
   flex: none;
 }
 .lv-run-btn {
-  background: #16a34a;
-  color: #fff;
+  background: var(--qe-run);
+  color: var(--accent-text);
   border: none;
   border-radius: 6px;
   padding: 5px 14px;
@@ -266,25 +266,25 @@
   min-height: 1px;
 }
 .lv-hbar-info {
-  background: #9aa4b2;
+  background: var(--sev-info);
 }
 .lv-hbar-warn {
-  background: #e0972f;
+  background: var(--sev-warn);
 }
 .lv-hbar-err {
-  background: #dc2626;
+  background: var(--sev-err);
 }
 .lv-hseg {
   width: 100%;
 }
 .lv-hseg-err {
-  background: #dc2626;
+  background: var(--sev-err);
 }
 .lv-hseg-warn {
-  background: #e0972f;
+  background: var(--sev-warn);
 }
 .lv-hseg-info {
-  background: #9aa4b2;
+  background: var(--sev-info);
 }
 .lv-hist-axis {
   display: flex;
@@ -404,7 +404,7 @@
 }
 .lv-field-picker-remove:hover {
   background: var(--bg-3);
-  color: var(--err);
+  color: var(--err-ink);
 }
 .lv-field-picker-empty {
   padding: 10px 12px;
@@ -442,7 +442,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--bg-1);
+  background: var(--surface-main);
   border-bottom: 1px solid var(--line-1);
   padding: 6px 12px;
   font-size: 10.5px;
@@ -450,9 +450,6 @@
   text-align: left;
   color: var(--text-3);
   white-space: nowrap;
-}
-[data-theme='dark'] .lv-table thead th {
-  background: var(--bg-0);
 }
 .lv-row {
   cursor: pointer;
@@ -481,10 +478,10 @@
   white-space: nowrap;
 }
 .lv-row-msg.tint-err {
-  color: #dc2626;
+  color: var(--sev-err-text);
 }
 .lv-row-msg.tint-warn {
-  color: #b45309;
+  color: var(--sev-warn-text);
 }
 .lv-group-name {
   overflow: hidden;
@@ -571,10 +568,10 @@
 
 /* severity バッジ / 凡例テキスト */
 .lv-sev-err {
-  color: #dc2626;
+  color: var(--sev-err-text);
 }
 .lv-sev-warn {
-  color: #b45309;
+  color: var(--sev-warn-text);
 }
 .lv-sev-info {
   color: var(--text-3);
@@ -586,12 +583,12 @@
   padding: 1px 6px;
 }
 .lv-sev-badge.lv-sev-err {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.15);
+  color: var(--sev-err-text);
+  background: var(--sev-err-dim);
 }
 .lv-sev-badge.lv-sev-warn {
-  color: #b45309;
-  background: rgba(224, 151, 47, 0.18);
+  color: var(--sev-warn-text);
+  background: var(--sev-warn-dim);
 }
 .lv-sev-badge.lv-sev-info {
   color: var(--text-3);

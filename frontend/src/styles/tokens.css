@@ -25,12 +25,21 @@
   --accent-hi: #7b86e2;
   --accent-dim: rgba(94, 106, 210, 0.14);
   --accent-text: #fff;
+  /* 文字として使う accent (白地 / 暗い地で 4.5:1 以上)。値は [data-accent] が accent ごとに持つ。
+     ダークでは明るい側 (--accent-ink-dark)、ライトでは暗い側 (--accent-ink-light) を選ぶ。 */
+  --accent-ink: var(--accent-ink-dark, #8590e6);
+  /* 白文字 (--accent-text) を乗せる面。両テーマとも暗い側の値 (白との対比 5.0:1 以上)。 */
+  --accent-strong: var(--accent-ink-light, #5a66ca);
 
   --ok: #58c184;
   --warn: #e5a54b;
   --err: #eb5757;
   --info: #6ea3f7;
   --muted: #868d99;
+  /* 文字として使う err。ダークは --err と同じ (地の上で 5.2:1)。 */
+  --err-ink: #eb5757;
+  /* 本文 (.main) と表のヘッダの地。ライトは bg-1、ダークは bg-0 に当たる (テーマで面の割り当てが入れ替わる)。 */
+  --surface-main: #15171c;
 
   /* SQL エディタのシンタックスハイライト (デザイン 3: 明度を上げた同系色) */
   --sql-kw: #6ea3f7;
@@ -110,6 +119,26 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-drawer: -24px 0 60px rgba(0, 0, 0, 0.35);
   --shadow-pop: 0 16px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-2);
+
+  /* 固定色 (両テーマ共通)。テーマに追随させない意図があるもの。 */
+  --terminal-bg: #0a0a0a; /* xterm の背景 (.terminal-container) */
+  --overlay: rgba(15, 15, 20, 0.25); /* Drawer の backdrop */
+  --shadow-knob: 0 1px 3px rgba(0, 0, 0, 0.25); /* トグルのつまみ */
+  --banner-warn-bg: rgba(242, 201, 76, 0.12); /* .sso-banner の地 */
+  --err-dim: rgba(235, 87, 87, 0.12); /* .error-banner の地 */
+  --warn-dim: rgba(229, 165, 75, 0.12); /* Pricing の注意枠の地 */
+  --warn-line: rgba(229, 165, 75, 0.3); /* Pricing の注意枠の線 */
+  /* ログの重要度 (ログビューアのバー・セグメント・行・バッジ)。両テーマ共通の固定色。 */
+  --sev-info: #9aa4b2;
+  --sev-warn: #e0972f;
+  --sev-err: #dc2626;
+  --sev-warn-text: #b45309;
+  --sev-err-text: #dc2626;
+  --sev-warn-dim: rgba(224, 151, 47, 0.18);
+  --sev-err-dim: rgba(220, 38, 38, 0.15);
+  /* Live Tail の on 状態の文字と地 (面の緑は --qe-run と同じ値なので --qe-run を使う) */
+  --live-on-text: #15803d;
+  --live-on-dim: rgba(22, 163, 74, 0.12);
 }
 
 [data-theme='light'] {
@@ -124,19 +153,22 @@
 
   --text-1: #282a30;
   --text-2: #5f606a;
-  --text-3: #8b8b95;
+  --text-3: #6f7079; /* 白地で 4.9:1、bg-0 で 4.8:1 (docs/issues/closed/0202 で #8b8b95 から変更) */
   --text-4: #b5b5bd;
 
   --accent: #5e6ad2;
-  --accent-hi: #4f5abd;
+  --accent-hi: #4f5abd; /* 常に適用される [data-accent] が上書きするため、この値は使われない */
   --accent-dim: rgba(94, 106, 210, 0.09);
   --accent-text: #fff;
+  --accent-ink: var(--accent-ink-light, #5a66ca);
 
   --ok: #12a66c;
   --warn: #d9a514;
   --err: #e5484d;
   --info: #2f80ed;
   --muted: #8b8b95;
+  --err-ink: #d2373d; /* 白地で 4.8:1 (--err #e5484d は 3.9:1) */
+  --surface-main: #ffffff;
 
   /* SQL エディタのシンタックスハイライト (デザイン 2: ライト) */
   --sql-kw: #2563eb;
@@ -182,29 +214,41 @@
   --accent: #5e6ad2;
   --accent-hi: #7b86e2;
   --accent-dim: rgba(94, 106, 210, 0.12);
+  --accent-ink-light: #5a66ca;
+  --accent-ink-dark: #8590e6; /* --accent-hi (#7b86e2) は bg-2 の上で 4.3:1 なので少し明るくする */
 }
 [data-accent='amber'] {
   --accent: #d9a514;
   --accent-hi: #eab308;
   --accent-dim: rgba(217, 165, 20, 0.12);
+  --accent-ink-light: #8b6a0d;
+  --accent-ink-dark: #eab308;
 }
 [data-accent='blue'] {
   --accent: #2f80ed;
   --accent-hi: #5695ee;
   --accent-dim: rgba(47, 128, 237, 0.11);
+  --accent-ink-light: #286ecc;
+  --accent-ink-dark: #5695ee;
 }
 [data-accent='green'] {
   --accent: #12a66c;
   --accent-hi: #26b97f;
   --accent-dim: rgba(18, 166, 108, 0.11);
+  --accent-ink-light: #0e7e52;
+  --accent-ink-dark: #26b97f;
 }
 [data-accent='purple'] {
   --accent: #8b5cf6;
   --accent-hi: #a07df8;
   --accent-dim: rgba(139, 92, 246, 0.12);
+  --accent-ink-light: #7d53dd;
+  --accent-ink-dark: #a07df8;
 }
 [data-accent='pink'] {
   --accent: #de5d9c;
   --accent-hi: #e77fb1;
   --accent-dim: rgba(222, 93, 156, 0.11);
+  --accent-ink-light: #b24a7d;
+  --accent-ink-dark: #e77fb1;
 }
