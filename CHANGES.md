@@ -26,6 +26,8 @@
   - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
+- [FIX] Web の S3 / GCS のオブジェクト SQL 検索が `Cannot read properties of undefined (reading 'fields')` で失敗する不具合を修正する (`AsyncDuckDBConnection.send()` が返す Arrow の `AsyncRecordBatchStreamReader` は `open()` するまで `schema` を持たないのに、`collectQueryResult` が反復の前に `schema.fields` を読んでいた。`QueryBatchReader` に `open()` を加え、`collectQueryResult` が列名を読む前に `open()` するようにする。issue 0206)
+  - @sfuruya0612
 
 - [UPDATE] CLI の全コマンドが Ctrl-C と SIGTERM でキャンセルされる context で AWS / Google Cloud / Datadog / TiDB を呼び出すようにする (main が `signal.NotifyContext` で作った context を cobra の `ExecuteContextC` 経由で各コマンドへ渡し、それまで各コマンドが個別に呼んでいた `context.Background()` 30 箇所を `commandContext(cmd)` に置き換える。これで一覧取得や BigQuery のクエリ、SSO デバイス認可の承認待ちを Ctrl-C で即座に打ち切れる。context を受け取る口が無かった TiDB Cloud のクライアントには第一引数として context を追加し、Digest 認証の 2 往復の両方に紐付ける。`sso generate-config` のアカウント選択とロール選択、`ssm param put` / `secretsmanager put` の標準入力からの値の読み取りも、読み取りを別の goroutine に出して context のキャンセルで待機を打ち切るようにする (`signal.NotifyContext` はシグナルの既定の動作を止めるため、context を見ない読み取りを残すと入力待ちの間 Ctrl-C が無反応になる)。ただし SSM セッションの切断と API サーバのシャットダウンは、中断で context がキャンセル済みでも完了させる必要があるため専用の短命 context を使う。`server` コマンドが自前で張っていた `signal.NotifyContext` は main の 1 箇所に集約する)
   - @sfuruya0612

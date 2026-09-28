@@ -2,6 +2,7 @@
 
 Created: 2026-09-28
 Model: Claude Fable 5.1
+Completed: 2026-09-28
 
 ## 症状
 
@@ -61,3 +62,24 @@ Cannot read properties of undefined (reading 'fields')
 - Object Storage の Query パネルで、既定の SQL と任意の SELECT が結果表に列名と行を表示する。
 - 実物の Arrow の `AsyncRecordBatchStreamReader` を `open()` する前の状態で `collectQueryResult` に渡す単体テストが通る。
 - `mise run check` が通過する。
+
+## 解決方法
+
+`collectQueryResult` が列名を読む前にリーダーを `open()` するようにし、`QueryBatchReader` の型を Arrow の契約に合わせた。
+
+- `lib/duckdbResult.ts` の `QueryBatchReader` に `open(): Promise<unknown>` を加え、`schema` の宣言を `readonly schema: Schema | undefined` にした。
+- `collectQueryResult` の先頭で `await reader.open()` を呼び、その後に `columnsOf(reader.schema)` で列名を読むようにした。`open()` の後も `schema` が `undefined` のときは、列も行も無い結果を返す。
+- `lib/duckdb.ts` の `runQuery` は処理を変えず、`send()` が返すリーダーは `open()` されておらず `open()` は `collectQueryResult` が行う、というコメントを足した。
+- `duckdbResult.test.ts` に `describe('collectQueryResult (Arrow の AsyncRecordBatchStreamReader)')` の 3 テストを追加した。リーダーは `tableToIPC(table, 'stream')` のバイト列を 64 バイトのチャンクの非同期イテラブルで流し、`RecordBatchReader.from()` に渡して作る。`open()` する前のリーダーから列名と行を読むこと (渡す前に `reader.schema` が `undefined` であることも確かめる)、上限を超えたら打ち切って cancel を呼ぶこと、バイト列が空でスキーマの無いストリームでは列も行も無い結果を返すことを検証する。
+- 同ファイルの `makeReader` スタブを、`open()` を呼ぶまで `schema` が `undefined` になる形にし、`open()` と `next()` の呼び出し順を記録するようにした。`open()` が最初の `next()` より前に 1 回だけ呼ばれることと、`open()` の後も `schema` が無いスタブで列も行も無い結果を返すことのテストを追加した。
+- `duckdb.test.ts` の `makeReader` スタブも同じく `open()` を持ち、`open()` を呼ぶまで `schema` を持たない形にした。
+
+追加したテストとスタブを変えた既存のテストが不具合を捕まえることは、`lib/duckdbResult.ts` だけを修正前の内容に戻して確かめた。
+`duckdbResult.test.ts` と `duckdb.test.ts` の 16 テスト (実物の Arrow のリーダーを使う 3 テストを含む) が、症状と同じ `TypeError: Cannot read properties of undefined (reading 'fields')` で失敗した。
+修正後は 16 テストすべてが通る。
+
+完了条件の検証は次のとおりである。
+
+- 「Object Storage の Query パネルで、既定の SQL と任意の SELECT が結果表に列名と行を表示する」: ブラウザでは確認していない。代わりに、`send()` が返すリーダーと同じ作り方の Arrow のリーダーを `collectQueryResult` に渡す単体テストで、列名と行が取れることを確認した。`runQuery` は `send()` の戻り値をそのまま `collectQueryResult` に渡すため、リーダーの作り方が同じであればブラウザでも同じ経路を通る。
+- 「実物の Arrow の `AsyncRecordBatchStreamReader` を `open()` する前の状態で `collectQueryResult` に渡す単体テストが通る」: 通過した。
+- 「`mise run check` が通過する」: 終了コード 0 で通過した。frontend は Test Files 117 passed / Tests 1257 passed、lint はエラー 0 (警告 9 件は変更前からある)。backend は 18 パッケージすべて ok。

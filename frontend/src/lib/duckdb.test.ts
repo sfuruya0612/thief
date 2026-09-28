@@ -31,14 +31,21 @@ vi.mock('@duckdb/duckdb-wasm', () => ({
   LogLevel: { WARNING: 2 },
 }));
 
-// makeReader は conn.send が返すバッチ列を模す。各バッチは行数だけを指定する。
+// makeReader は conn.send が返すバッチ列を模す。各バッチは行数だけを指定する。Arrow の
+// リーダーと同じく、open() を呼ぶまで schema は undefined にする (docs/issues/closed/0206)。
 function makeReader(batchSizes: number[]) {
   const schema = tableFromArrays({ n: [0] }).schema;
   const batches = batchSizes.map(
     (size) => tableFromArrays({ n: Array.from({ length: size }, (_, i) => i) }).batches[0],
   );
+  let opened = false;
   return {
-    schema,
+    async open() {
+      opened = true;
+    },
+    get schema() {
+      return opened ? schema : undefined;
+    },
     [Symbol.asyncIterator]() {
       let index = 0;
       return {

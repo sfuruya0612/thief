@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { tableFromArrays } from 'apache-arrow';
+import { RecordBatchReader, tableFromArrays, tableToIPC } from 'apache-arrow';
 import { batchToRows, cellToString, collectQueryResult, columnsOf } from './duckdbResult';
 
 // makeBatch は 1 バッチだけの Arrow テーブルから RecordBatch を取り出す。
@@ -76,20 +76,28 @@ describe('batchToRows', () => {
 });
 
 // makeReader は collectQueryResult に渡すストリームのスタブを返す。batches はバッチごとの
-// 行数の配列で、pulled には iterator.next() が呼ばれた回数が入る (先読みの検証に使う)。
+// 行数の配列で、pulled には iterator.next() が呼ばれた回数、calls には open() と next() が
+// 呼ばれた順序が入る (先読みと open() の順序の検証に使う)。Arrow の RecordBatchReader と
+// 同じく、open() を呼ぶまで schema は undefined にする (docs/issues/closed/0206)。
 function makeReader(batchSizes: number[]) {
   const table = tableFromArrays({ n: [0] });
   const batches = batchSizes.map(
     (size) => tableFromArrays({ n: Array.from({ length: size }, (_, i) => i) }).batches[0],
   );
-  const state = { pulled: 0 };
+  const state = { pulled: 0, calls: [] as ('open' | 'next')[] };
   const reader = {
-    schema: table.schema,
+    async open() {
+      state.calls.push('open');
+    },
+    get schema() {
+      return state.calls.includes('open') ? table.schema : undefined;
+    },
     [Symbol.asyncIterator]() {
       let index = 0;
       return {
         async next() {
           state.pulled += 1;
+          state.calls.push('next');
           if (index >= batches.length) return { done: true as const, value: undefined };
           const value = batches[index];
           index += 1;
@@ -182,6 +190,85 @@ describe('collectQueryResult', () => {
     expect(result.columns).toEqual(['n']);
     expect(result.rows).toEqual([]);
     expect(result.truncated).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it('open() を呼ぶまで schema を持たないリーダーでも、最初の next() より前に open() して列名を読む', async () => {
+    const cancel = vi.fn(async () => {});
+    const { reader, state } = makeReader([1]);
+    // send() が返した直後のリーダーと同じく、open() の前は schema が無い
+    expect(reader.schema).toBeUndefined();
+    const result = await collectQueryResult(reader, 10, cancel);
+    expect(state.calls[0]).toBe('open');
+    expect(state.calls.filter((c) => c === 'open')).toHaveLength(1);
+    expect(result.columns).toEqual(['n']);
+    expect(result.rows).toEqual([['0']]);
+  });
+
+  it('open() の後も schema が無いリーダーでは列も行も無い結果を返す', async () => {
+    const cancel = vi.fn(async () => {});
+    const reader = {
+      async open() {},
+      schema: undefined,
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: true as const, value: undefined };
+          },
+        };
+      },
+    };
+    const result = await collectQueryResult(reader, 10, cancel);
+    expect(result).toEqual({ columns: [], rows: [], truncated: false });
+    expect(cancel).not.toHaveBeenCalled();
+  });
+});
+
+// makeArrowStreamReader は Arrow の IPC stream 形式のバイト列を非同期の小さなチャンクで流し、
+// RecordBatchReader.from() が返す未 open の AsyncRecordBatchStreamReader を返す。
+// AsyncDuckDBConnection.send() が返すリーダーと同じ構築経路である (docs/issues/closed/0206)。
+async function makeArrowStreamReader(values: Record<string, unknown[]>) {
+  const ipc = tableToIPC(tableFromArrays(values), 'stream');
+  async function* chunks() {
+    const size = 64;
+    for (let i = 0; i < ipc.byteLength; i += size) yield ipc.subarray(i, i + size);
+  }
+  return RecordBatchReader.from(chunks());
+}
+
+describe('collectQueryResult (Arrow の AsyncRecordBatchStreamReader)', () => {
+  it('open() していないリーダーから列名と行を読む', async () => {
+    const cancel = vi.fn(async () => {});
+    const reader = await makeArrowStreamReader({ id: [1, 2, 3], name: ['a', 'b', 'c'] });
+    // send() が返した直後のリーダーは schema を持たない (ここで schema.fields を読むと
+    // "Cannot read properties of undefined (reading 'fields')" になる)
+    expect(reader.schema).toBeUndefined();
+    const result = await collectQueryResult(reader, 10, cancel);
+    expect(result.columns).toEqual(['id', 'name']);
+    expect(result.rows).toEqual([
+      ['1', 'a'],
+      ['2', 'b'],
+      ['3', 'c'],
+    ]);
+    expect(result.truncated).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it('上限を超えたら打ち切り、cancel を呼ぶ', async () => {
+    const cancel = vi.fn(async () => {});
+    const reader = await makeArrowStreamReader({ id: [1, 2, 3] });
+    const result = await collectQueryResult(reader, 2, cancel);
+    expect(result.columns).toEqual(['id']);
+    expect(result.rows).toEqual([['1'], ['2']]);
+    expect(result.truncated).toBe(true);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('バイト列が空でスキーマの無いストリームでは列も行も無い結果を返す', async () => {
+    const cancel = vi.fn(async () => {});
+    const reader = await RecordBatchReader.from((async function* () {})());
+    const result = await collectQueryResult(reader, 10, cancel);
+    expect(result).toEqual({ columns: [], rows: [], truncated: false });
     expect(cancel).not.toHaveBeenCalled();
   });
 });

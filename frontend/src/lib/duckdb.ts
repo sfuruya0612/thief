@@ -105,6 +105,8 @@ async function getConnection(): Promise<duckdb.AsyncDuckDBConnection> {
 
 // runQuery は SQL をストリーム実行し、OBJECT_QUERY_MAX_ROWS 行で打ち切る。行の収集と
 // 打ち切りの判定は duckdbResult.ts の collectQueryResult が行う (単体テストで固定する)。
+// send() が返すリーダーは open() されておらず schema を持たない。open() も collectQueryResult
+// が行う (docs/issues/closed/0206)。
 async function runQuery(sql: string): Promise<ObjectQueryResult> {
   const conn = await getConnection();
   const startedAt = performance.now();

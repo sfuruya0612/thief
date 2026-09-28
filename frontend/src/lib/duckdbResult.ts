@@ -63,9 +63,15 @@ export function batchToRows(batch: RecordBatch): string[][] {
 }
 
 // QueryBatchReader は collectQueryResult が読むストリームの最小形。DuckDB Wasm の
-// AsyncResultStreamIterator はこの形を満たす。テストではこの形のスタブを渡す。
+// AsyncDuckDBConnection.send() が返す Arrow の AsyncRecordBatchStreamReader はこの形を
+// 満たす。テストではこの形のスタブを渡す。
+//
+// Arrow の RecordBatchReader は、open() (または最初の next()) がストリーム先頭のスキーマの
+// メッセージを読むまで schema が undefined のままである。send() は open() せずに返すため、
+// schema を読む側が先に open() を呼ぶ (docs/issues/closed/0206)。
 export interface QueryBatchReader {
-  schema: Schema;
+  open(): Promise<unknown>;
+  readonly schema: Schema | undefined;
   [Symbol.asyncIterator](): AsyncIterator<RecordBatch>;
 }
 
@@ -86,7 +92,11 @@ export async function collectQueryResult(
   maxRows: number,
   cancel: () => Promise<void>,
 ): Promise<CollectedQueryResult> {
-  const columns = columnsOf(reader.schema);
+  // スキーマはストリームの先頭にあり、open() で読む。open() の前に schema を読むと undefined
+  // で列名を取れない (docs/issues/closed/0206)。スキーマの無いストリームでは Arrow が open()
+  // でリーダーを閉じるため、列も行も無い結果になる。
+  await reader.open();
+  const columns = reader.schema === undefined ? [] : columnsOf(reader.schema);
   const rows: string[][] = [];
   let truncated = false;
   const iterator = reader[Symbol.asyncIterator]();
