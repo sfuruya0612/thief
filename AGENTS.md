@@ -272,7 +272,8 @@ frontend/
 ├── eslint.config.js / .prettierrc.json
 ├── public/assets/
 └── src/
-    ├── main.tsx / App.tsx / app.css     # エントリポイントとレイアウト CSS
+    ├── main.tsx / App.tsx               # エントリポイント
+    ├── styles/                          # CSS (index.css が読み込み順を決める。下の「コーディングスタイル」を参照)
     ├── types/{aws,gcp,nonaws,query,common}.ts  # Raw (backend JSON 形状) と Row (UI 形状) の 2 層
     ├── types/__contract__/*.json / contract.check.ts  # backend と突き合わせるゴールデン JSON と型検査
     ├── api/{client,endpoints,queries,terminal}.ts
@@ -322,7 +323,12 @@ frontend/
 - TypeScript は `strict`、`noUnusedLocals`/`noUnusedParameters` を有効化(`tsconfig.json`)。意図的に未使用の引数は `_` プレフィックスを付ける(ESLint 側で `argsIgnorePattern: '^_'` を許容)。
 - コンポーネントは関数コンポーネント + Hooks のみ。クラスコンポーネントは書かない。
 - Props の型は `interface XxxProps` として明示し、コンポーネント本体でデストラクチャする。
-- CSS は `app.css` に集約されたクラス(`.toolbar`/`.table-wrap`/`table.dt`/`.seg`/`.nav-item`/`.btn`/`.stats`/`.facets` 等)を再利用する。新しいクラスを追加する場合は既存の命名規則(BEM 風ではなく機能名そのまま)に合わせる。
+- CSS は `src/styles/` に層で分け、`styles/index.css` の `@import` の順 (tokens → base → shell → primitives → features) がカスケードを決める (docs/issues/closed/0201)。
+  - `tokens.css`: テーマの変数 (色・文字・間隔・角・影) と `[data-theme]` / `[data-density]` / `[data-accent]` の切替。色と寸法の値はここにだけ書き、他のファイルは `var(--…)` で参照する。
+  - `base.css`: reset と要素の既定。`shell.css`: 画面の骨格 (`.app` / `.topbar` / セッションタブ / `.body` / `.pane` / `.sidebar` / `.main` / `.toolbar`)。`utilities.css`: 小さな汎用クラス。
+  - `primitives.css`: 汎用の部品 (`.btn` / `.stat` / `.facet` / `.chip-search` / `table.dt` / `.status` / `.tag` / `.seg` 等)。
+  - `features/<feature>.css`: feature 固有の規則 (`drawer` / `terminal` / `tweaks` / `nonaws` / `storage` / `query` / `logviewer` / `pricing` / `cost` / `charts`)。**新しい規則はまずここに書く**。2 つ以上の feature で同じ形の規則が要るときに `primitives.css` へ昇格させる。
+  - クラス名は既存の命名規則 (BEM 風ではなく機能名そのまま、feature 固有は `qe-` / `lv-` / `pr-` のような接頭辞) に合わせる。
 - 状態を更新するだけの `useEffect`(`setState` を effect 内で直接呼ぶパターン)は既存コードに複数存在するが、新規追加時は可能な限りイベントハンドラや `useMemo` で代替できないか検討する。
 
 ### frontend テスト

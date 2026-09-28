@@ -217,7 +217,7 @@ export function Drawer({
         className={`drawer-backdrop ${open ? 'open' : ''} ${contained ? 'contained' : ''}`}
         onClick={onClose}
       />
-      {/* 開閉位置 (transform) は app.css の .drawer / .drawer.open / .drawer.pos-bottom /
+      {/* 開閉位置 (transform) は styles/features/drawer.css の .drawer / .drawer.open / .drawer.pos-bottom /
           .drawer.pos-bottom.open だけで定義する。inline で重複させると、下配置の閉じ位置が
           参照する --terminal-dock-h の加算を片方だけ直す余地が生まれる (issue 0174 の reopen)。 */}
       <div

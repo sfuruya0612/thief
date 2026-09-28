@@ -1,0 +1,144 @@
+/* 非 AWS ビュー共通 (BigQuery / Datadog / TiDB): バナー、エラー表示、セクション切替。 */
+
+.sso-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(242, 201, 76, 0.12);
+  border-bottom: 1px solid var(--line-1);
+  color: var(--text-1);
+  font-size: 12.5px;
+}
+.sso-banner-text {
+  flex: 1;
+}
+.sso-banner-hint,
+.sso-banner-error {
+  color: var(--text-3);
+}
+.sso-banner-error {
+  color: var(--err);
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(235, 87, 87, 0.12);
+  border-bottom: 1px solid var(--line-1);
+  color: var(--err);
+  font-size: 12.5px;
+}
+.error-banner-text {
+  flex: 1;
+}
+
+.fetch-failed-warning {
+  display: inline-flex;
+  align-items: center;
+  color: var(--warn);
+  cursor: help;
+}
+
+.nonaws-cols {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.nonaws-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line-1);
+}
+.nonaws-list-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line-1);
+}
+.nonaws-list-filter .chip-search {
+  flex: 1;
+}
+.nonaws-list {
+  overflow-y: auto;
+  padding: var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nonaws-list .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 30px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.nonaws-list .nav-item:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+.nonaws-list .nav-item.active {
+  background: var(--accent-dim);
+  color: var(--text-1);
+  font-weight: 500;
+}
+.nonaws-list .nav-item .meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.query-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line-1);
+}
+.query-box textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  background: var(--bg-0);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-1);
+  outline: 0;
+}
+.query-box textarea:focus {
+  border-color: var(--accent);
+}
+.query-box-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.query-error {
+  color: var(--err);
+  font-size: 12px;
+}
+
+.empty-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--text-3);
+  font-size: 12.5px;
+}

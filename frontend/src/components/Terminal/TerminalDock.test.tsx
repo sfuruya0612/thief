@@ -4,7 +4,7 @@
 //
 // 表示状態は getComputedStyle で判定しない。jsdom 29.1.1 の getComputedStyle は author の
 // display: flex を持つ要素に hidden を付けた場合でも display を none と返し、ブラウザと
-// 結果が異なるため。ここでは hidden 属性の有無だけを確認し、app.css の規則そのものと
+// 結果が異なるため。ここでは hidden 属性の有無だけを確認し、styles/features/terminal.css の規則そのものと
 // 実際の表示は手動確認で見る (issue 0174 の設計判断 2)。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render } from '@testing-library/react';

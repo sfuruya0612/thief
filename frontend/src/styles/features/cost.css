@@ -1,0 +1,47 @@
+/* Cost Explorer のクロス表 (table.dt.cost-cross-table)。 */
+
+/* Cost Explorer クロス表: 列数が日付範囲に応じて可変なため table-layout: fixed (幅 100% 固定)
+   ではなく auto にし、列を潰さず横スクロールで見せる。列幅は colgroup (JSX 側) で指定する */
+table.dt.cost-cross-table {
+  width: auto;
+  min-width: 100%;
+  table-layout: auto;
+}
+table.dt.cost-cross-table th,
+table.dt.cost-cross-table td {
+  white-space: nowrap;
+}
+/* Group (1列目) と Total (2列目) は横スクロールしても常に見える位置に固定する。
+   sticky の left オフセットは列幅リサイズに応じて JSX 側の inline style (left) で動的に設定する
+   ため、CSS 側では width 系の固定値は持たない (colgroup の <col> が実幅を決める) */
+table.dt.cost-cross-table td:first-child,
+table.dt.cost-cross-table td:nth-child(2) {
+  position: sticky;
+  z-index: 1;
+  background: var(--bg-1);
+}
+table.dt.cost-cross-table td:nth-child(2) {
+  border-right: 1px solid var(--line-1);
+}
+[data-theme='dark'] table.dt.cost-cross-table td:first-child,
+[data-theme='dark'] table.dt.cost-cross-table td:nth-child(2) {
+  background: var(--bg-0);
+}
+/* thead th:first-child / th:nth-child(2) は縦 (top) と横 (left) の両方に sticky する
+   角セルのため、横スクロールで流れる他のヘッダーセル (z-index: 2) より手前に表示させる
+   必要がある。ここで z-index を上げないと、スクロールで流れてきた日付ヘッダーが重なる。 */
+table.dt.cost-cross-table thead th:first-child,
+table.dt.cost-cross-table thead th:nth-child(2) {
+  position: sticky;
+  z-index: 3;
+  background: var(--bg-1);
+}
+table.dt.cost-cross-table thead th:nth-child(2) {
+  border-right: 1px solid var(--line-1);
+}
+[data-theme='dark'] table.dt.cost-cross-table thead th:first-child,
+[data-theme='dark'] table.dt.cost-cross-table thead th:nth-child(2) {
+  background: var(--bg-0);
+}
+
+/* checkbox */

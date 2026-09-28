@@ -1,0 +1,577 @@
+/* 汎用の部品: .btn、.stats / .stat、.facets / .facet / .chip-search、table.dt、.cb、.status、.tag、.svc-pill、.cell-bar、.seg、.swatches、.toggle。
+   feature 固有の規則は features/ に書き、2 つ以上の feature で同じ形が要るときにここへ昇格させる。 */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-1);
+  color: var(--text-1);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+.btn:hover {
+  background: var(--bg-2);
+  border-color: var(--line-3);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn:disabled:hover {
+  background: var(--bg-1);
+  border-color: var(--line-2);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.btn.primary:hover {
+  background: var(--accent-hi);
+  border-color: var(--accent-hi);
+}
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+  box-shadow: none;
+}
+.btn.ghost:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+  border-color: transparent;
+}
+.btn.sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-1);
+  background: transparent;
+}
+.stat {
+  background: var(--bg-1);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: var(--shadow-sm);
+}
+[data-theme='dark'] .stat {
+  background: var(--bg-1);
+}
+.stat .label {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.stat .value {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.stat .value .unit {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.stat .delta {
+  font-size: 11px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stat .delta.pos {
+  color: var(--ok);
+}
+.stat .delta.neg {
+  color: var(--err);
+}
+
+.facets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--line-1);
+  flex-wrap: wrap;
+  min-height: 42px;
+}
+.facet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.1s,
+    background 0.1s;
+}
+.facet:hover {
+  border-color: var(--line-3);
+  color: var(--text-1);
+}
+.facet.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.facet .k {
+  color: var(--text-3);
+  font-weight: 400;
+}
+.facet.active .k {
+  color: var(--accent);
+  opacity: 0.75;
+}
+.facet .v {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.facet.active .v {
+  color: var(--accent);
+}
+.facet .x {
+  opacity: 0.5;
+}
+.facet.active .x {
+  opacity: 1;
+}
+
+.chip-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-3);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.12s;
+}
+.chip-search:focus-within {
+  border-color: var(--accent);
+}
+.chip-search input {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text-1);
+  font-size: 12px;
+  min-width: 150px;
+}
+.facets .clear-btn {
+  margin-left: auto;
+}
+
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+table.dt {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+table.dt thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-1);
+  color: var(--text-3);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: left;
+  padding: 0 10px;
+  height: 32px;
+  border-bottom: 1px solid var(--line-1);
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-theme='dark'] table.dt thead th {
+  background: var(--bg-0);
+}
+table.dt thead th.sortable {
+  cursor: pointer;
+}
+table.dt thead th.sortable:hover {
+  color: var(--text-1);
+}
+table.dt thead th .sort {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--text-4);
+  font-size: 8px;
+}
+table.dt thead th.sorted {
+  color: var(--text-1);
+}
+table.dt thead th.sorted .sort {
+  color: var(--accent);
+}
+
+/* 列幅ドラッグリサイズ用ハンドル (th 右端、セッション内のみ幅を保持) */
+table.dt thead th .col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+table.dt thead th .col-resize-handle:hover {
+  background: var(--accent-dim);
+}
+
+/* 列リサイズ発生後: 幅 100% 固定をやめ、colgroup の px 合計幅で描画する。
+   合計が .table-wrap を超えたら overflow:auto で横スクロールになる */
+table.dt.dt-resized {
+  width: max-content;
+  min-width: 100%;
+}
+
+/* 列フィルター行: ヘッダ行の下、sticky で追従させる */
+table.dt thead tr.dt-filter-row th {
+  position: sticky;
+  top: 32px;
+  z-index: 2;
+  background: var(--bg-1);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line-1);
+}
+[data-theme='dark'] table.dt thead tr.dt-filter-row th {
+  background: var(--bg-0);
+}
+table.dt thead tr.dt-filter-row .dt-col-filter {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: 4px;
+  color: var(--text-1);
+}
+
+table.dt tbody tr {
+  height: var(--row-h);
+  cursor: pointer;
+  transition: background-color 0.08s ease;
+}
+table.dt tbody tr:hover {
+  background: var(--bg-2);
+}
+table.dt tbody tr.selected {
+  background: var(--accent-dim);
+}
+/* プレビュー不可のオブジェクト行はメタデータ列を淡色化してグレーアウトを示す。
+   Actions 列 (最終列: Preview / Download) はダウンロードが可能なため淡色化しない。 */
+table.dt tbody tr.preview-ineligible td {
+  opacity: 0.45;
+}
+table.dt tbody tr.preview-ineligible td:last-child {
+  opacity: 1;
+}
+table.dt tbody td {
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+table.dt tbody td.mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+table.dt tbody td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+table.dt tbody td.primary {
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.cb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--line-3);
+  border-radius: 4px;
+  background: var(--bg-1);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  top: 1px;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+.cb:hover {
+  border-color: var(--text-3);
+}
+.cb:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.cb:checked::after {
+  content: '';
+  width: 8px;
+  height: 4px;
+  border-left: 1.5px solid var(--accent-text);
+  border-bottom: 1.5px solid var(--accent-text);
+  transform: rotate(-45deg) translate(0px, -1px);
+}
+
+/* Status — Linear-style small colored dot + quiet text */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-1);
+  font-weight: 450;
+}
+.status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status.ok .dot {
+  background: var(--ok);
+}
+.status.warn .dot {
+  background: var(--warn);
+}
+.status.err .dot {
+  background: var(--err);
+}
+.status.info .dot {
+  background: var(--info);
+}
+.status.muted .dot {
+  background: transparent;
+  border: 1.5px dashed var(--text-4);
+  width: 7px;
+  height: 7px;
+}
+.status.ok,
+.status.warn,
+.status.err,
+.status.info {
+  color: var(--text-1);
+}
+.status.muted {
+  color: var(--text-3);
+}
+
+/* Tags (still used in drawer) */
+.tag-list {
+  display: inline-flex;
+  gap: 4px;
+  overflow: hidden;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-2);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag .k {
+  color: var(--text-3);
+}
+.tag .v {
+  color: var(--text-1);
+  margin-left: 2px;
+  font-weight: 500;
+}
+.tag.env-prod .v {
+  color: var(--err);
+}
+.tag.env-stg .v {
+  color: var(--warn);
+}
+.tag.env-dev .v {
+  color: var(--info);
+}
+
+/* Service pill */
+.svc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  color: var(--text-2);
+}
+.svc-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* Mini bar (unused now, kept for safety) */
+.cell-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cell-bar .bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-3);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 40px;
+  max-width: 80px;
+}
+.cell-bar .bar > div {
+  height: 100%;
+  border-radius: 2px;
+}
+.cell-bar .val {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.seg {
+  display: flex;
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+}
+.seg button {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  border-radius: 5px;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.seg button:hover {
+  color: var(--text-1);
+}
+.seg button.active {
+  background: var(--bg-1);
+  color: var(--text-1);
+  box-shadow: var(--shadow-sm);
+  font-weight: 500;
+}
+.swatches {
+  display: flex;
+  gap: 6px;
+}
+.swatches button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: transform 0.1s;
+}
+.swatches button:hover {
+  transform: scale(1.1);
+}
+.swatches button.active {
+  border-color: var(--text-1);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+.toggle .tg {
+  width: 30px;
+  height: 18px;
+  background: var(--bg-4);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.12s;
+}
+.toggle .tg::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.12s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.toggle.on .tg {
+  background: var(--accent);
+}
+.toggle.on .tg::after {
+  transform: translateX(12px);
+}

@@ -1,0 +1,17 @@
+/* 読み込み順がカスケードを決める。tokens → base → shell → primitives → features の順で、
+   同じ詳細度の規則は後のファイルが勝つ。新しい規則は features/<feature>.css に書く (AGENTS.md の frontend 節)。 */
+@import './tokens.css';
+@import './base.css';
+@import './shell.css';
+@import './primitives.css';
+@import './features/cost.css';
+@import './features/drawer.css';
+@import './features/terminal.css';
+@import './features/tweaks.css';
+@import './features/nonaws.css';
+@import './features/storage.css';
+@import './features/query.css';
+@import './utilities.css';
+@import './features/logviewer.css';
+@import './features/pricing.css';
+@import './features/charts.css';

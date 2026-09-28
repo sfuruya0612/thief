@@ -1,5 +1,5 @@
 // CodeMirror 6 ベースの SQL エディタ。
-// ハイライト色は app.css の --sql-* CSS 変数を参照するため、テーマ切替時の再構成は不要。
+// ハイライト色は styles/tokens.css の --sql-* CSS 変数を参照するため、テーマ切替時の再構成は不要。
 // タブ切替は親側で key を変えて再マウントする前提 (doc の差し替えは value 同期 effect が拾う)。
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { autocompletion, completionKeymap } from '@codemirror/autocomplete';

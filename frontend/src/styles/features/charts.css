@@ -1,0 +1,11 @@
+/* 台数の推移グラフ (ResourceCountChart) の見出し。 */
+
+.timeseries-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.timeseries-head .seg {
+  flex: 0 0 auto;
+}

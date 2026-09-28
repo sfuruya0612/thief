@@ -1,0 +1,168 @@
+/* ブラウザのターミナル (xterm) と常駐のドック。 */
+
+.terminal-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.terminal-container {
+  flex: 1;
+  min-height: 0;
+  background: #0a0a0a;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  padding: 8px;
+  overflow: hidden;
+}
+.terminal-status {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  color: var(--text-2);
+}
+.terminal-status-error {
+  color: var(--err);
+  border-color: var(--err);
+}
+.terminal-status-closed {
+  color: var(--text-3);
+}
+
+/* Terminal dock (画面下部に常駐するターミナルパネル) */
+.terminal-dock {
+  /* 常駐の殻として、一時的なオーバーレイである .drawer-backdrop (10) と .drawer (11) より
+     前面に置く。これが無いと Drawer を開いている間は backdrop がドックを覆い、Terminal への
+     クリックが Drawer を閉じるだけでフォーカスが渡らない。下配置の Drawer はドックの背面へ
+     滑り込んで閉じる。 */
+  position: relative;
+  z-index: 12;
+  /* .app の flex 列で本文側 (.body / .main) だけを縮め、ドックの高さは inline の height で固定する */
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border-top: 1px solid var(--line-2);
+}
+/* ドックの上端に重ねるリサイズハンドル。.panel-resizer がパネル内側の右端 6px を占めるのと
+   同じ扱いで、タブバーの上端 6px に重ねる。既存の寸法 (折りたたみ時の 32px を含む) を
+   変えずに高さのドラッグ変更だけを受け取るため、独立した行にはしない。 */
+.terminal-dock-resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 1;
+}
+.terminal-dock-resizer:hover {
+  background: var(--accent);
+  opacity: 0.5;
+}
+.terminal-dock-tabs {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 var(--sp-2);
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--line-1);
+  overflow-x: auto;
+}
+.terminal-dock-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 280px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.terminal-dock-tab:hover {
+  color: var(--text-1);
+}
+.terminal-dock-tab.active {
+  color: var(--text-1);
+  border-bottom-color: var(--accent);
+}
+.terminal-dock-tab-status {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.terminal-dock-tab-status.status-connected {
+  background: var(--ok);
+}
+.terminal-dock-tab-status.status-error {
+  background: var(--err);
+}
+.terminal-dock-tab-kind {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+.terminal-dock-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-dock-tab-state {
+  flex: none;
+  color: var(--text-3);
+}
+.terminal-dock-tab-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.terminal-dock-tab-close:hover {
+  color: var(--text-1);
+}
+.terminal-dock-toggle {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.terminal-dock-toggle:hover {
+  color: var(--text-1);
+}
+/* .terminal-panel は height: 100% を持つため、本文とペインには display を宣言せず
+   (hidden 属性での非表示を UA スタイルに任せる)、高さだけを渡す。本文の高さの下限は
+   hooks/useTerminalDockHeight.ts のクランプが持ち、CSS 側には二重に持たない。 */
+.terminal-dock-body {
+  flex: 1;
+  min-height: 0;
+}
+.terminal-dock-pane {
+  height: 100%;
+}
+/* author 由来の display 宣言が UA スタイルシートの [hidden] { display: none } に
+   常に勝つため、非表示を明示する (将来ここに display が足されても壊れないようにする)。 */
+.terminal-dock-body[hidden],
+.terminal-dock-pane[hidden] {
+  display: none;
+}

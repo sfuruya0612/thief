@@ -1,0 +1,725 @@
+/* 画面の骨格: .app、TopBar、セッションタブ / ピッカー / カード、.body のグリッド、ペイン、サイドバー、.main、.toolbar。 */
+
+/* セッションタブバーの有無 (AWS/GCP のみ表示) で子要素数が変わるため、
+   grid の行テンプレートではなく flex で本文 (.body / .main) を伸ばす。 */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.app > .body,
+.app > .main {
+  flex: 1;
+  min-height: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4);
+  height: 46px;
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+}
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+.topbar .brand .logo {
+  width: 26px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+}
+.topbar .brand .wordmark {
+  height: 17px;
+  display: block;
+  object-fit: contain;
+  transform: translateY(1px);
+}
+.topbar .divider {
+  width: 1px;
+  height: 18px;
+  background: var(--line-2);
+}
+.topbar .spacer {
+  flex: 1;
+}
+.topbar .iconbtn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  transition: background 0.1s;
+}
+.topbar .iconbtn:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+}
+/* 分割表示中は分割ボタンを押下状態にする */
+.topbar .iconbtn.active {
+  background: var(--accent-dim);
+  color: var(--text-1);
+}
+
+.session-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--session-bar-bg);
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+}
+.session-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 150px;
+  margin-top: 5px;
+  margin-bottom: -1px;
+  padding: 0 6px 0 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-tab:hover:not(.active) {
+  color: var(--text-2);
+}
+.session-tab.active {
+  background: var(--bg-1);
+  border-color: var(--line-2);
+  color: var(--text-1);
+  font-weight: 600;
+}
+.session-tab.dragging {
+  opacity: 0.5;
+}
+.session-tab.drop-target {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.session-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--env-dev);
+  flex: none;
+}
+.session-tab-dot.env-stg {
+  background: var(--env-stg);
+}
+.session-tab-dot.env-prod {
+  background: var(--env-prod);
+}
+.session-tab-dot.missing {
+  background: var(--text-4);
+}
+.session-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-tab-close {
+  padding: 0 2px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.session-tab-close:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+}
+.session-tabs-more-wrap,
+.session-tab-add-wrap {
+  position: relative;
+  align-self: center;
+  margin-left: 6px;
+  display: flex;
+}
+.session-tabs-more {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-1);
+  border: 1px solid var(--line-3);
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-tabs-more.holds-active {
+  border-color: var(--accent);
+  color: var(--accent-hi);
+}
+.session-tab-add {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  background: none;
+  border: 1px dashed var(--line-3);
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-tab-add:hover {
+  color: var(--text-1);
+}
+.session-tab-add.open {
+  border-style: solid;
+  background: var(--bg-1);
+  color: var(--text-1);
+}
+.session-tabs-hint {
+  margin-left: auto;
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10.5px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+/* 「他 N ▾」メニュー */
+.session-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 320px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.session-more-menu-head,
+.session-more-menu-foot {
+  padding: 7px 12px;
+  font-size: 10.5px;
+  color: var(--text-4);
+}
+.session-more-menu-head {
+  border-bottom: 1px solid var(--line-1);
+}
+.session-more-menu-foot {
+  border-top: 1px solid var(--line-1);
+}
+.session-more-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.session-more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.session-more-item:hover {
+  background: var(--qe-tree-sel-bg);
+}
+.session-more-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+}
+.session-more-item:hover .session-more-item-name {
+  color: var(--qe-tree-sel-text);
+}
+
+/* セッション追加ピッカー (＋ボタン直下のポップオーバー) */
+.session-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 440px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.session-picker.narrow {
+  width: 400px;
+}
+.session-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+.session-picker-head .chip-search {
+  flex: 1;
+}
+.session-picker-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+.session-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.session-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.session-picker-item.active {
+  background: var(--qe-tree-sel-bg);
+}
+.session-picker-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.session-picker-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-1);
+}
+.session-picker-item.active .session-picker-item-name {
+  color: var(--qe-tree-sel-text);
+  font-weight: 600;
+}
+.session-picker-item-meta {
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.session-picker-item-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.session-picker-badge {
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.session-picker-badge.ok {
+  background: var(--qe-pill-ok-bg);
+  color: var(--qe-pill-ok-text);
+}
+.session-picker-badge.warn {
+  background: var(--qe-pill-run-bg);
+  color: var(--qe-pill-run-text);
+}
+.session-picker-item-hint {
+  font-size: 10.5px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+.session-picker-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-4);
+  text-align: center;
+}
+.session-picker-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--warn);
+}
+.session-picker-foot {
+  padding: 7px 12px;
+  border-top: 1px solid var(--line-1);
+  font-size: 10.5px;
+  color: var(--text-4);
+}
+
+/* 全タブを閉じたときの空状態パネル */
+.session-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.session-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.session-empty-hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+/* サイドバーのアクティブセッションカード (profile-card 内) */
+.session-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.session-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-card-meta {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.session-card-meta .account-id {
+  color: var(--info);
+  font-family: var(--font-mono);
+}
+.session-card-expiry {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+}
+.session-card-expiry.expiring {
+  color: var(--warn);
+}
+.session-card-reauth {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  min-width: 0;
+}
+.session-card-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  min-width: 0;
+}
+.session-card-error {
+  font-size: 10px;
+  color: var(--err);
+}
+.session-card-reauth code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: var(--sidebar-w, 216px) 1fr;
+  min-height: 0;
+}
+/* 分割表示 (issue 0175): サイドバーの右にペインを 2 つ等幅で並べる (幅のリサイズは持たない) */
+.body.split {
+  grid-template-columns: var(--sidebar-w, 216px) minmax(0, 1fr) minmax(0, 1fr);
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+/* 分割していないときのペインは display: contents にして .body のグリッドに影響させない
+   (1 ペインでも同じ div.pane で包み、ペインを閉じたときに残ったペインが
+   再マウントされないようにするため。issue 0175) */
+.pane.single {
+  display: contents;
+}
+/* 2 つ目のペインにだけ左の境界線を引く (1 つ目はサイドバーの border-right が担う) */
+.body.split .pane + .pane {
+  border-left: 1px solid var(--line-1);
+}
+.pane > .main {
+  flex: 1;
+  min-height: 0;
+}
+/* フォーカス中のペインはアクセントカラーの内側の枠線で示す (レイアウトを動かさない) */
+.pane.focused {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.pane-bar {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--line-1);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.pane-bar .pane-index {
+  font-variant-numeric: tabular-nums;
+}
+.pane-bar .pane-close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.pane-bar .pane-close:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+/* サービス未選択のペインの案内 */
+.main.pane-empty {
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+.sidebar {
+  background: var(--bg-0);
+  border-right: 1px solid var(--line-1);
+  padding: var(--sp-3) var(--sp-2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  position: relative;
+}
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 1;
+}
+.sidebar-resizer:hover {
+  background: var(--accent);
+  opacity: 0.5;
+}
+/* Athena / CloudWatch Logs / BigQuery / Cloud Logging の左パネル (.qe-schema / .lv-tree)
+   共通のリサイズハンドル。親が overflow: hidden のため sidebar-resizer と異なり
+   right: 0 (パネル内側) に置く。 */
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 1;
+}
+.panel-resizer:hover {
+  background: var(--accent);
+  opacity: 0.5;
+}
+.sidebar .section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  padding: 0 10px;
+  margin-bottom: 2px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  height: 30px;
+  font-size: 13px;
+  color: var(--text-2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  position: relative;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.sidebar .nav-item:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+.sidebar .nav-item.active {
+  background: var(--accent-dim);
+  color: var(--text-1);
+  font-weight: 500;
+}
+.sidebar .nav-item .svc-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.sidebar .nav-item.active .svc-icon {
+}
+.sidebar .nav-item .count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar .nav-item.active .count {
+  color: var(--text-2);
+}
+/* 分割中に、そのサービスを表示中のペイン番号を示す印 */
+.sidebar .nav-item .pane-mark {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--accent-dim);
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar .profile-card {
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: var(--shadow-sm);
+}
+.sidebar .profile-card .label {
+  font-size: 10.5px;
+  color: var(--text-2);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sidebar .profile-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sidebar .profile-card select {
+  width: 100%;
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-1);
+  overflow: hidden;
+  position: relative;
+}
+[data-theme='dark'] .main {
+  background: var(--bg-0);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.toolbar .title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: auto;
+}
+.toolbar .title h1 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+.toolbar .title .subtitle {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.toolbar .sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line-2);
+  margin: 0 4px;
+}
+
+.view-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--sp-2);
+}
+.view-switch button {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  border-radius: var(--radius);
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.view-switch button:hover {
+  color: var(--text-1);
+  background: var(--bg-2);
+}
+.view-switch button.active {
+  color: var(--text-1);
+  background: var(--accent-dim);
+}

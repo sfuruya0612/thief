@@ -133,7 +133,7 @@ export function logEntryFromRaw(raw: LogEntryRaw, index: number): LogEntryRow {
 
 // logSeverityLevel は Cloud Logging の Severity 文字列 (Default/Debug/Info/Notice/
 // Warning/Error/Critical/Alert/Emergency、backend の logging.Severity.String() 準拠) を
-// app.css の .logbox 系クラス (.lvl-info/.lvl-warn/.lvl-err) に対応する 3 段階へ丸める。
+// styles/features/drawer.css の .logbox 系クラス (.lvl-info/.lvl-warn/.lvl-err) に対応する 3 段階へ丸める。
 export function logSeverityLevel(severity: string): 'info' | 'warn' | 'err' {
   switch (severity) {
     case 'Error':

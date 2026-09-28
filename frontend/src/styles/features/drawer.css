@@ -1,0 +1,335 @@
+/* 詳細パネル (Drawer): backdrop、配置 (右 / 下 / 分割中の内包)、リサイズハンドル、見出し、タブ、本文の部品 (.kv、.metric、.logbox)。 */
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 20, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+  z-index: 10;
+}
+.drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  /* 常駐ターミナルドック (TerminalDock.tsx が --terminal-dock-h を設定する) の上に収める。
+     ドックが無いときは 0px にフォールバックし、従来どおり 8px 浮かせる。 */
+  bottom: calc(var(--terminal-dock-h, 0px) + 8px);
+  width: min(600px, 52vw);
+  /* インラインの px 指定 (永続化されたリサイズ値) が描画後のウィンドウ縮小を追い越さないためのガードレール */
+  max-width: 85vw;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  transform: translateX(calc(100% + 16px));
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.drawer.open {
+  transform: translateX(0);
+}
+/* 閉じた Drawer は位置にかかわらず入力を受け取らない (閉じ位置の計算が崩れても
+   常駐ターミナルドックへのクリックを奪わないための保険)。 */
+.drawer:not(.open) {
+  pointer-events: none;
+}
+
+/* Bottom-docked variant */
+.drawer.pos-bottom {
+  top: auto;
+  left: 8px;
+  right: 8px;
+  /* .drawer より詳細度が高いため、下配置でも同じ計算を再宣言する */
+  bottom: calc(var(--terminal-dock-h, 0px) + 8px);
+  width: auto;
+  max-width: none;
+  height: min(46vh, 520px);
+  /* インラインの px 指定が現在のビューポートを超えて画面全体を覆わないためのガードレール */
+  max-height: 85vh;
+  /* 閉じ位置は bottom で持ち上げたドック分も足して下げる。自身の高さ + 16px だけでは
+     ドックの高さ分が画面内に残り、ドックの上に被さって入力を奪う。 */
+  transform: translateY(calc(100% + var(--terminal-dock-h, 0px) + 16px));
+}
+.drawer.pos-bottom.open {
+  transform: translateY(0);
+}
+.drawer.pos-bottom .dbody {
+  padding-bottom: 20px;
+}
+
+/* 分割表示中 (issue 0175): Drawer を包含ブロック (ペインの .main、position: relative と
+   overflow: hidden を持つ) の中に収める。位置と上限を vw / vh から % に変えることで、
+   もう一方のペインへはみ出さない。 */
+.drawer-backdrop.contained {
+  position: absolute;
+}
+.drawer.contained {
+  position: absolute;
+  /* .main はターミナルドックより上の領域なので、ドックの高さ (--terminal-dock-h) を足さない */
+  bottom: 8px;
+  width: min(600px, 85%);
+  /* インラインの px 指定 (永続化されたリサイズ値) をペイン幅の 85% で切るガードレール */
+  max-width: 85%;
+}
+.drawer.contained.pos-bottom {
+  left: 8px;
+  right: 8px;
+  width: auto;
+  max-width: none;
+  height: min(46%, 520px);
+  max-height: 85%;
+  /* 閉じ位置も .main の中に収まるため、ドックの高さは足さない */
+  transform: translateY(calc(100% + 16px));
+}
+/* 上記の閉じ位置より後に置く必要がある (.drawer.pos-bottom.open と同じ詳細度のため) */
+.drawer.contained.pos-bottom.open {
+  transform: translateY(0);
+}
+
+/* Resize handles */
+.drawer .resize-handle {
+  position: absolute;
+  z-index: 5;
+  touch-action: none;
+}
+.drawer .resize-handle.rh-left {
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+.drawer .resize-handle.rh-top {
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+.drawer .resize-handle::after {
+  content: '';
+  position: absolute;
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.12s;
+}
+.drawer .resize-handle.rh-left::after {
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 44px;
+}
+.drawer .resize-handle.rh-top::after {
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 3px;
+  width: 44px;
+}
+.drawer .resize-handle:hover::after,
+.drawer .resize-handle:active::after {
+  background: var(--accent);
+}
+
+.drawer .dh {
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+}
+.drawer .dh .top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin-bottom: 8px;
+}
+.drawer .dh .top .x {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+}
+.drawer .dh .top .x:hover {
+  background: var(--bg-3);
+  color: var(--text-1);
+}
+.drawer .dh h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.drawer .dh .id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+.drawer .dh .actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.drawer .dtabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+}
+.drawer .dtab {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+.drawer .dtab:hover {
+  color: var(--text-1);
+  background: var(--bg-2);
+}
+.drawer .dtab.active {
+  color: var(--text-1);
+  background: var(--bg-3);
+  font-weight: 500;
+}
+.drawer .dbody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 32px;
+}
+.drawer .section {
+  margin-bottom: 24px;
+}
+.drawer .section h3 {
+  margin: 0 0 10px 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 2px 16px;
+  font-size: 12.5px;
+}
+.kv .k {
+  color: var(--text-3);
+  padding: 5px 0;
+}
+.kv .v {
+  color: var(--text-1);
+  padding: 5px 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  word-break: break-all;
+}
+.kv .v .copy {
+  opacity: 0.35;
+  margin-left: 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.kv .v .copy:hover {
+  opacity: 1;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.metric {
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+}
+.metric .mh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.metric .mh .ml {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.metric .mh .mv {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.metric svg {
+  display: block;
+  width: 100%;
+  height: 48px;
+}
+
+/* inline log preview */
+.logbox {
+  background: var(--bg-0);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+/* S3 / GCS オブジェクトプレビューの編集用テキストエリア */
+.object-edit-textarea {
+  width: 100%;
+  min-height: 320px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-1);
+  line-height: 1.6;
+  resize: vertical;
+}
+.logbox .ts {
+  color: var(--text-4);
+  margin-right: 8px;
+}
+.logbox .lvl-info {
+  color: var(--info);
+}
+.logbox .lvl-warn {
+  color: var(--warn);
+}
+.logbox .lvl-err {
+  color: var(--err);
+}
+
+/* Terminal (EC2 Start Session / ECS Exec Command) */

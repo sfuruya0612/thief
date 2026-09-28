@@ -1,6 +1,7 @@
 # frontend の app.css を層 (tokens / base / shell / primitives / features) に分割する
 
 Created: 2026-09-28
+Completed: 2026-09-28
 Model: Claude Fable 5.1
 
 ## 背景
@@ -67,3 +68,13 @@ frontend の刷新案として「案 A 整流」(見た目は現行のまま、C
 - docs/issues/0202 (直書きの色とテーマ上書きのトークン化)、0203 (部品の TSX 化)、0204 (Drawer の分離)、0205 (死んだ設定の削除) が本 issue の後に続く。番号順に実装する。
 - docs/issues/closed/0174 / 0175 / 0176: `app.css.test.ts` が固定している不変条件の出所。
 - `AGENTS.md` frontend 「コーディングスタイル」
+
+## 解決方法
+
+- `frontend/src/app.css` (4,341 行) を `frontend/src/styles/` の 15 ファイルに分け、`styles/index.css` が `@import` で読み込み順を決めるようにした。`main.tsx` は `./styles/index.css` を import する。分割は現行のセクション見出しの境界で切る連続した範囲を基本とし、位置が変わるのは設計判断に書いた 3 群 (`.view-switch*` 4 ブロック → `shell.css`、`.seg` / `.swatches` / `.toggle` 13 ブロック → `primitives.css`、`table.dt.cost-cross-table` 8 ブロック → `features/cost.css`) だけにした。セクション見出しのコメント (モックの世代の記述を含む) は削除し、各ファイルの先頭に役割のコメントを置いた。規則の直前の説明コメントは残した。
+- 検証: 規則ブロック (行頭のセレクタから対応する `}` まで、コメントを除く) を単位に、現行 `app.css` と新しいファイルを読み込み順に結合したものを一時的なスクリプトで突き合わせた。ブロックは 670 個で集合として一致し、3 群を除いた順序も一致、3 群それぞれの内部の順序も一致した。加えて `npm run build` の成果物の CSS を分割前後で比べ、どちらも 65,761 バイト・701 ブロック (xterm の CSS を含む) で、ブロックの集合が一致した。
+- `src/app.css.test.ts` を `src/styles/styles.test.ts` に移し、`shell.css` / `features/drawer.css` / `features/terminal.css` を `?raw` で読んで読み込み順に結合したものを対象にした。検証する不変条件と件数 (8 テスト) は同じ。
+- TSX / TS のコメント 8 か所の `app.css` への参照を、参照先のファイル名 (`styles/tokens.css`、`styles/features/drawer.css`、`styles/features/terminal.css`) に書き換えた。`frontend/src` に `app.css` の文字列は残っていない。
+- `AGENTS.md` の frontend 「ディレクトリ構造」と「コーディングスタイル」を分割後の規約 (置き場所と、`features/` から `primitives.css` への昇格の規則) に書き換えた。
+- 完了条件の「開発サーバでの 4 画面の目視」は、この環境では開発サーバをブラウザで開けなかったため未実施。代わりに上のビルド成果物の比較 (規則の集合が同一) を根拠にした。目視は次の起動時に行う。
+- frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (113 ファイル 1,234 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

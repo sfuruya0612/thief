@@ -25,7 +25,7 @@ import { Terminal, type ConnectionStatus } from './Terminal';
 import { pruneStatuses } from './terminalDockStatuses';
 
 // Drawer (position: fixed) がドックを覆わないよう、ドックの高さを CSS 変数として
-// document.documentElement に反映する (app.css の .drawer / .drawer.pos-bottom の bottom が参照する)。
+// document.documentElement に反映する (styles/features/drawer.css の .drawer / .drawer.pos-bottom の bottom が参照する)。
 const DOCK_HEIGHT_VAR = '--terminal-dock-h';
 
 export function TerminalDock() {

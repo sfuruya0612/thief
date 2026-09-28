@@ -1,5 +1,6 @@
-// app.css のうち、jsdom がレイアウトと transform を計算しないために DOM からは検証できない
-// 不変条件を、規則のテキストで固定する。
+// styles/ の CSS のうち、jsdom がレイアウトと transform を計算しないために DOM からは検証できない
+// 不変条件を、規則のテキストで固定する。対象は shell.css (ペイン)、features/drawer.css (Drawer)、
+// features/terminal.css (ターミナルドック) の 3 ファイルで、読み込み順 (index.css) に結合して検証する。
 // 1. 下配置の Drawer の閉じ位置が、bottom を持ち上げるドックの高さ (--terminal-dock-h) の分も下がる
 //    (issue 0174 の reopen で崩れていたもの)
 // 2. 常駐ターミナルドック (.terminal-dock) が .drawer と .drawer-backdrop より前面にある
@@ -10,7 +11,11 @@
 import { describe, expect, it } from 'vitest';
 // raw import が空文字列にならないよう、vite.config.ts の test.css.include で `.css?raw` を通している。
 // Node の fs は使わない (`@types/node` が無く `tsc --noEmit` を通らない)。
-import css from './app.css?raw';
+import shell from './shell.css?raw';
+import drawer from './features/drawer.css?raw';
+import terminal from './features/terminal.css?raw';
+
+const css = [shell, drawer, terminal].join('\n');
 
 // 規則ブロックの抽出。セレクタが行頭から始まり直後に " {" が続くブロックを 1 つだけ探し、
 // 宣言部を返す。子孫セレクタや接頭辞を共有する別セレクタ (.drawer と .drawer-backdrop) と
@@ -20,7 +25,7 @@ import css from './app.css?raw';
 // ブロック内のコメントに行頭の } を含む行があると、そこを終端と誤認して以降の宣言を
 // 取りこぼす。宣言の値は書かれたとおりに比較し、`!important` も取り除かない (付けば
 // 落ちて、カスケードを変える変更としてレビューに上がる)。
-// source を省略すると app.css を読む。合成した CSS を渡して抽出規則そのものも検証する。
+// source を省略すると上の 3 ファイルを読む。合成した CSS を渡して抽出規則そのものも検証する。
 function declarationsOf(selector: string, source: string = css): string {
   const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '');
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -39,7 +44,7 @@ function declarationOf(selector: string, property: string, source: string = css)
   return (match as RegExpExecArray)[1].trim();
 }
 
-// 抽出規則の検証。app.css の現在の内容では踏まない経路 (コメント内の行頭の }、接頭辞を
+// 抽出規則の検証。現在の CSS では踏まない経路 (コメント内の行頭の }、接頭辞を
 // 共有するセレクタ、同じセレクタの重複) を合成した CSS で固定する。
 describe('規則ブロックの抽出', () => {
   it('ブロック内のコメントに行頭の } があっても、その後の宣言まで抽出する', () => {
@@ -73,7 +78,7 @@ describe('規則ブロックの抽出', () => {
   });
 });
 
-describe('app.css の Drawer とターミナルドックの重なり', () => {
+describe('features/drawer.css と features/terminal.css の重なり', () => {
   it('下配置の Drawer の閉じ位置は、bottom が参照するドックの高さの分も下げる', () => {
     expect(declarationOf('.drawer.pos-bottom', 'bottom')).toBe(
       'calc(var(--terminal-dock-h, 0px) + 8px)',
@@ -102,7 +107,7 @@ describe('app.css の Drawer とターミナルドックの重なり', () => {
   });
 });
 
-describe('app.css のターミナルドックの高さ変更', () => {
+describe('features/terminal.css のターミナルドックの高さ変更', () => {
   it('.terminal-dock-resizer はドックの上端 6px に重なり、縦方向のカーソルを出す', () => {
     expect(declarationOf('.terminal-dock-resizer', 'position')).toBe('absolute');
     expect(declarationOf('.terminal-dock-resizer', 'top')).toBe('0');
@@ -123,7 +128,7 @@ describe('app.css のターミナルドックの高さ変更', () => {
 
 // issue 0175: 分割していないときのペインのラッパーはレイアウトに影響させない。
 // jsdom は display: contents を解釈しないため、規則のテキストで固定する。
-describe('app.css の分割表示', () => {
+describe('shell.css の分割表示', () => {
   it('.pane.single は display: contents で .body のグリッドに影響させない', () => {
     expect(declarationOf('.pane.single', 'display')).toBe('contents');
   });

@@ -23,7 +23,7 @@ export const GCP_SERVICE_GROUPS: ServiceGroupMeta[] = [
   { key: 'observability', label: 'Observability' },
 ];
 
-// data.jsx SERVICES を移植。色は app.css の --svc-* CSS 変数を参照する
+// data.jsx SERVICES を移植。色は styles/tokens.css の --svc-* CSS 変数を参照する
 export const SERVICES: ServiceMeta[] = [
   { key: 'ec2', name: 'EC2', sub: 'Instances', color: 'var(--svc-ec2)', group: 'compute' },
   { key: 'lambda', name: 'Lambda', sub: 'Functions', color: 'var(--svc-lambda)', group: 'compute' },

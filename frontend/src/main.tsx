@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
 import { cleanupStaleObjectQueryFiles } from './lib/opfs';
 import './i18n';
-import './app.css';
+import './styles/index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

@@ -213,7 +213,7 @@ describe('Drawer の開閉クラスと transform の定義元', () => {
     localStorage.clear();
   });
 
-  // 閉じ位置と開き位置は app.css の .drawer / .drawer.open / .drawer.pos-bottom /
+  // 閉じ位置と開き位置は styles/features/drawer.css の .drawer / .drawer.open / .drawer.pos-bottom /
   // .drawer.pos-bottom.open だけで定義する。inline の transform を残すと、下配置の閉じ位置が
   // 参照する --terminal-dock-h の加算を CSS 側だけ直す余地が生まれる (issue 0174 の reopen)。
   it('閉じた下配置の Drawer は pos-bottom を持ち open を持たず、inline の transform を設定しない', () => {

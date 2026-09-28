@@ -1,0 +1,210 @@
+/* テーマの変数 (色・文字・間隔・角・影) と、[data-theme] / [data-density] / [data-accent] の切替。
+   色と寸法の値はこのファイルにだけ書き、他のファイルは var(--…) で参照する。 */
+
+:root {
+  /* Type */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, 'JetBrains Mono', monospace;
+
+  /* Dark theme (クエリエディタ デザイン 3 のパレットに全体統一) */
+  --bg-0: #15171c; /* app background */
+  --bg-1: #1e2127; /* panels */
+  --bg-2: #262b33; /* raised */
+  --bg-3: #2c313a; /* hover */
+  --bg-4: #353b45; /* active */
+  --line-1: #262a31; /* hairline */
+  --line-2: #2c313a; /* stronger border */
+  --line-3: #3a404b;
+
+  --text-1: #e6e9ee;
+  --text-2: #b6bcc6;
+  --text-3: #868d99;
+  --text-4: #596070;
+
+  --accent: #5e6ad2; /* Linear indigo default */
+  --accent-hi: #7b86e2;
+  --accent-dim: rgba(94, 106, 210, 0.14);
+  --accent-text: #fff;
+
+  --ok: #58c184;
+  --warn: #e5a54b;
+  --err: #eb5757;
+  --info: #6ea3f7;
+  --muted: #868d99;
+
+  /* SQL エディタのシンタックスハイライト (デザイン 3: 明度を上げた同系色) */
+  --sql-kw: #6ea3f7;
+  --sql-fn: #c08bfa;
+  --sql-str: #58c184;
+  --sql-num: #e5a54b;
+  --sql-text: #d7dbe2;
+  --sql-comment: #596070;
+  --sql-linenum: #4a505b;
+
+  /* クエリエディタ固有トークン */
+  --qe-run: #16a34a; /* Run ボタンとアクティブタブ下線 (両テーマ共通) */
+  --qe-run-hover: #149042;
+  --qe-tree-sel-bg: #1c2b4a;
+  --qe-tree-sel-text: #9db8f7;
+  --qe-partition: #e5a54b;
+  --qe-selection: rgba(110, 163, 247, 0.22);
+  --qe-pill-run-bg: rgba(229, 165, 75, 0.15);
+  --qe-pill-run-text: #e5a54b;
+  --qe-pill-ok-bg: rgba(88, 193, 132, 0.15);
+  --qe-pill-ok-text: #58c184;
+  --qe-pill-err-bg: rgba(235, 87, 87, 0.16);
+  --qe-pill-err-text: #f28b8b;
+  --qe-pill-muted-bg: rgba(134, 141, 153, 0.15);
+  --qe-pill-muted-text: #9aa1ac;
+
+  /* セッションタブ (マルチアカウント切替バー)。環境色ドットはダーク地でも
+     判別できる彩度に調整した値 (モック 5a 実測)。 */
+  --session-bar-bg: #101216;
+  --env-dev: #16a34a;
+  --env-stg: #d9942f;
+  --env-prod: #ef5350;
+
+  --svc-ec2: #f2994a;
+  --svc-rds: #4ea7fc;
+  --svc-cache: #eb5757;
+  --svc-lambda: #f2994a;
+  --svc-ecs: #a97ce8;
+  --svc-s3: #4cb782;
+  --svc-iam: #de5d9c;
+  --svc-elb: #f2994a;
+  --svc-cf: #4ea7fc;
+  --svc-apigw: #a97ce8;
+  --svc-natgw: #4cb782;
+  --svc-sqs: #de5d9c;
+  --svc-kinesis: #4ea7fc;
+  --svc-waf: #eb5757;
+  --svc-dynamo: #527fff;
+  --svc-ecr: #f2994a;
+  --svc-ssm: #de5d9c;
+  --svc-secrets: #de5d9c;
+  --svc-costexplorer: #f2c94c;
+  --svc-pricing: #2dd4bf;
+  --svc-cfn: #ff9900;
+  --svc-cloudwatchlogs: #e7157b;
+  --svc-athena: #a97ce8;
+  --svc-cloudrun: #4285f4;
+  --svc-bigquery: #4285f4;
+  --svc-gcs: #4285f4;
+  --svc-gcpiam: #de5d9c;
+  --svc-gcpserviceaccounts: #de5d9c;
+  --svc-cloudlogging: #4285f4;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  --row-h: 36px;
+  --radius-sm: 5px;
+  --radius: 7px;
+  --radius-lg: 10px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-drawer: -24px 0 60px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 16px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-2);
+}
+
+[data-theme='light'] {
+  --bg-0: #fbfbfc;
+  --bg-1: #ffffff;
+  --bg-2: #f6f6f8;
+  --bg-3: #efeff2;
+  --bg-4: #e7e7ec;
+  --line-1: #ececef;
+  --line-2: #e0e0e5;
+  --line-3: #c9c9d1;
+
+  --text-1: #282a30;
+  --text-2: #5f606a;
+  --text-3: #8b8b95;
+  --text-4: #b5b5bd;
+
+  --accent: #5e6ad2;
+  --accent-hi: #4f5abd;
+  --accent-dim: rgba(94, 106, 210, 0.09);
+  --accent-text: #fff;
+
+  --ok: #12a66c;
+  --warn: #d9a514;
+  --err: #e5484d;
+  --info: #2f80ed;
+  --muted: #8b8b95;
+
+  /* SQL エディタのシンタックスハイライト (デザイン 2: ライト) */
+  --sql-kw: #2563eb;
+  --sql-fn: #7c3aed;
+  --sql-str: #15803d;
+  --sql-num: #b45309;
+  --sql-text: #1f2937;
+  --sql-comment: #9ca3af;
+  --sql-linenum: #c2c7cf;
+
+  /* クエリエディタ固有トークン */
+  --qe-tree-sel-bg: #eef2ff;
+  --qe-tree-sel-text: #1e3a8a;
+  --qe-partition: #b45309;
+  --qe-selection: rgba(37, 99, 235, 0.15);
+  --qe-pill-run-bg: #fef3c7;
+  --qe-pill-run-text: #b45309;
+  --qe-pill-ok-bg: #dcfce7;
+  --qe-pill-ok-text: #15803d;
+  --qe-pill-err-bg: #fee2e2;
+  --qe-pill-err-text: #dc2626;
+  --qe-pill-muted-bg: #f3f4f6;
+  --qe-pill-muted-text: #6b7280;
+
+  /* セッションタブ (ライト: モック 4a 実測) */
+  --session-bar-bg: #f4f4f2;
+  --env-stg: #f59e0b;
+  --env-prod: #dc2626;
+
+  --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.05);
+  --shadow-drawer: -24px 0 60px rgba(24, 24, 40, 0.1);
+  --shadow-pop: 0 16px 50px rgba(24, 24, 40, 0.14), 0 0 0 1px var(--line-1);
+}
+
+[data-density='cozy'] {
+  --row-h: 42px;
+}
+[data-density='comfortable'] {
+  --row-h: 50px;
+}
+
+[data-accent='indigo'] {
+  --accent: #5e6ad2;
+  --accent-hi: #7b86e2;
+  --accent-dim: rgba(94, 106, 210, 0.12);
+}
+[data-accent='amber'] {
+  --accent: #d9a514;
+  --accent-hi: #eab308;
+  --accent-dim: rgba(217, 165, 20, 0.12);
+}
+[data-accent='blue'] {
+  --accent: #2f80ed;
+  --accent-hi: #5695ee;
+  --accent-dim: rgba(47, 128, 237, 0.11);
+}
+[data-accent='green'] {
+  --accent: #12a66c;
+  --accent-hi: #26b97f;
+  --accent-dim: rgba(18, 166, 108, 0.11);
+}
+[data-accent='purple'] {
+  --accent: #8b5cf6;
+  --accent-hi: #a07df8;
+  --accent-dim: rgba(139, 92, 246, 0.12);
+}
+[data-accent='pink'] {
+  --accent: #de5d9c;
+  --accent-hi: #e77fb1;
+  --accent-dim: rgba(222, 93, 156, 0.11);
+}
