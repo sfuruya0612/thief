@@ -79,13 +79,26 @@ describe('規則ブロックの抽出', () => {
 });
 
 describe('features/drawer.css と features/terminal.css の重なり', () => {
+  // issue 0204: ドックの高さ (--terminal-dock-h) の参照は .drawer の --drawer-lift の 1 か所だけにし、
+  // bottom と下配置の閉じ位置の両方をそこから計算する (分割前の 100% + dock + 16px と等価)。
   it('下配置の Drawer の閉じ位置は、bottom が参照するドックの高さの分も下げる', () => {
-    expect(declarationOf('.drawer.pos-bottom', 'bottom')).toBe(
+    expect(declarationOf('.drawer', '--drawer-lift')).toBe(
       'calc(var(--terminal-dock-h, 0px) + 8px)',
     );
+    expect(declarationOf('.drawer', 'bottom')).toBe('var(--drawer-lift)');
     expect(declarationOf('.drawer.pos-bottom', 'transform')).toBe(
-      'translateY(calc(100% + var(--terminal-dock-h, 0px) + 16px))',
+      'translateY(calc(100% + var(--drawer-lift) + 8px))',
     );
+    // コメント (等価性の説明) を除いた規則のテキストで数える
+    expect(drawer.replace(/\/\*[\s\S]*?\*\//g, '').match(/var\(--terminal-dock-h/g)).toHaveLength(
+      1,
+    );
+  });
+
+  it('分割中の内包 (contained) はドックより上の領域に収まるため、持ち上げは 8px だけになる', () => {
+    expect(declarationOf('.drawer.contained', '--drawer-lift')).toBe('8px');
+    expect(declarationsOf('.drawer.contained')).not.toMatch(/^\s*bottom:/m);
+    expect(declarationsOf('.drawer.contained.pos-bottom')).not.toMatch(/^\s*transform:/m);
   });
 
   it('閉じた Drawer は pointer-events を受け取らない', () => {

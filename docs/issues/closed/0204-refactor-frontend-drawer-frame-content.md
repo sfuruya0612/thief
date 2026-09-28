@@ -1,6 +1,7 @@
 # frontend の Drawer を配置 (DrawerFrame) と中身 (Drawer) に分け、ドックの高さの参照を 1 か所にする
 
 Created: 2026-09-28
+Completed: 2026-09-28
 Model: Claude Fable 5.1
 
 ## 背景
@@ -45,3 +46,10 @@ Model: Claude Fable 5.1
 - docs/issues/0201〜0203 (先に実装する)。
 - docs/issues/closed/0003、0174、0175、0176: 配置の条件の出所。
 - docs/adr/0012 (常駐ドック)、docs/adr/0025 (分割表示)。本 issue は方針を変えない。
+
+## 解決方法
+
+- `components/Drawer/DrawerFrame.tsx` を新設し、backdrop、`.drawer` 要素とそのクラス (`pos-bottom` / `open` / `contained`)、リサイズハンドルと `startResize`、`cloudlens:drawerSize` の読み書きと再クランプ、ESC のリスナーを `Drawer.tsx` からそのまま移した (153 行)。`Drawer.tsx` は公開の名前と `DrawerProps` を変えず、`<DrawerFrame open={!!resource} …>` の中に見出し・タブ・本文を描画する (416 行 → 310 行)。`useRef` と寸法の state は `Drawer.tsx` から無くなった。
+- `styles/features/drawer.css`: `.drawer` に `--drawer-lift: calc(var(--terminal-dock-h, 0px) + 8px)` を定義して `bottom: var(--drawer-lift)` にし、`.drawer.pos-bottom` の `bottom` の再宣言を削除、`transform` を `translateY(calc(100% + var(--drawer-lift) + 8px))` (分割前の `100% + var(--terminal-dock-h, 0px) + 16px` と等価) にした。`.drawer.contained` は `bottom: 8px` の代わりに `--drawer-lift: 8px` を上書きし、`.drawer.contained.pos-bottom` の `transform` (`100% + 16px`) と `.drawer.contained.pos-bottom.open` のブロックは `.drawer.pos-bottom` / `.drawer.pos-bottom.open` が同じ値を導くため削除した。コメントを除いた規則のテキストで `var(--terminal-dock-h` を参照するのは `.drawer` の 1 か所だけになった。各配置の計算値: 右 `bottom` = ドック + 8px、下 `bottom` = ドック + 8px と閉じ位置 `100% + ドック + 16px`、内包の右 `bottom` = 8px、内包の下 `bottom` = 8px と閉じ位置 `100% + 16px`。いずれも分割前と同じ。
+- `Drawer.test.tsx` の配置のテスト 16 件を `DrawerFrame.test.tsx` に移し (`DrawerFrame` を直接描画、`resource: null` は `open: false` に)、中身のテスト 8 件を残して合成の確認 1 件 (`position` / `contained` が `.drawer` のクラスに現れ、`resource` が無ければ `open` が付かず見出しも無い) を足した。`styles/styles.test.ts` の閉じ位置のテストは `--drawer-lift` の定義・`bottom` の参照・`transform` の式・`var(--terminal-dock-h` の参照回数 1 を検証する形にし、内包が `--drawer-lift: 8px` を上書きして `bottom` / `transform` を再宣言しないことを検証するテストを 1 件足した。
+- 完了条件の「開発サーバでの目視 (右 / 下 × ドックの状態 × 分割)」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。CSS の等価性は上の計算値の対応で示した。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (117 ファイル 1,251 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

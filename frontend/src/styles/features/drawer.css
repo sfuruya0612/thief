@@ -19,8 +19,12 @@
   top: 8px;
   right: 8px;
   /* 常駐ターミナルドック (TerminalDock.tsx が --terminal-dock-h を設定する) の上に収める。
-     ドックが無いときは 0px にフォールバックし、従来どおり 8px 浮かせる。 */
-  bottom: calc(var(--terminal-dock-h, 0px) + 8px);
+     ドックが無いときは 0px にフォールバックし、従来どおり 8px 浮かせる。
+     --terminal-dock-h を参照するのはこの 1 か所だけ。下配置の閉じ位置 (.drawer.pos-bottom の
+     transform) もこの変数から計算し、分割中の内包 (.drawer.contained) はドックより上の領域
+     (.main) に収まるため 8px に上書きする (docs/issues/closed/0204)。 */
+  --drawer-lift: calc(var(--terminal-dock-h, 0px) + 8px);
+  bottom: var(--drawer-lift);
   width: min(600px, 52vw);
   /* インラインの px 指定 (永続化されたリサイズ値) が描画後のウィンドウ縮小を追い越さないためのガードレール */
   max-width: 85vw;
@@ -49,16 +53,16 @@
   top: auto;
   left: 8px;
   right: 8px;
-  /* .drawer より詳細度が高いため、下配置でも同じ計算を再宣言する */
-  bottom: calc(var(--terminal-dock-h, 0px) + 8px);
+  /* bottom は .drawer の宣言 (var(--drawer-lift)) をそのまま使う */
   width: auto;
   max-width: none;
   height: min(46vh, 520px);
   /* インラインの px 指定が現在のビューポートを超えて画面全体を覆わないためのガードレール */
   max-height: 85vh;
-  /* 閉じ位置は bottom で持ち上げたドック分も足して下げる。自身の高さ + 16px だけでは
-     ドックの高さ分が画面内に残り、ドックの上に被さって入力を奪う。 */
-  transform: translateY(calc(100% + var(--terminal-dock-h, 0px) + 16px));
+  /* 閉じ位置は bottom で持ち上げた分 (--drawer-lift = ドックの高さ + 8px) も足して下げる。
+     自身の高さ + 16px だけではドックの高さ分が画面内に残り、ドックの上に被さって入力を奪う。
+     分割前の式 100% + var(--terminal-dock-h, 0px) + 16px と等価。 */
+  transform: translateY(calc(100% + var(--drawer-lift) + 8px));
 }
 .drawer.pos-bottom.open {
   transform: translateY(0);
@@ -75,8 +79,9 @@
 }
 .drawer.contained {
   position: absolute;
-  /* .main はターミナルドックより上の領域なので、ドックの高さ (--terminal-dock-h) を足さない */
-  bottom: 8px;
+  /* .main はターミナルドックより上の領域なので、持ち上げはドックの高さを含まない 8px だけ
+     (bottom と閉じ位置の両方がこの変数から決まる) */
+  --drawer-lift: 8px;
   width: min(600px, 85%);
   /* インラインの px 指定 (永続化されたリサイズ値) をペイン幅の 85% で切るガードレール */
   max-width: 85%;
@@ -88,12 +93,8 @@
   max-width: none;
   height: min(46%, 520px);
   max-height: 85%;
-  /* 閉じ位置も .main の中に収まるため、ドックの高さは足さない */
-  transform: translateY(calc(100% + 16px));
-}
-/* 上記の閉じ位置より後に置く必要がある (.drawer.pos-bottom.open と同じ詳細度のため) */
-.drawer.contained.pos-bottom.open {
-  transform: translateY(0);
+  /* 閉じ位置は .drawer.pos-bottom の transform が --drawer-lift (= 8px) から計算するので、
+     ここでは再宣言しない (分割前の式 100% + 16px と等価) */
 }
 
 /* Resize handles */

@@ -421,6 +421,8 @@
 
 ### misc
 
+- frontend の Drawer を配置 (`DrawerFrame`: backdrop、右 / 下 / 分割中の内包、リサイズと寸法の永続化、ESC) と中身 (`Drawer`: 見出し、タブ、本文) に分け、CSS の常駐ターミナルドックの高さ (`--terminal-dock-h`) の参照を `.drawer` の `--drawer-lift` の 1 か所にする (下配置の閉じ位置と内包の持ち上げはこの変数から計算する。各配置の計算値は分割前と同じ。`Drawer` の公開 Props と呼び出し側は変えない。docs/issues/closed/0204)
+  - @sfuruya0612
 - frontend の汎用の見た目を `components/primitives/` の部品にし、className の直書きを置き換える (`Button` (`size` / `variant`、`type` の既定 `button`) で `<button className="btn …">` 57 か所、`SearchField` で `.chip-search` の標準形 6 か所、`Stat` で `.stat` の label / value / delta 形 3 か所と `StatTile` を置き換えた。`<select>` / `<input>` / `<a>` にボタンの見た目を借りる 27 か所と、グラフを載せるカードとしての `.stat` 5 か所は直書きのまま。DOM は `type="button"` が付く以外は同じ。docs/issues/closed/0203)
   - @sfuruya0612
 - frontend の `app.css` (4,341 行) を `src/styles/` の層 (tokens / base / shell / primitives / utilities / features) に分割し、`styles/index.css` の `@import` の順で読み込むようにする (規則の中身とカスケードに影響する並び順は変えない。位置が変わるのは `.view-switch`、`.seg` / `.swatches` / `.toggle`、`table.dt.cost-cross-table` の 3 群だけで、いずれも同じ要素に当たる規則が移動の前後に無いことを確認した。ビルド成果物の CSS は分割前後で規則の集合が同一。`app.css.test.ts` は `styles/styles.test.ts` に移し、`AGENTS.md` の frontend 節に置き場所の規約を書いた。docs/issues/closed/0201)

@@ -1,6 +1,9 @@
-// drawer.jsx Drawer の移植: 右/下ドッキング可能な詳細パネル
-import { useEffect, useRef, useState } from 'react';
+// 詳細パネル (Drawer) の中身: サービスごとのタブ、見出し、タブごとの本文。
+// 配置 (右 / 下 / 分割中の内包、backdrop、ESC、リサイズと寸法の永続化) は DrawerFrame が持つ
+// (docs/issues/closed/0204)。
+import { useEffect, useState } from 'react';
 import type { BaseRow, DrawerPos } from '../../types/common';
+import { DrawerFrame } from './DrawerFrame';
 import { AwsIcons } from '../icons/AwsIcons';
 import { GcpIcons } from '../icons/GcpIcons';
 import { Icons } from '../icons/Icons';
@@ -54,29 +57,6 @@ const DRAWER_TABS: Record<string, string[]> = {
   gcs: ['Overview', 'Objects'],
 };
 
-const DRAWER_SIZE_KEY = 'cloudlens:drawerSize';
-
-interface DrawerSize {
-  width?: number;
-  height?: number;
-}
-
-function loadDrawerSize(): DrawerSize {
-  try {
-    return JSON.parse(localStorage.getItem(DRAWER_SIZE_KEY) || '{}') as DrawerSize;
-  } catch {
-    return {};
-  }
-}
-
-function saveDrawerSize(size: DrawerSize): void {
-  try {
-    localStorage.setItem(DRAWER_SIZE_KEY, JSON.stringify(size));
-  } catch {
-    // quota / serialization エラーは無視
-  }
-}
-
 function DrawerOverview({ rows }: { rows: OverviewEntry[] }) {
   return (
     <div className="section">
@@ -126,8 +106,6 @@ export function Drawer({
   onClose,
 }: DrawerProps) {
   const [tab, setTab] = useState('Overview');
-  const [size, setSize] = useState<DrawerSize>(loadDrawerSize);
-  const drawerRef = useRef<HTMLDivElement | null>(null);
   const open = !!resource;
 
   useEffect(() => {
@@ -136,281 +114,193 @@ export function Drawer({
     }
   }, [resource?.id]);
 
-  // レイアウト崩れ等で閉じるボタンに届かない場合の復旧手段として ESC でも閉じられるようにする。
-  // 分割表示中は closeOnEscape を false で受け取った側 (フォーカスしていないペイン) が
-  // リスナーを登録しない (両ペインの Drawer が開いていても ESC で閉じるのは 1 つだけ)。
-  useEffect(() => {
-    if (!open || !closeOnEscape) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, closeOnEscape, onClose]);
-
-  // リサイズの基準になる矩形。contained のときは包含ブロック (offsetParent = ペインの
-  // .main) の矩形を使い、ドラッグ位置と上限をペイン基準で計算する。offsetParent を
-  // 持たない環境 (jsdom 等) と 1 ペインではウィンドウ基準にフォールバックする。
-  const resizeBounds = () => {
-    const block = contained ? drawerRef.current?.offsetParent : null;
-    if (block) {
-      const rect = block.getBoundingClientRect();
-      return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-    }
-    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-  };
-
-  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const move = (ev: PointerEvent) => {
-      setSize((prev) => {
-        const bounds = resizeBounds();
-        let next: DrawerSize;
-        if (position === 'bottom') {
-          const h = Math.min(
-            Math.max(bounds.height - (ev.clientY - bounds.top) - 8, 220),
-            bounds.height * 0.85,
-          );
-          next = { ...prev, height: Math.round(h) };
-        } else {
-          const w = Math.min(
-            Math.max(bounds.width - (ev.clientX - bounds.left) - 8, 380),
-            bounds.width * 0.85,
-          );
-          next = { ...prev, width: Math.round(w) };
-        }
-        saveDrawerSize(next);
-        return next;
-      });
-    };
-    const up = () => {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-    document.body.style.cursor = position === 'bottom' ? 'ns-resize' : 'ew-resize';
-    document.body.style.userSelect = 'none';
-  };
-
   const tabs = DRAWER_TABS[service] ?? ['Overview'];
   const svcMeta =
     SERVICES.find((s) => s.key === service) ?? GCP_SERVICES.find((s) => s.key === service);
   const IconEl = AwsIcons[service] ?? GcpIcons[service];
 
-  // 永続化されたサイズは保存時点のウィンドウサイズ基準の px 絶対値のため、
-  // 現在のウィンドウサイズで再クランプする (ドラッグ時クランプと同じ 0.85 係数)。
-  const sizeStyle: React.CSSProperties =
-    position === 'bottom'
-      ? size.height
-        ? { height: Math.min(size.height, window.innerHeight * 0.85) }
-        : {}
-      : size.width
-        ? { width: Math.min(size.width, window.innerWidth * 0.85) }
-        : {};
-
   return (
-    <>
-      <div
-        className={`drawer-backdrop ${open ? 'open' : ''} ${contained ? 'contained' : ''}`}
-        onClick={onClose}
-      />
-      {/* 開閉位置 (transform) は styles/features/drawer.css の .drawer / .drawer.open / .drawer.pos-bottom /
-          .drawer.pos-bottom.open だけで定義する。inline で重複させると、下配置の閉じ位置が
-          参照する --terminal-dock-h の加算を片方だけ直す余地が生まれる (issue 0174 の reopen)。 */}
-      <div
-        ref={drawerRef}
-        className={`drawer ${position === 'bottom' ? 'pos-bottom' : ''} ${open ? 'open' : ''} ${
-          contained ? 'contained' : ''
-        }`}
-        style={sizeStyle}
-      >
-        <div
-          className={`resize-handle ${position === 'bottom' ? 'rh-top' : 'rh-left'}`}
-          onPointerDown={startResize}
-          title="Drag to resize"
-        />
-        {resource && (
-          <>
-            <div className="dh">
-              <div className="top">
-                <span className="svc-pill" style={{ gap: 6 }}>
-                  {IconEl ? (
-                    <IconEl size={13} />
-                  ) : (
-                    <span className="dot" style={{ background: svcMeta?.color }} />
-                  )}
-                  {svcMeta?.name}
-                </span>
-                <span style={{ color: 'var(--text-4)' }}>/</span>
-                <span className="mono" style={{ color: 'var(--text-2)' }}>
-                  {profile}
-                </span>
-                <span style={{ color: 'var(--text-4)' }}>/</span>
-                <span className="mono" style={{ color: 'var(--text-3)' }}>
-                  {region}
-                </span>
-                <button className="x" onClick={onClose}>
-                  <Icons.x />
-                </button>
-              </div>
-              <h2>
-                {resource.name}
-                <StatusBadge state={resource.state ?? ''} />
-              </h2>
-              <div className="id">{resource.id}</div>
-              <div className="actions">
-                {tabs.includes('Terminal') && (
-                  <Button size="sm" onClick={() => setTab('Terminal')}>
-                    <Icons.terminal size={12} /> Open CLI
-                  </Button>
+    <DrawerFrame
+      open={open}
+      position={position}
+      contained={contained}
+      closeOnEscape={closeOnEscape}
+      onClose={onClose}
+    >
+      {resource && (
+        <>
+          <div className="dh">
+            <div className="top">
+              <span className="svc-pill" style={{ gap: 6 }}>
+                {IconEl ? (
+                  <IconEl size={13} />
+                ) : (
+                  <span className="dot" style={{ background: svcMeta?.color }} />
                 )}
-                <Button size="sm" variant="ghost" style={{ marginLeft: 'auto' }}>
-                  <Icons.more size={14} />
+                {svcMeta?.name}
+              </span>
+              <span style={{ color: 'var(--text-4)' }}>/</span>
+              <span className="mono" style={{ color: 'var(--text-2)' }}>
+                {profile}
+              </span>
+              <span style={{ color: 'var(--text-4)' }}>/</span>
+              <span className="mono" style={{ color: 'var(--text-3)' }}>
+                {region}
+              </span>
+              <button className="x" onClick={onClose}>
+                <Icons.x />
+              </button>
+            </div>
+            <h2>
+              {resource.name}
+              <StatusBadge state={resource.state ?? ''} />
+            </h2>
+            <div className="id">{resource.id}</div>
+            <div className="actions">
+              {tabs.includes('Terminal') && (
+                <Button size="sm" onClick={() => setTab('Terminal')}>
+                  <Icons.terminal size={12} /> Open CLI
                 </Button>
+              )}
+              <Button size="sm" variant="ghost" style={{ marginLeft: 'auto' }}>
+                <Icons.more size={14} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="dtabs">
+            {tabs.map((t) => (
+              <div
+                key={t}
+                className={`dtab ${tab === t ? 'active' : ''}`}
+                onClick={() => setTab(t)}
+              >
+                {t}
               </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="dtabs">
-              {tabs.map((t) => (
-                <div
-                  key={t}
-                  className={`dtab ${tab === t ? 'active' : ''}`}
-                  onClick={() => setTab(t)}
-                >
-                  {t}
-                </div>
-              ))}
-            </div>
-
-            <div className="dbody">
-              {tab === 'Overview' && (
-                <>
-                  <DrawerOverview rows={overviewRows} />
-                  {service === 'cfn' && (
-                    <DrawerCFNOverviewExtra
-                      profile={profile}
-                      region={region}
-                      stack={resource.name}
-                    />
-                  )}
-                </>
-              )}
-              {tab === 'Tags' && service !== 'cfn' && (
-                <DrawerTags tags={resource.tags} fetchFailed={resource.tagsFetchFailed} />
-              )}
-              {tab === 'Tags' && service === 'cfn' && (
-                <DrawerCFNTags profile={profile} region={region} stack={resource.name} />
-              )}
-              {tab === 'Events' && service === 'cfn' && (
-                <DrawerCFNEvents profile={profile} region={region} stack={resource.name} />
-              )}
-              {tab === 'Resources' && service === 'cfn' && (
-                <DrawerCFNResources profile={profile} region={region} stack={resource.name} />
-              )}
-              {tab === 'Terminal' && (
-                <DrawerTerminal
-                  service={service}
-                  profile={profile}
-                  region={region}
-                  resource={resource}
-                />
-              )}
-              {tab === 'Images' && (
-                <DrawerECRImages profile={profile} region={region} repo={resource.name} />
-              )}
-              {tab === 'Services' && service === 'ecs' && (
-                <DrawerECSServices profile={profile} region={region} cluster={resource.name} />
-              )}
-              {tab === 'Tasks' && service === 'ecs' && (
-                <DrawerECSTasks
-                  profile={profile}
-                  region={region}
-                  cluster={resource.name}
-                  // Terminal タブへ切り替えず、常駐ドックへ直接セッションを開く
-                  onExec={(target) => {
-                    openECSTerminalSession(
-                      profile,
-                      region,
-                      resource.name,
-                      target.taskArn,
-                      target.container,
-                    );
-                  }}
-                />
-              )}
-              {tab === 'Instances' && service === 'ecs' && (
-                <DrawerECSContainerInstances
-                  profile={profile}
-                  region={region}
-                  cluster={resource.name}
-                />
-              )}
-              {tab === 'Objects' && service === 's3' && (
-                <DrawerS3Objects profile={profile} region={region} bucket={resource.name} />
-              )}
-              {tab === 'Objects' && service === 'gcs' && (
-                <DrawerGCSObjects projectId={profile} bucket={resource.name} />
-              )}
-              {tab === 'Listeners' && service === 'elb' && (
-                <DrawerELBListeners profile={profile} region={region} lbArn={resource.id} />
-              )}
-              {tab === 'Targets' && service === 'elb' && (
-                <DrawerELBTargets profile={profile} region={region} lbArn={resource.id} />
-              )}
-              {tab === 'Instance Parameters' && service === 'rds' && (
-                <DrawerRDSInstanceParameters
-                  profile={profile}
-                  region={region}
-                  instance={resource.name}
-                />
-              )}
-              {tab === 'Cluster Parameters' && service === 'rds' && (
-                <DrawerRDSClusterParameters
-                  profile={profile}
-                  region={region}
-                  instance={resource.name}
-                />
-              )}
-              {tab === 'Parameters' && service === 'cache' && (
-                <DrawerCacheParameters profile={profile} region={region} cluster={resource.name} />
-              )}
-              {tab === 'Behaviors' && service === 'cloudfront' && (
-                <DrawerCloudFrontBehaviors profile={profile} region={region} id={resource.id} />
-              )}
-              {tab === 'Rules' && service === 'waf' && (
-                <DrawerWAFRules
-                  profile={profile}
-                  region={region}
-                  id={resource.id}
-                  name={resource.name}
-                />
-              )}
-              {tab === 'Items' && service === 'dynamo' && (
-                <DrawerDynamoItems profile={profile} region={region} table={resource.name} />
-              )}
-              {tab === 'Value' && service === 'ssm' && (
-                <DrawerSSMEdit
-                  profile={profile}
-                  region={region}
-                  name={resource.name}
-                  onClose={onClose}
-                />
-              )}
-              {tab === 'Value' && service === 'secrets' && (
-                <DrawerSecretEdit
-                  profile={profile}
-                  region={region}
-                  name={resource.name}
-                  onClose={onClose}
-                />
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </>
+          <div className="dbody">
+            {tab === 'Overview' && (
+              <>
+                <DrawerOverview rows={overviewRows} />
+                {service === 'cfn' && (
+                  <DrawerCFNOverviewExtra profile={profile} region={region} stack={resource.name} />
+                )}
+              </>
+            )}
+            {tab === 'Tags' && service !== 'cfn' && (
+              <DrawerTags tags={resource.tags} fetchFailed={resource.tagsFetchFailed} />
+            )}
+            {tab === 'Tags' && service === 'cfn' && (
+              <DrawerCFNTags profile={profile} region={region} stack={resource.name} />
+            )}
+            {tab === 'Events' && service === 'cfn' && (
+              <DrawerCFNEvents profile={profile} region={region} stack={resource.name} />
+            )}
+            {tab === 'Resources' && service === 'cfn' && (
+              <DrawerCFNResources profile={profile} region={region} stack={resource.name} />
+            )}
+            {tab === 'Terminal' && (
+              <DrawerTerminal
+                service={service}
+                profile={profile}
+                region={region}
+                resource={resource}
+              />
+            )}
+            {tab === 'Images' && (
+              <DrawerECRImages profile={profile} region={region} repo={resource.name} />
+            )}
+            {tab === 'Services' && service === 'ecs' && (
+              <DrawerECSServices profile={profile} region={region} cluster={resource.name} />
+            )}
+            {tab === 'Tasks' && service === 'ecs' && (
+              <DrawerECSTasks
+                profile={profile}
+                region={region}
+                cluster={resource.name}
+                // Terminal タブへ切り替えず、常駐ドックへ直接セッションを開く
+                onExec={(target) => {
+                  openECSTerminalSession(
+                    profile,
+                    region,
+                    resource.name,
+                    target.taskArn,
+                    target.container,
+                  );
+                }}
+              />
+            )}
+            {tab === 'Instances' && service === 'ecs' && (
+              <DrawerECSContainerInstances
+                profile={profile}
+                region={region}
+                cluster={resource.name}
+              />
+            )}
+            {tab === 'Objects' && service === 's3' && (
+              <DrawerS3Objects profile={profile} region={region} bucket={resource.name} />
+            )}
+            {tab === 'Objects' && service === 'gcs' && (
+              <DrawerGCSObjects projectId={profile} bucket={resource.name} />
+            )}
+            {tab === 'Listeners' && service === 'elb' && (
+              <DrawerELBListeners profile={profile} region={region} lbArn={resource.id} />
+            )}
+            {tab === 'Targets' && service === 'elb' && (
+              <DrawerELBTargets profile={profile} region={region} lbArn={resource.id} />
+            )}
+            {tab === 'Instance Parameters' && service === 'rds' && (
+              <DrawerRDSInstanceParameters
+                profile={profile}
+                region={region}
+                instance={resource.name}
+              />
+            )}
+            {tab === 'Cluster Parameters' && service === 'rds' && (
+              <DrawerRDSClusterParameters
+                profile={profile}
+                region={region}
+                instance={resource.name}
+              />
+            )}
+            {tab === 'Parameters' && service === 'cache' && (
+              <DrawerCacheParameters profile={profile} region={region} cluster={resource.name} />
+            )}
+            {tab === 'Behaviors' && service === 'cloudfront' && (
+              <DrawerCloudFrontBehaviors profile={profile} region={region} id={resource.id} />
+            )}
+            {tab === 'Rules' && service === 'waf' && (
+              <DrawerWAFRules
+                profile={profile}
+                region={region}
+                id={resource.id}
+                name={resource.name}
+              />
+            )}
+            {tab === 'Items' && service === 'dynamo' && (
+              <DrawerDynamoItems profile={profile} region={region} table={resource.name} />
+            )}
+            {tab === 'Value' && service === 'ssm' && (
+              <DrawerSSMEdit
+                profile={profile}
+                region={region}
+                name={resource.name}
+                onClose={onClose}
+              />
+            )}
+            {tab === 'Value' && service === 'secrets' && (
+              <DrawerSecretEdit
+                profile={profile}
+                region={region}
+                name={resource.name}
+                onClose={onClose}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </DrawerFrame>
   );
 }
