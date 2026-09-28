@@ -113,3 +113,44 @@ describe('StatsRow', () => {
     expect(valueOf(container, 'Other')).toBe('1');
   });
 });
+
+describe('StatsRow variant="inline" (workbench の 1 行、issue 0212)', () => {
+  it('value と label を cards と同じ順に並べ、title に全文を持ち、カード (.stat) は出さない', () => {
+    const { container } = render(
+      <StatsRow
+        variant="inline"
+        service="ec2"
+        resources={[{ state: 'running' }, { state: 'running' }, { state: 'stopped' }]}
+        cost={[]}
+      />,
+    );
+    expect(container.querySelector('.stats')).toBeNull();
+    expect(container.querySelector('.stat')).toBeNull();
+    const inline = container.querySelector('.stats-inline')!;
+    expect(inline).not.toBeNull();
+    const items = Array.from(inline.querySelectorAll('.stats-inline-item')).map(
+      (el) => el.textContent,
+    );
+    expect(items).toEqual([
+      '3 Resources',
+      '2 Running',
+      '1 Stopped',
+      '0 Other',
+      '— Monthly cost (Unblended)',
+      '— Monthly cost (Net Amortized)',
+    ]);
+    expect(inline.getAttribute('title')).toBe(
+      'Resources: 3 · Running: 2 · Stopped: 1 · Other: 0 · Monthly cost (Unblended): — · Monthly cost (Net Amortized): —',
+    );
+  });
+
+  it('inline でも service ごとの集計は cards と同じ (ecr は Resources だけ)', () => {
+    const { container } = render(
+      <StatsRow variant="inline" service="ecr" resources={[{ state: '' }]} cost={[]} />,
+    );
+    const items = Array.from(container.querySelectorAll('.stats-inline-item')).map(
+      (el) => el.textContent,
+    );
+    expect(items).toEqual(['1 Resources']);
+  });
+});

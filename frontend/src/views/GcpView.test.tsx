@@ -1,12 +1,14 @@
 // 分割表示 (issue 0175) の GcpView 側の検証。AccountView と同じ分岐
 // (2 ペインの描画、フォーカス中のペインへのサイドバーの反映、pointerdown での
 // フォーカス移動、ペインごとの Drawer の独立、ESC の受け取り先) を固定する。
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GcpView, type GcpViewProps } from './GcpView';
 import { useSplitPanes } from '../hooks/useSplitPanes';
 import type { GcpProject } from '../types/gcp';
+import { resetTweaksForTest } from '../hooks/useTweaks';
+import { STORAGE_KEY } from '../lib/storage';
 
 // GcpServicePanel が使う useGcpResources だけを差し替え、他のフックは実装のまま使う
 // (views/AccountView.test.tsx と同じ方法)。fetch は解決しない Promise にして副作用の
@@ -315,5 +317,56 @@ describe('GcpView の分割表示', () => {
     expect(main.querySelector('tbody')?.textContent).toContain(
       'No resources match current filters',
     );
+  });
+});
+
+describe('GcpView の一覧の上段 (Layout = workbench、issue 0212)', () => {
+  function setLayout(layout: 'standard' | 'workbench') {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tweaks: {
+          theme: 'light',
+          density: 'compact',
+          accent: 'green',
+          drawerPos: 'right',
+          lang: 'ja',
+          layout,
+        },
+      }),
+    );
+    resetTweaksForTest();
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+    mocks.useGcpResources.mockReturnValue({ data: [CLOUD_RUN_ROW], isLoading: false, error: null });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    resetTweaksForTest();
+  });
+
+  it('standard では toolbar と facets の 2 段で、.panel-bar は出ない', () => {
+    setLayout('standard');
+    const { container } = renderSplit({ drawerPos: 'right' });
+    const main = container.querySelector('.main')!;
+    expect(main.querySelector('.panel-bar')).toBeNull();
+    expect(main.querySelector(':scope > .toolbar h1')?.textContent).toBe('Cloud Run');
+    expect(main.querySelector(':scope > .facets .facet')).not.toBeNull();
+  });
+
+  it('workbench では上段が 1 行の .panel-bar (サービス名 + チップ) になる', () => {
+    setLayout('workbench');
+    const { container } = renderSplit({ drawerPos: 'right' });
+    const main = container.querySelector('.main')!;
+    const bar = main.querySelector(':scope > .panel-bar')!;
+    expect(bar).not.toBeNull();
+    expect(bar.querySelector('.title h1')?.textContent).toBe('Cloud Run');
+    expect(bar.querySelector('.facets .facet')).not.toBeNull();
+    expect(main.querySelector(':scope > .toolbar')).toBeNull();
+    expect(main.querySelector(':scope > .facets')).toBeNull();
   });
 });

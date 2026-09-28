@@ -2,13 +2,15 @@
 // 分割表示 (issue 0175) のペイン単位の挙動の検証。
 // SSO トークン期限切れのときだけ SSOExpiredBanner を出し、それ以外の ApiError
 // (403 ACCESS_DENIED 等) は ErrorBanner に落ちることを確認する。
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AccountView, type AccountViewProps } from './AccountView';
 import { useSplitPanes } from '../hooks/useSplitPanes';
 import { ApiError } from '../types/common';
 import { SSO_TOKEN_EXPIRED_CODE } from '../lib/ssoError';
+import { resetTweaksForTest } from '../hooks/useTweaks';
+import { STORAGE_KEY } from '../lib/storage';
 
 // ServicePanel が使う useResources / useCost だけを差し替え、他のフック
 // (Sidebar の useRegions など) は実装のまま使う。fetch は解決しない Promise に
@@ -506,5 +508,109 @@ describe('AccountView の一覧取得に追随した時系列の再取得', () =
     rerender(viewElement(qc));
 
     expect(timeseriesCalls()).toBe(1);
+  });
+});
+
+describe('AccountView の一覧の上段 (Layout = workbench、issue 0212)', () => {
+  const EC2_ROWS = [
+    {
+      id: 'i-1',
+      name: 'web-01',
+      state: 'running',
+      region: 'ap-northeast-1',
+      instanceType: 't3.micro',
+      az: 'ap-northeast-1a',
+      privateIp: '10.0.0.1',
+      publicIp: '',
+      vpcId: 'vpc-1',
+      tags: { Env: 'prod' },
+    },
+    {
+      id: 'i-2',
+      name: 'web-02',
+      state: 'stopped',
+      region: 'ap-northeast-1',
+      instanceType: 't3.micro',
+      az: 'ap-northeast-1c',
+      privateIp: '10.0.0.2',
+      publicIp: '',
+      vpcId: 'vpc-1',
+      tags: { Env: 'stg' },
+    },
+  ];
+
+  function setLayout(layout: 'standard' | 'workbench') {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tweaks: {
+          theme: 'light',
+          density: 'compact',
+          accent: 'green',
+          drawerPos: 'right',
+          lang: 'ja',
+          layout,
+        },
+      }),
+    );
+    resetTweaksForTest();
+  }
+
+  function renderService(service: 'ec2' | 'ecs') {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(viewElement(client, { panes: { services: [service], ids: [0], focused: 0 } }));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+    mocks.useCost.mockReturnValue({ data: [], isLoading: false, error: null });
+    mocks.useResources.mockReturnValue({ data: EC2_ROWS, isLoading: false, error: null });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    resetTweaksForTest();
+  });
+
+  it('standard では toolbar / stats (カード) / facets の 3 段で、.panel-bar は出ない', () => {
+    setLayout('standard');
+    const { container } = renderService('ec2');
+    const main = container.querySelector('.main')!;
+    expect(main.querySelector('.panel-bar')).toBeNull();
+    expect(main.querySelector(':scope > .toolbar h1')?.textContent).toBe('EC2');
+    expect(main.querySelector(':scope > .stats .stat')).not.toBeNull();
+    expect(main.querySelector(':scope > .facets .facet')).not.toBeNull();
+    expect(main.querySelector('.stats-inline')).toBeNull();
+  });
+
+  it('workbench では上段が 1 行の .panel-bar (サービス名 + 要約 + チップ) になり、3 段は出ない', () => {
+    setLayout('workbench');
+    const { container } = renderService('ec2');
+    const main = container.querySelector('.main')!;
+    const bar = main.querySelector(':scope > .panel-bar')!;
+    expect(bar).not.toBeNull();
+    expect(bar.querySelector('.title h1')?.textContent).toBe('EC2');
+    const summary = Array.from(bar.querySelectorAll('.stats-inline-item')).map(
+      (el) => el.textContent,
+    );
+    expect(summary.slice(0, 3)).toEqual(['2 Resources', '1 Running', '1 Stopped']);
+    expect(bar.querySelector('.facets .facet')).not.toBeNull();
+    expect(main.querySelector(':scope > .toolbar')).toBeNull();
+    expect(main.querySelector(':scope > .stats')).toBeNull();
+    expect(main.querySelector(':scope > .facets')).toBeNull();
+  });
+
+  it('workbench の ECS ではタスク数のグラフが既定で閉じた details (.panel-collapsible) に入る', () => {
+    setLayout('workbench');
+    const { container } = renderService('ecs');
+    const details = container.querySelector('details.panel-collapsible')!;
+    expect(details).not.toBeNull();
+    expect(details.hasAttribute('open')).toBe(false);
+    expect(details.querySelector('summary')?.textContent).toBe('Tasks per cluster');
+
+    setLayout('standard');
+    const standard = renderService('ecs');
+    expect(standard.container.querySelector('details.panel-collapsible')).toBeNull();
   });
 });

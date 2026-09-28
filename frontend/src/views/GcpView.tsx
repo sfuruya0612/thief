@@ -28,6 +28,7 @@ import {
 } from '../components/Drawer/overviewRows';
 import type { ColumnDef } from '../components/tables/columns';
 import { GCP_SERVICES } from '../lib/serviceMeta';
+import { useTweaks } from '../hooks/useTweaks';
 import type { SplitPanesState } from '../lib/splitPanes';
 import type { BaseRow, DrawerPos } from '../types/common';
 import type {
@@ -97,19 +98,30 @@ function GcpRowsPanel<TRow extends BaseRow>({
   }, [rows, filters]);
 
   const svcMeta = GCP_SERVICES.find((s) => s.key === service);
+  // Layout = workbench では上段 (toolbar / facets) を 1 行の .panel-bar にまとめる (issue 0212)
+  const workbench = useTweaks().tweaks.layout === 'workbench';
+  const title = (
+    <div className="title">
+      <h1>{svcMeta?.name}</h1>
+      <span className="subtitle">{svcMeta?.sub.toLowerCase()}</span>
+    </div>
+  );
+  const facets = <FacetBar rows={rows} filters={filters} setFilters={setFilters} />;
 
   return (
     <div className="main">
-      <div className="toolbar">
-        <div className="title">
-          <h1>{svcMeta?.name}</h1>
-          <span className="subtitle">{svcMeta?.sub.toLowerCase()}</span>
+      {workbench ? (
+        <div className="panel-bar">
+          {title}
+          {facets}
         </div>
-      </div>
+      ) : (
+        <div className="toolbar">{title}</div>
+      )}
 
       {Boolean(error) && <ErrorBanner error={error} />}
 
-      <FacetBar rows={rows} filters={filters} setFilters={setFilters} />
+      {!workbench && facets}
 
       <DataTable
         rows={filtered}

@@ -76,6 +76,7 @@ import { Drawer } from '../components/Drawer/Drawer';
 import { Icons } from '../components/icons/Icons';
 import { useCost, useResources } from '../api/queries';
 import { SERVICES } from '../lib/serviceMeta';
+import { useTweaks } from '../hooks/useTweaks';
 import type { SplitPanesState } from '../lib/splitPanes';
 import type { BaseRow, DrawerPos, Profile } from '../types/common';
 import { isSSOExpiredError } from '../lib/ssoError';
@@ -172,31 +173,54 @@ function ServicePanel<TRaw, TRow extends BaseRow>({
   }, [allResources, filters]);
 
   const svcMeta = SERVICES.find((s) => s.key === service);
+  // Layout = workbench では上段 (toolbar / stats / facets) を 1 行の .panel-bar にまとめる
+  // (issue 0212)。Layout による DOM の分岐はこの上段だけ (AGENTS.md の frontend 節)。
+  const workbench = useTweaks().tweaks.layout === 'workbench';
+  const title = (
+    <div className="title">
+      <h1>{svcMeta?.name}</h1>
+      <span className="subtitle">{svcMeta?.sub.toLowerCase()}</span>
+    </div>
+  );
+  const facets = <FacetBar rows={allResources} filters={filters} setFilters={setFilters} />;
+  const countChart = countChartTitle && (
+    <ResourceCountChart
+      service={service}
+      profile={profile}
+      region={region}
+      title={countChartTitle}
+    />
+  );
 
   return (
     <div className="main">
-      <div className="toolbar">
-        <div className="title">
-          <h1>{svcMeta?.name}</h1>
-          <span className="subtitle">{svcMeta?.sub.toLowerCase()}</span>
+      {workbench ? (
+        <div className="panel-bar">
+          {title}
+          <StatsRow variant="inline" resources={allResources} service={service} cost={cost ?? []} />
+          {facets}
         </div>
-      </div>
+      ) : (
+        <div className="toolbar">{title}</div>
+      )}
 
       {ssoExpired && <SSOExpiredBanner profile={profile} />}
       {!ssoExpired && error && <ErrorBanner error={error} />}
 
-      <StatsRow resources={allResources} service={service} cost={cost ?? []} />
+      {!workbench && <StatsRow resources={allResources} service={service} cost={cost ?? []} />}
 
-      {countChartTitle && (
-        <ResourceCountChart
-          service={service}
-          profile={profile}
-          region={region}
-          title={countChartTitle}
-        />
-      )}
+      {countChart &&
+        (workbench ? (
+          // workbench では既定で畳み、見たいときだけ開く (1 行の上段を崩さない)
+          <details className="panel-collapsible">
+            <summary>{countChartTitle}</summary>
+            {countChart}
+          </details>
+        ) : (
+          countChart
+        ))}
 
-      <FacetBar rows={allResources} filters={filters} setFilters={setFilters} />
+      {!workbench && facets}
 
       <DataTable
         rows={filtered}

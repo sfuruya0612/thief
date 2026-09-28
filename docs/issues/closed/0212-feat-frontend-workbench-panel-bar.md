@@ -1,6 +1,7 @@
 # workbench レイアウトで一覧の上段 (toolbar / stats / facets) を 1 行にする
 
 Created: 2026-09-29
+Completed: 2026-09-29
 Model: Claude Fable 5.1
 
 ## 背景
@@ -37,3 +38,12 @@ docs/issues/0210 の第 2 段 (シェルの構造の後半)。AWS の一覧 (`vi
 
 - docs/issues/0210、0211 (先に実装する)、0213。
 - docs/issues/closed/0186 (ECS のタスク数のグラフ)、0203 (`Stat` / `StatsRow`)。
+
+## 解決方法
+
+- `StatsRow` に `variant?: 'cards' | 'inline'` (既定 `cards`) を足した。`inline` は `<span class="stats-inline" title="Resources: 8 · Running: 6 · …">` に `<span class="stats-inline-item"><b>8</b> Resources</span>` を並べ、区切りの `·` は CSS (`.stats-inline-item + .stats-inline-item::before`) で描く。`StatItem[]` の組み立て (`costStats` を含む) は `cards` と共通で、`ResourceCountChart` が使う `Stat` / `.stats` には触れていない。
+- `ServicePanel` (`views/AccountView.tsx`) と `GcpView` は `useTweaks().tweaks.layout === 'workbench'` で上段だけを分岐する。`workbench` では `<div class="panel-bar">` に `title` (サービス名 + 補足)、`StatsRow variant="inline"` (AWS のみ)、`FacetBar` を置き、`standard` では従来の `.toolbar` / `.stats` / `.facets` の 3 段 (DOM は変えていない)。`SSOExpiredBanner` / `ErrorBanner` は両方で `panel-bar` (または `toolbar`) の直後。ECS の `ResourceCountChart` は `workbench` では `<details class="panel-collapsible">` (既定は閉、`summary` は `countChartTitle`) に入れ、`standard` では従来どおり常時表示。
+- CSS: `.panel-bar` は `shell.css` の `.toolbar` の隣 (高さ 36px、`gap: 8px`、`padding: 0 10px`、`border-bottom: 1px solid var(--line-1)`、`overflow: hidden`)。`.panel-bar .title` は `nowrap` で縮まず、`.panel-bar .stats-inline` は `flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis` (全文は `title` 属性)、`.panel-bar .facets` は `margin-left: auto; border: 0; min-height: 0; padding: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none` (収まらないチップは横スクロールで届く)、`.panel-bar .facet` は `min-width: 0; flex-shrink: 0` (`.facet` の `min-width: 150px` を解く)。`.stats-inline` 自体の文字 (12px、`text-3`、値は `<b>` で `text-1`) は `primitives.css` の `.stat` の隣。`.panel-collapsible > summary` は 28px、`text-2`、既定のマーカーを消して `▸` / `▾` を `::before` で出す。
+- 縦のクローム (最初の行まで) は `workbench` で TopBar 40 + panel-bar 36 + th 28 = 104px (ECS は `summary` の 28px が乗る)。`standard` は 0210 以前と同じ。
+- テスト: `StatsRow.test.tsx` に `inline` の 2 件 (文字列と順序、`title`、`.stat` を出さないこと、`ecr` の集計が `cards` と同じ)、`AccountView.test.tsx` に上段の describe 3 件 (standard の 3 段、workbench の `.panel-bar` と要約とチップ、ECS の `details.panel-collapsible` が既定で閉じ standard では出ない)、`GcpView.test.tsx` に 2 件 (standard の 2 段、workbench の `.panel-bar`) を足した。Layout の切替は `App.test.tsx` と同じく `localStorage` の `cloudlens:v1` に `tweaks.layout` を書いて `resetTweaksForTest()` で読み直す。
+- 完了条件の「開発サーバでの目視 (EC2 / ECS / S3 / Cloud Run)」はこの環境では未実施 (docs/issues/closed/0201 と同じ)。frontend の `npm run lint` (エラー 0、警告 9 は既存分)、`npm run test` (117 ファイル 1,326 テスト成功)、`npm run build` の通過を確認した。backend には変更が無い。

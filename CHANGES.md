@@ -428,6 +428,8 @@
   - @sfuruya0612
 - [ADD] Web の Layout = Workbench で、TopBar とセッションタブを 40px の 1 段にまとめ、サイドバーを 44px の rail (アイコンと件数だけ) に畳めるようにする (畳むボタンと ⌘B / Ctrl+B。折りたたみは `localStorage` に残る。Standard の DOM は変わらない。docs/issues/closed/0211)
   - @sfuruya0612
+- [ADD] Web の Layout = Workbench で、AWS / Google Cloud の一覧の上段 (サービス名・統計カード・絞り込みチップの 3 段) を 36px の 1 行にまとめる (統計は「8 Resources · 6 Running · …」の要約の文字になり、収まらない分は省略して全文はツールチップに出す。絞り込みチップは同じ行の右側。ECS のタスク数のグラフは折りたたみ (既定は閉) にする。Standard の DOM と見た目は変わらない。docs/issues/closed/0212)
+  - @sfuruya0612
 
 ### misc
 

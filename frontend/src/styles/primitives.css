@@ -115,6 +115,24 @@
   color: var(--err-ink);
 }
 
+/* StatsRow variant="inline" (issue 0212)。「8 Resources · 6 Running · …」の 1 行。
+   幅は置き場所 (.panel-bar) が決め、収まらない分は省略する。 */
+.stats-inline {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stats-inline-item + .stats-inline-item::before {
+  content: '\00B7';
+  margin: 0 6px;
+  color: var(--line-3);
+}
+.stats-inline b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+
 .facets {
   display: flex;
   align-items: center;

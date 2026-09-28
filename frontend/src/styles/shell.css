@@ -786,6 +786,94 @@
   margin: 0 4px;
 }
 
+/* workbench の一覧の上段 (issue 0212)。ServicePanel / GcpView が Layout で DOM を分岐し、
+   toolbar / stats / facets の 3 段の代わりに 36px の 1 行 (.panel-bar) を出す。
+   standard では使わない。子は折り返さず、収まらない分は要約が省略 (title に全文)、
+   チップは横スクロール (スクロールバー無し)。 */
+.panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.panel-bar .title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.panel-bar .title h1 {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+.panel-bar .title .subtitle {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.panel-bar .stats-inline {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.panel-bar .facets {
+  flex: 0 1 auto;
+  margin-left: auto;
+  border: 0;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.panel-bar .facets::-webkit-scrollbar {
+  display: none;
+}
+.panel-bar .facet {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/* workbench で ResourceCountChart (ECS のタスク数) を畳む (issue 0212)。既定は閉。
+   開いたときの中身は .stats / .stat のまま。 */
+.panel-collapsible {
+  flex-shrink: 0;
+}
+.panel-collapsible > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.panel-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+.panel-collapsible > summary::before {
+  content: '\25B8';
+  font-size: 10px;
+  color: var(--text-3);
+}
+.panel-collapsible[open] > summary::before {
+  content: '\25BE';
+}
+
 .view-switch {
   display: flex;
   align-items: center;

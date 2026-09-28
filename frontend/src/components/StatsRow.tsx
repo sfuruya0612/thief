@@ -13,6 +13,8 @@ interface StatItem {
 }
 
 export interface StatsRowProps {
+  // cards = 統計カードの行 (既定)。inline = workbench の 1 行ツールバー用の要約の文字列 (issue 0212)。
+  variant?: 'cards' | 'inline';
   resources: Array<{
     state?: string;
     kind?: string;
@@ -79,7 +81,7 @@ const SIMPLE_COST_ONLY = new Set(['apigw', 'natgw', 'sqs', 'kinesis', 'waf', 'dy
 // state を持たず Cost Explorer の対応もないサービスは Resources のみ表示する
 const RESOURCES_ONLY = new Set(['ecr', 'ssm', 'secrets']);
 
-export function StatsRow({ resources, service, cost }: StatsRowProps) {
+export function StatsRow({ resources, service, cost, variant = 'cards' }: StatsRowProps) {
   const running = resources.filter((r) => RUNNING_STATES.has(r.state ?? '')).length;
   const stopped = resources.filter((r) => r.state === 'stopped').length;
   const other = resources.length - running - stopped;
@@ -149,6 +151,20 @@ export function StatsRow({ resources, service, cost }: StatsRowProps) {
       { label: 'Other', value: other, tone: other > 0 ? 'neg' : undefined },
       ...costStats(service, cost),
     ];
+  }
+
+  if (variant === 'inline') {
+    // 「8 Resources · 6 Running · …」の 1 行。収まらない分は CSS で省略し、title に全文を持つ。
+    const full = stats.map((s) => `${s.label}: ${s.value}`).join(' · ');
+    return (
+      <span className="stats-inline" title={full}>
+        {stats.map((s, i) => (
+          <span key={i} className="stats-inline-item">
+            <b>{s.value}</b> {s.label}
+          </span>
+        ))}
+      </span>
+    );
   }
 
   return (
