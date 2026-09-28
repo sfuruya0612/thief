@@ -106,6 +106,18 @@ describe('features/drawer.css と features/terminal.css の重なり', () => {
     expect(declarationOf('.drawer:not(.open)', 'pointer-events')).toBe('none');
   });
 
+  // issue 0213: workbench の docked は流れの中にある。.drawer の top / right / bottom
+  // (bottom は --drawer-lift) は relative では位置をずらすので inset で解き、transform を持たない。
+  // 閉じているときは DrawerFrame が描画しないので閉じ位置の計算は無い。
+  it('docked の Drawer は流れの中 (position: relative、inset: auto) にあり、transform を持たない', () => {
+    expect(declarationOf('.drawer.docked', 'position')).toBe('relative');
+    expect(declarationOf('.drawer.docked', 'inset')).toBe('auto');
+    expect(declarationOf('.drawer.docked', 'transform')).toBe('none');
+    expect(declarationOf('.drawer.docked.pos-bottom', 'transform')).toBe('none');
+    expect(declarationsOf('.drawer.docked')).not.toMatch(/^\s*bottom:/m);
+    expect(declarationsOf('.drawer.docked')).not.toMatch(/--drawer-lift/);
+  });
+
   it('.terminal-dock は position を持ち、.drawer と .drawer-backdrop より大きい z-index を持つ', () => {
     const dock = Number(declarationOf('.terminal-dock', 'z-index'));
     const drawer = Number(declarationOf('.drawer', 'z-index'));
@@ -150,6 +162,18 @@ describe('shell.css の分割表示', () => {
 
 // issue 0210: workbench の行高 (28px) は既定の密度のときだけ効き、明示的に cozy / comfortable を
 // 選んだときはそちらが勝つ。同じ詳細度の属性セレクタなので、ブロックの順序がその前提を決める。
+describe('shell.css の .main-row (issue 0213)', () => {
+  it('standard では縦積みで、workbench では右配置は row、下配置 (.drawer-bottom) は column になる', () => {
+    expect(declarationOf('.main-row', 'flex-direction')).toBe('column');
+    expect(declarationOf('.main-row', 'flex')).toBe('1');
+    expect(declarationOf('.main-row', 'min-height')).toBe('0');
+    expect(declarationOf("[data-layout='workbench'] .main-row", 'flex-direction')).toBe('row');
+    expect(
+      declarationOf("[data-layout='workbench'] .main-row.drawer-bottom", 'flex-direction'),
+    ).toBe('column');
+  });
+});
+
 describe('tokens.css の Layout と密度の順序', () => {
   it("[data-layout='workbench'] のブロックは [data-density] のブロックより前にある", () => {
     const source = tokens.replace(/\/\*[\s\S]*?\*\//g, '');

@@ -430,6 +430,8 @@
   - @sfuruya0612
 - [ADD] Web の Layout = Workbench で、AWS / Google Cloud の一覧の上段 (サービス名・統計カード・絞り込みチップの 3 段) を 36px の 1 行にまとめる (統計は「8 Resources · 6 Running · …」の要約の文字になり、収まらない分は省略して全文はツールチップに出す。絞り込みチップは同じ行の右側。ECS のタスク数のグラフは折りたたみ (既定は閉) にする。Standard の DOM と見た目は変わらない。docs/issues/closed/0212)
   - @sfuruya0612
+- [ADD] Web の Layout = Workbench で、Drawer をオーバーレイではなく表の右 (または下) に並ぶ docked なペインにする (backdrop が無く、表と詳細を同時に操作できる。ドラッグで幅 / 高さを変えられ、Standard と同じキーで保存される。分割中は各ペインの中に収まる。ESC で閉じる。Standard の Drawer は変わらない。docs/issues/closed/0213)
+  - @sfuruya0612
 
 ### misc
 

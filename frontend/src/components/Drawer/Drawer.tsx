@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import type { BaseRow, DrawerPos } from '../../types/common';
 import { DrawerFrame } from './DrawerFrame';
+import { useTweaks } from '../../hooks/useTweaks';
 import { AwsIcons } from '../icons/AwsIcons';
 import { GcpIcons } from '../icons/GcpIcons';
 import { Icons } from '../icons/Icons';
@@ -107,6 +108,8 @@ export function Drawer({
 }: DrawerProps) {
   const [tab, setTab] = useState('Overview');
   const open = !!resource;
+  // Layout = workbench では docked (表の右 / 下に列として並ぶ)。issue 0213
+  const mode = useTweaks().tweaks.layout === 'workbench' ? 'docked' : 'overlay';
 
   useEffect(() => {
     if (resource) {
@@ -123,6 +126,7 @@ export function Drawer({
     <DrawerFrame
       open={open}
       position={position}
+      mode={mode}
       contained={contained}
       closeOnEscape={closeOnEscape}
       onClose={onClose}

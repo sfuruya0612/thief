@@ -97,6 +97,44 @@
      ここでは再宣言しない (分割前の式 100% + 16px と等価) */
 }
 
+/* Layout = workbench (issue 0213): Drawer を .main-row の中で表の右 (または下) に列として並べる
+   docked。流れの中 (position: relative、transform 無し、backdrop 無し) にあり、閉じているときは
+   DrawerFrame が描画しないので閉じ位置の計算は無い。分割中もペインの .main-row に収まるため
+   contained は使わない。幅 / 高さの inline 指定 (cloudlens:drawerSize) は overlay と共有し、
+   上限はペインの 85%。.drawer の top / right / bottom は relative では位置をずらすので inset で解く。 */
+.drawer.docked {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  /* 分割中の狭いペインでは 60% に抑える (1 ペインでは 380px) */
+  width: min(380px, 60%);
+  max-width: 85%;
+  height: auto;
+  max-height: none;
+  border: 0;
+  border-left: 1px solid var(--line-2);
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+  z-index: auto;
+}
+.drawer.docked.pos-bottom {
+  width: auto;
+  max-width: none;
+  height: 40%;
+  max-height: 85%;
+  border-left: 0;
+  border-top: 1px solid var(--line-2);
+  transform: none;
+}
+.drawer.docked .dh {
+  padding: 10px 14px 8px;
+}
+.drawer.docked .dbody {
+  padding: 12px 14px 24px;
+}
+
 /* Resize handles */
 .drawer .resize-handle {
   position: absolute;

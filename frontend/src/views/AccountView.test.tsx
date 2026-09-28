@@ -601,6 +601,27 @@ describe('AccountView の一覧の上段 (Layout = workbench、issue 0212)', () 
     expect(main.querySelector(':scope > .facets')).toBeNull();
   });
 
+  it('表と Drawer は両レイアウトで .main-row の中にあり、workbench で行を選ぶと docked で開く', () => {
+    setLayout('standard');
+    const standard = renderService('ec2');
+    const row = standard.container.querySelector('.main-row');
+    expect(row).not.toBeNull();
+    expect(row!.querySelector(':scope > .table-wrap')).not.toBeNull();
+    expect(row!.querySelector(':scope > .drawer')).not.toBeNull();
+    expect(row!.querySelector(':scope > .drawer.docked')).toBeNull();
+    expect(row!.classList.contains('drawer-bottom')).toBe(false);
+    standard.unmount();
+
+    setLayout('workbench');
+    const { container } = renderService('ec2');
+    expect(container.querySelector('.main-row > .drawer')).toBeNull();
+    fireEvent.click(container.querySelector('tbody tr')!);
+    const drawer = container.querySelector('.main-row > .drawer.docked.open');
+    expect(drawer).not.toBeNull();
+    expect(drawer!.querySelector('.dh h2')?.textContent).toContain('web-01');
+    expect(container.querySelector('.drawer-backdrop')).toBeNull();
+  });
+
   it('workbench の ECS ではタスク数のグラフが既定で閉じた details (.panel-collapsible) に入る', () => {
     setLayout('workbench');
     const { container } = renderService('ecs');

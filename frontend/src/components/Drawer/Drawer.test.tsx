@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Drawer } from './Drawer';
 import type { BaseRow } from '../../types/common';
 import { resetTerminalSessionsForTest, useTerminalSessions } from '../../hooks/useTerminalSessions';
+import { resetTweaksForTest } from '../../hooks/useTweaks';
+import { STORAGE_KEY } from '../../lib/storage';
 
 const RESOURCE: BaseRow = {
   id: 'i-0123456789abcdef0',
@@ -45,6 +47,49 @@ describe('Drawer と DrawerFrame の合成', () => {
     const closed = renderDrawer({ resource: null });
     expect(drawerElement(closed.container).classList.contains('open')).toBe(false);
     expect(closed.container.querySelector('.dh')).toBeNull();
+  });
+});
+
+describe('Drawer の mode (Layout、issue 0213)', () => {
+  function setLayout(layout: 'standard' | 'workbench') {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tweaks: {
+          theme: 'light',
+          density: 'compact',
+          accent: 'green',
+          drawerPos: 'right',
+          lang: 'ja',
+          layout,
+        },
+      }),
+    );
+    resetTweaksForTest();
+  }
+
+  afterEach(() => {
+    localStorage.clear();
+    resetTweaksForTest();
+  });
+
+  it('workbench では docked を DrawerFrame に渡し (backdrop 無し、contained は付かない)、閉じると描画しない', () => {
+    setLayout('workbench');
+    const opened = renderDrawer({ contained: true });
+    const drawer = drawerElement(opened.container);
+    expect(drawer.classList.contains('docked')).toBe(true);
+    expect(drawer.classList.contains('contained')).toBe(false);
+    expect(opened.container.querySelector('.drawer-backdrop')).toBeNull();
+
+    const closed = renderDrawer({ resource: null });
+    expect(closed.container.querySelector('.drawer')).toBeNull();
+  });
+
+  it('standard では overlay のまま (docked が付かず、backdrop がある)', () => {
+    setLayout('standard');
+    const { container } = renderDrawer();
+    expect(drawerElement(container).classList.contains('docked')).toBe(false);
+    expect(container.querySelector('.drawer-backdrop')).not.toBeNull();
   });
 });
 

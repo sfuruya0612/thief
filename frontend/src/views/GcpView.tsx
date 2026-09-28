@@ -123,25 +123,29 @@ function GcpRowsPanel<TRow extends BaseRow>({
 
       {!workbench && facets}
 
-      <DataTable
-        rows={filtered}
-        columns={columns}
-        onSelect={(r) => onSelectId(r.id)}
-        selectedId={selectedId}
-        isLoading={isLoading}
-      />
+      {/* 表と Drawer を .main-row で包む (issue 0213)。standard では縦積み (overlay の Drawer は
+          流れの外)、workbench では docked の Drawer が右 / 下に列として並ぶ。 */}
+      <div className={`main-row${drawerPos === 'bottom' ? ' drawer-bottom' : ''}`}>
+        <DataTable
+          rows={filtered}
+          columns={columns}
+          onSelect={(r) => onSelectId(r.id)}
+          selectedId={selectedId}
+          isLoading={isLoading}
+        />
 
-      <Drawer
-        resource={selected}
-        service={service}
-        profile={projectId}
-        region={selected?.region ?? ''}
-        position={drawerPos}
-        overviewRows={selected ? overviewRows(selected) : []}
-        contained={contained}
-        closeOnEscape={closeOnEscape}
-        onClose={() => onSelectId(null)}
-      />
+        <Drawer
+          resource={selected}
+          service={service}
+          profile={projectId}
+          region={selected?.region ?? ''}
+          position={drawerPos}
+          overviewRows={selected ? overviewRows(selected) : []}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
+          onClose={() => onSelectId(null)}
+        />
+      </div>
     </div>
   );
 }

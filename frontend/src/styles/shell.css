@@ -753,6 +753,26 @@
   overflow: hidden;
   position: relative;
 }
+/* 表 (.table-wrap) と Drawer を包む (issue 0213)。standard では縦積みで従来と同じ
+   (overlay の Drawer は fixed / absolute で流れの外。contained の offsetParent は .main のまま)。
+   workbench では docked の Drawer が右 (row) か、下配置 (.drawer-bottom) なら下 (column) に
+   列として並ぶ。 */
+.main-row {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.main-row > .table-wrap {
+  min-width: 0;
+}
+[data-layout='workbench'] .main-row {
+  flex-direction: row;
+}
+[data-layout='workbench'] .main-row.drawer-bottom {
+  flex-direction: column;
+}
 
 .toolbar {
   display: flex;
@@ -818,9 +838,10 @@
   color: var(--text-3);
   font-size: 11.5px;
 }
+/* 収まらないときは要約 (全文は title にある) から先に縮め、先頭の 2〜3 項目は残す */
 .panel-bar .stats-inline {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 3 auto;
+  min-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

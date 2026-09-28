@@ -229,3 +229,80 @@ describe('DrawerFrame の開閉クラスと transform の定義元', () => {
     expect(drawer.style.transform).toBe('');
   });
 });
+
+describe('DrawerFrame の docked (Layout = workbench、issue 0213)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  function stubContainingBlock(el: HTMLElement, rect: DOMRect) {
+    const block = document.createElement('div');
+    block.getBoundingClientRect = () => rect;
+    Object.defineProperty(el, 'offsetParent', { value: block, configurable: true });
+  }
+
+  it('docked で開くと .drawer に docked と open が付き、backdrop を描画せず、contained は付かない', () => {
+    const { container } = renderFrame({ mode: 'docked', contained: true });
+    const drawer = drawerElement(container);
+    expect(drawer.classList.contains('docked')).toBe(true);
+    expect(drawer.classList.contains('open')).toBe(true);
+    expect(drawer.classList.contains('contained')).toBe(false);
+    expect(drawer.classList.contains('pos-bottom')).toBe(false);
+    expect(container.querySelector('.drawer-backdrop')).toBeNull();
+    expect(drawer.querySelector('.resize-handle.rh-left')).not.toBeNull();
+    expect(container.querySelector('[data-testid="body"]')).not.toBeNull();
+  });
+
+  it('docked の下配置は pos-bottom と上側のリサイズハンドルを持つ', () => {
+    const { container } = renderFrame({ mode: 'docked', position: 'bottom' });
+    const drawer = drawerElement(container);
+    expect(drawer.classList.contains('docked')).toBe(true);
+    expect(drawer.classList.contains('pos-bottom')).toBe(true);
+    expect(drawer.querySelector('.resize-handle.rh-top')).not.toBeNull();
+  });
+
+  it('docked で閉じているときは何も描画しない', () => {
+    const { container } = renderFrame({ mode: 'docked', open: false });
+    expect(container.querySelector('.drawer')).toBeNull();
+    expect(container.querySelector('.drawer-backdrop')).toBeNull();
+  });
+
+  it('既定の mode は overlay で、閉じていても .drawer と backdrop を描画する (従来どおり)', () => {
+    const { container } = renderFrame({ open: false });
+    expect(container.querySelector('.drawer')).not.toBeNull();
+    expect(container.querySelector('.drawer-backdrop')).not.toBeNull();
+  });
+
+  it('docked の右配置のリサイズは包含ブロックの矩形を基準にし、端の 8px を引かない', () => {
+    const { container } = renderFrame({ mode: 'docked', position: 'right' });
+    const drawer = drawerElement(container);
+    stubContainingBlock(drawer, { left: 100, top: 50, width: 1000, height: 800 } as DOMRect);
+
+    fireEvent.pointerDown(drawer.querySelector('.resize-handle')!);
+    fireEvent(document, new MouseEvent('pointermove', { clientX: 300 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    // 1000 - (300 - 100)。overlay (contained) なら 8px を引いて 792 になる
+    expect(drawer.style.width).toBe('800px');
+    expect(JSON.parse(localStorage.getItem('cloudlens:drawerSize')!).width).toBe(800);
+  });
+
+  it('docked の下配置のリサイズは包含ブロックの高さの 85% を上限にする', () => {
+    const { container } = renderFrame({ mode: 'docked', position: 'bottom' });
+    const drawer = drawerElement(container);
+    stubContainingBlock(drawer, { left: 0, top: 0, width: 1000, height: 600 } as DOMRect);
+
+    fireEvent.pointerDown(drawer.querySelector('.resize-handle')!);
+    fireEvent(document, new MouseEvent('pointermove', { clientY: 0 }));
+    fireEvent(document, new MouseEvent('pointerup'));
+
+    expect(drawer.style.height).toBe('510px'); // 600 * 0.85
+  });
+
+  it('docked でも open 中は Escape で onClose が呼ばれる', () => {
+    const onClose = vi.fn();
+    renderFrame({ mode: 'docked', onClose });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
