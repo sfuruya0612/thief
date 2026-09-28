@@ -8,11 +8,16 @@
     "configFailed": "設定を取得できないため実行できません",
     "configLoading": "設定を取得中です",
     "unsupportedFormat": "SQL 検索の対象外の形式です",
-    "tooLarge": "サイズ上限 ({{limit}}) を超えるオブジェクトは SQL 検索できません"
+    "tooLarge": "サイズ上限 ({{limit}}) を超えるオブジェクトは SQL 検索できません",
+    "noneSelected": "オブジェクトを選択してください",
+    "mixedFormats": "形式の異なるオブジェクトはまとめて検索できません",
+    "tooManyFiles": "一度に選択できるオブジェクトは {{max}} 件までです",
+    "totalTooLarge": "選択したオブジェクトの合計サイズが上限 ({{limit}}) を超えています"
   },
   "drawerObjectBrowser": {
     "openPreview": "プレビューを開く",
     "openQuery": "オブジェクトに SQL を実行",
+    "openQuerySelected": "選択したオブジェクトに SQL を実行",
     "openFolder": "{{name}} を開く",
     "search": "検索",
     "breadcrumbRoot": "ルート",
@@ -20,7 +25,10 @@
     "modeFlat": "フラット",
     "truncatedNotice": "取得件数が上限 (1000 件) に達したため一部のみ表示しています。prefix で絞り込んで再検索してください。",
     "truncatedNoticeHierarchy": "取得件数が上限 (1000 件) に達したため一部のみ表示しています。フォルダを開くか、検索欄で絞り込んでください。",
-    "selectOrDropFile": "ファイルを選択またはドロップ"
+    "selectOrDropFile": "ファイルを選択またはドロップ",
+    "querySelected": "選択した {{count}} 件に Query",
+    "selectedCount": "{{count}} 件選択中",
+    "selectionClamped": "{{count}} 件選択中 (上限 {{max}} 件)"
   },
   "drawerObjectPreview": {
     "overwriteConfirm": "{{fileName}} を上書きします。よろしいですか？",
@@ -31,6 +39,7 @@
   },
   "drawerObjectQuery": {
     "title": "Query: {{fileName}}",
+    "titleMultiple": "Query: {{count}} 件のオブジェクト",
     "ingesting": "取り込み中 {{written}} / {{total}} ({{percent}}%)",
     "ingestingUnknownTotal": "取り込み中 {{written}}",
     "run": "実行",

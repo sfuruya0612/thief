@@ -126,7 +126,8 @@ export interface ObjectListEnvelopeRaw<T> {
 }
 
 // GET /api/config のバックエンド JSON 形状。frontend が参照する実行時設定を返す。
-// object_query_max_bytes はオブジェクト SQL 検索が取り込める 1 オブジェクトのサイズ上限 (バイト)。
+// object_query_max_bytes はオブジェクト SQL 検索が 1 回の検索で取り込めるオブジェクトの
+// 合計サイズの上限 (バイト)。
 export interface ClientConfigRaw {
   object_query_max_bytes: number;
 }

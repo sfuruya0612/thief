@@ -9,9 +9,14 @@
 // パンくずで移動する。フラットモード (delimiter なし) は今いるフォルダ以下の全階層を
 // 平らに出す (issue 0208 の複数オブジェクト選択で使う)。
 //
-// Query ボタンはオブジェクト 1 つを DuckDB Wasm に取り込んで SQL を実行する (docs/issues/0196)。
+// Query ボタンはオブジェクトを DuckDB Wasm に取り込んで SQL を実行する (docs/issues/0196)。
 // 押せる条件は対象形式・サイズ上限以下・設定の取得完了・ブラウザ対応の 4 つで、押せない行は
 // title に理由を出す。押下すると一覧を置き換えて DrawerObjectQuery を表示する。
+//
+// 複数選択は DataTable のチェックボックス列を selection で制御化して行う (docs/issues/0208)。
+// 選べるのは Query 可能なオブジェクト行だけで、選べる行が 1 つも無い一覧 (フォルダだけの
+// 階層など) にはチェックボックスが出ない。選択は表示中の行との積で解釈し、件数は
+// OBJECT_QUERY_MAX_FILES で打ち切る。
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UseMutationResult } from '@tanstack/react-query';
@@ -25,9 +30,13 @@ import { Loading } from '../Loading';
 import { ApiError } from '../../types/common';
 import { isPreviewEligible, previewDisabledReason } from '../../lib/objectPreview';
 import {
+  clampObjectQuerySelection,
   isObjectQuerySupported,
   objectQueryDisabledReason,
+  objectQuerySelectionDisabledReason,
+  OBJECT_QUERY_MAX_FILES,
   type ObjectQueryConfigState,
+  type ObjectQueryTarget,
 } from '../../lib/objectQuery';
 import { objectQueryEngine } from '../../lib/duckdb';
 import { createOpfsIngestor } from '../../lib/opfsIngest';
@@ -155,7 +164,10 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   const [selected, setSelected] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [previewRow, setPreviewRow] = useState<ObjectRow<TRow> | null>(null);
-  const [queryRow, setQueryRow] = useState<ObjectRow<TRow> | null>(null);
+  // queryFiles は SQL 検索に掛けるオブジェクト (行の Query は 1 件、選択の Query は選択分)。
+  const [queryFiles, setQueryFiles] = useState<ObjectQueryTarget[] | null>(null);
+  // selectedIds は一覧の複数選択。表示中の行の id との積で解釈する。
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const previewKey = previewRow ? previewKeyOf(previewRow) : undefined;
   const preview = usePreview(previewKey);
   // オブジェクト SQL 検索のサイズ上限。取得中と取得失敗では上限が分からないため Query を
@@ -199,7 +211,12 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
     [mode, nameOfObject, relativeName],
   );
 
-  const runSearch = () => setCommittedInput(normalizeSearchPrefix(prefixInput));
+  // 検索の確定とモードの切り替え、フォルダの移動では選択を空にする (表示中の行が変わり、
+  // 選択の対象が一覧から消えるため)。
+  const runSearch = () => {
+    setCommittedInput(normalizeSearchPrefix(prefixInput));
+    setSelectedIds(new Set());
+  };
 
   // フォルダ行のクリックとパンくずからの移動。潜った先で前の入力による絞り込みが掛かった
   // ままにならないよう、検索欄と確定済みの入力も空にする。
@@ -207,7 +224,13 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
     setCurrentPrefix(prefix);
     setPrefixInput('');
     setCommittedInput('');
+    setSelectedIds(new Set());
   }, []);
+
+  const changeMode = (next: ObjectBrowserMode) => {
+    setMode(next);
+    setSelectedIds(new Set());
+  };
 
   const rows = useMemo<ObjectBrowserRow<TRow>[]>(() => {
     const folderRows: ObjectFolderRow[] = (data?.prefixes ?? []).map((prefix) => ({
@@ -228,6 +251,59 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
   }, [data, toTableRow, mode, currentPrefix, nameOfObject]);
 
   const objectCount = useMemo(() => rows.filter((row) => row.kind === 'object').length, [rows]);
+
+  // isSelectable は行にチェックボックスを描くかどうか。Query 可能なオブジェクト行だけを
+  // 選べる (フォルダ行と Query 不可の行は選べない)。設定の取得中と取得失敗、ブラウザ非対応
+  // では全行が選べなくなる。
+  const isSelectable = useCallback(
+    (row: ObjectBrowserRow<TRow>): boolean =>
+      row.kind === 'object' &&
+      objectQueryDisabledReason(previewKeyOf(row), sizeOf(row), configState, browserSupported) ===
+        '',
+    [browserSupported, configState, previewKeyOf, sizeOf],
+  );
+
+  // 選択は表示中の行との積で解釈する。一覧の変化で消えた id や、選べなくなった行は
+  // 選択から外れる。
+  const selectedObjectRows = useMemo(
+    () =>
+      rows.filter(
+        (row): row is ObjectRow<TRow> =>
+          row.kind === 'object' && isSelectable(row) && selectedIds.has(row.id),
+      ),
+    [isSelectable, rows, selectedIds],
+  );
+  const selectedVisibleIds = useMemo(
+    () => new Set(selectedObjectRows.map((row) => row.id)),
+    [selectedObjectRows],
+  );
+  const selectedTargets = useMemo(
+    () =>
+      selectedObjectRows.map((row) => ({
+        key: previewKeyOf(row),
+        url: downloadHref(row),
+        size: sizeOf(row),
+      })),
+    [downloadHref, previewKeyOf, selectedObjectRows, sizeOf],
+  );
+  const selectionDisabledReason = objectQuerySelectionDisabledReason(
+    selectedTargets,
+    configState,
+    browserSupported,
+  );
+  const selectionCountLabel =
+    selectedTargets.length >= OBJECT_QUERY_MAX_FILES
+      ? t('drawerObjectBrowser.selectionClamped', {
+          count: selectedTargets.length,
+          max: OBJECT_QUERY_MAX_FILES,
+        })
+      : t('drawerObjectBrowser.selectedCount', { count: selectedTargets.length });
+
+  // 選択の変更は毎回上限で打ち切る。全選択では DataTable が渡す表示順、1 行のチェックでは
+  // 既存の選択の後ろに新しい id が足された順になり、挿入順の先頭 OBJECT_QUERY_MAX_FILES 件が残る。
+  const onSelectionChange = useCallback((next: Set<string>) => {
+    setSelectedIds(clampObjectQuerySelection(next, OBJECT_QUERY_MAX_FILES));
+  }, []);
 
   // パンくず (ルートと各階層)。クリックするとその階層へ戻る。
   const breadcrumb = useMemo(() => {
@@ -298,7 +374,7 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
               size="sm"
               disabled={queryReason !== ''}
               title={queryReason || t('drawerObjectBrowser.openQuery')}
-              onClick={() => setQueryRow(r)}
+              onClick={() => setQueryFiles([{ key, url: downloadHref(r), size }])}
             >
               Query
             </Button>
@@ -361,17 +437,15 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
     );
   }
 
-  if (queryRow && maxBytes !== undefined) {
+  if (queryFiles !== null && maxBytes !== undefined) {
     return (
       <DrawerObjectQuery
-        fileName={previewKeyOf(queryRow)}
-        url={downloadHref(queryRow)}
+        files={queryFiles}
         maxBytes={maxBytes}
-        size={sizeOf(queryRow)}
         profile={profile}
         engine={objectQueryEngine}
         createIngestor={createOpfsIngestor}
-        onClose={() => setQueryRow(null)}
+        onClose={() => setQueryFiles(null)}
       />
     );
   }
@@ -417,10 +491,10 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
             {t('drawerObjectBrowser.search')}
           </Button>
         </span>
-        {/* トグルは今いるフォルダと検索欄の入力を変えない */}
+        {/* トグルは今いるフォルダと検索欄の入力を変えない (選択は表示中の行との積なので空にする) */}
         <div className="seg">
           {(['hierarchy', 'flat'] as const).map((m) => (
-            <button key={m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>
+            <button key={m} className={mode === m ? 'active' : ''} onClick={() => changeMode(m)}>
               {t(
                 m === 'hierarchy'
                   ? 'drawerObjectBrowser.modeHierarchy'
@@ -429,6 +503,18 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="s3-selection-row">
+        <span className="muted">{selectionCountLabel}</span>
+        <Button
+          size="sm"
+          disabled={selectionDisabledReason !== ''}
+          title={selectionDisabledReason || t('drawerObjectBrowser.openQuerySelected')}
+          onClick={() => setQueryFiles(selectedTargets)}
+        >
+          {t('drawerObjectBrowser.querySelected', { count: selectedTargets.length })}
+        </Button>
       </div>
 
       {data?.truncated && (
@@ -493,6 +579,11 @@ export function DrawerObjectBrowser<TObject, TRow extends { id: string }>({
           columns={columns}
           onSelect={() => {}}
           selectedId={null}
+          selection={{
+            selected: selectedVisibleIds,
+            onChange: onSelectionChange,
+            isSelectable,
+          }}
           rowClassName={(r) =>
             r.kind === 'folder' || isPreviewEligible(previewKeyOf(r), sizeOf(r))
               ? undefined

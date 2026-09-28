@@ -39,8 +39,9 @@ const (
 
 	DefaultDatadogOAuthCLIRedirectURI = "http://127.0.0.1:8400/callback"
 
-	// DefaultObjectQueryMaxBytes は frontend のオブジェクト SQL 検索が取り込める
-	// オブジェクトのサイズ上限 (1 GiB)。THIEF_OBJECT_QUERY_MAX_BYTES で上書きする。
+	// DefaultObjectQueryMaxBytes は frontend のオブジェクト SQL 検索が 1 回の検索で
+	// 取り込めるオブジェクトの合計サイズの上限 (1 GiB)。THIEF_OBJECT_QUERY_MAX_BYTES で
+	// 上書きする。
 	DefaultObjectQueryMaxBytes int64 = 1 << 30
 )
 
@@ -76,7 +77,8 @@ type Config struct {
 	S3PathStyle bool `yaml:"-"`
 
 	// ObjectQueryMaxBytes は frontend のオブジェクト SQL 検索 (S3 / GCS のオブジェクトを
-	// DuckDB Wasm に取り込む機能) が取り込める 1 オブジェクトのサイズ上限 (バイト)。
+	// DuckDB Wasm に取り込む機能) が 1 回の検索で取り込めるオブジェクトの合計サイズの
+	// 上限 (バイト)。1 件だけを選んだときはそのオブジェクトのサイズが合計になる。
 	// THIEF_OBJECT_QUERY_MAX_BYTES で上書きし、GET /api/config で frontend へ渡す。
 	// 設定ファイル (YAML) からは読まない (yaml:"-")。設定経路を 1 つに保つためである。
 	ObjectQueryMaxBytes int64 `yaml:"-"`

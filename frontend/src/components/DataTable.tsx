@@ -1,9 +1,18 @@
 // tables.jsx DataTable の汎用化移植
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { filterText, type ColumnDef } from './tables/columns';
 import { Loading } from './Loading';
 import { useColumnResize } from '../hooks/useColumnResize';
+
+// DataTableSelection は行のチェックボックス列を外から制御するための props。
+// 渡した一覧では選択状態を呼び出し側が持ち、渡さない一覧は従来どおり内部 state を使う。
+export interface DataTableSelection<T> {
+  selected: ReadonlySet<string>;
+  onChange: (next: Set<string>) => void;
+  // false の行にはチェックボックスを描かない。
+  isSelectable: (row: T) => boolean;
+}
 
 export interface DataTableProps<T extends { id: string; state?: string }> {
   rows: T[];
@@ -14,6 +23,8 @@ export interface DataTableProps<T extends { id: string; state?: string }> {
   // rowClassName は行ごとに追加する CSS クラスを返す (未指定なら追加しない)。
   // オブジェクトブラウザのプレビュー不可行のグレーアウト等に使う。
   rowClassName?: (row: T) => string | undefined;
+  // selection を渡すとチェックボックス列を制御化する (オブジェクトブラウザの複数選択)。
+  selection?: DataTableSelection<T>;
 }
 
 // ソート可能な値のみを対象にする (それ以外はソート不能として扱う)
@@ -37,6 +48,7 @@ export function DataTable<T extends { id: string; state?: string }>({
   selectedId,
   isLoading,
   rowClassName,
+  selection,
 }: DataTableProps<T>) {
   const { t } = useTranslation('app');
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -92,6 +104,54 @@ export function DataTable<T extends { id: string; state?: string }>({
     });
   };
 
+  // 制御化したチェックボックス (selection) の対象行。列フィルタとソートを適用した表示順の
+  // isSelectable な行 (「選べる行」) がヘッダの全選択・全解除の対象になる。
+  const selectedSet = selection?.selected;
+  const isSelectable = selection?.isSelectable;
+  const selectableRows = useMemo(
+    () => (isSelectable ? sorted.filter((r) => isSelectable(r)) : []),
+    [isSelectable, sorted],
+  );
+  const selectedSelectableCount = useMemo(
+    () => (selectedSet ? selectableRows.filter((r) => selectedSet.has(r.id)).length : 0),
+    [selectableRows, selectedSet],
+  );
+  const headerChecked = selection
+    ? selectableRows.length > 0 && selectedSelectableCount === selectableRows.length
+    : checked.size === filtered.length && filtered.length > 0;
+  const headerIndeterminate = selection ? selectedSelectableCount > 0 && !headerChecked : false;
+  // indeterminate は HTML の属性ではなく DOM のプロパティのため、ref で反映する。
+  const headerCheckboxRef = useCallback(
+    (el: HTMLInputElement | null) => {
+      if (el) el.indeterminate = headerIndeterminate;
+    },
+    [headerIndeterminate],
+  );
+
+  // ヘッダのチェックボックス。制御化した一覧では「選べる行を 1 つも選んでいなければ全選択、
+  // 1 つでも選んでいれば全解除」にする。indeterminate からのクリックが全解除になるため、
+  // 選択の打ち切りで全件を選べない一覧でも全解除に到達できる。
+  const toggleAllChecked = (checkedByClick: boolean) => {
+    if (selection) {
+      selection.onChange(
+        selectedSelectableCount === 0 ? new Set(selectableRows.map((r) => r.id)) : new Set(),
+      );
+      return;
+    }
+    setChecked(checkedByClick ? new Set(filtered.map((r) => r.id)) : new Set());
+  };
+
+  const toggleRow = (id: string, next: boolean) => {
+    if (selection) {
+      const nextSet = new Set(selection.selected);
+      if (next) nextSet.add(id);
+      else nextSet.delete(id);
+      selection.onChange(nextSet);
+      return;
+    }
+    toggleRowChecked(id, next);
+  };
+
   if (isLoading) {
     return (
       <div className="table-wrap">
@@ -112,14 +172,18 @@ export function DataTable<T extends { id: string; state?: string }>({
         <thead>
           <tr ref={theadRowRef}>
             <th>
-              <input
-                type="checkbox"
-                className="cb"
-                checked={checked.size === filtered.length && filtered.length > 0}
-                onChange={(e) =>
-                  setChecked(e.target.checked ? new Set(filtered.map((r) => r.id)) : new Set())
-                }
-              />
+              {/* 制御化した一覧で選べる行が 1 つも表示されていなければ、ヘッダのチェックボックスは
+                  出さない (ヘッダの対象は表示中の選べる行で、対象が無いため)。列フィルタで隠れた
+                  行の選択は残り、フィルタを消せばヘッダから全解除できる。 */}
+              {(!selection || selectableRows.length > 0) && (
+                <input
+                  ref={headerCheckboxRef}
+                  type="checkbox"
+                  className="cb"
+                  checked={headerChecked}
+                  onChange={(e) => toggleAllChecked(e.target.checked)}
+                />
+              )}
             </th>
             {columns.map((c) => (
               <th
@@ -172,12 +236,14 @@ export function DataTable<T extends { id: string; state?: string }>({
               onClick={() => onSelect(r)}
             >
               <td onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  className="cb"
-                  checked={checked.has(r.id)}
-                  onChange={(e) => toggleRowChecked(r.id, e.target.checked)}
-                />
+                {(!selection || selection.isSelectable(r)) && (
+                  <input
+                    type="checkbox"
+                    className="cb"
+                    checked={selection ? selection.selected.has(r.id) : checked.has(r.id)}
+                    onChange={(e) => toggleRow(r.id, e.target.checked)}
+                  />
+                )}
               </td>
               {columns.map((c) => (
                 <td key={c.key} style={{ textAlign: c.align ?? 'left' }}>

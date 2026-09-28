@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { DataTable } from './DataTable';
 import type { ColumnDef } from './tables/columns';
@@ -171,5 +171,149 @@ describe('DataTable', () => {
     fireEvent.change(nameFilter, { target: { value: 'no-such-row' } });
 
     expect(container.textContent).toContain('No resources match current filters');
+  });
+
+  describe('selection (制御化したチェックボックス列)', () => {
+    function renderSelected(
+      selected: ReadonlySet<string>,
+      isSelectable: (row: Row) => boolean,
+      extra: { rows?: Row[]; columns?: ColumnDef<Row>[] } = {},
+    ) {
+      const onChange = vi.fn();
+      const view = render(
+        <DataTable
+          rows={extra.rows ?? rows}
+          columns={extra.columns ?? baseColumns}
+          onSelect={() => {}}
+          selectedId={null}
+          selection={{ selected, onChange, isSelectable }}
+        />,
+      );
+      return { ...view, onChange };
+    }
+
+    it('isSelectable が false の行にはチェックボックスが無く、行のチェックは onChange に集合を渡す', () => {
+      const { container, onChange } = renderSelected(new Set(), (r) => r.id === '1');
+      const bodyRows = container.querySelectorAll('tbody tr');
+
+      expect(bodyRows[0].querySelector('input.cb')).not.toBeNull();
+      expect(bodyRows[1].querySelector('input.cb')).toBeNull();
+
+      fireEvent.click(bodyRows[0].querySelector('input.cb') as HTMLInputElement);
+      expect([...onChange.mock.calls[0][0]]).toEqual(['1']);
+
+      // チェック済みの行を外すと、その id だけが集合から消える
+      const { container: checkedContainer, onChange: onCheckedChange } = renderSelected(
+        new Set(['1', '2']),
+        () => true,
+      );
+      const checkedRows = checkedContainer.querySelectorAll('tbody tr');
+      fireEvent.click(checkedRows[1].querySelector('input.cb') as HTMLInputElement);
+      expect([...onCheckedChange.mock.calls[0][0]]).toEqual(['1']);
+    });
+
+    it('ヘッダは選べる行が 1 つも選ばれていなければ全選択、1 つでも選ばれていれば全解除になる', () => {
+      const { container, onChange } = renderSelected(new Set(), () => true);
+      const header = container.querySelector('thead input.cb') as HTMLInputElement;
+
+      fireEvent.click(header);
+      expect([...onChange.mock.calls[0][0]]).toEqual(['1', '2']);
+
+      // indeterminate (一部だけ選択) からのクリックは全解除になる
+      const partial = renderSelected(new Set(['1']), () => true);
+      const partialHeader = partial.container.querySelector('thead input.cb') as HTMLInputElement;
+      fireEvent.click(partialHeader);
+      expect([...partial.onChange.mock.calls[0][0]]).toEqual([]);
+
+      // 全て選択済みからのクリックも全解除になる
+      const all = renderSelected(new Set(['1', '2']), () => true);
+      const allHeader = all.container.querySelector('thead input.cb') as HTMLInputElement;
+      fireEvent.click(allHeader);
+      expect([...all.onChange.mock.calls[0][0]]).toEqual([]);
+    });
+
+    it('ヘッダは全て選ばれていれば checked、一部なら indeterminate になる', () => {
+      const all = renderSelected(new Set(['1', '2']), () => true);
+      const allHeader = all.container.querySelector('thead input.cb') as HTMLInputElement;
+      expect(allHeader.checked).toBe(true);
+      expect(allHeader.indeterminate).toBe(false);
+
+      const partial = renderSelected(new Set(['1']), () => true);
+      const partialHeader = partial.container.querySelector('thead input.cb') as HTMLInputElement;
+      expect(partialHeader.checked).toBe(false);
+      expect(partialHeader.indeterminate).toBe(true);
+
+      const none = renderSelected(new Set(), () => true);
+      const noneHeader = none.container.querySelector('thead input.cb') as HTMLInputElement;
+      expect(noneHeader.checked).toBe(false);
+      expect(noneHeader.indeterminate).toBe(false);
+    });
+
+    it('全選択は列フィルタとソートを適用した表示順の選べる行を対象にする', () => {
+      const threeRows: Row[] = [
+        { id: '1', name: 'alpha', size: 3 },
+        { id: '2', name: 'apricot', size: 1 },
+        { id: '3', name: 'banana', size: 2 },
+      ];
+      const columns: ColumnDef<Row>[] = [
+        { key: 'name', header: 'Name', width: '50%', cell: (r) => r.name },
+        { key: 'size', header: 'Size', width: '30%', cell: (r) => String(r.size) },
+      ];
+      const { container, onChange } = renderSelected(new Set(), (r) => r.id !== '3', {
+        rows: threeRows,
+        columns,
+      });
+
+      // size 列で昇順ソートすると表示順は apricot(2) → banana(3) → alpha(1) になる
+      fireEvent.click(container.querySelector('th[data-col-key="size"]') as HTMLTableCellElement);
+
+      fireEvent.click(container.querySelector('thead input.cb') as HTMLInputElement);
+      // 選択できない banana (3) を除いた表示順の id になる
+      expect([...onChange.mock.calls[0][0]]).toEqual(['2', '1']);
+    });
+
+    it('選べる行が 1 つも無い一覧にはヘッダのチェックボックスが出ない', () => {
+      const { container } = renderSelected(new Set(), () => false);
+      expect(container.querySelector('thead input.cb')).toBeNull();
+      expect(container.querySelectorAll('tbody input.cb')).toHaveLength(0);
+
+      // 選べる行が 1 つでもあればヘッダに出る
+      const { container: selectableContainer } = renderSelected(new Set(), (r) => r.id === '1');
+      expect(selectableContainer.querySelector('thead input.cb')).not.toBeNull();
+    });
+
+    it('列フィルタで選べる行が全て隠れるとヘッダのチェックボックスが消え、選択は変わらない', () => {
+      const { container, onChange } = renderSelected(new Set(['1']), (r) => r.id === '1');
+      expect((container.querySelector('thead input.cb') as HTMLInputElement).checked).toBe(true);
+
+      // name 列のフィルタで alpha (id 1) を隠すと、選べる行が 1 つも表示されなくなる
+      const nameFilter = container.querySelector(
+        'tr.dt-filter-row input.dt-col-filter',
+      ) as HTMLInputElement;
+      fireEvent.change(nameFilter, { target: { value: 'beta' } });
+      expect(container.querySelector('thead input.cb')).toBeNull();
+      expect(container.querySelectorAll('tbody input.cb')).toHaveLength(0);
+      // 隠れた行の選択は DataTable からは変えない (onChange を呼ばない)
+      expect(onChange).not.toHaveBeenCalled();
+
+      // フィルタを消すとヘッダが戻り、残っている選択で checked になる
+      fireEvent.change(nameFilter, { target: { value: '' } });
+      expect((container.querySelector('thead input.cb') as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('selection を渡さない一覧は内部 state のチェックボックスのまま動く', () => {
+      const { container } = renderTable();
+      const header = container.querySelector('thead input.cb') as HTMLInputElement;
+
+      fireEvent.click(header);
+      const bodyRows = container.querySelectorAll('tbody tr');
+      expect((bodyRows[0].querySelector('input.cb') as HTMLInputElement).checked).toBe(true);
+      expect((bodyRows[1].querySelector('input.cb') as HTMLInputElement).checked).toBe(true);
+      expect(header.checked).toBe(true);
+
+      fireEvent.click(header);
+      expect((bodyRows[0].querySelector('input.cb') as HTMLInputElement).checked).toBe(false);
+      expect((bodyRows[1].querySelector('input.cb') as HTMLInputElement).checked).toBe(false);
+    });
   });
 });

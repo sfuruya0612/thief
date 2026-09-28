@@ -26,6 +26,8 @@
   - @sfuruya0612
 - [ADD] S3 / GCS の Objects タブで、バケットをフォルダの階層として 1 階層ずつ辿れるようにする (backend が区切り文字 `/` で一覧して応答に `prefixes` を足し、既存のエンドポイントにクエリパラメータ `delimiter` (空か `/`) を足す。frontend はフォルダ行とパンくずで辿る階層モードと、従来の平らな一覧のフラットモードをトグルで切り替える。打ち切りは、オブジェクトとフォルダを合わせて 1000 件を超える残りがあるときだけ行い、GCS のちょうど 1000 件のときの打ち切りをやめる。issue 0207)
   - @sfuruya0612
+- [CHANGE] S3 / GCS のオブジェクト SQL 検索で、一覧で選んだ同じ形式の複数のオブジェクトを 1 回の検索に掛けられるようにする (選んだ全オブジェクトを読み取り関数のリスト引数で 1 つの `obj` ビューにし、由来のオブジェクトのキーを `object_key` 列で区別する。1 件の検索でも `object_key` 列が増えるため `SELECT *` の結果の列が変わり、データが `object_key` 列を持つオブジェクトは列名の衝突 (Binder Error) で検索に失敗する。`THIEF_OBJECT_QUERY_MAX_BYTES` は 1 回の検索で取り込む合計サイズの上限になり、1 回に選べるのは 50 件まで、取り込みは並列度 4 で行う。`DataTable` のチェックボックス列を props `selection` で制御化して選択に使う。issue 0208)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 - [FIX] Web の S3 / GCS のオブジェクト SQL 検索が `Cannot read properties of undefined (reading 'fields')` で失敗する不具合を修正する (`AsyncDuckDBConnection.send()` が返す Arrow の `AsyncRecordBatchStreamReader` は `open()` するまで `schema` を持たないのに、`collectQueryResult` が反復の前に `schema.fields` を読んでいた。`QueryBatchReader` に `open()` を加え、`collectQueryResult` が列名を読む前に `open()` するようにする。issue 0206)

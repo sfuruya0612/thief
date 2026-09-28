@@ -34,3 +34,4 @@ thief の設計判断の記録。
 | [0027](0027-issues-untracked.md) | issue を git で管理しない | Superseded by 0028 | 2026-07-12 |
 | [0028](0028-issues-under-docs-tracked.md) | issue を docs/issues/ に移し、git で管理する | Accepted | 2026-09-26 |
 | [0029](0029-object-list-delimiter-hierarchy.md) | オブジェクトの階層は API の区切り文字で 1 階層ずつ取得し、フラットモードを残す | Accepted | 2026-09-28 |
+| [0030](0030-object-query-multiple-objects.md) | オブジェクトの SQL 検索は、同じ形式の複数のオブジェクトを読み取り関数のリスト引数で 1 つのビューにまとめる | Accepted | 2026-09-28 |

@@ -59,6 +59,15 @@
 .s3-prefix-input input {
   width: 100%;
 }
+/* 選択したオブジェクトの件数と「選択した N 件に Query」ボタン */
+.s3-selection-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+}
+
 .s3-truncated-notice {
   margin-bottom: 8px;
   padding: 6px 10px;

@@ -8,11 +8,16 @@
     "configFailed": "Cannot run queries because the configuration could not be loaded",
     "configLoading": "Loading configuration",
     "unsupportedFormat": "This file format is not supported for SQL queries",
-    "tooLarge": "Objects larger than the size limit ({{limit}}) cannot be queried"
+    "tooLarge": "Objects larger than the size limit ({{limit}}) cannot be queried",
+    "noneSelected": "Select at least one object",
+    "mixedFormats": "Objects with different formats cannot be queried together",
+    "tooManyFiles": "You can select up to {{max}} objects at a time",
+    "totalTooLarge": "The total size of the selected objects exceeds the size limit ({{limit}})"
   },
   "drawerObjectBrowser": {
     "openPreview": "Open preview",
     "openQuery": "Run SQL against this object",
+    "openQuerySelected": "Run SQL against the selected objects",
     "openFolder": "Open {{name}}",
     "search": "Search",
     "breadcrumbRoot": "Root",
@@ -20,7 +25,10 @@
     "modeFlat": "Flat",
     "truncatedNotice": "Reached the maximum of 1000 results; only some are shown. Narrow down with a prefix and search again.",
     "truncatedNoticeHierarchy": "Reached the maximum of 1000 results; only some are shown. Open a folder or narrow down with the search field.",
-    "selectOrDropFile": "Select or drop a file"
+    "selectOrDropFile": "Select or drop a file",
+    "querySelected": "Query {{count}} selected objects",
+    "selectedCount": "{{count}} selected",
+    "selectionClamped": "{{count}} selected (limit {{max}})"
   },
   "drawerObjectPreview": {
     "overwriteConfirm": "Overwrite {{fileName}}. Are you sure?",
@@ -31,6 +39,7 @@
   },
   "drawerObjectQuery": {
     "title": "Query: {{fileName}}",
+    "titleMultiple": "Query: {{count}} objects",
     "ingesting": "Loading {{written}} / {{total}} ({{percent}}%)",
     "ingestingUnknownTotal": "Loading {{written}}",
     "run": "Run",
@@ -38,7 +47,7 @@
     "rowCount": "{{rows}} rows",
     "elapsed": "{{ms}} ms",
     "truncated": "Truncated at {{max}} rows. Use LIMIT to narrow the result",
-    "ingestFailed": "Failed to load the object",
+    "ingestFailed": "Ingest failed",
     "unsupported": "This browser does not support writing to OPFS",
     "tooLarge": "Cancelled because the object exceeds the size limit ({{limit}})",
     "quotaExceeded": "Not enough browser storage to start loading the object",

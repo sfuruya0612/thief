@@ -36,14 +36,14 @@ import {
 import type { ObjectQueryEngine, ObjectQueryExtension, ObjectQueryResult } from './objectQuery';
 
 // 接続は 1 つだけ作って共有し、ビューの名前も obj の 1 つだけを使う。そのため、パネルを閉じて
-// すぐ別のオブジェクトを開くと、古いパネルの解放が新しいパネルのビューを消しうる。これは
-// registeredViewPath で防ぐ。
+// すぐ別の検索を開くと、古いパネルの解放が新しいパネルのビューを消しうる。これは
+// registeredViewOwner で防ぐ。
 let dbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
 let connectionPromise: Promise<duckdb.AsyncDuckDBConnection> | null = null;
-// registeredViewPath は obj ビューが今どの OPFS パスに対して作られているか。ビューの名前は
-// obj の 1 つだけなので、パネルを閉じてすぐ別のオブジェクトを開くと、閉じた側の解放が開いた
-// 側のビューを消しうる。解放はこの値と一致するときだけ行う。
-let registeredViewPath: string | null = null;
+// registeredViewOwner は obj ビューが今どのパネル (DrawerObjectQuery の id) のものか。
+// ビューの名前は obj の 1 つだけなので、パネルを閉じてすぐ別の検索を開くと、閉じた側の解放が
+// 開いた側のビューを消しうる。解放はこの値と一致するときだけ行う。
+let registeredViewOwner: string | null = null;
 
 async function instantiateDuckDB(): Promise<duckdb.AsyncDuckDB> {
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
@@ -120,26 +120,31 @@ async function runQuery(sql: string): Promise<ObjectQueryResult> {
 // objectQueryEngine は DrawerObjectQuery が使う共有エンジン。
 export const objectQueryEngine: ObjectQueryEngine = {
   async registerView(
-    opfsPath: string,
-    readSql: string,
+    id: string,
+    opfsPaths: string[],
+    viewSql: string,
     extensions: ObjectQueryExtension[],
   ): Promise<void> {
-    // パスの記録は登録の開始時に行う。CREATE の応答を待ってから記録すると、その往復の間に
+    // 持ち主の記録は登録の開始時に行う。CREATE の応答を待ってから記録すると、その往復の間に
     // 別のパネルの解放が「まだ自分のビューだ」と判定して DROP VIEW を出し、作られた直後の
     // ビューを消す。登録に失敗した場合はビューが無いままこの値が残るが、解放の DROP VIEW は
     // IF EXISTS なので害は無い。
-    registeredViewPath = opfsPath;
+    registeredViewOwner = id;
     const db = await getDuckDB();
-    await db.registerOPFSFileName(opfsPath);
+    // OPFS のファイルは 1 つずつ登録する。全ファイルを登録してからビューを作る。
+    for (const opfsPath of opfsPaths) {
+      await db.registerOPFSFileName(opfsPath);
+    }
     const conn = await getConnection();
-    // 読み取り関数が拡張を要する形式 (json / parquet) だけ、CREATE VIEW の直前に INSTALL と
+    // 読み取り関数が拡張を要する形式 (json / parquet) だけ、ビューの作成前に INSTALL と
     // LOAD を行う。INSTALL は custom_extension_repository (同一オリジン) から取得する。
     // 取得できない場合は DuckDB のエラーがそのまま ErrorBanner に出る。
     for (const extension of extensions) {
       await conn.query(objectQueryInstallSql(extension));
     }
+    // viewSql は CREATE OR REPLACE VIEW obj を含む (objectQueryViewSql が組み立てる)。
     // 解放が届く前に次の登録が走ることがあるため、既存のビューは置き換える。
-    await conn.query(`CREATE OR REPLACE VIEW obj AS SELECT * FROM ${readSql}`);
+    await conn.query(viewSql);
   },
 
   run: runQuery,
@@ -150,18 +155,18 @@ export const objectQueryEngine: ObjectQueryEngine = {
     await conn.cancelSent();
   },
 
-  async dropView(opfsPath: string): Promise<void> {
+  async dropView(id: string): Promise<void> {
     if (!initializedDuckDB()) return;
-    // 別のオブジェクトのビューに置き換わっていたら、その持ち主の解放に任せる。
-    if (registeredViewPath !== opfsPath) return;
-    registeredViewPath = null;
+    // 別のパネルのビューに置き換わっていたら、その持ち主の解放に任せる。
+    if (registeredViewOwner !== id) return;
+    registeredViewOwner = null;
     const conn = await getConnection();
     await conn.query('DROP VIEW IF EXISTS obj');
   },
 
-  async dropFile(opfsPath: string): Promise<void> {
+  async dropFiles(opfsPaths: string[]): Promise<void> {
     const db = initializedDuckDB();
     if (!db) return;
-    await (await db).dropFile(opfsPath);
+    await (await db).dropFiles(opfsPaths);
   },
 };

@@ -2,15 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DrawerS3Objects } from './DrawerS3Objects';
+import type { ObjectIngestRequest } from '../../lib/opfsIngest';
+
+// ingestCalls はモックした ingestor が受け取った取り込み要求 (複数選択で開くファイルの検証)。
+const ingestCalls = vi.hoisted(() => ({ calls: [] as ObjectIngestRequest[] }));
 
 // 取り込み処理 (Worker + OPFS) は jsdom で動かない。実物を使うとアンマウント時の終了指示が
 // 応答を待って 5 秒のタイムアウトに入り、OPFS の残骸削除も警告を出すため、ingestor を
 // モックする。取り込み後の表示は DrawerObjectQuery.test.tsx が検証する。
 vi.mock('../../lib/opfsIngest', () => ({
   createOpfsIngestor: () => ({
-    ingest: vi.fn(() => new Promise<void>(() => {})),
+    ingest: vi.fn((request: ObjectIngestRequest) => {
+      ingestCalls.calls.push(request);
+      return new Promise<void>(() => {});
+    }),
     terminate: vi.fn(async () => {}),
   }),
+  checkObjectQueryQuota: vi.fn(async () => {}),
 }));
 
 // テスト間で QueryClient を独立させるためのラッパー
@@ -120,6 +128,44 @@ function modeButton(container: HTMLElement, label: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+// rowFor は名前の列に text を含む本体行を返す。
+function rowFor(container: HTMLElement, text: string): HTMLTableRowElement {
+  const row = dataRows(container).find((tr) => tr.textContent?.includes(text));
+  if (!row) throw new Error(`row not found: ${text}`);
+  return row;
+}
+
+// checkboxOf は行のチェックボックスを返す (チェックボックスが無い行は null)。
+function checkboxOf(row: HTMLTableRowElement): HTMLInputElement | null {
+  return row.querySelector('input.cb');
+}
+
+// headerCheckbox はヘッダのチェックボックスを返す。
+function headerCheckbox(container: HTMLElement): HTMLInputElement {
+  return container.querySelector('thead input.cb') as HTMLInputElement;
+}
+
+// selectableRowNames はチェックボックスを持つ本体行の名前を表示順に返す。
+function selectableRowNames(container: HTMLElement): string[] {
+  return dataRows(container)
+    .filter((tr) => checkboxOf(tr) !== null)
+    .map((tr) => tr.querySelectorAll('td')[1]?.textContent ?? '');
+}
+
+// querySelectedButton は「選択した N 件に Query」ボタンを返す。
+function querySelectedButton(container: HTMLElement): HTMLButtonElement {
+  const btn = Array.from(container.querySelectorAll('button')).find((b) =>
+    (b.textContent ?? '').startsWith('選択した'),
+  );
+  if (!btn) throw new Error('query selected button not found');
+  return btn as HTMLButtonElement;
+}
+
+// s3Object は一覧の応答 1 件を組み立てる。
+function s3Object(key: string, size = 100) {
+  return { key, size, last_modified: '', storage_class: 'STANDARD', etag: key };
+}
+
 describe('DrawerS3Objects', () => {
   const originalFetch = globalThis.fetch;
   const originalStorage = Object.getOwnPropertyDescriptor(globalThis.navigator, 'storage');
@@ -127,6 +173,7 @@ describe('DrawerS3Objects', () => {
 
   beforeEach(() => {
     globalThis.fetch = vi.fn();
+    ingestCalls.calls.length = 0;
   });
 
   afterEach(() => {
@@ -589,6 +636,273 @@ describe('DrawerS3Objects', () => {
     // 一覧は表示されなくなり、取り込みの進捗表示に切り替わる
     expect(container.textContent).not.toContain('Objects (1)');
     expect(container.textContent).toContain('取り込み中');
+    // 行ごとの Query はその行 1 件だけを取り込む
+    await waitFor(() => {
+      expect(ingestCalls.calls).toHaveLength(1);
+    });
+    expect(ingestCalls.calls[0].url).toContain('key=data.csv');
+    expect(ingestCalls.calls[0].size).toBe(100);
+  });
+
+  it('Query 可能なオブジェクト行にだけチェックボックスが出る', async () => {
+    stubObjectQueryBrowserSupport();
+    mockFetchByUrl(() =>
+      jsonResponse({
+        objects: [
+          s3Object('data.csv'),
+          s3Object('data.parquet'),
+          s3Object('app.log'),
+          s3Object('huge.csv', (1 << 30) + 1),
+        ],
+        prefixes: ['logs/'],
+        truncated: false,
+      }),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('data.parquet');
+    });
+    await waitFor(() => {
+      expect(objectQueryButtons(container)[0]?.disabled).toBe(false);
+    });
+
+    // フォルダ行と Query 不可の行 (対象外の形式、上限超過) にはチェックボックスが無い
+    expect(checkboxOf(rowFor(container, 'logs/'))).toBeNull();
+    expect(checkboxOf(rowFor(container, 'data.csv'))).not.toBeNull();
+    expect(checkboxOf(rowFor(container, 'data.parquet'))).not.toBeNull();
+    expect(checkboxOf(rowFor(container, 'app.log'))).toBeNull();
+    expect(checkboxOf(rowFor(container, 'huge.csv'))).toBeNull();
+    expect(selectableRowNames(container)).toEqual(['data.csv', 'data.parquet']);
+  });
+
+  it('ヘッダのチェックボックスで表示中の Query 可能な行が全選択 / 全解除される', async () => {
+    stubObjectQueryBrowserSupport();
+    mockFetchByUrl(() =>
+      jsonResponse({
+        objects: [s3Object('a.csv', 10), s3Object('b.csv', 20), s3Object('app.log')],
+        prefixes: [],
+        truncated: false,
+      }),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('b.csv');
+    });
+    await waitFor(() => {
+      expect(querySelectedButton(container).disabled).toBe(true);
+    });
+    expect(querySelectedButton(container).textContent).toBe('選択した 0 件に Query');
+    expect(querySelectedButton(container).title).toBe('オブジェクトを選択してください');
+    expect(container.textContent).toContain('0 件選択中');
+
+    fireEvent.click(headerCheckbox(container));
+
+    expect(checkboxOf(rowFor(container, 'a.csv'))?.checked).toBe(true);
+    expect(checkboxOf(rowFor(container, 'b.csv'))?.checked).toBe(true);
+    // Query 不可の行は選ばれない
+    expect(checkboxOf(rowFor(container, 'app.log'))).toBeNull();
+    expect(headerCheckbox(container).checked).toBe(true);
+    expect(container.textContent).toContain('2 件選択中');
+    expect(querySelectedButton(container).disabled).toBe(false);
+    expect(querySelectedButton(container).textContent).toBe('選択した 2 件に Query');
+
+    fireEvent.click(headerCheckbox(container));
+
+    expect(checkboxOf(rowFor(container, 'a.csv'))?.checked).toBe(false);
+    expect(checkboxOf(rowFor(container, 'b.csv'))?.checked).toBe(false);
+    expect(headerCheckbox(container).checked).toBe(false);
+    expect(container.textContent).toContain('0 件選択中');
+    expect(querySelectedButton(container).disabled).toBe(true);
+  });
+
+  it('Query 可能な行が 51 件以上のときは表示順の先頭 50 件で打ち切り、51 件目のチェックでは変わらない', async () => {
+    stubObjectQueryBrowserSupport();
+    const objects = Array.from({ length: 51 }, (_, i) =>
+      s3Object(`file-${String(i).padStart(2, '0')}.csv`),
+    );
+    mockFetchByUrl(() => jsonResponse({ objects, prefixes: [], truncated: false }));
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('file-50.csv');
+    });
+    expect(selectableRowNames(container)).toHaveLength(51);
+
+    fireEvent.click(headerCheckbox(container));
+
+    // 表示順の先頭 50 件だけが選ばれる
+    expect(container.textContent).toContain('50 件選択中 (上限 50 件)');
+    const selectedRows = dataRows(container).filter((tr) => checkboxOf(tr)?.checked);
+    expect(selectedRows).toHaveLength(50);
+    expect(checkboxOf(rowFor(container, 'file-00.csv'))?.checked).toBe(true);
+    expect(checkboxOf(rowFor(container, 'file-49.csv'))?.checked).toBe(true);
+    expect(checkboxOf(rowFor(container, 'file-50.csv'))?.checked).toBe(false);
+    // 一部だけ選択なのでヘッダは indeterminate になる
+    expect(headerCheckbox(container).checked).toBe(false);
+    expect(headerCheckbox(container).indeterminate).toBe(true);
+
+    // 51 件目の行をチェックしても、打ち切りの先頭 50 件のまま変わらない
+    fireEvent.click(checkboxOf(rowFor(container, 'file-50.csv')) as HTMLInputElement);
+
+    expect(container.textContent).toContain('50 件選択中 (上限 50 件)');
+    expect(checkboxOf(rowFor(container, 'file-50.csv'))?.checked).toBe(false);
+    expect(checkboxOf(rowFor(container, 'file-00.csv'))?.checked).toBe(true);
+    expect(checkboxOf(rowFor(container, 'file-49.csv'))?.checked).toBe(true);
+
+    // indeterminate からのヘッダのクリックは全解除になる
+    fireEvent.click(headerCheckbox(container));
+
+    expect(container.textContent).toContain('0 件選択中');
+    expect(dataRows(container).filter((tr) => checkboxOf(tr)?.checked)).toHaveLength(0);
+  });
+
+  it('「選択した N 件に Query」ボタンは 0 件・形式の混在・合計サイズの超過で無効になる', async () => {
+    stubObjectQueryBrowserSupport();
+    mockFetchByUrl(() =>
+      jsonResponse({
+        objects: [
+          s3Object('data.csv'),
+          s3Object('data.parquet'),
+          s3Object('big-a.csv', 600 * 1024 * 1024),
+          s3Object('big-b.csv', 600 * 1024 * 1024),
+        ],
+        prefixes: [],
+        truncated: false,
+      }),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('big-b.csv');
+    });
+    await waitFor(() => {
+      expect(objectQueryButtons(container)[0]?.disabled).toBe(false);
+    });
+
+    // 0 件
+    expect(querySelectedButton(container).disabled).toBe(true);
+    expect(querySelectedButton(container).title).toBe('オブジェクトを選択してください');
+
+    // 形式の混在 (csv と parquet)
+    fireEvent.click(checkboxOf(rowFor(container, 'data.csv')) as HTMLInputElement);
+    fireEvent.click(checkboxOf(rowFor(container, 'data.parquet')) as HTMLInputElement);
+    expect(container.textContent).toContain('2 件選択中');
+    expect(querySelectedButton(container).disabled).toBe(true);
+    expect(querySelectedButton(container).title).toBe(
+      '形式の異なるオブジェクトはまとめて検索できません',
+    );
+
+    // 同じ形式 (csv) でも合計サイズが上限 (1 GiB) を超えると無効
+    fireEvent.click(checkboxOf(rowFor(container, 'data.parquet')) as HTMLInputElement);
+    fireEvent.click(checkboxOf(rowFor(container, 'big-a.csv')) as HTMLInputElement);
+    fireEvent.click(checkboxOf(rowFor(container, 'big-b.csv')) as HTMLInputElement);
+    expect(container.textContent).toContain('3 件選択中');
+    expect(querySelectedButton(container).disabled).toBe(true);
+    expect(querySelectedButton(container).title).toBe(
+      '選択したオブジェクトの合計サイズが上限 (1.0 GiB) を超えています',
+    );
+  });
+
+  it('「選択した N 件に Query」ボタンを押すと選んだ行の files で SQL 検索が開く', async () => {
+    stubObjectQueryBrowserSupport();
+    mockFetchByUrl(() =>
+      jsonResponse({
+        objects: [s3Object('a.csv', 10), s3Object('b.csv', 20)],
+        prefixes: [],
+        truncated: false,
+      }),
+    );
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('b.csv');
+    });
+    await waitFor(() => {
+      expect(objectQueryButtons(container)[0]?.disabled).toBe(false);
+    });
+
+    fireEvent.click(checkboxOf(rowFor(container, 'a.csv')) as HTMLInputElement);
+    fireEvent.click(checkboxOf(rowFor(container, 'b.csv')) as HTMLInputElement);
+    fireEvent.click(querySelectedButton(container));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Query: 2 件のオブジェクト');
+    });
+    expect(container.textContent).toContain('取り込み中');
+    await waitFor(() => {
+      expect(ingestCalls.calls).toHaveLength(2);
+    });
+    expect(ingestCalls.calls.map((request) => request.url)).toEqual([
+      expect.stringContaining('key=a.csv'),
+      expect.stringContaining('key=b.csv'),
+    ]);
+    expect(ingestCalls.calls.map((request) => request.size)).toEqual([10, 20]);
+  });
+
+  it('prefix の確定、フォルダの移動、モードの切り替えで選択が空になる', async () => {
+    stubObjectQueryBrowserSupport();
+    mockFetchByUrl((url) => {
+      const u = new URL(url);
+      const flat = u.searchParams.get('delimiter') !== '/';
+      return jsonResponse({
+        objects: [s3Object('root.csv')],
+        prefixes: flat ? [] : ['logs/'],
+        truncated: false,
+      });
+    });
+
+    const { container } = renderWithQC(
+      <DrawerS3Objects profile="test" region="ap-northeast-1" bucket="my-bucket" />,
+    );
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('root.csv');
+    });
+    await waitFor(() => {
+      expect(checkboxOf(rowFor(container, 'root.csv'))).not.toBeNull();
+    });
+
+    // prefix の確定
+    fireEvent.click(checkboxOf(rowFor(container, 'root.csv')) as HTMLInputElement);
+    expect(container.textContent).toContain('1 件選択中');
+    fireEvent.change(prefixInputOf(container), { target: { value: 'log' } });
+    fireEvent.click(buttonByText(container, '検索'));
+    expect(container.textContent).toContain('0 件選択中');
+
+    // フォルダの移動
+    await waitFor(() => {
+      expect(checkboxOf(rowFor(container, 'root.csv'))).not.toBeNull();
+    });
+    fireEvent.click(checkboxOf(rowFor(container, 'root.csv')) as HTMLInputElement);
+    expect(container.textContent).toContain('1 件選択中');
+    fireEvent.click(folderButton(container, 'logs/'));
+    expect(container.textContent).toContain('0 件選択中');
+
+    // モードの切り替え
+    await waitFor(() => {
+      expect(checkboxOf(rowFor(container, 'root.csv'))).not.toBeNull();
+    });
+    fireEvent.click(checkboxOf(rowFor(container, 'root.csv')) as HTMLInputElement);
+    expect(container.textContent).toContain('1 件選択中');
+    fireEvent.click(modeButton(container, 'フラット'));
+    expect(container.textContent).toContain('0 件選択中');
   });
 
   it('SQL 検索のパネルを開いたまま region を変えると一覧に戻る (解放されないままにしない)', async () => {

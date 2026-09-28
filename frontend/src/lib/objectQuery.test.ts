@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampObjectQuerySelection,
   formatObjectQueryLimit,
   isAbortError,
   ObjectQueryIngestError,
@@ -13,11 +14,15 @@ import {
   objectQueryOpfsPath,
   objectQueryOverLimit,
   objectQueryQuotaExceeded,
-  objectQueryReadSql,
+  objectQuerySelectionDisabledReason,
   objectQueryStorageName,
+  objectQueryViewSql,
   OBJECT_QUERY_EXTENSION_REPOSITORY,
+  OBJECT_QUERY_INGEST_CONCURRENCY,
+  OBJECT_QUERY_MAX_FILES,
   OBJECT_QUERY_MAX_ROWS,
 } from './objectQuery';
+import type { ObjectQueryTarget } from './objectQuery';
 
 const READY_1GIB = { status: 'ready', maxBytes: 1 << 30 } as const;
 
@@ -104,30 +109,63 @@ describe('objectQueryExtensionInitSql', () => {
   });
 });
 
-describe('objectQueryReadSql', () => {
-  it('拡張子から決まる読み取り関数を OPFS パスに適用する', () => {
-    const csv = objectQueryFormat('data.csv');
-    expect(csv && objectQueryReadSql('opfs://thief-query/x.csv', csv)).toBe(
-      "read_csv('opfs://thief-query/x.csv')",
-    );
-    const tsv = objectQueryFormat('data.tsv.gz');
-    expect(tsv && objectQueryReadSql('opfs://thief-query/x.tsv.gz', tsv)).toBe(
-      "read_csv('opfs://thief-query/x.tsv.gz', delim='\\t')",
-    );
-    const jsonl = objectQueryFormat('data.jsonl');
-    expect(jsonl && objectQueryReadSql('opfs://thief-query/x.jsonl', jsonl)).toBe(
-      "read_json_auto('opfs://thief-query/x.jsonl')",
-    );
-    const parquet = objectQueryFormat('data.parquet');
-    expect(parquet && objectQueryReadSql('opfs://thief-query/x.parquet', parquet)).toBe(
-      "read_parquet('opfs://thief-query/x.parquet')",
+describe('objectQueryViewSql', () => {
+  it('複数の OPFS パスをリスト引数にした読み取り関数と object_key 列でビューを組み立てる', () => {
+    const format = objectQueryFormat('data.parquet');
+    const files = [
+      {
+        opfsPath: 'opfs://thief-query/u1.parquet',
+        fileName: 'u1.parquet',
+        key: 'out/part-00000.parquet',
+      },
+      {
+        opfsPath: 'opfs://thief-query/u2.parquet',
+        fileName: 'u2.parquet',
+        key: 'out/part-00001.parquet',
+      },
+    ];
+    expect(format && objectQueryViewSql(files, format)).toBe(
+      'CREATE OR REPLACE VIEW obj AS SELECT * REPLACE (CASE ' +
+        "WHEN object_key LIKE '%u1.parquet' THEN 'out/part-00000.parquet' " +
+        "WHEN object_key LIKE '%u2.parquet' THEN 'out/part-00001.parquet' " +
+        "ELSE object_key END AS object_key) FROM read_parquet(['opfs://thief-query/u1.parquet', 'opfs://thief-query/u2.parquet'], union_by_name = true, filename = 'object_key')",
     );
   });
 
-  it('パス中の単一引用符をエスケープする', () => {
+  it('1 件でもリストの形にし、由来のキーを CASE 式で写す', () => {
     const format = objectQueryFormat('data.csv');
-    expect(format && objectQueryReadSql("opfs://thief-query/it's.csv", format)).toBe(
-      "read_csv('opfs://thief-query/it''s.csv')",
+    const files = [{ opfsPath: 'opfs://thief-query/u1.csv', fileName: 'u1.csv', key: 'data.csv' }];
+    expect(format && objectQueryViewSql(files, format)).toBe(
+      'CREATE OR REPLACE VIEW obj AS SELECT * REPLACE (CASE ' +
+        "WHEN object_key LIKE '%u1.csv' THEN 'data.csv' " +
+        "ELSE object_key END AS object_key) FROM read_csv(['opfs://thief-query/u1.csv'], union_by_name = true, filename = 'object_key')",
+    );
+  });
+
+  it('tsv では delim が付く', () => {
+    const format = objectQueryFormat('data.tsv');
+    const files = [
+      { opfsPath: 'opfs://thief-query/u1.tsv', fileName: 'u1.tsv', key: 'data.tsv' },
+      { opfsPath: 'opfs://thief-query/u2.tsv.gz', fileName: 'u2.tsv.gz', key: 'data.tsv.gz' },
+    ];
+    expect(format && objectQueryViewSql(files, format)).toBe(
+      'CREATE OR REPLACE VIEW obj AS SELECT * REPLACE (CASE ' +
+        "WHEN object_key LIKE '%u1.tsv' THEN 'data.tsv' " +
+        "WHEN object_key LIKE '%u2.tsv.gz' THEN 'data.tsv.gz' " +
+        "ELSE object_key END AS object_key) FROM read_csv(['opfs://thief-query/u1.tsv', 'opfs://thief-query/u2.tsv.gz'], union_by_name = true, filename = 'object_key', delim='\\t')",
+    );
+  });
+
+  it('キーの単一引用符を二重化する', () => {
+    const format = objectQueryFormat('data.csv');
+    const files = [{ opfsPath: 'opfs://thief-query/u1.csv', fileName: 'u1.csv', key: "it's.csv" }];
+    expect(format && objectQueryViewSql(files, format)).toContain("THEN 'it''s.csv'");
+  });
+
+  it('files が空なら組み立てずに例外を投げる', () => {
+    const format = objectQueryFormat('data.csv');
+    expect(() => format && objectQueryViewSql([], format)).toThrow(
+      'objectQueryViewSql: files must not be empty',
     );
   });
 });
@@ -203,6 +241,117 @@ describe('objectQueryDisabledReason', () => {
       'サイズ上限 (1.0 GiB) を超えるオブジェクトは SQL 検索できません',
     );
     expect(objectQueryDisabledReason('data.csv', 1 << 30, READY_1GIB, true)).toBe('');
+  });
+});
+
+describe('objectQuerySelectionDisabledReason', () => {
+  const target = (key: string, size = 100): ObjectQueryTarget => ({
+    key,
+    url: `http://127.0.0.1:8089/download?key=${key}`,
+    size,
+  });
+
+  it('対象形式がそろっていれば押せる', () => {
+    expect(objectQuerySelectionDisabledReason([target('data.csv')], READY_1GIB, true)).toBe('');
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('data.csv'), target('data.csv.gz'), target('other.csv')],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('');
+  });
+
+  it('ブラウザ非対応 → 設定の取得失敗 → 取得中 → 0 件 の順に理由を返す', () => {
+    expect(objectQuerySelectionDisabledReason([target('data.csv')], READY_1GIB, false)).toBe(
+      'このブラウザはオブジェクトの SQL 検索に対応していません',
+    );
+    expect(
+      objectQuerySelectionDisabledReason([target('data.csv')], { status: 'error' }, true),
+    ).toBe('設定を取得できないため実行できません');
+    expect(
+      objectQuerySelectionDisabledReason([target('data.csv')], { status: 'loading' }, true),
+    ).toBe('設定を取得中です');
+    expect(objectQuerySelectionDisabledReason([], READY_1GIB, true)).toBe(
+      'オブジェクトを選択してください',
+    );
+  });
+
+  it('readFunction または delimiter が食い違う組み合わせは形式の混在として拒否する', () => {
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('data.csv'), target('data.tsv')],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('形式の異なるオブジェクトはまとめて検索できません');
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('data.parquet'), target('data.parquet')],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('');
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('data.csv'), target('data.parquet')],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('形式の異なるオブジェクトはまとめて検索できません');
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('data.tsv'), target('data.tsv.gz')],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('');
+  });
+
+  it('件数が OBJECT_QUERY_MAX_FILES を超えると拒否する', () => {
+    const targets = Array.from({ length: OBJECT_QUERY_MAX_FILES }, (_, i) =>
+      target(`data-${i}.csv`),
+    );
+    expect(objectQuerySelectionDisabledReason(targets, READY_1GIB, true)).toBe('');
+    expect(
+      objectQuerySelectionDisabledReason([...targets, target('extra.csv')], READY_1GIB, true),
+    ).toBe('一度に選択できるオブジェクトは 50 件までです');
+  });
+
+  it('合計サイズが上限を超えると拒否し、ちょうどは許す', () => {
+    const half = (1 << 30) / 2;
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('a.csv', half), target('b.csv', half)],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('');
+    expect(
+      objectQuerySelectionDisabledReason(
+        [target('a.csv', half), target('b.csv', half + 1)],
+        READY_1GIB,
+        true,
+      ),
+    ).toBe('選択したオブジェクトの合計サイズが上限 (1.0 GiB) を超えています');
+  });
+});
+
+describe('clampObjectQuerySelection', () => {
+  it('集合の挿入順の先頭 max 件だけを残す', () => {
+    expect([...clampObjectQuerySelection(new Set(['a', 'b', 'c']), 2)]).toEqual(['a', 'b']);
+  });
+
+  it('max 件以下なら同じ要素の集合を返す', () => {
+    expect([...clampObjectQuerySelection(new Set(['a', 'b']), 2)]).toEqual(['a', 'b']);
+    expect([...clampObjectQuerySelection(new Set(), 1)]).toEqual([]);
+  });
+});
+
+describe('OBJECT_QUERY_MAX_FILES / OBJECT_QUERY_INGEST_CONCURRENCY', () => {
+  it('件数の上限は 50、並列度は 4', () => {
+    expect(OBJECT_QUERY_MAX_FILES).toBe(50);
+    expect(OBJECT_QUERY_INGEST_CONCURRENCY).toBe(4);
   });
 });
 

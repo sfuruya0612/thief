@@ -436,7 +436,10 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 - S3 と GCS のオブジェクトをブラウザ内の DuckDB Wasm で SQL 検索できる。
   対象は csv、tsv、json、jsonl、ndjson とそれぞれの gzip 圧縮、および parquet の 11 形式である (`frontend/src/lib/objectQuery.ts`)。
-- 検索できるオブジェクトの大きさの上限は既定 1 GiB とし、`THIEF_OBJECT_QUERY_MAX_BYTES` で変えられる。
+- 一覧で選んだ複数のオブジェクトを 1 回の検索に掛けられる (ADR 0030)。
+  選んだ全オブジェクトが 1 つの `obj` ビューになり、由来のオブジェクトのキーが `object_key` 列に入る。
+  組み合わせられるのは同じ形式のオブジェクトだけで、1 回に選べるのは 50 件までとする (`OBJECT_QUERY_MAX_FILES`)。
+- 1 回の検索で取り込むオブジェクトの合計サイズの上限は既定 1 GiB とし、`THIEF_OBJECT_QUERY_MAX_BYTES` で変えられる。
   上限は `GET /api/config` で frontend に渡す。
 - 結果は 10000 行で打ち切る (`OBJECT_QUERY_MAX_ROWS`)。
 - 結果をグラフで表示できる。
@@ -446,7 +449,10 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 受け入れ基準:
 
 - 20000 行の CSV に `SELECT *` を実行すると、10000 行を表示し、打ち切りを示す。
+- 同じ形式の 3 オブジェクトを選んで `SELECT object_key, count(*) FROM obj GROUP BY object_key` を実行すると、3 行が返り、各行の `object_key` が選んだオブジェクトのキーである。
 - 上限を超える大きさのオブジェクトでは、検索の操作を実行できない。
+- csv と parquet のオブジェクトを同時に選ぶと、選択に対する検索の操作を実行できない。
+- 合計が上限を超える大きさのオブジェクトの組では、選択に対する検索の操作を実行できない。
 - 検索の実行中、ブラウザから DuckDB の拡張の外部配布元へのリクエストが発生しない。
 
 **FR-18 保存クエリ (スニペット)** (Could)

@@ -1,6 +1,10 @@
-// オブジェクト 1 つに対する SQL 検索パネル。DrawerObjectBrowser の一覧を置き換えて表示し、
-// Close で一覧に戻る。取り込み (Worker による OPFS への書き込み) とクエリ実行 (DuckDB) は
-// props のインターフェース越しに行い、テストではモックを差し込む。
+// オブジェクト (1 件または複数) に対する SQL 検索パネル。DrawerObjectBrowser の一覧を
+// 置き換えて表示し、Close で一覧に戻る。取り込み (Worker による OPFS への書き込み) とクエリ
+// 実行 (DuckDB) は props のインターフェース越しに行い、テストではモックを差し込む。
+//
+// 複数ファイルは並列度 OBJECT_QUERY_INGEST_CONCURRENCY で取り込み、全部そろってから
+// obj ビューを 1 つ作る (objectQueryViewSql)。取り込みが終わった ingestor は、OPFS の
+// ファイルと Web Locks のロックを保持したまま解放まで terminate しない。
 //
 // 寿命: OPFS のファイルと obj ビューはアンマウント時に解放する。解放処理は useEffect の
 // クリーンアップに置き、Close ボタンに限らず Drawer の X ボタン、Objects タブから他タブへの
@@ -34,29 +38,31 @@ import {
   objectQueryFormat,
   objectQueryLockName,
   objectQueryOpfsPath,
-  objectQueryReadSql,
+  objectQueryOverLimit,
   objectQueryStorageName,
+  objectQueryViewSql,
   objectQueryExtensions,
   OBJECT_QUERY_DEFAULT_SQL,
+  OBJECT_QUERY_INGEST_CONCURRENCY,
   OBJECT_QUERY_MAX_ROWS,
 } from '../../lib/objectQuery';
 import type {
   ObjectQueryEngine,
   ObjectQueryFormat,
   ObjectQueryResult,
+  ObjectQueryTarget,
 } from '../../lib/objectQuery';
+import { checkObjectQueryQuota } from '../../lib/opfsIngest';
 import type { ObjectIngestProgress, ObjectIngestor } from '../../lib/opfsIngest';
 import { Button } from '../primitives';
 
 export interface DrawerObjectQueryProps {
-  // fileName は元オブジェクトのキー (表示と形式判定に使う)。
-  fileName: string;
-  // url は取り込みに使うダウンロード API の URL。
-  url: string;
-  // maxBytes は取り込めるサイズ上限 (バイト)。設定 (GET /api/config) の取得完了後に確定する。
+  // files は検索対象のオブジェクト。1 件でも配列で渡す。全ファイルの読み取り関数と
+  // 区切り文字は一致していること (選択の可否は objectQuerySelectionDisabledReason が判定する)。
+  files: ObjectQueryTarget[];
+  // maxBytes は 1 回の検索で取り込む合計サイズの上限 (バイト)。設定 (GET /api/config) の
+  // 取得完了後に確定する。
   maxBytes: number;
-  // size は一覧が持つオブジェクトのサイズ (ブラウザの空き容量チェックに使う)。
-  size: number;
   // profile は S3 の SSO 期限切れバナーに使う。GCS には SSO が無いため渡さない。
   profile?: string;
   engine: ObjectQueryEngine;
@@ -64,17 +70,21 @@ export interface DrawerObjectQueryProps {
   onClose: () => void;
 }
 
-// 対象外の形式で開かれた場合の表示。呼び出し側は対象形式の行だけ Query を有効にするため
-// 通常は到達しないが、判定が変わっても安全に閉じられるようにしておく。
+// FALLBACK_FORMAT は対象外の形式で開かれた場合の表示。呼び出し側は対象形式の行だけを
+// 選択できるため通常は到達しないが、判定が変わっても安全に閉じられるようにしておく。
+const FALLBACK_FORMAT: ObjectQueryFormat = { extension: '', readFunction: 'read_csv' };
+
 export function DrawerObjectQuery(props: DrawerObjectQueryProps) {
-  const format = useMemo(() => objectQueryFormat(props.fileName), [props.fileName]);
-  if (!format) {
-    return <ObjectQueryPanel {...props} format={{ extension: '', readFunction: 'read_csv' }} />;
-  }
-  return <ObjectQueryPanel {...props} format={format} />;
+  // ファイルごとの形式。ファイル名に元の拡張子 (.csv.gz など) を保つために使う。
+  const formats = useMemo(
+    () => props.files.map((file) => objectQueryFormat(file.key) ?? FALLBACK_FORMAT),
+    [props.files],
+  );
+  return <ObjectQueryPanel {...props} formats={formats} format={formats[0] ?? FALLBACK_FORMAT} />;
 }
 
 interface ObjectQueryPanelProps extends DrawerObjectQueryProps {
+  formats: ObjectQueryFormat[];
   format: ObjectQueryFormat;
 }
 
@@ -89,24 +99,27 @@ const CHART_TYPE_OPTIONS: { value: QueryResultChartType; labelKey: string }[] = 
 ];
 
 function ObjectQueryPanel({
-  fileName,
-  url,
+  files,
   maxBytes,
-  size,
   profile,
   engine,
   createIngestor,
   onClose,
+  formats,
   format,
 }: ObjectQueryPanelProps) {
   const { t } = useTranslation('drawerStorage');
-  // OPFS 上のファイル名はパネルを開いたときに 1 度だけ決める (再ダウンロードしても同じ名前)。
-  const [id] = useState(() => crypto.randomUUID());
-  const opfsFileName = objectQueryFileName(id, format);
-  const storageName = objectQueryStorageName(opfsFileName);
-  const opfsPath = objectQueryOpfsPath(opfsFileName);
-  const lockName = objectQueryLockName(opfsFileName);
-  const readSql = objectQueryReadSql(opfsPath, format);
+  // パネルの識別子と OPFS 上のファイル名はパネルを開いたときに 1 度だけ決める
+  // (再ダウンロードしても同じ名前)。ファイル名はファイルごとの元の拡張子を保つ。
+  const [panelId] = useState(() => crypto.randomUUID());
+  const [fileIds] = useState(() => files.map(() => crypto.randomUUID()));
+  const fileNames = useMemo(
+    () => fileIds.map((id, i) => objectQueryFileName(id, formats[i])),
+    [fileIds, formats],
+  );
+  const storageNames = useMemo(() => fileNames.map(objectQueryStorageName), [fileNames]);
+  const opfsPaths = useMemo(() => fileNames.map(objectQueryOpfsPath), [fileNames]);
+  const lockNames = useMemo(() => fileNames.map(objectQueryLockName), [fileNames]);
   // 読み取り関数が要する DuckDB の拡張 (json / parquet)。csv / tsv は空配列。
   const extensions = useMemo(() => objectQueryExtensions(format), [format]);
 
@@ -128,21 +141,34 @@ function ObjectQueryPanel({
   // teardown と開始処理は依存を空にした effect から呼ぶため、最新の props を ref で参照する。
   const latestRef = useRef({
     engine,
-    url,
     maxBytes,
-    size,
-    opfsPath,
-    lockName,
-    readSql,
+    files,
+    fileNames,
+    storageNames,
+    lockNames,
+    opfsPaths,
+    format,
     extensions,
+    panelId,
   });
-  latestRef.current = { engine, url, maxBytes, size, opfsPath, lockName, readSql, extensions };
-  const storageNameRef = useRef(storageName);
-  storageNameRef.current = storageName;
+  latestRef.current = {
+    engine,
+    maxBytes,
+    files,
+    fileNames,
+    storageNames,
+    lockNames,
+    opfsPaths,
+    format,
+    extensions,
+    panelId,
+  };
   const createIngestorRef = useRef(createIngestor);
   createIngestorRef.current = createIngestor;
 
-  const ingestorRef = useRef<ObjectIngestor | null>(null);
+  // ingestorsRef は作成済みの ingestor (順番が来たファイルの分だけ)。取り込みが終わった
+  // ingestor もファイルとロックを保持したまま解放まで残る。
+  const ingestorsRef = useRef<ObjectIngestor[]>([]);
   // generation は effect の世代。前の世代の非同期処理が状態を更新しないための識別子。
   const generationRef = useRef(0);
   const disposedRef = useRef(false);
@@ -184,25 +210,125 @@ function ObjectQueryPanel({
     }
   }, []);
 
+  // terminateIngestors は作成済みの ingestor をすべて終了する (ファイルの削除とロックの
+  // 解放)。二重呼び出しでも安全なため、取り込みの失敗時とアンマウント時の両方から呼べる。
+  const terminateIngestors = useCallback(async (): Promise<void> => {
+    const created = ingestorsRef.current;
+    ingestorsRef.current = [];
+    for (const ingestor of created) {
+      try {
+        await ingestor.terminate();
+      } catch (err) {
+        console.warn('failed to terminate the object query worker', err);
+      }
+    }
+  }, []);
+
   const startPipeline = useCallback(
     (generation: number) => {
-      const ingestor = createIngestorRef.current();
-      ingestorRef.current = ingestor;
+      ingestorsRef.current = [];
       return (async () => {
-        const { url, maxBytes, size, opfsPath, lockName, readSql, engine, extensions } =
-          latestRef.current;
-        await ingestor.ingest(
-          { url, storageName: storageNameRef.current, lockName, maxBytes, size },
-          (p) => {
-            if (generationRef.current === generation) setProgress(p);
-          },
+        const {
+          engine,
+          maxBytes,
+          files,
+          fileNames,
+          storageNames,
+          lockNames,
+          opfsPaths,
+          format,
+          extensions,
+          panelId,
+        } = latestRef.current;
+        // obj ビューの定義。全ファイルを読み取り関数のリスト引数で 1 つの表にし、由来の
+        // オブジェクトを object_key 列で区別できるようにする。組み立ては描画時ではなく
+        // 取り込みの前に行い、失敗 (files が空) は取り込みの失敗と同じ経路でエラー表示する。
+        const viewSql = objectQueryViewSql(
+          files.map((file, i) => ({
+            opfsPath: opfsPaths[i],
+            fileName: fileNames[i],
+            key: file.key,
+          })),
+          format,
         );
+        // written / totals はファイルごとの最後の進捗。進捗表示と合計サイズの判定に使う。
+        const written = files.map(() => 0);
+        const totals = files.map<number | null>(() => null);
+        const aggregateProgress = (): ObjectIngestProgress => ({
+          written: written.reduce((sum, n) => sum + n, 0),
+          total: totals.every((total) => total !== null)
+            ? totals.reduce((sum, total) => sum + (total ?? 0), 0)
+            : null,
+        });
+        // 取り込みの前に、選んだ全ファイルの合計サイズで空き容量を 1 回確かめる。ファイル
+        // ごとの確認は OpfsIngestor.ingest が書き込みの直前に行う (書き込みが進んで空きが
+        // 減った後の確認になる)。
+        await checkObjectQueryQuota(files.reduce((sum, file) => sum + file.size, 0));
+        if (disposedRef.current || generationRef.current !== generation) return;
+
+        // 同時に取り込むのは OBJECT_QUERY_INGEST_CONCURRENCY 件まで。順番が来たファイルに
+        // だけ ingestor を作り (待っているファイルには作らない)、1 つ失敗したら待っている
+        // ファイルは始めず、作成済みの ingestor を全部止める。
+        const pending = files.map((_, index) => index);
+        let failure: unknown = null;
+        const runWorker = async (): Promise<void> => {
+          for (;;) {
+            if (failure !== null || disposedRef.current || generationRef.current !== generation) {
+              return;
+            }
+            const index = pending.shift();
+            if (index === undefined) return;
+            try {
+              // ingestor の作成 (Worker の起動) も失敗しうるため try の中で行う。
+              const ingestor = createIngestorRef.current();
+              ingestorsRef.current.push(ingestor);
+              await ingestor.ingest(
+                {
+                  url: files[index].url,
+                  storageName: storageNames[index],
+                  lockName: lockNames[index],
+                  maxBytes,
+                  size: files[index].size,
+                },
+                (p) => {
+                  written[index] = p.written;
+                  totals[index] = p.total;
+                  if (disposedRef.current || generationRef.current !== generation) return;
+                  setProgress(aggregateProgress());
+                },
+              );
+            } catch (err) {
+              // 最初に失敗したエラーだけを残し、作成済みの ingestor を全部止める。
+              if (failure === null) {
+                failure = err;
+                await terminateIngestors();
+              }
+              return;
+            }
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(OBJECT_QUERY_INGEST_CONCURRENCY, files.length) }, () =>
+            runWorker(),
+          ),
+        );
+        if (failure !== null) throw failure;
+        // 一覧のサイズが古い場合の保険。全ファイルの written の合計で上限を確かめ、超えて
+        // いたら全体を失敗させて取り込んだファイルを解放する。
+        const totalWritten = written.reduce((sum, n) => sum + n, 0);
+        if (objectQueryOverLimit(totalWritten, maxBytes)) {
+          await terminateIngestors();
+          throw new ObjectQueryIngestError(
+            'tooLarge',
+            `ingested size is larger than the limit (${totalWritten} > ${maxBytes})`,
+          );
+        }
         if (disposedRef.current || generationRef.current !== generation) return;
         // 登録は解放 (teardown) と直列化する。解放の後に登録が走ると、OPFS のファイルと
         // DuckDB のファイル登録が残る。
         const registered = await enqueueDb(async () => {
           if (disposedRef.current) return false;
-          await engine.registerView(opfsPath, readSql, extensions);
+          await engine.registerView(panelId, opfsPaths, viewSql, extensions);
           return true;
         });
         if (!registered || disposedRef.current || generationRef.current !== generation) return;
@@ -210,21 +336,21 @@ function ObjectQueryPanel({
         await runQuery(OBJECT_QUERY_DEFAULT_SQL, generation);
       })();
     },
-    [enqueueDb, runQuery],
+    [enqueueDb, runQuery, terminateIngestors],
   );
 
   // teardown は OPFS のファイル、ロック、DuckDB の登録と obj ビューを解放する。各段階を
-  // 独立に実行し、どれかが失敗しても Worker への終了指示まで必ず到達させる。
+  // 独立に実行し、どれかが失敗しても作成済みの ingestor の終了まで必ず到達させる。
   const teardown = useCallback(async () => {
     const steps: [string, () => Promise<void>][] = [
       ['cancel the running query', () => enqueueDb(() => latestRef.current.engine.cancelSent())],
       [
         'drop the obj view',
-        () => enqueueDb(() => latestRef.current.engine.dropView(latestRef.current.opfsPath)),
+        () => enqueueDb(() => latestRef.current.engine.dropView(latestRef.current.panelId)),
       ],
       [
-        'unregister the OPFS file',
-        () => enqueueDb(() => latestRef.current.engine.dropFile(latestRef.current.opfsPath)),
+        'unregister the OPFS files',
+        () => enqueueDb(() => latestRef.current.engine.dropFiles(latestRef.current.opfsPaths)),
       ],
     ];
     for (const [label, step] of steps) {
@@ -234,13 +360,8 @@ function ObjectQueryPanel({
         console.warn(`failed to ${label}`, err);
       }
     }
-    try {
-      await ingestorRef.current?.terminate();
-    } catch (err) {
-      console.warn('failed to terminate the object query worker', err);
-    }
-    ingestorRef.current = null;
-  }, [enqueueDb]);
+    await terminateIngestors();
+  }, [enqueueDb, terminateIngestors]);
 
   useEffect(() => {
     const generation = generationRef.current + 1;
@@ -328,10 +449,16 @@ function ObjectQueryPanel({
           percent: progress.total > 0 ? Math.floor((progress.written / progress.total) * 100) : 0,
         });
 
+  // 題名は 1 件ならキー、複数なら件数の文言にする。
+  const title =
+    files.length === 1
+      ? t('drawerObjectQuery.title', { fileName: files[0].key })
+      : t('drawerObjectQuery.titleMultiple', { count: files.length });
+
   return (
     <div className="section">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>{t('drawerObjectQuery.title', { fileName })}</h3>
+        <h3 style={{ margin: 0 }}>{title}</h3>
         <Button size="sm" style={{ marginLeft: 'auto' }} onClick={onClose}>
           Close
         </Button>

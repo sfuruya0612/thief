@@ -172,6 +172,31 @@ describe('DrawerGCSObjects', () => {
     expect(hugeBtn.title).toBe('サイズ上限 (1.0 GiB) を超えるオブジェクトは SQL 検索できません');
   });
 
+  it('Query 可能な行にだけチェックボックスが出て、ヘッダで全選択 / 全解除できる', async () => {
+    const { container } = renderWithQC(<DrawerGCSObjects projectId="p" bucket="my-bucket" />);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('data.csv');
+    });
+    await waitFor(() => {
+      expect(objectQueryButtons(container)[0].disabled).toBe(false);
+    });
+
+    // data.csv だけが Query 可能で、app.log (対象外) と huge.csv (上限超過) は選べない
+    const rows = dataRows(container);
+    expect(rows[0].querySelector('input.cb')).not.toBeNull();
+    expect(rows[1].querySelector('input.cb')).toBeNull();
+    expect(rows[2].querySelector('input.cb')).toBeNull();
+
+    fireEvent.click(container.querySelector('thead input.cb') as HTMLInputElement);
+    expect(container.textContent).toContain('1 件選択中');
+    expect((rows[0].querySelector('input.cb') as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(container.querySelector('thead input.cb') as HTMLInputElement);
+    expect(container.textContent).toContain('0 件選択中');
+    expect((rows[0].querySelector('input.cb') as HTMLInputElement).checked).toBe(false);
+  });
+
   it('初期表示はバケットのルートを階層モードで取得し、フォルダ行を名前の列だけで描く', async () => {
     const fetchMock = mockFetchByUrl(() =>
       jsonResponse({
@@ -214,6 +239,8 @@ describe('DrawerGCSObjects', () => {
       expect(cell.querySelector('a')).toBeNull();
     }
     expect(folderRow.classList.contains('preview-ineligible')).toBe(false);
+    // フォルダ行は選択できない (チェックボックスを描かない)
+    expect(folderRow.querySelector('input.cb')).toBeNull();
   });
 
   it('フォルダ行のクリックで潜り、パンくずで戻る。どちらも検索欄と確定済みの入力が空になる', async () => {

@@ -6,6 +6,14 @@ import i18n from '../i18n';
 // OBJECT_QUERY_MAX_ROWS は 1 クエリで表に出す最大行数。これを超えたら残りを読まずに打ち切る。
 export const OBJECT_QUERY_MAX_ROWS = 10000;
 
+// OBJECT_QUERY_MAX_FILES は 1 回の検索で選べるオブジェクトの件数上限。取り込みが終わった
+// Worker も解放までファイルとロックを保持したまま生きるため、件数に比例して増える
+// Worker・Web Locks のロック・DuckDB 側の OPFS ハンドルを抑える。
+export const OBJECT_QUERY_MAX_FILES = 50;
+
+// OBJECT_QUERY_INGEST_CONCURRENCY は同時に取り込むファイル数の上限。残りは順番を待つ。
+export const OBJECT_QUERY_INGEST_CONCURRENCY = 4;
+
 // OBJECT_QUERY_DEFAULT_SQL は SqlEditor の初期値 (完了後に自動実行するクエリ)。
 export const OBJECT_QUERY_DEFAULT_SQL = 'SELECT * FROM obj LIMIT 100';
 
@@ -90,16 +98,48 @@ export function objectQueryInstallSql(extension: ObjectQueryExtension): string {
   return `INSTALL ${extension}; LOAD ${extension};`;
 }
 
-// objectQueryReadSql は DuckDB の読み取り関数呼び出しを組み立てる。
-// 例: read_csv('opfs://thief-query/<uuid>.csv') / read_csv('opfs://...', delim='\t')
-export function objectQueryReadSql(opfsPath: string, format: ObjectQueryFormat): string {
-  // パスは自前で生成する uuid と拡張子だけだが、SQL 文字列として安全にするため
-  // 単一引用符は二重化する (DuckDB の文字列リテラルのエスケープ規則)。
-  const path = `'${opfsPath.replace(/'/g, "''")}'`;
-  if (format.delimiter !== undefined) {
-    return `${format.readFunction}(${path}, delim='${format.delimiter}')`;
+// ObjectQueryViewFile は obj ビューに読み込むファイル 1 つ分。fileName は OPFS 上のファイル名
+// (uuid + 拡張子) で、DuckDB の filename 列の値の末尾に現れる。key は元オブジェクトのキーで、
+// 由来の判定 (object_key 列) に使う。
+export interface ObjectQueryViewFile {
+  opfsPath: string;
+  fileName: string;
+  key: string;
+}
+
+// escapeObjectQueryLiteral は SQL の文字列リテラルに埋め込む値を安全にする。単一引用符は
+// 二重化する (DuckDB の文字列リテラルのエスケープ規則)。
+function escapeObjectQueryLiteral(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+// objectQueryViewSql は obj ビューの定義 SQL を組み立てる。files は 1 件でもリストで渡し、
+// 読み取り関数のリスト引数で 1 つの表にする。union_by_name = true で列を名前で揃え
+// (分割された出力の一部で列が欠けていても読める)、filename = 'object_key' で由来のパスを
+// object_key 列として足す。値は CASE 式で元オブジェクトのキーへ写す (末尾の後方一致なので
+// DuckDB が返す値の先頭部分の形に依存しない。uuid はファイル間で一意なので誤一致しない)。
+// format は全ファイルで共通 (読み取り関数と区切り文字が一致する組み合わせだけを選べる)。
+// files が空だとリスト引数が空の SQL になるため、組み立ての時点で拒否する。
+export function objectQueryViewSql(
+  files: readonly ObjectQueryViewFile[],
+  format: ObjectQueryFormat,
+): string {
+  if (files.length === 0) {
+    throw new Error('objectQueryViewSql: files must not be empty');
   }
-  return `${format.readFunction}(${path})`;
+  const paths = files.map((f) => `'${escapeObjectQueryLiteral(f.opfsPath)}'`).join(', ');
+  const cases = files
+    .map(
+      (f) =>
+        `WHEN object_key LIKE '%${escapeObjectQueryLiteral(f.fileName)}' THEN '${escapeObjectQueryLiteral(f.key)}'`,
+    )
+    .join(' ');
+  const options = ['union_by_name = true', "filename = 'object_key'"];
+  if (format.delimiter !== undefined) {
+    options.push(`delim='${format.delimiter}'`);
+  }
+  // ELSE object_key は、どの WHEN にも当たらないときに NULL ではなくパスをそのまま出すため。
+  return `CREATE OR REPLACE VIEW obj AS SELECT * REPLACE (CASE ${cases} ELSE object_key END AS object_key) FROM ${format.readFunction}([${paths}], ${options.join(', ')})`;
 }
 
 // objectQueryFileName は OPFS に置くファイル名 (ディレクトリを含まない) を組み立てる。
@@ -197,6 +237,70 @@ export function objectQueryDisabledReason(
   return '';
 }
 
+// ObjectQueryTarget は 1 回の検索に掛けるオブジェクト 1 件。DrawerObjectQuery の
+// files prop と、選択の可否を判定する純関数が共有する。
+export interface ObjectQueryTarget {
+  // key は元オブジェクトのキー (形式判定と表示に使う)。
+  key: string;
+  // url は取り込みに使うダウンロード API の URL。
+  url: string;
+  // size は一覧が持つオブジェクトのサイズ (合計サイズとブラウザの空き容量チェックに使う)。
+  size: number;
+}
+
+// objectQuerySelectionDisabledReason は「選択した N 件に Query」ボタンが押せない理由の文言を
+// 返す (押せる場合は空文字)。判定の順序はブラウザ非対応 → 設定の取得失敗 → 設定の取得中 →
+// 0 件 → 形式の混在 → 件数超過 → 合計サイズ超過。選べる組み合わせは readFunction と
+// delimiter が全て一致するものだけで、.csv と .csv.gz の混在は許す。
+export function objectQuerySelectionDisabledReason(
+  targets: readonly ObjectQueryTarget[],
+  config: ObjectQueryConfigState,
+  browserSupported: boolean,
+): string {
+  if (!browserSupported) {
+    return i18n.t('drawerStorage:objectQuery.browserUnsupported');
+  }
+  if (config.status === 'error') {
+    return i18n.t('drawerStorage:objectQuery.configFailed');
+  }
+  if (config.status === 'loading') {
+    return i18n.t('drawerStorage:objectQuery.configLoading');
+  }
+  if (targets.length === 0) {
+    return i18n.t('drawerStorage:objectQuery.noneSelected');
+  }
+  const first = objectQueryFormat(targets[0].key);
+  if (
+    first === undefined ||
+    targets.some((target) => {
+      const format = objectQueryFormat(target.key);
+      return (
+        format === undefined ||
+        format.readFunction !== first.readFunction ||
+        format.delimiter !== first.delimiter
+      );
+    })
+  ) {
+    return i18n.t('drawerStorage:objectQuery.mixedFormats');
+  }
+  if (targets.length > OBJECT_QUERY_MAX_FILES) {
+    return i18n.t('drawerStorage:objectQuery.tooManyFiles', { max: OBJECT_QUERY_MAX_FILES });
+  }
+  const total = targets.reduce((sum, target) => sum + target.size, 0);
+  if (objectQueryOverLimit(total, config.maxBytes)) {
+    return i18n.t('drawerStorage:objectQuery.totalTooLarge', {
+      limit: formatObjectQueryLimit(config.maxBytes),
+    });
+  }
+  return '';
+}
+
+// clampObjectQuerySelection は集合の挿入順の先頭 max 件だけを残した新しい集合を返す。
+// 一覧の全選択や行のチェックで上限を超えたとき、選択を上限内に保つために使う。
+export function clampObjectQuerySelection(ids: ReadonlySet<string>, max: number): Set<string> {
+  return new Set([...ids].slice(0, max));
+}
+
 // ObjectQueryResult は 1 回のクエリ実行の結果。
 export interface ObjectQueryResult {
   columns: string[];
@@ -209,11 +313,13 @@ export interface ObjectQueryResult {
 // ObjectQueryEngine は DuckDB 側の操作。DrawerObjectQuery はこのインターフェース越しに
 // エンジンを呼び、テストではモックを差し込む。
 export interface ObjectQueryEngine {
-  // registerView は OPFS のファイルを DuckDB に登録し、extensions を INSTALL / LOAD してから
-  // obj ビューを作成する。extensions は objectQueryExtensions が返す読み取り関数の拡張。
+  // registerView は OPFS のファイルをすべて DuckDB に登録し、extensions を INSTALL / LOAD
+  // してから viewSql (obj ビューの定義) を実行する。extensions は objectQueryExtensions が
+  // 返す読み取り関数の拡張。id はパネルの識別子で、obj ビューの持ち主の記録に使う。
   registerView(
-    opfsPath: string,
-    readSql: string,
+    id: string,
+    opfsPaths: string[],
+    viewSql: string,
     extensions: ObjectQueryExtension[],
   ): Promise<void>;
   // run は SQL をストリーム実行し、OBJECT_QUERY_MAX_ROWS 行で打ち切って結果を返す。
@@ -221,12 +327,12 @@ export interface ObjectQueryEngine {
   run(sql: string): Promise<ObjectQueryResult>;
   // cancelSent は実行中のクエリを打ち切る (DB 未初期化なら何もしない)。
   cancelSent(): Promise<void>;
-  // dropView は opfsPath に対して作られた obj ビューを削除する (未作成でも失敗しない)。
-  // obj という名前は 1 つしかないため、別のオブジェクトの登録が始まっていたら何もしない
+  // dropView は id のパネルが作った obj ビューを削除する (未作成でも失敗しない)。
+  // obj という名前は 1 つしかないため、別のパネルの登録が始まっていたら何もしない
   // (閉じたパネルの解放が、後から開いたパネルのビューを消さないようにする)。
-  dropView(opfsPath: string): Promise<void>;
-  // dropFile は DuckDB のファイル登録を解除する (未登録でも失敗しない)。
-  dropFile(opfsPath: string): Promise<void>;
+  dropView(id: string): Promise<void>;
+  // dropFiles は DuckDB のファイル登録を全ファイル分まとめて解除する (未登録でも失敗しない)。
+  dropFiles(opfsPaths: string[]): Promise<void>;
 }
 
 // ObjectQueryIngestErrorKind はブラウザ側 (Worker / OPFS / 容量) 由来の取り込みエラーの種別。

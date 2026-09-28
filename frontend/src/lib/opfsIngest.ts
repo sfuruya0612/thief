@@ -81,6 +81,34 @@ export function createOpfsIngestor(): ObjectIngestor {
   return new OpfsIngestor();
 }
 
+// checkObjectQueryQuota はブラウザの残り容量 (quota - usage) が取り込むサイズに足りなければ
+// ObjectQueryIngestError('quota') を投げる。DrawerObjectQuery が取り込みの前に選んだ全ファイルの
+// 合計サイズで 1 回確かめ、OpfsIngestor もファイルごとに確かめる (書き込みが進んで空きが
+// 減った後の確認になる)。
+export async function checkObjectQueryQuota(size: number): Promise<void> {
+  let estimate: StorageEstimate;
+  try {
+    estimate = await navigator.storage.estimate();
+  } catch (err) {
+    // 空き容量が取得できない場合はチェックを飛ばす (書き込み時の QuotaExceededError で検知する)。
+    console.warn('failed to estimate storage quota', err);
+    return;
+  }
+  if (estimate.quota === undefined || estimate.usage === undefined) {
+    // 値が入らない環境がある。空き容量 0 とみなすと取り込めなくなるので、estimate が
+    // 失敗した場合と同じくチェックを飛ばす。
+    console.warn('storage estimate has no quota or usage');
+    return;
+  }
+  const { quota, usage } = estimate;
+  if (objectQueryQuotaExceeded(quota, usage, size)) {
+    throw new ObjectQueryIngestError(
+      'quota',
+      `not enough storage: quota=${quota} usage=${usage} size=${size}`,
+    );
+  }
+}
+
 // toIngestError は Worker のエラーイベントを表示用のエラーへ変換する。
 function toIngestError(event: Extract<OpfsWriterEvent, { type: 'error' }>): unknown {
   if (event.kind === 'http') {
@@ -120,7 +148,7 @@ class OpfsIngestor implements ObjectIngestor {
   ): Promise<void> {
     if (this.terminated) throw createAbortError();
     // 取り込み前の空き容量チェック。足りなければ Worker を起動しない (ダウンロードを始めない)。
-    await this.checkQuota(request.size);
+    await checkObjectQueryQuota(request.size);
     // 空き容量の確認は待機を伴うため、その間にアンマウントされていることがある。Worker を
     // 起動すると誰も終了指示を送らないまま OPFS のファイルとロックを保持し続けるので、
     // 起動前にもう一度確認して中断する。
@@ -176,30 +204,6 @@ class OpfsIngestor implements ObjectIngestor {
     }
     // 取り込みが未 settle なら中断として返す (await している呼び出し元を解放する)。
     this.settleError(createAbortError());
-  }
-
-  private async checkQuota(size: number): Promise<void> {
-    let estimate: StorageEstimate;
-    try {
-      estimate = await navigator.storage.estimate();
-    } catch (err) {
-      // 空き容量が取得できない場合はチェックを飛ばす (書き込み時の QuotaExceededError で検知する)。
-      console.warn('failed to estimate storage quota', err);
-      return;
-    }
-    if (estimate.quota === undefined || estimate.usage === undefined) {
-      // 値が入らない環境がある。空き容量 0 とみなすと取り込めなくなるので、estimate が
-      // 失敗した場合と同じくチェックを飛ばす。
-      console.warn('storage estimate has no quota or usage');
-      return;
-    }
-    const { quota, usage } = estimate;
-    if (objectQueryQuotaExceeded(quota, usage, size)) {
-      throw new ObjectQueryIngestError(
-        'quota',
-        `not enough storage: quota=${quota} usage=${usage} size=${size}`,
-      );
-    }
   }
 
   private handle(event: OpfsWriterEvent): void {

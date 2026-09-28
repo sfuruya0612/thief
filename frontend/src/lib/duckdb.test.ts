@@ -6,7 +6,8 @@ import { tableFromArrays } from 'apache-arrow';
 // duckdbResult.test.ts が受け持つため、ここでは呼び出しの有無だけを見る。
 const stub = vi.hoisted(() => {
   const connection = {
-    query: vi.fn(async () => undefined),
+    // 引数の型は呼び出しの検証 (query.mock.calls) で使う。
+    query: vi.fn(async (_sql: string) => undefined),
     close: vi.fn(async () => undefined),
     send: vi.fn(),
     cancelSent: vi.fn(async () => true),
@@ -14,9 +15,9 @@ const stub = vi.hoisted(() => {
   const db = {
     instantiate: vi.fn(async () => undefined),
     connect: vi.fn(async () => connection),
-    registerOPFSFileName: vi.fn(async () => undefined),
+    registerOPFSFileName: vi.fn(async (_name: string) => undefined),
     terminate: vi.fn(async () => undefined),
-    dropFile: vi.fn(async () => undefined),
+    dropFiles: vi.fn(async (_names: string[]) => undefined),
   };
   return { connection, db };
 });
@@ -77,6 +78,8 @@ describe('objectQueryEngine.run', () => {
     stub.db.connect.mockReset();
     stub.db.connect.mockResolvedValue(stub.connection);
     stub.db.terminate.mockClear();
+    stub.db.registerOPFSFileName.mockClear();
+    stub.db.dropFiles.mockClear();
   });
 
   it('上限を超えたら打ち切り、接続の cancelSent を 1 回呼ぶ', async () => {
@@ -101,37 +104,69 @@ describe('objectQueryEngine.run', () => {
     expect(stub.connection.cancelSent).not.toHaveBeenCalled();
   });
 
-  it('別のオブジェクトのビューに置き換わっていたら dropView は何もしない', async () => {
+  it('registerView は全ファイルを登録し、拡張を読み込んでから viewSql を実行する', async () => {
+    const engine = await importEngine();
+    const viewSql =
+      "CREATE OR REPLACE VIEW obj AS SELECT * FROM read_parquet(['opfs://thief-query/a.parquet', 'opfs://thief-query/b.parquet'])";
+
+    await engine.registerView(
+      'panel-a',
+      ['opfs://thief-query/a.parquet', 'opfs://thief-query/b.parquet'],
+      viewSql,
+      ['parquet'],
+    );
+
+    expect(stub.db.registerOPFSFileName.mock.calls.map((call) => call[0])).toEqual([
+      'opfs://thief-query/a.parquet',
+      'opfs://thief-query/b.parquet',
+    ]);
+    // 初期化の SET 3 文の後に INSTALL / LOAD と viewSql の順で実行する。
+    expect(stub.connection.query.mock.calls.slice(-2).map((call) => call[0])).toEqual([
+      'INSTALL parquet; LOAD parquet;',
+      viewSql,
+    ]);
+    // ファイルの登録が終わってから viewSql を実行する。
+    expect(stub.db.registerOPFSFileName.mock.invocationCallOrder[1]).toBeLessThan(
+      stub.connection.query.mock.invocationCallOrder[stub.connection.query.mock.calls.length - 1],
+    );
+  });
+
+  it('別のパネルのビューに置き換わっていたら dropView は何もしない', async () => {
     stub.connection.send.mockResolvedValue(makeReader([1]));
     const engine = await importEngine();
 
-    await engine.registerView('opfs://thief-query/a.csv', "read_csv('a')", []);
-    await engine.registerView('opfs://thief-query/b.csv', "read_csv('b')", []);
+    await engine.registerView('panel-a', ['opfs://thief-query/a.csv'], "SELECT 'a'", []);
+    await engine.registerView('panel-b', ['opfs://thief-query/b.csv'], "SELECT 'b'", []);
     stub.connection.query.mockClear();
 
-    // 先に閉じたパネルの解放。ビューはもう b のものなので消さない。
-    await engine.dropView('opfs://thief-query/a.csv');
+    // 先に閉じたパネルの解放。ビューはもう panel-b のものなので消さない。
+    await engine.dropView('panel-a');
     expect(stub.connection.query).not.toHaveBeenCalled();
 
-    // b のパネルの解放では消す。
-    await engine.dropView('opfs://thief-query/b.csv');
+    // panel-b の解放では消す。
+    await engine.dropView('panel-b');
     expect(stub.connection.query).toHaveBeenCalledWith('DROP VIEW IF EXISTS obj');
   });
 
-  it('別のオブジェクトの登録が始まっていれば、CREATE の完了前でも dropView は何もしない', async () => {
+  it('別のパネルの登録が始まっていれば、CREATE の完了前でも dropView は何もしない', async () => {
     stub.connection.send.mockResolvedValue(makeReader([1]));
     const engine = await importEngine();
 
-    await engine.registerView('opfs://thief-query/a.csv', "read_csv('a')", []);
+    await engine.registerView('panel-a', ['opfs://thief-query/a.csv'], "SELECT 'a'", []);
     stub.connection.query.mockClear();
-    // b の CREATE の応答を保留したまま、a の解放を走らせる。
+    // panel-b の CREATE の応答を保留したまま、panel-a の解放を走らせる。
     let resolveCreate: () => void = () => {};
     stub.connection.query.mockImplementationOnce(
       () => new Promise<undefined>((resolve) => (resolveCreate = () => resolve(undefined))),
     );
-    const registering = engine.registerView('opfs://thief-query/b.csv', "read_csv('b')", []);
+    const registering = engine.registerView(
+      'panel-b',
+      ['opfs://thief-query/b.csv'],
+      "SELECT 'b'",
+      [],
+    );
 
-    await engine.dropView('opfs://thief-query/a.csv');
+    await engine.dropView('panel-a');
 
     expect(stub.connection.query).not.toHaveBeenCalledWith('DROP VIEW IF EXISTS obj');
     // 保留していた CREATE を解決して登録を終わらせる。
@@ -140,15 +175,18 @@ describe('objectQueryEngine.run', () => {
     await registering;
   });
 
-  it('registerView は既存のビューを置き換える', async () => {
+  it('dropFiles は全ファイルの登録をまとめて解除する', async () => {
     stub.connection.send.mockResolvedValue(makeReader([1]));
     const engine = await importEngine();
+    // DuckDB が未初期化なら登録の解除は何もしないため、先に初期化させる。
+    await engine.run('SELECT 1');
 
-    await engine.registerView('opfs://thief-query/a.csv', "read_csv('a')", []);
+    await engine.dropFiles(['opfs://thief-query/a.csv', 'opfs://thief-query/b.csv']);
 
-    expect(stub.connection.query).toHaveBeenCalledWith(
-      "CREATE OR REPLACE VIEW obj AS SELECT * FROM read_csv('a')",
-    );
+    expect(stub.db.dropFiles).toHaveBeenCalledWith([
+      'opfs://thief-query/a.csv',
+      'opfs://thief-query/b.csv',
+    ]);
   });
 
   it('接続に失敗しても、次の呼び出しでやり直せる', async () => {
@@ -159,7 +197,7 @@ describe('objectQueryEngine.run', () => {
     const engine = await importEngine();
 
     await expect(
-      engine.registerView('opfs://thief-query/a.csv', "read_csv('a')", []),
+      engine.registerView('panel-a', ['opfs://thief-query/a.csv'], "SELECT 'a'", []),
     ).rejects.toThrow('connect failed');
     await engine.cancelSent();
 
@@ -188,7 +226,7 @@ describe('objectQueryEngine.run', () => {
     const engine = await importEngine();
 
     await expect(
-      engine.registerView('opfs://thief-query/a.csv', "read_csv('a')", []),
+      engine.registerView('panel-a', ['opfs://thief-query/a.csv'], "SELECT 'a'", []),
     ).rejects.toThrow('wasm load failed');
 
     expect(warn).toHaveBeenCalled();

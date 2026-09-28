@@ -1,12 +1,16 @@
 // DrawerObjectQuery のコンポーネントテスト。OPFS / Web Worker / DuckDB Wasm は jsdom で
 // 動かないため、エンジンと取り込み処理は props のインターフェースへモックを差し込む。
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DrawerObjectQuery } from './DrawerObjectQuery';
 import { ObjectQueryIngestError } from '../../lib/objectQuery';
-import type { ObjectQueryEngine, ObjectQueryResult } from '../../lib/objectQuery';
+import type {
+  ObjectQueryEngine,
+  ObjectQueryResult,
+  ObjectQueryTarget,
+} from '../../lib/objectQuery';
 import type {
   ObjectIngestProgress,
   ObjectIngestRequest,
@@ -15,6 +19,25 @@ import type {
 import { ApiError } from '../../types/common';
 
 const MAX_BYTES = 1 << 30;
+
+// target は検索対象のオブジェクト 1 件を組み立てる。
+function target(
+  key: string,
+  size = 4096,
+  url = `http://127.0.0.1:8089/download?key=${key}`,
+): ObjectQueryTarget {
+  return { key, size, url };
+}
+
+// stubStorageEstimate は空き容量チェック (navigator.storage.estimate) の戻り値を固定する。
+function stubStorageEstimate(estimate: StorageEstimate) {
+  const estimateMock = vi.fn(async () => estimate);
+  Object.defineProperty(globalThis.navigator, 'storage', {
+    value: { estimate: estimateMock },
+    configurable: true,
+  });
+  return estimateMock;
+}
 
 // echarts-for-react は jsdom (canvas 未実装) では描画できないため、option を捕まえる
 // スタブに差し替える (option の内容そのものの検証は QueryResultChart.test.tsx)。
@@ -38,7 +61,7 @@ function makeEngine(overrides: Partial<ObjectQueryEngine> = {}): ObjectQueryEngi
     })),
     cancelSent: vi.fn(async () => {}),
     dropView: vi.fn(async () => {}),
-    dropFile: vi.fn(async () => {}),
+    dropFiles: vi.fn(async () => {}),
     ...overrides,
   };
 }
@@ -83,47 +106,99 @@ function doneIngestor() {
   return ingestor;
 }
 
+// controllableIngestors はファイル数分の ingestor を、取り込みの進捗・完了・失敗をテストから
+// 制御できる形で作る。terminate は保留中の ingest を AbortError で失敗させる (実物と同じ)。
+function controllableIngestors() {
+  const created: {
+    ingestor: ObjectIngestor;
+    resolve: () => void;
+    reject: (err: unknown) => void;
+    report: (progress: ObjectIngestProgress) => void;
+  }[] = [];
+  const createIngestor = () => {
+    let resolveIngest: () => void = () => {};
+    let rejectIngest: (err: unknown) => void = () => {};
+    let reportProgress: ((progress: ObjectIngestProgress) => void) | null = null;
+    const ingestor: ObjectIngestor = {
+      ingest: vi.fn(
+        (_request: ObjectIngestRequest, onProgress: (p: ObjectIngestProgress) => void) => {
+          reportProgress = onProgress;
+          return new Promise<void>((resolve, reject) => {
+            resolveIngest = resolve;
+            rejectIngest = reject;
+          });
+        },
+      ),
+      terminate: vi.fn(async () => {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        rejectIngest(err);
+      }),
+    };
+    created.push({
+      ingestor,
+      resolve: () => resolveIngest(),
+      reject: (err: unknown) => rejectIngest(err),
+      report: (progress: ObjectIngestProgress) => reportProgress?.(progress),
+    });
+    return ingestor;
+  };
+  return { created, createIngestor };
+}
+
 // SSOExpiredBanner が useSSOLogin (react-query の mutation) を使うため、Provider を挟む。
 function renderWithQC(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
+// renderQuery は files (省略時は 1 件) を渡してパネルを描画する。取り込みの ingestor は
+// createIngestor が呼ばれるたびに factory で作る (並列度の検証は呼ばれた回数で行う)。
 function renderQuery(
   engine: ObjectQueryEngine,
-  ingestor: ObjectIngestor,
-  extra: { profile?: string; fileName?: string } = {},
+  createIngestor: () => ObjectIngestor,
+  extra: { profile?: string; files?: ObjectQueryTarget[]; maxBytes?: number } = {},
 ) {
   const onClose = vi.fn();
-  const createIngestor = vi.fn(() => ingestor);
   const view = renderWithQC(
     <DrawerObjectQuery
-      fileName={extra.fileName ?? 'data.csv'}
-      url="http://127.0.0.1:8089/api/aws/profiles/p/s3/b/objects/download?key=data.csv"
-      maxBytes={MAX_BYTES}
-      size={4096}
+      files={extra.files ?? [target('data.csv')]}
+      maxBytes={extra.maxBytes ?? MAX_BYTES}
       profile={extra.profile}
       engine={engine}
       createIngestor={createIngestor}
       onClose={onClose}
     />,
   );
-  return { ...view, onClose, createIngestor, ingestor };
+  return { ...view, onClose };
 }
 
 describe('DrawerObjectQuery', () => {
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis.navigator, 'storage');
+
   beforeEach(() => {
     capturedChart.option = {};
+    // 空き容量チェックは既定で足りるようにする (不足のケースは各テストで差し替える)。
+    stubStorageEstimate({ quota: 2 ** 40, usage: 0 });
+  });
+
+  afterEach(() => {
+    if (originalStorage) {
+      Object.defineProperty(globalThis.navigator, 'storage', originalStorage);
+    } else {
+      Reflect.deleteProperty(globalThis.navigator, 'storage');
+    }
   });
 
   it('取り込み中の進捗を Content-Length 付きで表示する', async () => {
     const engine = makeEngine();
-    const { ingestor, container } = renderQuery(engine, pendingIngestor().ingestor);
+    const pending = pendingIngestor();
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
       expect(container.textContent).toContain('取り込み中 1.0 KB / 4.0 KB (25%)');
     });
-    expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+    expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     // 取り込みが終わるまで Query の実行には進まない
     expect(engine.run).not.toHaveBeenCalled();
   });
@@ -131,10 +206,10 @@ describe('DrawerObjectQuery', () => {
   it('取り込み完了後に obj ビューを作成して初期クエリの結果を表に表示する', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.resolveIngest();
@@ -143,12 +218,18 @@ describe('DrawerObjectQuery', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('alice');
     });
-    // OPFS パスは登録名と SQL 中のパスで同じ文字列を使う
+    // パネルの id は uuid、OPFS パスは登録名と SQL 中のパスで同じ文字列を使う
     const registerCall = (engine.registerView as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(registerCall[0]).toMatch(/^opfs:\/\/thief-query\/.+\.csv$/);
-    expect(registerCall[1]).toBe(`read_csv('${registerCall[0]}')`);
+    expect(registerCall[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(registerCall[1]).toHaveLength(1);
+    const opfsPath = registerCall[1][0];
+    expect(opfsPath).toMatch(/^opfs:\/\/thief-query\/.+\.csv$/);
+    expect(registerCall[2]).toContain(`['${opfsPath}']`);
+    expect(registerCall[2]).toContain('union_by_name = true');
+    expect(registerCall[2]).toContain("filename = 'object_key'");
+    expect(registerCall[2]).toContain("THEN 'data.csv'");
     // csv は DuckDB の拡張を要しない
-    expect(registerCall[2]).toEqual([]);
+    expect(registerCall[3]).toEqual([]);
     expect(engine.run).toHaveBeenCalledWith('SELECT * FROM obj LIMIT 100');
     // 行数と実行時間を表の下に出す
     expect(container.textContent).toContain('1 行');
@@ -159,26 +240,28 @@ describe('DrawerObjectQuery', () => {
 
   it('json 形式では読み取り関数の拡張 (json) を registerView に渡す', async () => {
     const engine = makeEngine();
-    const { container } = renderQuery(engine, doneIngestor(), { fileName: 'logs/data.json.gz' });
+    const { container } = renderQuery(engine, () => doneIngestor(), {
+      files: [target('logs/data.json.gz')],
+    });
 
     await waitFor(() => {
       expect(container.textContent).toContain('alice');
     });
     const registerCall = (engine.registerView as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(registerCall[0]).toMatch(/^opfs:\/\/thief-query\/.+\.json\.gz$/);
-    expect(registerCall[1]).toBe(`read_json_auto('${registerCall[0]}')`);
-    expect(registerCall[2]).toEqual(['json']);
+    expect(registerCall[1][0]).toMatch(/^opfs:\/\/thief-query\/.+\.json\.gz$/);
+    expect(registerCall[2]).toContain('read_json_auto');
+    expect(registerCall[3]).toEqual(['json']);
   });
 
   it('取り込みエラーが SSO 期限切れのときは SSOExpiredBanner を出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor, {
+    const { container } = renderQuery(engine, () => pending.ingestor, {
       profile: 'my-profile',
     });
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(new ApiError(401, 'SSO_TOKEN_EXPIRED', 'token expired'));
@@ -194,10 +277,10 @@ describe('DrawerObjectQuery', () => {
   it('profile が無い場合は SSO 期限切れでも ErrorBanner に出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(new ApiError(401, 'SSO_TOKEN_EXPIRED', 'token expired'));
@@ -212,10 +295,10 @@ describe('DrawerObjectQuery', () => {
   it('その他の取り込みエラーは ErrorBanner にメッセージを出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(new ApiError(500, 'INTERNAL_ERROR', 'download failed'));
@@ -231,10 +314,10 @@ describe('DrawerObjectQuery', () => {
   it('上限超過の取り込みエラーは上限付きの文言を出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(
@@ -252,10 +335,10 @@ describe('DrawerObjectQuery', () => {
   it('Worker が非対応を返したときはブラウザ非対応の文言を出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(
@@ -275,10 +358,10 @@ describe('DrawerObjectQuery', () => {
   it('空き容量不足の取り込みエラーは容量不足の文言を出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(new ObjectQueryIngestError('quota', 'not enough storage'));
@@ -294,10 +377,10 @@ describe('DrawerObjectQuery', () => {
   it('OPFS のエラーは DuckDB 以外の取り込みエラーとしてメッセージを出す', async () => {
     const engine = makeEngine();
     const pending = pendingIngestor();
-    const { ingestor, container } = renderQuery(engine, pending.ingestor);
+    const { container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
       pending.rejectIngest(new ObjectQueryIngestError('opfs', 'failed to open sync access handle'));
@@ -320,7 +403,7 @@ describe('DrawerObjectQuery', () => {
       ),
       terminate: vi.fn(async () => {}),
     };
-    const { container } = renderQuery(engine, ingestor);
+    const { container } = renderQuery(engine, () => ingestor);
 
     await waitFor(() => {
       expect(container.textContent).toContain('取り込み中 2.0 KB');
@@ -335,7 +418,7 @@ describe('DrawerObjectQuery', () => {
         throw new Error('Parser Error: syntax error at or near "SELEC"');
       }),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('クエリに失敗しました');
@@ -353,7 +436,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 100,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('10000 行を超えたため打ち切りました');
@@ -363,16 +446,15 @@ describe('DrawerObjectQuery', () => {
 
   it('取り込み要求に URL と OPFS パスとロック名と上限とサイズを渡す', async () => {
     const engine = makeEngine();
-    const { ingestor } = renderQuery(engine, pendingIngestor().ingestor);
+    const pending = pendingIngestor();
+    renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
-    const request = (ingestor.ingest as ReturnType<typeof vi.fn>).mock
+    const request = (pending.ingestor.ingest as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as ObjectIngestRequest;
-    expect(request.url).toBe(
-      'http://127.0.0.1:8089/api/aws/profiles/p/s3/b/objects/download?key=data.csv',
-    );
+    expect(request.url).toBe('http://127.0.0.1:8089/download?key=data.csv');
     expect(request.storageName).toMatch(/^thief-query\/.+\.csv$/);
     expect(request.maxBytes).toBe(MAX_BYTES);
     expect(request.size).toBe(4096);
@@ -392,7 +474,7 @@ describe('DrawerObjectQuery', () => {
     });
     const ingestor = doneIngestor();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { unmount } = renderQuery(engine, ingestor);
+    const { unmount } = renderQuery(engine, () => ingestor);
 
     await waitFor(() => {
       expect(engine.run).toHaveBeenCalledTimes(1);
@@ -401,7 +483,7 @@ describe('DrawerObjectQuery', () => {
     unmount();
 
     await waitFor(() => {
-      expect(engine.dropFile).toHaveBeenCalledTimes(1);
+      expect(engine.dropFiles).toHaveBeenCalledTimes(1);
       expect(ingestor.terminate).toHaveBeenCalledTimes(1);
     });
     expect(engine.cancelSent).toHaveBeenCalledTimes(1);
@@ -411,10 +493,16 @@ describe('DrawerObjectQuery', () => {
     warn.mockRestore();
   });
 
-  it('アンマウントすると cancelSent / DROP VIEW / dropFile と Worker の終了指示を呼ぶ', async () => {
+  it('アンマウントすると cancelSent / DROP VIEW / dropFiles と Worker の終了指示を呼ぶ', async () => {
     const engine = makeEngine();
-    const ingestor = doneIngestor();
-    const { unmount, container } = renderQuery(engine, ingestor);
+    const ingestors: ObjectIngestor[] = [];
+    const createIngestor = () => {
+      const ingestor = doneIngestor();
+      ingestors.push(ingestor);
+      return ingestor;
+    };
+    const files = [target('a.csv'), target('b.csv')];
+    const { unmount, container } = renderQuery(engine, createIngestor, { files });
 
     await waitFor(() => {
       expect(engine.run).toHaveBeenCalledTimes(1);
@@ -426,48 +514,54 @@ describe('DrawerObjectQuery', () => {
     await waitFor(() => {
       expect(engine.cancelSent).toHaveBeenCalledTimes(1);
       expect(engine.dropView).toHaveBeenCalledTimes(1);
-      expect(engine.dropFile).toHaveBeenCalledTimes(1);
-      expect(ingestor.terminate).toHaveBeenCalledTimes(1);
+      expect(engine.dropFiles).toHaveBeenCalledTimes(1);
+      expect(ingestors[0].terminate).toHaveBeenCalledTimes(1);
+      expect(ingestors[1].terminate).toHaveBeenCalledTimes(1);
     });
-    const dropFileCall = (engine.dropFile as ReturnType<typeof vi.fn>).mock.calls[0];
     const dropViewCall = (engine.dropView as ReturnType<typeof vi.fn>).mock.calls[0];
+    const dropFilesCall = (engine.dropFiles as ReturnType<typeof vi.fn>).mock.calls[0];
     const registerCall = (engine.registerView as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(dropFileCall[0]).toBe(registerCall[0]);
-    // dropView には登録と同じ OPFS パスを渡す (別の文字列だと解放が永久に一致しなくなる)。
+    // dropView には registerView と同じパネルの id を渡す (別の id だと解放が永久に一致しなくなる)。
     expect(dropViewCall[0]).toBe(registerCall[0]);
+    // dropFiles には登録した全ファイルの OPFS パスを渡す。
+    expect(dropFilesCall[0]).toEqual(registerCall[1]);
+    expect(dropFilesCall[0]).toHaveLength(2);
   });
 
   it('取り込み中にアンマウントしても Worker の終了指示まで到達し、エラーを表示しない', async () => {
     const engine = makeEngine();
-    const { ingestor, unmount, container } = renderQuery(engine, pendingIngestor().ingestor);
+    const pending = pendingIngestor();
+    const { unmount, container } = renderQuery(engine, () => pending.ingestor);
 
     await waitFor(() => {
-      expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.ingest).toHaveBeenCalledTimes(1);
     });
 
     unmount();
 
     await waitFor(() => {
-      expect(ingestor.terminate).toHaveBeenCalledTimes(1);
+      expect(pending.ingestor.terminate).toHaveBeenCalledTimes(1);
       expect(engine.cancelSent).toHaveBeenCalledTimes(1);
     });
     // 中断はエラーとして表示しない
     expect(container.textContent).not.toContain('取り込みに失敗しました');
   });
 
-  it('StrictMode の二重実行でも取り込みは 1 回だけで、初期クエリの結果を表示する', async () => {
+  it('StrictMode の二重実行でも取り込みは 1 回だけで、解放でファイルとロックが残らない', async () => {
     const engine = makeEngine();
-    const ingestor = doneIngestor();
+    const ingestors: ObjectIngestor[] = [];
     const onClose = vi.fn();
-    const { container } = renderWithQC(
+    const { container, unmount } = renderWithQC(
       <StrictMode>
         <DrawerObjectQuery
-          fileName="data.csv"
-          url="http://127.0.0.1:8089/download"
+          files={[target('data.csv')]}
           maxBytes={MAX_BYTES}
-          size={4096}
           engine={engine}
-          createIngestor={() => ingestor}
+          createIngestor={() => {
+            const ingestor = doneIngestor();
+            ingestors.push(ingestor);
+            return ingestor;
+          }}
           onClose={onClose}
         />
       </StrictMode>,
@@ -480,7 +574,23 @@ describe('DrawerObjectQuery', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('alice');
     });
-    expect(ingestor.ingest).toHaveBeenCalledTimes(1);
+    expect(ingestors).toHaveLength(1);
+    expect(ingestors[0].ingest).toHaveBeenCalledTimes(1);
+
+    // アンマウントで OPFS のファイル (dropFiles) とロック (terminate) が解放される。
+    // StrictMode では 1 回目の cleanup でも解放処理が走るため、回数ではなく最後の呼び出しの
+    // 引数と、作成した ingestor がすべて終了することを確かめる。
+    unmount();
+    await waitFor(() => {
+      expect(ingestors[0].terminate).toHaveBeenCalledTimes(1);
+    });
+    expect(engine.dropView).toHaveBeenCalled();
+    expect(engine.dropFiles).toHaveBeenCalled();
+    const registerCall = (engine.registerView as ReturnType<typeof vi.fn>).mock.calls[0];
+    const dropViewCalls = (engine.dropView as ReturnType<typeof vi.fn>).mock.calls;
+    expect(dropViewCalls[dropViewCalls.length - 1][0]).toBe(registerCall[0]);
+    const dropFilesCalls = (engine.dropFiles as ReturnType<typeof vi.fn>).mock.calls;
+    expect(dropFilesCalls[dropFilesCalls.length - 1][0]).toEqual(registerCall[1]);
   });
 
   it('Chart に切り替えると初期選択 (X は先頭の列、Y は先頭の数値列) でグラフを表示する', async () => {
@@ -495,7 +605,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 5,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -531,7 +641,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 5,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -554,7 +664,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 5,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -578,7 +688,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 5,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('v0');
@@ -597,7 +707,7 @@ describe('DrawerObjectQuery', () => {
     const engine = makeEngine({
       run: vi.fn(async () => ({ columns: [], rows: [], truncated: false, elapsedMs: 1 })),
     });
-    renderQuery(engine, doneIngestor());
+    renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(screen.getByText('結果がありません')).toBeInTheDocument();
@@ -609,7 +719,7 @@ describe('DrawerObjectQuery', () => {
 
   it('数値列が無い結果では Chart を無効にし理由を title に出す', async () => {
     const engine = makeEngine();
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('alice');
@@ -638,7 +748,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 4,
       });
     const engine = makeEngine({ run });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -676,7 +786,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 5,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -710,7 +820,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 5,
       })),
     });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -743,7 +853,7 @@ describe('DrawerObjectQuery', () => {
         elapsedMs: 4,
       });
     const engine = makeEngine({ run });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -779,7 +889,7 @@ describe('DrawerObjectQuery', () => {
       })
       .mockResolvedValueOnce({ columns: [], rows: [], truncated: false, elapsedMs: 4 });
     const engine = makeEngine({ run });
-    const { container } = renderQuery(engine, doneIngestor());
+    const { container } = renderQuery(engine, () => doneIngestor());
 
     await waitFor(() => {
       expect(container.textContent).toContain('a');
@@ -802,5 +912,256 @@ describe('DrawerObjectQuery', () => {
     const chartButton = screen.getByRole('button', { name: 'グラフ' });
     expect(chartButton).toBeDisabled();
     expect(chartButton).toHaveAttribute('title', '列が無いためグラフを表示できません');
+  });
+
+  it('題名は 1 件ならキー、複数なら件数の文言にする', async () => {
+    const engine = makeEngine();
+    const single = renderQuery(engine, () => doneIngestor(), { files: [target('data.csv')] });
+    await waitFor(() => {
+      expect(single.container.textContent).toContain('Query: data.csv');
+    });
+
+    const multiple = renderQuery(engine, () => doneIngestor(), {
+      files: [target('out/part-00000.csv'), target('out/part-00001.csv')],
+    });
+    await waitFor(() => {
+      expect(multiple.container.textContent).toContain('Query: 2 件のオブジェクト');
+    });
+  });
+
+  it('複数ファイルを 1 つの obj ビューにし、ファイルごとの OPFS パスと由来のキーを SQL に入れる', async () => {
+    const engine = makeEngine();
+    const { container } = renderQuery(engine, () => doneIngestor(), {
+      // 拡張子が違っても同じ読み取り関数 (read_csv) なら 1 つのビューにできる
+      files: [target('out/part-00000.csv'), target('out/part-00001.csv.gz')],
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('alice');
+    });
+    const registerCall = (engine.registerView as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(registerCall[1]).toHaveLength(2);
+    expect(registerCall[1][0]).toMatch(/^opfs:\/\/thief-query\/[0-9a-f-]{36}\.csv$/);
+    expect(registerCall[1][1]).toMatch(/^opfs:\/\/thief-query\/[0-9a-f-]{36}\.csv\.gz$/);
+    expect(registerCall[2]).toContain('read_csv');
+    expect(registerCall[2]).toContain(`['${registerCall[1][0]}', '${registerCall[1][1]}']`);
+    expect(registerCall[2]).toContain("THEN 'out/part-00000.csv'");
+    expect(registerCall[2]).toContain("THEN 'out/part-00001.csv.gz'");
+    expect(registerCall[3]).toEqual([]);
+  });
+
+  it('5 件を並列度 4 で取り込み、1 件の完了後に 5 件目を始める', async () => {
+    const engine = makeEngine();
+    const { created, createIngestor } = controllableIngestors();
+    const files = Array.from({ length: 5 }, (_, i) => target(`part-${i}.csv`));
+    renderQuery(engine, createIngestor, { files });
+
+    await waitFor(() => {
+      expect(created).toHaveLength(4);
+    });
+    expect(
+      created.map((entry) => (entry.ingestor.ingest as ReturnType<typeof vi.fn>).mock.calls.length),
+    ).toEqual([1, 1, 1, 1]);
+    // 4 件が終わるまで 5 件目は始まらず、登録にも進まない
+    expect(engine.registerView).not.toHaveBeenCalled();
+
+    await act(async () => {
+      created[0].resolve();
+    });
+    await waitFor(() => {
+      expect(created).toHaveLength(5);
+    });
+
+    await act(async () => {
+      for (const entry of created.slice(1)) entry.resolve();
+    });
+    await waitFor(() => {
+      expect(engine.registerView).toHaveBeenCalledTimes(1);
+    });
+    expect(created[4].ingestor.ingest).toHaveBeenCalledTimes(1);
+  });
+
+  it('取り込みの前に合計サイズで空き容量を 1 回確かめ、足りなければ quotaExceeded で止まる', async () => {
+    const estimate = stubStorageEstimate({ quota: 1000, usage: 0 });
+    const engine = makeEngine();
+    const createIngestor = vi.fn(() => doneIngestor());
+    const { container } = renderQuery(engine, createIngestor, {
+      files: [target('a.csv', 600), target('b.csv', 401)],
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        'ブラウザの空き容量が足りないため取り込みを開始できません',
+      );
+    });
+    // 合計 (1001 > 1000) で 1 回だけ確かめ、ingestor は作らない
+    expect(estimate).toHaveBeenCalledTimes(1);
+    expect(createIngestor).not.toHaveBeenCalled();
+    expect(engine.registerView).not.toHaveBeenCalled();
+  });
+
+  it('取り込みの written の合計が上限を超えたら tooLarge になり全ファイルを解放する', async () => {
+    const engine = makeEngine();
+    const { created, createIngestor } = controllableIngestors();
+    const { container } = renderQuery(engine, createIngestor, {
+      files: [target('a.csv', 600), target('b.csv', 600)],
+      maxBytes: 1000,
+    });
+
+    await waitFor(() => {
+      expect(created).toHaveLength(2);
+    });
+    await act(async () => {
+      for (const entry of created) {
+        entry.report({ written: 600, total: 600 });
+        entry.resolve();
+      }
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        'オブジェクトがサイズ上限 (1000 B) を超えているため取り込みを中止しました',
+      );
+    });
+    expect(engine.registerView).not.toHaveBeenCalled();
+    expect(created[0].ingestor.terminate).toHaveBeenCalledTimes(1);
+    expect(created[1].ingestor.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('進捗は全ファイルの合計で表示する', async () => {
+    const engine = makeEngine();
+    const { created, createIngestor } = controllableIngestors();
+    const { container } = renderQuery(engine, createIngestor, {
+      files: [target('a.csv'), target('b.csv')],
+    });
+
+    await waitFor(() => {
+      expect(created).toHaveLength(2);
+    });
+    await act(async () => {
+      created[0].report({ written: 1024, total: 4096 });
+      created[1].report({ written: 2048, total: 2048 });
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('取り込み中 3.0 KB / 6.0 KB (50%)');
+    });
+  });
+
+  it('1 つでも Content-Length が無いファイルがあれば合計不明の進捗表示にする', async () => {
+    const engine = makeEngine();
+    const { created, createIngestor } = controllableIngestors();
+    const { container } = renderQuery(engine, createIngestor, {
+      files: [target('a.csv'), target('b.csv')],
+    });
+
+    await waitFor(() => {
+      expect(created).toHaveLength(2);
+    });
+    await act(async () => {
+      created[0].report({ written: 1024, total: 4096 });
+      created[1].report({ written: 512, total: null });
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('取り込み中 1.5 KB');
+    });
+    // 合計が分からないので割合は出さない
+    expect(container.textContent).not.toContain('%');
+  });
+
+  it('1 つの取り込みが失敗すると、待っているファイルは始めず、作成済みの全 ingestor を止める', async () => {
+    const engine = makeEngine();
+    const { created, createIngestor } = controllableIngestors();
+    const { container } = renderQuery(engine, createIngestor, {
+      files: Array.from({ length: 5 }, (_, i) => target(`part-${i}.csv`)),
+    });
+
+    await waitFor(() => {
+      expect(created).toHaveLength(4);
+    });
+    await act(async () => {
+      created[0].reject(new ApiError(500, 'INTERNAL_ERROR', 'download failed'));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('download failed');
+    });
+    expect(container.textContent).toContain('取り込みに失敗しました');
+    // 表示するエラーは 1 つだけ
+    expect(container.querySelectorAll('.error-banner')).toHaveLength(1);
+    // 5 件目は作られず、作成済みの 4 件がすべて終了する
+    expect(created).toHaveLength(4);
+    expect(
+      created.reduce(
+        (count, entry) =>
+          count + (entry.ingestor.terminate as ReturnType<typeof vi.fn>).mock.calls.length,
+        0,
+      ),
+    ).toBe(4);
+    expect(engine.registerView).not.toHaveBeenCalled();
+  });
+
+  it('ingestor の作成に失敗しても、作成済みの ingestor を止めてエラーを表示する', async () => {
+    const engine = makeEngine();
+    const { created, createIngestor } = controllableIngestors();
+    let calls = 0;
+    const createOrThrow = () => {
+      calls += 1;
+      if (calls === 2) throw new Error('worker start failed');
+      return createIngestor();
+    };
+    const { container } = renderQuery(engine, createOrThrow, {
+      files: [target('a.csv'), target('b.csv'), target('c.csv')],
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('worker start failed');
+    });
+    expect(container.textContent).toContain('取り込みに失敗しました');
+    // 2 件目の作成で失敗し、3 件目は作らず、作成済みの 1 件を終了する
+    expect(calls).toBe(2);
+    expect(created).toHaveLength(1);
+    expect(created[0].ingestor.terminate).toHaveBeenCalledTimes(1);
+    expect(engine.registerView).not.toHaveBeenCalled();
+  });
+
+  it('files が空なら取り込みを始めず、ビューの組み立ての失敗をエラーとして表示する', async () => {
+    const engine = makeEngine();
+    const createIngestor = vi.fn(() => doneIngestor());
+    const { container } = renderQuery(engine, createIngestor, { files: [] });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('objectQueryViewSql: files must not be empty');
+    });
+    expect(container.textContent).toContain('取り込みに失敗しました');
+    expect(createIngestor).not.toHaveBeenCalled();
+    expect(engine.registerView).not.toHaveBeenCalled();
+  });
+
+  it('取り込みが終わった ingestor は解放まで terminate しない', async () => {
+    const engine = makeEngine();
+    const ingestors: ObjectIngestor[] = [];
+    const createIngestor = () => {
+      const ingestor = doneIngestor();
+      ingestors.push(ingestor);
+      return ingestor;
+    };
+    const { container, unmount } = renderQuery(engine, createIngestor, {
+      files: [target('a.csv'), target('b.csv')],
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('alice');
+    });
+    expect(ingestors).toHaveLength(2);
+    expect(ingestors[0].terminate).not.toHaveBeenCalled();
+    expect(ingestors[1].terminate).not.toHaveBeenCalled();
+
+    unmount();
+    await waitFor(() => {
+      expect(ingestors[0].terminate).toHaveBeenCalledTimes(1);
+      expect(ingestors[1].terminate).toHaveBeenCalledTimes(1);
+    });
   });
 });
