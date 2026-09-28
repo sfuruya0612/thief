@@ -1,4 +1,54 @@
-/* S3 / GCS のオブジェクトブラウザ (prefix 入力、アップロード)。 */
+/* S3 / GCS のオブジェクトブラウザ (パンくず、prefix 入力、アップロード)。 */
+
+.object-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.object-breadcrumb button {
+  padding: 2px 6px;
+  border-radius: 5px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.object-breadcrumb button:hover {
+  background: var(--bg-2);
+  color: var(--text-1);
+}
+.object-breadcrumb button.active {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.object-breadcrumb .sep {
+  color: var(--line-3);
+}
+/* 名前の列のフォルダ行。クリックでそのフォルダへ潜る */
+.object-folder-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.object-folder-link:hover {
+  color: var(--accent);
+}
+
+.s3-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.s3-search-row .s3-prefix-input {
+  flex: 1;
+  margin-bottom: 0;
+}
 
 .s3-prefix-input {
   display: flex;

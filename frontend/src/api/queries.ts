@@ -408,14 +408,30 @@ export function useSSMUpdate(profile: string, region: string) {
 // ============================================================
 // S3 Objects (Drawer の Objects タブ)
 // ============================================================
-// バックエンドは最大 1000 件で打ち切る ({objects, truncated} エンベロープ)。
-// prefix ごとに独立した queryKey で、検索確定 (prefix 変更) のたびに再取得される。
-export function useS3Objects(profile: string, region: string, bucket: string, prefix?: string) {
+// バックエンドは {objects, prefixes, truncated} エンベロープを返す。prefixes は
+// 階層モード (delimiter=/) のフォルダで、フラットモードでは []。truncated は 1000 件で
+// 打ち切られた場合の通知用。prefix と delimiter ごとに独立した queryKey で、検索確定
+// (prefix 変更) やモード切替 (delimiter 変更) のたびに再取得される。
+export function useS3Objects(
+  profile: string,
+  region: string,
+  bucket: string,
+  prefix: string | undefined,
+  delimiter: string | undefined,
+) {
   return useQuery({
-    queryKey: ['aws', 's3-objects', profile, region, bucket, prefix],
+    queryKey: ['aws', 's3-objects', profile, region, bucket, prefix, delimiter],
     queryFn: async () => {
-      const { objects, truncated } = await getS3Objects(profile, region, bucket, prefix);
-      return { objects: (objects ?? []).map(s3ObjectFromRaw), truncated };
+      const { objects, prefixes, truncated } = await getS3Objects(
+        profile,
+        region,
+        bucket,
+        prefix,
+        delimiter,
+      );
+      // backend は prefixes を必ず返すが、[] を保証できない旧版に当たっても
+      // 一覧は表示できるよう空配列に正規化する (objects と同じ扱い)。
+      return { objects: (objects ?? []).map(s3ObjectFromRaw), prefixes: prefixes ?? [], truncated };
     },
     enabled: !!profile && !!bucket,
   });
@@ -1154,14 +1170,32 @@ export function useGcpResources<TRaw, TRow extends BaseRow>(
   });
 }
 
-// バックエンドは最大 1000 件で打ち切る ({objects, truncated} エンベロープ)。
-// prefix ごとに独立した queryKey で、検索確定 (prefix 変更) のたびに再取得される。
-export function useGcsObjects(projectId: string, bucket: string, prefix?: string) {
+// バックエンドは {objects, prefixes, truncated} エンベロープを返す。prefixes は
+// 階層モード (delimiter=/) のフォルダで、フラットモードでは []。prefix と delimiter
+// ごとに独立した queryKey で、検索確定 (prefix 変更) やモード切替 (delimiter 変更) の
+// たびに再取得される。
+export function useGcsObjects(
+  projectId: string,
+  bucket: string,
+  prefix: string | undefined,
+  delimiter: string | undefined,
+) {
   return useQuery({
-    queryKey: ['gcp', 'gcs-objects', projectId, bucket, prefix],
+    queryKey: ['gcp', 'gcs-objects', projectId, bucket, prefix, delimiter],
     queryFn: async () => {
-      const { objects, truncated } = await getGcsObjects(projectId, bucket, prefix);
-      return { objects: (objects ?? []).map((raw, idx) => gcsObjectFromRaw(raw, idx)), truncated };
+      const { objects, prefixes, truncated } = await getGcsObjects(
+        projectId,
+        bucket,
+        prefix,
+        delimiter,
+      );
+      // backend は prefixes を必ず返すが、[] を保証できない旧版に当たっても
+      // 一覧は表示できるよう空配列に正規化する (objects と同じ扱い)。
+      return {
+        objects: (objects ?? []).map((raw, idx) => gcsObjectFromRaw(raw, idx)),
+        prefixes: prefixes ?? [],
+        truncated,
+      };
     },
     enabled: !!projectId && !!bucket,
   });

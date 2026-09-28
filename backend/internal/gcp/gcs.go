@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -57,34 +58,75 @@ func ListBuckets(ctx context.Context, projectID string) ([]BucketInfo, error) {
 	return buckets, nil
 }
 
-// maxGCSListObjects は ListObjects が返すオブジェクト件数の上限。S3 の
-// maxS3ListObjects と同じ考え方で、蓄積件数がこれに達した時点で列挙を打ち切る。
+// maxGCSListObjects は ListObjects が蓄積するオブジェクトとフォルダを合わせた件数の上限。
+// S3 の maxS3ListObjects と同じ考え方で、蓄積件数がこれに達した後にまだエントリが返る
+// ときだけ列挙を打ち切る (ちょうど上限で終わるときは打ち切らない)。
 const maxGCSListObjects = 1000
 
 // ListObjects は指定バケット内のオブジェクトを prefix 絞り込みで列挙する。
-// 蓄積件数が maxGCSListObjects に達した時点で打ち切り、truncated に true を返す。
-func ListObjects(ctx context.Context, projectID, bucket, prefix string) (objects []ObjectInfo, truncated bool, err error) {
+// delimiter が "/" の階層モードでは、次の区切り文字までを畳み込んだ合成ディレクトリ
+// エントリ (ObjectAttrs.Prefix のみを持つ) を prefixes として返し、objects には含めない。
+// 空のフラットモードでは従来どおり平らな一覧を返す。
+// オブジェクトとフォルダを合わせた蓄積件数が maxGCSListObjects に達した後にまだ追加する
+// エントリがあるときだけ打ち切り、truncated に true を返す。
+func ListObjects(ctx context.Context, projectID, bucket, prefix, delimiter string) (objects []ObjectInfo, prefixes []string, truncated bool, err error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("create storage client: %w", err)
+		return nil, nil, false, fmt.Errorf("create storage client: %w", err)
 	}
 	defer client.Close()
 
-	it := client.Bucket(bucket).UserProject(projectID).Objects(ctx, &storage.Query{Prefix: prefix})
+	query := &storage.Query{Prefix: prefix}
+	if delimiter != "" {
+		query.Delimiter = delimiter
+	}
+	it := client.Bucket(bucket).UserProject(projectID).Objects(ctx, query)
+	objects, prefixes, truncated, err = collectGCSObjects(it.Next, maxGCSListObjects)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("iterate objects in %s: %w", bucket, err)
+	}
+	return objects, prefixes, truncated, nil
+}
+
+// errNilObjectAttrs は iterator.Next が Done でもエラーでもないのに nil を返したときのエラー。
+var errNilObjectAttrs = errors.New("object iterator returned nil attrs")
+
+// collectGCSObjects は it.Next に相当する next から 1 件ずつ取り出し、オブジェクトと
+// フォルダ (ObjectAttrs.Prefix が空でない合成ディレクトリエントリ) を蓄積する。
+// オブジェクトとフォルダを合わせた蓄積件数が max に達した後にまだエントリが返るときだけ
+// truncated を true にする。ちょうど max 件で終わるときは false である
+// (S3 の appendS3ListEntriesUpToLimit と同じ境界)。
+//
+// storage.Client を必要としない純関数に切り出すことで、境界とフォルダの振り分けを
+// storage.Client 無しでテストできるようにしている。
+func collectGCSObjects(
+	next func() (*storage.ObjectAttrs, error),
+	max int,
+) (objects []ObjectInfo, prefixes []string, truncated bool, err error) {
 	for {
-		if len(objects) >= maxGCSListObjects {
-			return objects, true, nil
-		}
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
+		attrs, err := next()
+		if errors.Is(err, iterator.Done) {
+			return objects, prefixes, false, nil
 		}
 		if err != nil {
-			return nil, false, fmt.Errorf("iterate objects in %s: %w", bucket, err)
+			return nil, nil, false, err
+		}
+		if attrs == nil {
+			// iterator.Next は Done でもエラーでもないときに nil を返さない。返ったときは
+			// 契約違反としてエラーにする (読み飛ばすと上限の数え上げが進まず、nil が
+			// 返り続けたときに終了しない)。上限の判定より先に見て、上限の位置で返った
+			// nil を打ち切りとして扱わない。
+			return nil, nil, false, errNilObjectAttrs
+		}
+		if len(objects)+len(prefixes) >= max {
+			return objects, prefixes, true, nil
+		}
+		if attrs.Prefix != "" {
+			prefixes = append(prefixes, attrs.Prefix)
+			continue
 		}
 		objects = append(objects, objectFromAttrs(attrs))
 	}
-	return objects, false, nil
 }
 
 // ObjectReader は GCS オブジェクトのダウンロード用リーダーとメタデータを保持する。

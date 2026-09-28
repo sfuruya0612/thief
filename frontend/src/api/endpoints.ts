@@ -282,16 +282,21 @@ export function getSSMParameterValue(
 // ============================================================
 // S3 Objects (Drawer の Objects タブ)
 // ============================================================
-// バックエンドは {objects, truncated} エンベロープを返す (1000 件で打ち切られた場合の通知用)。
+// バックエンドは {objects, prefixes, truncated} エンベロープを返す。prefixes は
+// 階層モード (delimiter=/) のフォルダで、フラットモードでは []。truncated は
+// 1000 件で打ち切られた場合の通知用。
+// delimiter は "" (フラット) か "/" (階層) の 2 値で、バックエンドもそれ以外を 400 にする。
 export async function getS3Objects(
   profile: string,
   region: string,
   bucket: string,
   prefix?: string,
+  delimiter?: string,
 ): Promise<ObjectListEnvelopeRaw<S3ObjectRaw>> {
   return apiGet<ObjectListEnvelopeRaw<S3ObjectRaw>>(
     `/api/aws/profiles/${encodeURIComponent(profile)}/s3/${encodeURIComponent(bucket)}/objects`,
-    { region, prefix },
+    // フラットモードの空 delimiter はクエリに載せない (backend は無指定をフラットとして扱う)
+    { region, prefix, delimiter: delimiter || undefined },
   );
 }
 
@@ -903,17 +908,22 @@ export function getGcsBuckets(projectId: string): Promise<GcsBucketRaw[]> {
 }
 
 // GCS バケット内のオブジェクト一覧 (Drawer の Objects タブ相当)
-// バックエンドは {objects, truncated} エンベロープを返す (1000 件で打ち切られた場合の通知用)。
+// バックエンドは {objects, prefixes, truncated} エンベロープを返す。prefixes は
+// 階層モード (delimiter=/) のフォルダで、フラットモードでは []。truncated は
+// 1000 件で打ち切られた場合の通知用。
 export async function getGcsObjects(
   projectId: string,
   bucket: string,
   prefix?: string,
+  delimiter?: string,
 ): Promise<ObjectListEnvelopeRaw<GcsObjectRaw>> {
   return apiGet<ObjectListEnvelopeRaw<GcsObjectRaw>>(
     `/api/gcp/gcs/${encodeURIComponent(bucket)}/objects`,
     {
       project_id: projectId,
       prefix,
+      // フラットモードの空 delimiter はクエリに載せない (backend は無指定をフラットとして扱う)
+      delimiter: delimiter || undefined,
     },
   );
 }

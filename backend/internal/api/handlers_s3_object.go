@@ -14,13 +14,31 @@ import (
 
 // S3ObjectsResponse は handleS3Objects のレスポンスエンベロープ。
 // Truncated は maxS3ListObjects で打ち切られたことを示す。
+// Prefixes は階層モード (delimiter=/) のフォルダ (CommonPrefixes) の完全な prefix で、
+// 該当が無いときは null ではなく [] を返す。
 type S3ObjectsResponse struct {
 	Objects   []awsinternal.S3ObjectResource `json:"objects"`
+	Prefixes  []string                       `json:"prefixes"`
 	Truncated bool                           `json:"truncated"`
 }
 
+// objectListDelimiter はオブジェクト一覧 API の delimiter クエリパラメータを検証する。
+// 受け付ける値は空 (フラットモード) と "/" (階層モード) の 2 つだけで、それ以外は 400 を
+// 書き込んで ok=false を返す。S3 と GCS で同じ規則にするため共通化する。
+func objectListDelimiter(w http.ResponseWriter, r *http.Request) (string, bool) {
+	delimiter := r.URL.Query().Get("delimiter")
+	if delimiter != "" && delimiter != "/" {
+		writeBadRequest(w, `delimiter must be empty or "/"`)
+		return "", false
+	}
+	return delimiter, true
+}
+
 // handleS3Objects は指定バケット (と prefix) のオブジェクト一覧を返す。
-// キャッシュキーには prefix も含める (prefix ごとに独立キャッシュ)。
+// キャッシュキーには prefix と delimiter も含める (prefix / モードごとに独立キャッシュ)。
+// delimiter を prefix の後ろに置くことで、アップロード後の
+// cacheKey("s3-objects", profile, region, bucket, "") による前方一致の無効化が
+// 階層モードとフラットモードの両方に効く。
 func (s *Server) handleS3Objects(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	bucket := r.PathValue("bucket")
@@ -29,13 +47,25 @@ func (s *Server) handleS3Objects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prefix := r.URL.Query().Get("prefix")
+	delimiter, ok := objectListDelimiter(w, r)
+	if !ok {
+		return
+	}
 
-	s.serveCached(w, r, cacheKey("s3-objects", profile, region, bucket, prefix), cacheTTL, writeAWSError, func() (any, error) {
-		objects, truncated, err := awsinternal.ListS3Objects(r.Context(), profile, region, bucket, prefix)
+	s.serveCached(w, r, cacheKey("s3-objects", profile, region, bucket, prefix, delimiter), cacheTTL, writeAWSError, func() (any, error) {
+		objects, prefixes, truncated, err := s.s3Objects(r.Context(), profile, region, bucket, prefix, delimiter)
 		if err != nil {
 			return nil, err
 		}
-		return S3ObjectsResponse{Objects: objects, Truncated: truncated}, nil
+		// 該当が無いときは null ではなく [] を返す (frontend の Raw 型が非 null のため)。
+		// 階層モードではフォルダだけの階層で objects が空になるのが常態なので、objects も揃える。
+		if objects == nil {
+			objects = []awsinternal.S3ObjectResource{}
+		}
+		if prefixes == nil {
+			prefixes = []string{}
+		}
+		return S3ObjectsResponse{Objects: objects, Prefixes: prefixes, Truncated: truncated}, nil
 	})
 }
 

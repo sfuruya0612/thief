@@ -23,7 +23,8 @@ const previewKeyOf = (r: GcsObjectTableRow): string => r.name;
 const sizeOf = (r: GcsObjectTableRow): number => r.size;
 
 export function DrawerGCSObjects({ projectId, bucket }: DrawerGCSObjectsProps) {
-  const useObjects = (prefix: string) => useGcsObjects(projectId, bucket, prefix);
+  const useObjects = (prefix: string, delimiter: string) =>
+    useGcsObjects(projectId, bucket, prefix, delimiter);
   const useUpload = (uploadPrefix: string | undefined) =>
     useGcsUpload(projectId, bucket, uploadPrefix);
   const usePreview = (key: string | undefined) => useGcsObjectPreview(projectId, bucket, key);

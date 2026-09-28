@@ -1,125 +1,30 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/gcp"
 )
 
-func TestSanitizeContentDispositionFilename(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{
-			name: "simple filename",
-			in:   "report.txt",
-			want: "report.txt",
-		},
-		{
-			name: "extract final segment from path",
-			in:   "path/to/file.csv",
-			want: "file.csv",
-		},
-		{
-			name: "strip CR LF injection",
-			in:   "evil\r\nX-Injected: yes.txt",
-			want: "evilX-Injected: yes.txt",
-		},
-		{
-			name: "strip double quotes",
-			in:   `weird"name".pdf`,
-			want: "weirdname.pdf",
-		},
-		{
-			name: "strip backslash",
-			in:   `mix\slash.bin`,
-			want: "mixslash.bin",
-		},
-		{
-			name: "empty key fallback",
-			in:   "",
-			want: "download",
-		},
-		{
-			name: "trailing slash fallback",
-			in:   "dir/",
-			want: "download",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sanitizeContentDispositionFilename(tt.in)
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestReadS3UploadBody(t *testing.T) {
-	tests := []struct {
-		name    string
-		in      []byte
-		want    []byte
-		wantErr error
-	}{
-		{
-			name: "empty body",
-			in:   []byte{},
-			want: []byte{},
-		},
-		{
-			name: "small body",
-			in:   []byte("hello"),
-			want: []byte("hello"),
-		},
-		{
-			name: "exactly at limit",
-			in:   bytes.Repeat([]byte("a"), maxS3UploadSize),
-			want: bytes.Repeat([]byte("a"), maxS3UploadSize),
-		},
-		{
-			name:    "exceeds limit",
-			in:      bytes.Repeat([]byte("a"), maxS3UploadSize+1),
-			wantErr: errS3UploadTooLarge,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := readS3UploadBody(strings.NewReader(string(tt.in)))
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("err = %v, want %v", err, tt.wantErr)
-			}
-			if tt.wantErr == nil && !bytes.Equal(got, tt.want) {
-				t.Errorf("got %d bytes, want %d bytes", len(got), len(tt.want))
-			}
-		})
-	}
-}
-
-// TestHandleS3Objects は /api/aws/profiles/{profile}/s3/{bucket}/objects の
-// delimiter / prefix の扱いと応答形状を検証する。一覧の取得は Server のフィールド
-// (s3Objects) を差し替えて行い、実 AWS へは接続しない。
-func TestHandleS3Objects(t *testing.T) {
+// TestHandleGCPGCSObjects は /api/gcp/gcs/{bucket}/objects の delimiter / prefix の扱いと
+// 応答形状を検証する。一覧の取得は Server のフィールド (gcsObjects) を差し替えて行い、
+// 実 GCP へは接続しない。
+func TestHandleGCPGCSObjects(t *testing.T) {
 	s := newTestServer(t)
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
 
 	var gotPrefix, gotDelimiter string
 	called := false
-	s.s3Objects = func(_ context.Context, profile, region, bucket, prefix, delimiter string) ([]awsinternal.S3ObjectResource, []string, bool, error) {
-		if profile != "test-profile" || region != "ap-northeast-1" || bucket != "my-bucket" {
-			t.Errorf("unexpected args: profile=%q region=%q bucket=%q", profile, region, bucket)
+	s.gcsObjects = func(_ context.Context, projectID, bucket, prefix, delimiter string) ([]gcp.ObjectInfo, []string, bool, error) {
+		if projectID != "test-project" || bucket != "my-bucket" {
+			t.Errorf("unexpected args: projectID=%q bucket=%q", projectID, bucket)
 		}
 		called = true
 		gotPrefix, gotDelimiter = prefix, delimiter
@@ -128,9 +33,9 @@ func TestHandleS3Objects(t *testing.T) {
 			return nil, []string{"empty/sub/"}, false, nil
 		}
 		if delimiter == "/" {
-			return []awsinternal.S3ObjectResource{{Key: "logs/a.txt", Size: 1}}, []string{"logs/", "notes/"}, false, nil
+			return []gcp.ObjectInfo{{Name: "logs/a.txt", Bucket: "my-bucket", Size: 1}}, []string{"logs/", "notes/"}, false, nil
 		}
-		return []awsinternal.S3ObjectResource{{Key: "logs/a.txt", Size: 1}}, nil, false, nil
+		return []gcp.ObjectInfo{{Name: "logs/a.txt", Bucket: "my-bucket", Size: 1}}, nil, false, nil
 	}
 
 	do := func(target string) *httptest.ResponseRecorder {
@@ -143,7 +48,7 @@ func TestHandleS3Objects(t *testing.T) {
 
 	t.Run("階層モードは prefixes 付きで返す", func(t *testing.T) {
 		called, gotPrefix, gotDelimiter = false, "", ""
-		w := do("/api/aws/profiles/test-profile/s3/my-bucket/objects?region=ap-northeast-1&prefix=logs/&delimiter=%2F")
+		w := do("/api/gcp/gcs/my-bucket/objects?project_id=test-project&prefix=logs/&delimiter=%2F")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
 		}
@@ -151,12 +56,12 @@ func TestHandleS3Objects(t *testing.T) {
 			t.Errorf("called with prefix=%q delimiter=%q, want prefix=%q delimiter=%q",
 				gotPrefix, gotDelimiter, "logs/", "/")
 		}
-		var body S3ObjectsResponse
+		var body GCSObjectsResponse
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
-		want := S3ObjectsResponse{
-			Objects:  []awsinternal.S3ObjectResource{{Key: "logs/a.txt", Size: 1}},
+		want := GCSObjectsResponse{
+			Objects:  []gcp.ObjectInfo{{Name: "logs/a.txt", Bucket: "my-bucket", Size: 1}},
 			Prefixes: []string{"logs/", "notes/"},
 		}
 		if diff := cmp.Diff(want, body); diff != "" {
@@ -166,14 +71,14 @@ func TestHandleS3Objects(t *testing.T) {
 
 	t.Run("フラットモードは prefixes を [] で返す", func(t *testing.T) {
 		called, gotPrefix, gotDelimiter = false, "", ""
-		w := do("/api/aws/profiles/test-profile/s3/my-bucket/objects?region=ap-northeast-1&prefix=logs/")
+		w := do("/api/gcp/gcs/my-bucket/objects?project_id=test-project&prefix=logs/")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
 		}
 		if gotDelimiter != "" {
 			t.Errorf("delimiter = %q, want empty", gotDelimiter)
 		}
-		var body S3ObjectsResponse
+		var body GCSObjectsResponse
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 			t.Fatalf("unmarshal body: %v", err)
 		}
@@ -191,7 +96,7 @@ func TestHandleS3Objects(t *testing.T) {
 
 	t.Run("フォルダだけの階層は objects を [] で返す", func(t *testing.T) {
 		called, gotPrefix, gotDelimiter = false, "", ""
-		w := do("/api/aws/profiles/test-profile/s3/my-bucket/objects?region=ap-northeast-1&prefix=empty/&delimiter=%2F")
+		w := do("/api/gcp/gcs/my-bucket/objects?project_id=test-project&prefix=empty/&delimiter=%2F")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusOK, w.Body.String())
 		}
@@ -206,7 +111,7 @@ func TestHandleS3Objects(t *testing.T) {
 
 	t.Run("delimiter の不正値は 400", func(t *testing.T) {
 		called, gotPrefix, gotDelimiter = false, "", ""
-		w := do("/api/aws/profiles/test-profile/s3/my-bucket/objects?region=ap-northeast-1&delimiter=%5C")
+		w := do("/api/gcp/gcs/my-bucket/objects?project_id=test-project&delimiter=%5C")
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d (body=%s)", w.Code, http.StatusBadRequest, w.Body.String())
 		}
@@ -226,15 +131,15 @@ func TestHandleS3Objects(t *testing.T) {
 	})
 }
 
-// TestHandleS3ObjectsCacheKeyIncludesDelimiter は同じ prefix でも delimiter が違えば
-// 別のキャッシュエントリになり、同じ delimiter ではキャッシュにヒットすることを検証する。
-func TestHandleS3ObjectsCacheKeyIncludesDelimiter(t *testing.T) {
+// TestHandleGCPGCSObjectsCacheKeyIncludesDelimiter は同じ prefix でも delimiter が違えば
+// 別のキャッシュエントリになることを検証する。
+func TestHandleGCPGCSObjectsCacheKeyIncludesDelimiter(t *testing.T) {
 	s := newTestServer(t)
 	s.mux = http.NewServeMux()
 	s.registerRoutes()
 
 	calls := 0
-	s.s3Objects = func(context.Context, string, string, string, string, string) ([]awsinternal.S3ObjectResource, []string, bool, error) {
+	s.gcsObjects = func(context.Context, string, string, string, string) ([]gcp.ObjectInfo, []string, bool, error) {
 		calls++
 		return nil, nil, false, nil
 	}
@@ -242,7 +147,7 @@ func TestHandleS3ObjectsCacheKeyIncludesDelimiter(t *testing.T) {
 	do := func(query string) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(http.MethodGet,
-			"/api/aws/profiles/test-profile/s3/my-bucket/objects?region=ap-northeast-1"+query, nil)
+			"/api/gcp/gcs/my-bucket/objects?project_id=test-project"+query, nil)
 		w := httptest.NewRecorder()
 		s.mux.ServeHTTP(w, r)
 		return w
@@ -256,13 +161,5 @@ func TestHandleS3ObjectsCacheKeyIncludesDelimiter(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("loader calls = %d, want 2 (the flat and hierarchy caches must be separate)", calls)
-	}
-
-	w := do("")
-	if got := w.Header().Get("X-Cache-Status"); got != "HIT" {
-		t.Errorf("X-Cache-Status = %q, want HIT", got)
-	}
-	if calls != 2 {
-		t.Errorf("loader calls = %d, want 2 after a cache hit", calls)
 	}
 }

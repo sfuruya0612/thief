@@ -13,8 +13,13 @@
   "drawerObjectBrowser": {
     "openPreview": "プレビューを開く",
     "openQuery": "オブジェクトに SQL を実行",
+    "openFolder": "{{name}} を開く",
     "search": "検索",
+    "breadcrumbRoot": "ルート",
+    "modeHierarchy": "階層",
+    "modeFlat": "フラット",
     "truncatedNotice": "取得件数が上限 (1000 件) に達したため一部のみ表示しています。prefix で絞り込んで再検索してください。",
+    "truncatedNoticeHierarchy": "取得件数が上限 (1000 件) に達したため一部のみ表示しています。フォルダを開くか、検索欄で絞り込んでください。",
     "selectOrDropFile": "ファイルを選択またはドロップ"
   },
   "drawerObjectPreview": {

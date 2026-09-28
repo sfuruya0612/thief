@@ -24,6 +24,8 @@
   - @sfuruya0612
 - [ADD] Web の S3 / GCS のオブジェクト SQL 検索の結果を、列を選んで棒グラフ・折れ線グラフで表示できるようにする (結果部に Table / Chart の切り替えを置き、X 列 (単一選択)、Y 列 (複数選択、数値列だけが候補)、グラフ種類を選べるようにする。数値の判定は結果表と同じ `lib/numericCell.ts` を共有し、空のセルは欠損として点を描かない。列が無い結果と数値列が無い結果では Chart を無効にして理由を出し、グラフの表示中にそうした結果を実行したときは表へ戻す。X 列の値が 5,000 種類を超える結果は SQL での集計か LIMIT を促す。軸・凡例の文字色は `components/charts/chartTheme.ts` に集約して既存の 2 つのグラフと共有する。issue 0197)
   - @sfuruya0612
+- [ADD] S3 / GCS の Objects タブで、バケットをフォルダの階層として 1 階層ずつ辿れるようにする (backend が区切り文字 `/` で一覧して応答に `prefixes` を足し、既存のエンドポイントにクエリパラメータ `delimiter` (空か `/`) を足す。frontend はフォルダ行とパンくずで辿る階層モードと、従来の平らな一覧のフラットモードをトグルで切り替える。打ち切りは、オブジェクトとフォルダを合わせて 1000 件を超える残りがあるときだけ行い、GCS のちょうど 1000 件のときの打ち切りをやめる。issue 0207)
+  - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
   - @sfuruya0612
 - [FIX] Web の S3 / GCS のオブジェクト SQL 検索が `Cannot read properties of undefined (reading 'fields')` で失敗する不具合を修正する (`AsyncDuckDBConnection.send()` が返す Arrow の `AsyncRecordBatchStreamReader` は `open()` するまで `schema` を持たないのに、`collectQueryResult` が反復の前に `schema.fields` を読んでいた。`QueryBatchReader` に `open()` を加え、`collectQueryResult` が列名を読む前に `open()` するようにする。issue 0206)

@@ -54,6 +54,16 @@ export interface ColumnDef<T> {
   filterValue?: (row: T) => string;
 }
 
+// 列フィルターの判定に使う文字列を取り出す。filterValue 指定があればそれを使い、
+// なければ row[key] の生値を文字列化する (cell の表示値とは異なる場合がある)。
+// DataTable の列フィルタと、行の種別ごとに元の列の判定を引き継ぐ呼び出し側
+// (DrawerObjectBrowser) の両方から使う。
+export function filterText<T>(c: ColumnDef<T>, row: T): string {
+  if (c.filterValue) return c.filterValue(row);
+  const v = (row as Record<string, unknown>)[c.key];
+  return v == null ? '' : String(v);
+}
+
 // バイト数を人が読みやすい単位 (KB/MB/GB/TB) に変換する
 export function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B';

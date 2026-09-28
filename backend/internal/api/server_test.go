@@ -14,6 +14,7 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/cache"
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/datadogauth"
+	"github.com/sfuruya0612/thief/backend/internal/gcp"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 )
@@ -44,6 +45,12 @@ func newTestServer(t *testing.T) *Server {
 		// (時系列のテストは差し替えること)。
 		ec2Resources: func(context.Context, string, string) ([]awsinternal.EC2Resource, error) {
 			return nil, errors.New("ec2 resources is not configured in newTestServer")
+		},
+		s3Objects: func(context.Context, string, string, string, string, string) ([]awsinternal.S3ObjectResource, []string, bool, error) {
+			return nil, nil, false, errors.New("s3 objects is not configured in newTestServer")
+		},
+		gcsObjects: func(context.Context, string, string, string, string) ([]gcp.ObjectInfo, []string, bool, error) {
+			return nil, nil, false, errors.New("gcs objects is not configured in newTestServer")
 		},
 		ecsTaskCountSeries: func(context.Context, string, string, awsinternal.TimeseriesRange, awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error) {
 			return nil, errors.New("ecs task count series is not configured in newTestServer")
@@ -166,6 +173,23 @@ func TestCacheKeyPrefixForInvalidate(t *testing.T) {
 		cacheKey("s3-objects", profile, region, bucket, ""),
 		cacheKey("s3-objects", profile, region, bucket, "logs/"),
 		cacheKey("s3-objects", profile, region, bucket, "logs/2026:07/"),
+		// delimiter は prefix の後ろに付くため、階層モード (/) とフラットモード ("") の
+		// どちらのキャッシュも同じ前方一致プレフィックスで無効化される。
+		cacheKey("s3-objects", profile, region, bucket, "", "/"),
+		cacheKey("s3-objects", profile, region, bucket, "logs/", "/"),
+		cacheKey("s3-objects", profile, region, bucket, "logs/", ""),
+	}
+
+	gcsPrefixKey := cacheKey("gcp-gcs-objects", "test-project", bucket, "")
+	gcsMatches := []string{
+		cacheKey("gcp-gcs-objects", "test-project", bucket, ""),
+		cacheKey("gcp-gcs-objects", "test-project", bucket, "logs/", "/"),
+		cacheKey("gcp-gcs-objects", "test-project", bucket, "logs/", ""),
+	}
+	for _, key := range gcsMatches {
+		if !strings.HasPrefix(key, gcsPrefixKey) {
+			t.Errorf("key %q does not have prefix %q", key, gcsPrefixKey)
+		}
 	}
 	for _, key := range matches {
 		if !strings.HasPrefix(key, prefixKey) {

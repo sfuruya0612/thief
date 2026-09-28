@@ -80,12 +80,19 @@ func (s *Server) handleGCPGCS(w http.ResponseWriter, r *http.Request) {
 
 // GCSObjectsResponse は handleGCPGCSObjects のレスポンスエンベロープ。
 // Truncated は maxGCSListObjects で打ち切られたことを示す。
+// Prefixes は階層モード (delimiter=/) のフォルダの完全な prefix で、該当が無いときは
+// null ではなく [] を返す。
 type GCSObjectsResponse struct {
 	Objects   []gcp.ObjectInfo `json:"objects"`
+	Prefixes  []string         `json:"prefixes"`
 	Truncated bool             `json:"truncated"`
 }
 
 // handleGCPGCSObjects は指定バケット配下のオブジェクトを prefix 絞り込みで返す。
+// キャッシュキーには prefix と delimiter も含める (prefix / モードごとに独立キャッシュ)。
+// delimiter を prefix の後ろに置くことで、アップロード後の
+// cacheKey("gcp-gcs-objects", projectID, bucket, "") による前方一致の無効化が
+// 階層モードとフラットモードの両方に効く。
 func (s *Server) handleGCPGCSObjects(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := s.gcpProjectIDFromQuery(w, r)
 	if !ok {
@@ -93,12 +100,24 @@ func (s *Server) handleGCPGCSObjects(w http.ResponseWriter, r *http.Request) {
 	}
 	bucket := r.PathValue("bucket")
 	prefix := r.URL.Query().Get("prefix")
-	s.serveCached(w, r, cacheKey("gcp-gcs-objects", projectID, bucket, prefix), cacheTTL, writeGCPError, func() (any, error) {
-		objects, truncated, err := gcp.ListObjects(r.Context(), projectID, bucket, prefix)
+	delimiter, ok := objectListDelimiter(w, r)
+	if !ok {
+		return
+	}
+	s.serveCached(w, r, cacheKey("gcp-gcs-objects", projectID, bucket, prefix, delimiter), cacheTTL, writeGCPError, func() (any, error) {
+		objects, prefixes, truncated, err := s.gcsObjects(r.Context(), projectID, bucket, prefix, delimiter)
 		if err != nil {
 			return nil, err
 		}
-		return GCSObjectsResponse{Objects: objects, Truncated: truncated}, nil
+		// 該当が無いときは null ではなく [] を返す (frontend の Raw 型が非 null のため)。
+		// 階層モードではフォルダだけの階層で objects が空になるのが常態なので、objects も揃える。
+		if objects == nil {
+			objects = []gcp.ObjectInfo{}
+		}
+		if prefixes == nil {
+			prefixes = []string{}
+		}
+		return GCSObjectsResponse{Objects: objects, Prefixes: prefixes, Truncated: truncated}, nil
 	})
 }
 

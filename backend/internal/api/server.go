@@ -14,6 +14,7 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/cache"
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	ddclient "github.com/sfuruya0612/thief/backend/internal/datadog"
+	"github.com/sfuruya0612/thief/backend/internal/gcp"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	tidbclient "github.com/sfuruya0612/thief/backend/internal/tidb"
 	"golang.org/x/sync/singleflight"
@@ -40,6 +41,12 @@ type Server struct {
 
 	// ec2Resources は EC2 の一覧を取得する関数。テストで差し替えられるよう、関数として持つ。
 	ec2Resources func(ctx context.Context, profile, region string) ([]awsinternal.EC2Resource, error)
+	// s3Objects は S3 オブジェクトの一覧を取得する関数。テストで差し替えられるよう、
+	// ec2Resources と同じ形で持つ。delimiter が "/" のときは階層モードで、prefixes に
+	// フォルダの完全な prefix が入る。
+	s3Objects func(ctx context.Context, profile, region, bucket, prefix, delimiter string) ([]awsinternal.S3ObjectResource, []string, bool, error)
+	// gcsObjects は GCS オブジェクトの一覧を取得する関数。s3Objects と対称。
+	gcsObjects func(ctx context.Context, projectID, bucket, prefix, delimiter string) ([]gcp.ObjectInfo, []string, bool, error)
 	// ecsTaskCountSeries は ECS のタスク数の時系列を取得する関数。テストで実 AWS へ
 	// 接続せずに差し替えられるよう、関数として持つ。
 	ecsTaskCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, w awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error)
@@ -68,6 +75,8 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		ddLoginSessions:    newDatadogLoginSessionStore(),
 		ddAuth:             defaultDatadogAuthDeps(),
 		ec2Resources:       awsinternal.ListEC2Resources,
+		s3Objects:          awsinternal.ListS3Objects,
+		gcsObjects:         gcp.ListObjects,
 		ecsTaskCountSeries: awsinternal.ListECSTaskCountSeries,
 	}
 

@@ -29,7 +29,16 @@ var s3ObjectColumns = []util.Column{
 	{Header: "ETag"},
 }
 
+// s3ObjectsLister は `s3 objects` が呼ぶ一覧取得関数の型。テストで AWS への接続を差し替え、
+// フラグから取得関数の引数と出力までの結線を検証できるようにする (elbOps と同じ形)。
+type s3ObjectsLister func(ctx context.Context, profile, region, bucket, prefix, delimiter string) ([]awsinternal.S3ObjectResource, []string, bool, error)
+
 func newS3Cmd() *cobra.Command {
+	return newS3CmdWithObjectsLister(awsinternal.ListS3Objects)
+}
+
+// newS3CmdWithObjectsLister は objects の取得関数を差し替えられる形で s3 コマンドを組み立てる。
+func newS3CmdWithObjectsLister(listObjects s3ObjectsLister) *cobra.Command {
 	s3Cmd := &cobra.Command{
 		Use:   "s3",
 		Short: "S3 commands",
@@ -61,7 +70,7 @@ func newS3Cmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			prefix, _ := cmd.Flags().GetString("prefix")
-			return s3RunObjects(cmd, args[0], prefix)
+			return s3RunObjects(cmd, listObjects, args[0], prefix)
 		},
 	}
 	objectsCmd.Flags().String("prefix", "", "Object key prefix filter")
@@ -116,12 +125,14 @@ func contentTypeForFile(filePath string) string {
 	return mime.TypeByExtension(filepath.Ext(filePath))
 }
 
-func s3RunObjects(cmd *cobra.Command, bucket, prefix string) error {
+// s3RunObjects はオブジェクトの平らな一覧を出力する。CLI は階層表示を扱わないため
+// delimiter に空文字を渡し、応答の prefixes は使わない。
+func s3RunObjects(cmd *cobra.Command, listObjects s3ObjectsLister, bucket, prefix string) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	objects, truncated, err := awsinternal.ListS3Objects(commandContext(cmd), cfg.Profile, cfg.Region, bucket, prefix)
+	objects, _, truncated, err := listObjects(commandContext(cmd), cfg.Profile, cfg.Region, bucket, prefix, "")
 	if err != nil {
 		return err
 	}

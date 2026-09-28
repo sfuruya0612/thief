@@ -217,6 +217,17 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  // オブジェクトブラウザのフォルダ行。タブの付いたフォルダの輪郭にする
+  folder: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        </>
+      }
+    />
+  ),
   // 分割表示の切り替え。枠を縦線で 2 分割した形にする
   split: (p = {}) => (
     <Icon

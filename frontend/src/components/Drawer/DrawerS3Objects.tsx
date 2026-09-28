@@ -23,7 +23,8 @@ const previewKeyOf = (r: S3ObjectTableRow): string => r.key;
 const sizeOf = (r: S3ObjectTableRow): number => r.size;
 
 export function DrawerS3Objects({ profile, region, bucket }: DrawerS3ObjectsProps) {
-  const useObjects = (prefix: string) => useS3Objects(profile, region, bucket, prefix);
+  const useObjects = (prefix: string, delimiter: string) =>
+    useS3Objects(profile, region, bucket, prefix, delimiter);
   const useUpload = (uploadPrefix: string | undefined) =>
     useS3Upload(profile, region, bucket, uploadPrefix);
   const usePreview = (key: string | undefined) => useS3ObjectPreview(profile, region, bucket, key);

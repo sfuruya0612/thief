@@ -1,7 +1,7 @@
 // tables.jsx DataTable の汎用化移植
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ColumnDef } from './tables/columns';
+import { filterText, type ColumnDef } from './tables/columns';
 import { Loading } from './Loading';
 import { useColumnResize } from '../hooks/useColumnResize';
 
@@ -28,14 +28,6 @@ function sortValue<T>(row: T, key: string): string | number | undefined {
 // header が空 (Actions 列等) でも key === 'actions' でもない列を対象とする
 function isFilterable<T>(c: ColumnDef<T>): boolean {
   return c.filterable ?? (c.header !== '' && c.key !== 'actions');
-}
-
-// 列フィルターの判定に使う文字列を取り出す。filterValue 指定があればそれを使い、
-// なければ row[key] の生値を文字列化する (cell の表示値とは異なる場合がある)
-function filterText<T>(c: ColumnDef<T>, row: T): string {
-  if (c.filterValue) return c.filterValue(row);
-  const v = (row as Record<string, unknown>)[c.key];
-  return v == null ? '' : String(v);
 }
 
 export function DataTable<T extends { id: string; state?: string }>({

@@ -13,8 +13,13 @@
   "drawerObjectBrowser": {
     "openPreview": "Open preview",
     "openQuery": "Run SQL against this object",
+    "openFolder": "Open {{name}}",
     "search": "Search",
+    "breadcrumbRoot": "Root",
+    "modeHierarchy": "Folders",
+    "modeFlat": "Flat",
     "truncatedNotice": "Reached the maximum of 1000 results; only some are shown. Narrow down with a prefix and search again.",
+    "truncatedNoticeHierarchy": "Reached the maximum of 1000 results; only some are shown. Open a folder or narrow down with the search field.",
     "selectOrDropFile": "Select or drop a file"
   },
   "drawerObjectPreview": {

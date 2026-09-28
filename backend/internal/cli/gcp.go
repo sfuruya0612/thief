@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,17 @@ const gcpLoggingDefaultLimit = 200
 
 // newGCPCmd は Google Cloud 操作のルートコマンドを返す。
 func newGCPCmd() *cobra.Command {
+	return newGCPCmdWithObjectsLister(gcp.ListObjects)
+}
+
+// gcsObjectsLister は `gcp gcs objects` が呼ぶ一覧取得関数の型。テストで Cloud Storage への
+// 接続を差し替え、フラグから取得関数の引数と出力までの結線を検証できるようにする
+// (s3ObjectsLister と同じ形)。
+type gcsObjectsLister func(ctx context.Context, projectID, bucket, prefix, delimiter string) ([]gcp.ObjectInfo, []string, bool, error)
+
+// newGCPCmdWithObjectsLister は gcs objects の取得関数を差し替えられる形で gcp コマンドを
+// 組み立てる。
+func newGCPCmdWithObjectsLister(listObjects gcsObjectsLister) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gcp",
 		Short: "Google Cloud operations",
@@ -76,7 +88,7 @@ func newGCPCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			prefix, _ := cmd.Flags().GetString("prefix")
-			return gcpRunObjects(cmd, args[0], prefix)
+			return gcpRunObjects(cmd, listObjects, args[0], prefix)
 		},
 	}
 	objectsCmd.Flags().String("prefix", "", "Object name prefix filter")
@@ -371,7 +383,9 @@ func gcpRunLoggingList(cmd *cobra.Command, filter string, since time.Duration, l
 	return printRowsOrGroupBy(cfg, cols, rows)
 }
 
-func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
+// gcpRunObjects はオブジェクトの平らな一覧を出力する。CLI は階層表示を扱わないため
+// delimiter に空文字を渡し、応答の prefixes は使わない。
+func gcpRunObjects(cmd *cobra.Command, listObjects gcsObjectsLister, bucket, prefix string) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
@@ -380,7 +394,7 @@ func gcpRunObjects(cmd *cobra.Command, bucket, prefix string) error {
 	if err != nil {
 		return err
 	}
-	objects, truncated, err := gcp.ListObjects(commandContext(cmd), projectID, bucket, prefix)
+	objects, _, truncated, err := listObjects(commandContext(cmd), projectID, bucket, prefix, "")
 	if err != nil {
 		return err
 	}

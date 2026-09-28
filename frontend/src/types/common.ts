@@ -116,9 +116,12 @@ export interface ObjectPreviewRow {
 }
 
 // S3 / GCS オブジェクト一覧 API の共通レスポンス形状 (件数上限による打ち切りを持つもの)。
-// backend の S3ObjectsResponse / GCSObjectsResponse に対応する。
+// backend の S3ObjectsResponse / GCSObjectsResponse に対応する。prefixes は階層モード
+// (delimiter=/) で返るフォルダの完全な prefix (末尾 / 付き) で、backend が [] を保証する
+// ため null を許さない。
 export interface ObjectListEnvelopeRaw<T> {
   objects: T[] | null;
+  prefixes: string[];
   truncated: boolean;
 }
 
