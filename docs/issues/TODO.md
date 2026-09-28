@@ -138,3 +138,5 @@
     - 対象とすファイルは csv,  parquet, jsonl, json など、AWS, Google Cloud の Managed サービスが出力する拡張子で代表的なものとする
 - [ ] `thief athena query` の結果取得に行数の上限を指定できるようにしたい (issue 0193 のレビューで判明。`GetAthenaQueryResultsAll` は NextToken が尽きるまで全ページを取得し、大量行を返す SELECT では実行時間とメモリが無制限に増える)
 - [ ] Google Cloud のサイドバーの件数バッジも AWS 側と同じ `useCachedQueryData` に揃えたい (`frontend/src/views/GcpSidebar.tsx` の `SvcItem` は `useQuery({ queryKey: ["gcp", svc, project], enabled: false })` で QueryObserver を作り、同一 queryKey の共有 options に queryFn 無しのオブザーバを足している。docs/issues/closed/0187 のとおり `query-core` の「queryFn が無ければ他オブザーバの options から補う」フォールバックが効くため現時点で不具合は出ないが、ライブラリの実装詳細への依存であり、AWS 側だけが対策済みという非対称も残る)
+- [ ] Object Storage (S3 / GCS) の Object をぜんぶ一覧で表示するのではなく、フォルダごとに階層構造で表示できるようにしたい (issues/0207)
+- [ ] Object Storage の DuckDB によるクエリを複数ファイルに対してかけられるようにしたい (issues/0208)
