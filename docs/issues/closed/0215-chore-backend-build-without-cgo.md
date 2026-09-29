@@ -2,6 +2,7 @@
 
 Created: 2026-09-29
 Model: Claude Fable 5.1
+Completed: 2026-09-29
 
 ## 背景
 
@@ -79,3 +80,31 @@ darwin では `-race` に cgo が要らない (`$(go env GOROOT)/src/cmd/go/inte
   この issue はその方針をタスクで実現する。
 - issue 0216: pre-commit の backend チェックの短縮。
   `mise.toml` の別の箇所 (`backend:lint` / `backend:test` / `check`) を変える。
+
+## 解決方法
+
+`mise.toml` の `[env]` に `CGO_ENABLED = "0"` を追加し、理由 (`github.com/DataDog/zstd` の cgo が Go のリンカを外部リンクに切り替えてリンク時間の大半を占める)、thief が使う Datadog API が zstd 圧縮の経路を通らないこと、`[env]` がシェルの変数より優先されるため cgo を有効にするときは `env CGO_ENABLED=1 go build ./...` のようにコマンド単位で上書きすることをコメントに書いた。
+`AGENTS.md` の「backend ビルドと CI」に固定の事実と理由と上書きの方法、Linux では `-race` に cgo が要るため `backend/` で `env CGO_ENABLED=1 go test -race -cover ./...` を使うことを追記し、「並行処理」節の `-race` の行にも Linux の注記を添えた。
+
+確認した結果 (2026-09-29、Go 1.26.6、darwin)。
+
+- `mise env` の出力に `set -gx CGO_ENABLED 0` がある。
+- `mise run backend:install` が成功し、`go version -m "$(go env GOPATH)/bin/thief"` に `build CGO_ENABLED=0` がある。
+  `backend/` で `go list -deps -f '{{if .CgoFiles}}{{.ImportPath}}{{end}}' ./cmd/thief` は何も出さない (cgo を含むパッケージが依存グラフから消えた)。
+- `mise run backend:test` (`go test -race -cover ./...`) が darwin で 18 パッケージすべて成功した。
+- `mise run check` が通った。
+- `CHANGES.md` の `## develop` の `### misc` にエントリを追記した (種別タグ無しは `### misc` の既存の書式に合わせた)。
+
+所要時間 (`$(go env GOPATH)/bin/thief` を削除してから `mise run backend:install` を実行する時間。各計測の前に同じ設定で 1 回ビルドしてキャッシュを温めた。他の処理を走らせていない状態で `/usr/bin/time -p` で計測)。
+
+| 設定 | real | user | sys |
+| --- | --- | --- | --- |
+| 変更前 (`CGO_ENABLED=1`、`mise.toml` を変える前の HEAD 5202e60 で計測) | 17.40 秒 | 13.97 秒 | 2.30 秒 |
+| 変更後 (`CGO_ENABLED=0`) | 11.90 秒 | 7.66 秒 | 2.94 秒 |
+
+変更後の所要時間は変更前より短い。
+
+「## 背景」の表の `CGO_ENABLED=0` のリンク 5.3 秒は、`backend/` で `CGO_ENABLED=0 go build -o <一時ファイル> ./cmd/thief` を直接実行した値であり、上の表とは手順が異なる。
+上の表は完了条件の手順 (バイナリを削除してから `mise run backend:install`) の値で、mise の起動と、`go install` がリンクの前に行う依存パッケージの更新の要否の確認を含む。
+バイナリが最新でリンクが走らない状態の `mise run backend:install` は real 4.76 秒 (2026-09-29 に同じ Mac で計測) で、この分が差の大半を占める。
+同じ手順で測り直すと real 10.26 秒で、残りの差は実行ごとのばらつきの範囲にある。

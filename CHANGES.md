@@ -435,6 +435,8 @@
 
 ### misc
 
+- backend のビルドとテストを `mise.toml` の `[env]` で `CGO_ENABLED=0` に固定する (`github.com/DataDog/zstd` の cgo が強制していた外部リンクが外れ、`mise run backend:install` の所要時間が 17.40 秒から 11.90 秒になる。Linux では `-race` に cgo が要るため `env CGO_ENABLED=1` で上書きする。docs/issues/closed/0215)
+  - @sfuruya0612
 - frontend の dev server で、duckdb-wasm の worker の sourcemap が同梱の `@duckdb/apache-arrow` のソースを指すことによる警告 (`points to a source file outside its package`、最大 117 行) を抑止する (`frontend/src/lib/viteLogger.ts` の判定と差し替えを `vite.config.ts` の `customLogger` で使う。3 つの部分文字列をすべて含む警告だけを落とし、他の警告は変えない。`customLogger` を渡すため `logLevel` / `clearScreen` は効かなくなる。docs/issues/closed/0214)
   - @sfuruya0612
 - frontend の使われていない定義を削除する (永続化されるだけで参照の無い `Tweaks.layout` (保存済みの値は読み込み時に読み捨てる)、参照の無い `--shadow-drawer` / `--sp-5`、`[data-accent]` が常に上書きするため実効値にならない `[data-theme='light']` の `--accent-hi`、CSS から参照の無い Google Fonts の `Instrument Serif` の読み込み。見た目と挙動は変えない。docs/issues/closed/0205)

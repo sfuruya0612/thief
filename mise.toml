@@ -1,5 +1,12 @@
 [env]
 GOPATH = "{{env.HOME}}/go"
+# CGO_ENABLED=0 を固定する (AGENTS.md「backend ビルドと CI」参照)。
+# 依存の github.com/DataDog/zstd (C ソース同梱) が cgo でビルドされると、Go のリンカが外部リンク
+# (clang / dsymutil / strip) に切り替わり、リンク時間の大半を占める。thief が使う Datadog API は
+# zstd 圧縮の経路を通らないため、無効化しても挙動は変わらない (issue 0215)。
+# mise の [env] はシェルで先に設定した同名の変数より優先される。cgo を有効にして試すときは
+# env CGO_ENABLED=1 go build ./... のようにコマンド単位で上書きする。
+CGO_ENABLED = "0"
 
 [tools]
 # backend/go.mod の toolchain 行と同一バージョンに揃える (AGENTS.md「backend ビルドと CI」参照)

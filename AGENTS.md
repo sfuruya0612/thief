@@ -154,7 +154,7 @@ backend/
 - `sync.WaitGroup` を使う場合は `Add` → `go func() { defer wg.Done(); ... }()` のパターンを徹底する。
 - チャネルは送信側がクローズする。受信側はクローズしない。
 - 共有データの保護は `sync.Mutex` / `sync.RWMutex` を使い、ロックの取得順序を一貫させる。複雑なロック構造より、データオーナーシップを 1 goroutine に集約してチャネルでやり取りする方を優先する。
-- データ競合検出のため、テストおよび CI では `go test -race ./...` を必ず実行する。
+- データ競合検出のため、テストおよび CI では `go test -race ./...` を必ず実行する。Linux では `-race` に cgo が要るため、`env CGO_ENABLED=1 go test -race ./...` を使う (「backend ビルドと CI」参照)。
 
 ### ロギング (`log/slog`)
 
@@ -238,7 +238,8 @@ backend/
 ### backend ビルドと CI
 
 - ローカルでの最低限のチェック: `go build ./...` / `go vet ./...` / `go test -race ./...` / `gofmt -l .`。
-- バイナリビルドは `CGO_ENABLED=0` を基本とする(static link で配布が容易)。
+- バイナリビルドは `CGO_ENABLED=0` を基本とする(static link で配布が容易)。`mise.toml` の `[env]` で `CGO_ENABLED = "0"` を固定しており、mise のタスクからでも、`mise activate` したシェルで `go build` / `go test` を直接叩いたときでも無効になる。依存の `github.com/DataDog/zstd` (C ソース同梱) が cgo でビルドされると Go のリンカが外部リンク (clang / dsymutil / strip) に切り替わり、リンク時間の大半を占めるためである (issue 0215)。cgo を有効にして試すときは `env CGO_ENABLED=1 go build ./...` のようにコマンド単位で上書きする (mise の `[env]` はシェルで先に設定した同名の変数より優先される)。
+- **Linux では `-race` に cgo が要る**: `go test -race` は darwin 以外で `-race requires cgo` として終了するため、`CGO_ENABLED=0` を固定したままでは `backend:test` を実行できない。Linux で実行するときは `backend/` で `env CGO_ENABLED=1 go test -race -cover ./...` を使う。
 - バージョン情報は `-ldflags` で `main.version` に注入する。
 - **Go ツールチェインのパッチ更新**: `mise.toml` の `[tools].go` と `backend/go.mod` の `toolchain` 行は、同一バージョンへ同時に更新する。mise を経由しないシェル (CI 等) では `GOTOOLCHAIN=auto` が `go.mod` の `toolchain` 行を基準にツールチェインを解決するため、`mise.toml` だけを上げても govulncheck は旧ツールチェインの標準ライブラリを検査し、修正済みの脆弱性が再検出される (issue 0144 で実測)。逆に `toolchain` 行だけを上げると、mise 経由のシェルでも `go` コマンドは `toolchain` 行のバージョンで動き、`mise.toml` の pin が実際に使われるバージョンを表さなくなる。更新後は `mise install` でツールチェインを導入し、`mise run check` の通過を確認する。
 

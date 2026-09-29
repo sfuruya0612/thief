@@ -142,5 +142,5 @@
 - [x] Object Storage の DuckDB によるクエリを複数ファイルに対してかけられるようにしたい (docs/issues/closed/0208)
 - [ ] オブジェクト SQL 検索で、取り込み後の `written` の合計が上限を超えたときのエラー文言を合計用の言い回しにしたい (issue 0208 の実装で既存の `drawerObjectQuery.tooLarge` (1 オブジェクト分の言い回し) を流用した)
 - [x] frontend の dev server (mise run frontend:run) で duckdb-wasm の worker の sourcemap 警告 (points to a source file outside its package) がコンソールに出続けるので抑止したい (docs/issues/closed/0214)
-- [ ] backend のビルドとリンクが遅いので、CGO_ENABLED=0 で cgo (DataDog/zstd) を外してリンクを速くしたい (issues/0215)
+- [x] backend のビルドとリンクが遅いので、CGO_ENABLED=0 で cgo (DataDog/zstd) を外してリンクを速くしたい (docs/issues/closed/0215)
 - [ ] pre-commit の backend チェック (lint / test) が遅いので、govulncheck を専用タスクに分けて go test の自動 vet を止めたい (issues/0216)
