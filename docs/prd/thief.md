@@ -72,7 +72,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 | 指標 | 目標 | 測定方法 |
 | --- | --- | --- |
-| 品質ゲートの通過 | fmt、lint、test がすべて成功する | リポジトリのルートで `mise run check` を実行し、終了コードが 0 であることを確認する |
+| 品質ゲートの通過 | fmt、lint、vuln、test がすべて成功する | リポジトリのルートで `mise run check` を実行し、終了コードが 0 であることを確認する |
 | backend と frontend の型契約の一致 | 不一致 0 件 | `frontend/` で `npm run lint` を実行する。`frontend/src/types/contract.check.ts` の型検査が失敗しないことを確認する |
 | AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 23 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing) のどちらかを持つことをコードで確認する |
 | CLI の一覧コマンドの存在 | FR-10 の表の一覧コマンドが 27 個すべて存在する。Web にだけある機能 (Pricing、分割表示など) は対象外とする | 表の各コマンドに `--help` を付けて実行し、終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき表のコマンドで始まることを確認する |
@@ -640,7 +640,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 ### 運用
 
 - ビルド、テスト、Lint、フォーマットは `mise run <task>` で実行する。
-  `mise run check` が fmt、lint、test をまとめて実行する。
+  `mise run check` が fmt、lint、vuln、test をまとめて実行する。
 - pre-commit フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt`、`mise run lint`、`mise run test` を実行する。
 - CI は無い (`.github/workflows/` にワークフローが無い)。
 - backend のログは `log/slog` で出す。

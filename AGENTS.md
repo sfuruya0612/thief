@@ -4,7 +4,7 @@
 
 ## pre-commit
 
-- フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt` / `mise run lint` / `mise run test` を実行する。まとめて確認するなら `mise run check`。
+- フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt` / `mise run lint` / `mise run test` を実行する。まとめて確認するなら `mise run check` (フックが実行しない `mise run backend:vuln` の govulncheck も実行する)。
 
 ## リポジトリ概要
 
@@ -46,7 +46,7 @@ frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴ�
 | `mise run fmt` | backend / frontend 両方のフォーマッタを実行 |
 | `mise run lint` | 両方の Lint を実行 |
 | `mise run test` | 両方のテストを実行 (ユニット中心) |
-| `mise run check` | `fmt` + `lint` + `test` を順に実行 (PR 提出前の最終確認) |
+| `mise run check` | `fmt` + `lint` + `vuln` + `test` を順に実行 (PR 提出前の最終確認) |
 
 ### backend タスク
 
@@ -54,8 +54,9 @@ frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴ�
 | --- | --- |
 | `mise run backend:build` | `go build ./...` |
 | `mise run backend:install` | `thief` CLI を `go install ./cmd/thief` で `$GOPATH/bin` に導入 |
-| `mise run backend:test` | `go test -race -cover ./...` |
-| `mise run backend:lint` | `go vet` + `staticcheck` + `govulncheck` |
+| `mise run backend:test` | `go test -race -cover -vet=off ./...` |
+| `mise run backend:lint` | `go vet` + `staticcheck` |
+| `mise run backend:vuln` | `govulncheck ./...` |
 | `mise run backend:fmt` | `gofmt -w .` + `goimports -w .` |
 | `mise run backend:tidy` | `go mod tidy -v` |
 | `mise run backend:run` | ローカルで API サーバを起動 (127.0.0.1:8089) |

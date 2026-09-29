@@ -35,8 +35,8 @@ description = "backend + frontend テスト"
 depends = ["backend:test", "frontend:test"]
 
 [tasks.check]
-description = "PR 提出前の最終確認 (fmt + lint + test)"
-depends = ["fmt", "lint", "test"]
+description = "PR 提出前の最終確認 (fmt + lint + vuln + test)"
+depends = ["fmt", "lint", "backend:vuln", "test"]
 
 # === backend ===
 [tasks."backend:setup"]
@@ -57,7 +57,9 @@ run = "go install ./cmd/thief"
 [tasks."backend:test"]
 description = "backend ユニットテスト (race)"
 dir = "backend"
-run = "go test -race -cover ./..."
+# go test の自動 vet は backend:lint の go vet ./... (全 analyzer を実行) の部分集合で、
+# check / pre-commit では二重実行になるため止める。vet の結果が要るときは backend:lint を併用する。
+run = "go test -race -cover -vet=off ./..."
 
 [tasks."backend:tools"]
 description = "go: 管理ツールのビルド時 Go バージョンを検査し、不一致なら再ビルド"
@@ -115,8 +117,13 @@ depends = ["backend:tools"]
 run = """
 go vet ./...
 "$(mise which staticcheck)" ./...
-"$(mise which govulncheck)" ./...
 """
+
+[tasks."backend:vuln"]
+description = "backend 脆弱性検査 (govulncheck)"
+dir = "backend"
+depends = ["backend:tools"]
+run = "\"$(mise which govulncheck)\" ./..."
 
 [tasks."backend:fmt"]
 description = "backend フォーマット"

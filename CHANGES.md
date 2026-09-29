@@ -435,6 +435,8 @@
 
 ### misc
 
+- pre-commit の backend チェックから govulncheck を専用タスク `backend:vuln` に分け、`go test` の自動 vet を止める (`mise run check` と `mise run backend:vuln` では従来どおり govulncheck が走る。`backend:test` は `-vet=off` とし、vet は `backend:lint` の `go vet ./...` に一本化する。各 2 回計測した 2 回目の値で `mise run backend:lint` が 21.28 秒から 14.52 秒、キャッシュ済みの `mise run backend:test` が 7.86 秒から 4.99 秒になる。ADR 0031。docs/issues/closed/0216)
+  - @sfuruya0612
 - backend のビルドとテストを `mise.toml` の `[env]` で `CGO_ENABLED=0` に固定する (`github.com/DataDog/zstd` の cgo が強制していた外部リンクが外れ、`mise run backend:install` の所要時間が 17.40 秒から 11.90 秒になる。Linux では `-race` に cgo が要るため `env CGO_ENABLED=1` で上書きする。docs/issues/closed/0215)
   - @sfuruya0612
 - frontend の dev server で、duckdb-wasm の worker の sourcemap が同梱の `@duckdb/apache-arrow` のソースを指すことによる警告 (`points to a source file outside its package`、最大 117 行) を抑止する (`frontend/src/lib/viteLogger.ts` の判定と差し替えを `vite.config.ts` の `customLogger` で使う。3 つの部分文字列をすべて含む警告だけを落とし、他の警告は変えない。`customLogger` を渡すため `logLevel` / `clearScreen` は効かなくなる。docs/issues/closed/0214)

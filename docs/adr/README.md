@@ -26,7 +26,7 @@ thief の設計判断の記録。
 | [0019](0019-official-icons-not-committed.md) | AWS と Google Cloud の公式アイコンをリポジトリに含めない | Accepted | 2026-07-08 |
 | [0020](0020-i18n-scope.md) | UI の固定の文言を翻訳し、Drawer のタブ名と外部サービスのメッセージは英語のままにする | Accepted | 2026-07-21 |
 | [0021](0021-mise-native-startup-without-docker.md) | Docker による起動をやめ、mise のタスクでネイティブに起動し、ポートを 8088 と 8089 にする | Accepted | 2026-07-18 |
-| [0022](0022-quality-gates.md) | 品質ゲートを mise run check と pre-commit フックに置く | Accepted | 2026-07-08 |
+| [0022](0022-quality-gates.md) | 品質ゲートを mise run check と pre-commit フックに置く | Superseded by 0031 | 2026-07-08 |
 | [0023](0023-cli-signal-context-exit-130.md) | CLI はシグナルで取り消せる context を全コマンドに渡し、中断を終了コード 130 で終える | Accepted | 2026-08-09 |
 | [0024](0024-local-persistence-locations.md) | 端末に残すデータの置き場所をデータの種類ごとに決める | Accepted | 2026-07-08 |
 | [0025](0025-two-pane-split-view.md) | 分割表示は 2 ペインまでとし、frontend だけで実装する | Accepted | 2026-09-25 |
@@ -35,3 +35,4 @@ thief の設計判断の記録。
 | [0028](0028-issues-under-docs-tracked.md) | issue を docs/issues/ に移し、git で管理する | Accepted | 2026-09-26 |
 | [0029](0029-object-list-delimiter-hierarchy.md) | オブジェクトの階層は API の区切り文字で 1 階層ずつ取得し、フラットモードを残す | Accepted | 2026-09-28 |
 | [0030](0030-object-query-multiple-objects.md) | オブジェクトの SQL 検索は、同じ形式の複数のオブジェクトを読み取り関数のリスト引数で 1 つのビューにまとめる | Accepted | 2026-09-28 |
+| [0031](0031-vuln-check-in-check-task-not-precommit.md) | govulncheck は check タスクと backend:vuln で実行し、pre-commit フックでは実行しない | Accepted | 2026-09-29 |

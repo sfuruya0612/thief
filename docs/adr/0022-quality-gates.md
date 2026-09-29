@@ -2,7 +2,7 @@
 
 Created: 2026-09-26
 Model: Claude Opus 5.5
-Status: Accepted
+Status: Superseded by 0031
 Decided: 2026-07-08
 
 ## 状況

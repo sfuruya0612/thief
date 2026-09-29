@@ -2,6 +2,7 @@
 
 Created: 2026-09-29
 Model: Claude Fable 5.1
+Completed: 2026-09-29
 
 ## 背景
 
@@ -79,3 +80,34 @@ pre-commit と `mise run check` はどちらも lint と test の両方を実行
   本 issue の ADR 0031 が supersede する。
 - issue 0215: `CGO_ENABLED=0` への固定。
   `mise.toml` の `[env]` を変える。
+
+## 解決方法
+
+`mise.toml` に `backend:vuln` タスク (`description = "backend 脆弱性検査 (govulncheck)"`、`dir = "backend"`、`depends = ["backend:tools"]`、`"$(mise which govulncheck)" ./...`) を `backend:lint` の直後に新設し、`backend:lint` の `run` から govulncheck の行を外した。
+`check` の `depends` を `["fmt", "lint", "backend:vuln", "test"]` にし、`description` を `PR 提出前の最終確認 (fmt + lint + vuln + test)` にした。
+`backend:test` の `run` を `go test -race -cover -vet=off ./...` にし、`backend:lint` の `go vet ./...` が自動 vet の上位互換であることと、単独実行では vet が走らないことをコメントに書いた。
+`.pre-commit-config.yaml` は変えていない (フックが呼ぶ `mise run lint` に govulncheck が含まれなくなる)。
+`AGENTS.md` の「タスクランナー」の表に `backend:vuln` の行を足し、`check` / `backend:lint` / `backend:test` の行を直し、「pre-commit」節に `check` はフックが実行しない `backend:vuln` も実行することを添えた。
+`docs/prd/thief.md` の品質ゲートの 2 箇所を `fmt、lint、vuln、test` にした。
+ADR 0022 の決定のうち覆る 2 つを `docs/adr/0031-vuln-check-in-check-task-not-precommit.md` に記録し、ADR 0022 の `Status` を `Superseded by 0031` にし、`docs/adr/README.md` の表を更新した。
+
+確認した結果 (2026-09-29、Go 1.26.6、darwin)。
+
+- `mise run backend:vuln` が `[backend:vuln] $ "$(mise which govulncheck)" ./...` に続けて `No vulnerabilities found.` を出す。
+- `mise run check` の出力に `[backend:vuln]` の govulncheck の実行が含まれる。
+- フックが呼ぶ `mise run lint` の出力に govulncheck の実行は無い (`[backend:tools] skip govulncheck: built with go1.26.6 (matches active toolchain)` はツールのビルド時バージョンの検査であり、govulncheck の実行ではない)。
+- `git diff -- .pre-commit-config.yaml` が空。
+- `mise run backend:test` の出力の 1 行目が `go test -race -cover -vet=off ./...` で、18 パッケージすべて成功した。
+- `mise run check` が通った。
+- `CHANGES.md` の `## develop` の `### misc` にエントリを追記した (種別タグ無しは `### misc` の既存の書式に合わせた)。
+
+所要時間 (他の処理を走らせていない状態で `/usr/bin/time -p` の real。各タスクを続けて 2 回実行し、テスト結果がキャッシュ済みの 2 回目どうしを主な比較とする。変更前は `mise.toml` を変える前の HEAD 5202e60 で計測)。
+
+| タスク | 変更前 | 変更後 |
+| --- | --- | --- |
+| `mise run backend:lint` | 21.86 秒 (2 回目 21.28 秒) | 14.58 秒 (2 回目 14.52 秒) |
+| `mise run backend:test` (キャッシュ済み) | 16.02 秒 (2 回目 7.86 秒) | 5.53 秒 (2 回目 4.99 秒) |
+
+どちらも変更後の所要時間が変更前より短い。
+2 回目どうしの比較では `backend:lint` が 21.28 秒から 14.52 秒、`backend:test` が 7.86 秒から 4.99 秒に短くなり、issue 本文の計測 (自動 vet あり 7.7 秒、`-vet=off` 4.4 秒) と整合する。
+変更前の計測は issue 0215 の `CGO_ENABLED=0` の固定より前の状態 (HEAD 5202e60) で取ったため、1 回目の `backend:test` の差 (16.02 秒から 5.53 秒) には 0215 の効果 (cgo 無しの再コンパイルと再リンク) が含まれ、この issue 単独の効果を表さない。
