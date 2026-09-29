@@ -1,8 +1,13 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
+import { createLogger, defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { isSuppressedViteWarning, withSuppressedWarnings } from './src/lib/viteLogger.ts';
 
 export default defineConfig({
+  // duckdb-wasm の eh worker の sourcemap 警告 (同梱の @duckdb/apache-arrow のソースを指す) を
+  // dev server で抑止する。customLogger を渡すと Vite は createLogger の level と
+  // allowClearScreen を捨てるため、logLevel / clearScreen は使えない (現状どちらも未使用)。
+  customLogger: withSuppressedWarnings(createLogger(), isSuppressedViteWarning),
   plugins: [react()],
   server: {
     port: 8088,

@@ -2,6 +2,7 @@
 
 Created: 2026-09-29
 Model: Claude Fable 5.1
+Completed: 2026-09-29
 
 ## 背景
 
@@ -77,3 +78,34 @@ DuckDB を初期化する操作は、S3 または GCS の Drawer の Objects タ
 ## 関連
 
 - issue 0196: worker を `?url` import で `node_modules` から配信する現状の経緯。
+
+## 解決方法
+
+`frontend/vite.config.ts` の `customLogger` に、新設の `frontend/src/lib/viteLogger.ts` で `warn` と `warnOnce` を差し替えた Vite 既定のロガーを渡し、duckdb-wasm の eh worker の sourcemap 警告だけを落とす。
+
+- `frontend/src/lib/viteLogger.ts` (新規): `isSuppressedViteWarning(msg)` は 3 つの部分文字列 (`points to a source file outside its package`、`/@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js`、`/@duckdb/apache-arrow/`) をすべて含むメッセージだけを真にする。`withSuppressedWarnings(logger, isSuppressed)` は渡されたオブジェクトの `warn` と `warnOnce` をその場で書き換え、判定が真のメッセージを捨て、偽のメッセージは同じ引数で元のメソッドに渡し、渡されたオブジェクトをそのまま返す。引数は `warn` と `warnOnce` を持つ構造的な型 `WarnLogger` のジェネリックで受け、`vite` の型は import しない。
+- `frontend/vite.config.ts`: `vite` から `createLogger` を追加で import し、`customLogger: withSuppressedWarnings(createLogger(), isSuppressedViteWarning)` を渡す。`plugins` / `server` / `preview` / `test` は変えていない。
+- `frontend/src/lib/viteLogger.test.ts` (新規): vitest のテスト 9 件。
+
+完了条件の検証。
+
+| 完了条件 | 検証 |
+| --- | --- |
+| `viteLogger.ts` の 2 関数と `vite.config.ts` の `customLogger`、他の設定は不変 | 上記の変更。`vite.config.ts` の差分は import の 2 行、コメントの 3 行、`customLogger` の 1 行だけ |
+| `viteLogger.test.ts` の検証項目 | `isSuppressedViteWarning`: 背景に引用した形の警告で真、ANSI エスケープで色付けした警告で真、別の worker (mvp) で偽、`/@duckdb/apache-arrow/` 以外のパスで偽、別の文言で偽、無関係な警告で偽の 6 件。`withSuppressedWarnings`: 真のメッセージで元の `warn` / `warnOnce` を呼ばない、偽のメッセージで同じ引数 (`{ timestamp: true }`) で元を呼ぶ、渡したオブジェクトと同じオブジェクトを返す (`toBe`) の 3 件。`mise run check` の frontend:test で 118 ファイル 1347 件が通過 (変更前は 117 ファイル 1338 件) |
+| 手動確認 | 下記 |
+| `CHANGES.md` の `### misc` のエントリ | 追記した |
+| `mise run check` | 通過 (exit 0。backend:test は 18 パッケージすべて ok、frontend:lint は 0 errors / 9 warnings で変更前と同数、govulncheck は No vulnerabilities found) |
+
+手動確認 (2026-09-29)。
+
+完了条件の手順から次の 2 点を変えた。ホストの 8088 と 8089 を別のプロセスが使っていたため、frontend は `mise run frontend:run` の代わりに `frontend/` で `VITE_API_BASE=http://127.0.0.1:18089 npx vite --port 18088 --strictPort` を実行し、backend は HEAD 5202e60 を `go build ./cmd/thief` したバイナリを `HOME="$(pwd)/example/home" THIEF_S3_PATH_STYLE=true THIEF_LISTEN_ADDR=127.0.0.1:18089 thief server` で起動した (floci は `mise run example:up` と `mise run example:seed`)。ブラウザの操作と DevTools の Network の確認は、headless の Google Chrome (`--headless=new --remote-debugging-port=19222`、専用の `--user-data-dir`) に対して DevTools Protocol (`Network.enable` の `requestWillBeSent` / `responseReceived` と `Runtime.evaluate` によるクリック) で行った。操作の経路は、サイドバーの S3、バケット `thief-example-data` の行、Drawer の Objects タブ、フォルダ `reports/`、`sample.csv` の Query、取り込み後の自動実行の結果表示を待って 実行 を 1 回押す、の順である。変更前は HEAD 5202e60 の作業ツリー、変更後はこの変更を適用した作業ツリーで、それぞれ Vite を新しく起動して同じ経路を実行した。
+
+| 項目 | 変更前 (HEAD 5202e60、`customLogger` なし) | 変更後 |
+| --- | --- | --- |
+| クエリ結果 | 取り込み直後の自動実行と 実行 ボタンの両方で `3 行` | 同じ |
+| Network の worker 取得 | `/node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url` の requestWillBeSent と responseReceived (200、text/javascript)、続いて `?url` なしの同パスの requestWillBeSent (type Script、Worker の起動) | 同じ |
+| Vite のコンソールの `points to a source file outside its package` を含む行 | 117 行 (最初の行は `.../node_modules/@duckdb/apache-arrow/util/util/buffer.ts` を指す) | 0 行 (ログは起動メッセージの 5 行だけ) |
+| ブラウザのコンソール | Vite の接続メッセージ 2 行と React DevTools の案内 1 行。例外なし | 同じ |
+
+方針セクションからの乖離は無い。

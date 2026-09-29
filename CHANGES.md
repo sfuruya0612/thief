@@ -435,6 +435,8 @@
 
 ### misc
 
+- frontend の dev server で、duckdb-wasm の worker の sourcemap が同梱の `@duckdb/apache-arrow` のソースを指すことによる警告 (`points to a source file outside its package`、最大 117 行) を抑止する (`frontend/src/lib/viteLogger.ts` の判定と差し替えを `vite.config.ts` の `customLogger` で使う。3 つの部分文字列をすべて含む警告だけを落とし、他の警告は変えない。`customLogger` を渡すため `logLevel` / `clearScreen` は効かなくなる。docs/issues/closed/0214)
+  - @sfuruya0612
 - frontend の使われていない定義を削除する (永続化されるだけで参照の無い `Tweaks.layout` (保存済みの値は読み込み時に読み捨てる)、参照の無い `--shadow-drawer` / `--sp-5`、`[data-accent]` が常に上書きするため実効値にならない `[data-theme='light']` の `--accent-hi`、CSS から参照の無い Google Fonts の `Instrument Serif` の読み込み。見た目と挙動は変えない。docs/issues/closed/0205)
   - @sfuruya0612
 - frontend の Drawer を配置 (`DrawerFrame`: backdrop、右 / 下 / 分割中の内包、リサイズと寸法の永続化、ESC) と中身 (`Drawer`: 見出し、タブ、本文) に分け、CSS の常駐ターミナルドックの高さ (`--terminal-dock-h`) の参照を `.drawer` の `--drawer-lift` の 1 か所にする (下配置の閉じ位置と内包の持ち上げはこの変数から計算する。各配置の計算値は分割前と同じ。`Drawer` の公開 Props と呼び出し側は変えない。docs/issues/closed/0204)
