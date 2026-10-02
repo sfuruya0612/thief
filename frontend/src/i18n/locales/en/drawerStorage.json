@@ -83,6 +83,7 @@
     "connect": "Connect",
     "launcherHint": "Connecting opens a terminal at the bottom of the window. The connection is kept across view changes.",
     "collapseDock": "Collapse terminal",
+    "resizeDock": "Resize terminal",
     "expandDock": "Expand terminal",
     "closeSession": "Close session",
     "statusConnecting": "Connecting",

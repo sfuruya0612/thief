@@ -1,4 +1,10 @@
 {
+  "fetchFailedWarning": {
+    "tooltip": "Failed to fetch (possibly due to missing permissions or a temporary error)"
+  },
+  "drawerTags": {
+    "fetchFailedHeading": "Tags (fetch failed)"
+  },
   "dynamoItems": {
     "countUnit": "{{n}} items",
     "previewLabel": "Preview (up to {{count}} items, Scan)",
