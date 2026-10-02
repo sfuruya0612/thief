@@ -15,7 +15,7 @@ thief は、AWS、Google Cloud、Datadog、TiDB Cloud のリソースとコス�
 thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の issue にしか書かれていない。
 そのため、製品全体として何を満たすべきかを 1 か所で示す文書が無い。
 本 PRD は、実装済みのコード、`docs/issues/` の issue 199 件 (closed 198 件と pending 1 件)、`docs/issues/TODO.md` から要求を逆算して書き起こしたものである。
-  本 PRD の作成中に起票した issue 0200 (CORS の不具合) は材料に含めない。
+  本 PRD の作成中に起票した issue 0200 (CORS の不具合) と issue 0217 (セッションのルートの Origin の検査) は材料に含めず、修正の結果だけを反映した。
 以下では、これら 3 つを**材料**と呼ぶ。
 
 - issue は 2026-07-12 から 2026-09-26 まで git 管理の対象外だった (コミット b4ca037、ADR 0027)。
@@ -68,7 +68,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 材料には利用状況の計測の記録が無い。
 そのため、本 PRD の成功指標はリポジトリ上で機械的に測れるものに限る。
-利用状況の指標は「未確定論点」に残す。
+利用状況の指標 (利用頻度、コンソールを開く回数の削減など) は置かない (「決定した論点」)。
 
 | 指標 | 目標 | 測定方法 |
 | --- | --- | --- |
@@ -122,10 +122,9 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 ### やらないこと
 
-- 外部サービスのリソースの作成、削除、設定変更 (FR-5、FR-6、FR-20 に挙げた値とオブジェクトの書き込みを除く)。
-  CloudFront の invalidation を作る API (`POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations`) は実装済みだが画面が無く、扱いは「未確定論点」で決める。
+- 外部サービスのリソースの作成、削除、設定変更 (FR-5、FR-6、FR-20 に挙げた値とオブジェクトの書き込み、および FR-3 の CloudFront の invalidation の作成を除く)。
   利用者の端末の中のファイルの作成と削除 (FR-18 のスニペット、`thief sso generate-config` による `~/.aws/config` の生成) は、この対象外に含めない。
-- 書き込みの SQL の実行 (Athena と BigQuery は読み取りだけを通す。例外は CLI の `thief bq query` で、FR-16 に書く)。
+- 書き込みの SQL の実行 (Athena と BigQuery のクエリは、API サーバでも CLI でも読み取りだけを通す。FR-16)。
 - 複数人で共有するサーバとしての運用 (利用者の認証、認可、監査ログを持たない)。
 - thief 本体の Docker による起動 (2026-07-18 のコミット cb2da77 で削除した)。
   `example/` のエミュレータ (floci) は docker compose で起動し、これは対象外に含めない。
@@ -138,13 +137,11 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 ## 機能要求
 
 優先度は材料に記録が無い。
-本 PRD では、起草者が次の基準で付けた。
+本 PRD では、起草者が次の基準で付け、2026-10-02 に開発者が確認した。
 
 - **Must**：欠けると UC の主目的が果たせない機能
 - **Should**：UC の主目的は果たせるが、手間が増える機能
 - **Could**：補助的な機能と、`docs/issues/TODO.md` で未着手の機能
-
-この付け方は「未確定論点」で確認を求める。
 
 ### AWS リソースの閲覧
 
@@ -174,6 +171,8 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - 一覧には状態やリージョンの絞り込み (`FacetBar`) と、件数の集計 (`StatsRow`) を付ける。
 - ECS の一覧には、クラスタごとの稼働タスク数 (CloudWatch の `AWS/ECS` 名前空間の `LiveTaskCount`) の時系列グラフを付ける (`GET /api/aws/profiles/{profile}/ecs/timeseries`、`backend/internal/aws/ecs_metrics.go`、issue 0186)。
 - サイドバーの件数バッジは、一覧の取得済みの結果だけを表示し、バッジのために取得を起こさない (issue 0187、`frontend/src/hooks/useCachedQueryData.ts`)。
+  Google Cloud のサイドバー (FR-20) も、同じ `useCachedQueryData` で件数を読む。
+  現在の `frontend/src/views/GcpSidebar.tsx` は `useCachedQueryData` を使わず、TanStack Query の実装の詳細に依存している (「決定した論点」)。
 
 受け入れ基準:
 
@@ -186,10 +185,13 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - 一覧で行を選ぶと Drawer を開き、Overview と、サービスごとのタブを表示する (`frontend/src/components/Drawer/Drawer.tsx` `DRAWER_TABS`)。
 - タブの内容はタブを開いたときに取得する。
 - タブの取得が失敗したとき、AWS が返したエラーの本文をそのまま (英語で) 表示する (issue 0075、0082、`frontend/src/components/Drawer/drawerError.tsx`)。
+- CloudFront の Drawer から、パスを指定して invalidation を作成できる (`POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations`)。
+  backend の API は実装済みで、画面は未実装である (「決定した論点」)。
 
 受け入れ基準:
 
 - ECS の Drawer に Overview、Services、Tasks、Instances、Terminal、Tags のタブがある。
+- CloudFront の Drawer でパス `/*` の invalidation を作成すると、そのディストリビューションの invalidation の一覧 (`aws cloudfront list-invalidations`) に、作成した invalidation が加わる。
 - タブを開くまで、そのタブ用の API リクエストが送られない (ブラウザの開発者ツールのネットワーク記録で確認する)。
 
 **FR-4 部分的な取得失敗の表示** (Should)
@@ -247,11 +249,12 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - ECS はタスク一覧の行から、コンテナを指定して接続できる (issue 0026)。
 - ブラウザ側で接続を閉じると、backend は SSM のセッションを終了する (`TerminateSSMSession`)。
 - WebSocket の接続は、`THIEF_WEB_ORIGINS` に列挙した Origin からだけ受け付ける (既定は `localhost:8088` と `127.0.0.1:8088`)。
+  Origin とアップグレードの検査は、AWS のセッションの開始 (`StartSession`、`ExecuteCommand`) より前に行う (issue 0217)。
 
 受け入れ基準:
 
 - ターミナルを閉じた後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
-- `THIEF_WEB_ORIGINS` に含まれない Origin からの WebSocket 接続は拒否される。
+- WebSocket のアップグレードを要求しない GET は 426 で、`THIEF_WEB_ORIGINS` に含まれない Origin からのアップグレードは 403 で、どちらも AWS のセッションを開始せずに拒否される。
 
 **FR-8 ターミナルドック** (Should)
 
@@ -349,12 +352,14 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - グラフの系列は金額の大きい上位 8 本とし、残りは Other の 1 本にまとめる (`frontend/src/views/CostExplorerPanel.tsx` `MAX_SERIES`)。
 - 表示中の集計表を CSV で出力できる。
 - Cost Explorer の API は us-east-1 に対して呼ぶ。
-- コストの予測は CLI (`thief cost forecast`) で表示する。
+- コストの予測を、Web の画面と CLI (`thief cost forecast`) で表示する。
+  Web の画面での予測の表示は未実装である (`frontend/src/api/queries.ts` `useCostForecast` を画面から使う箇所が無い。「決定した論点」)。
 
 受け入れ基準:
 
 - 10 サービス分のコストがある期間を開くと、グラフの系列がちょうど 9 本 (上位 8 本と Other) である。
 - CSV 出力の行数が、画面の集計表の行数と一致する。
+- Web の画面に、当月のコストの予測額が表示される。
 
 **FR-12 AWS の料金表示 (Pricing)** (Must)
 
@@ -383,7 +388,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 - カタログ、データベース、テーブル、ワークグループを選んでクエリを実行し、結果を表示する。
 - Web の画面は結果を 1 ページ 500 行で取得し、利用者が続きを読み込む限り行数の上限を設けない。
-  CLI の `thief athena query` は全ページを取得する。
+  CLI の `thief athena query` は全ページを取得し、行数の上限を設けない (「決定した論点」)。
 - 実行中のクエリを取り消せる。
 - 実行の履歴を最大 50 件表示する。
 - 実行状態は、Web の画面では 1 秒ごと、CLI では 2 秒ごとに取得する (`frontend/src/api/queries.ts` `QUERY_POLL_INTERVAL`、`backend/internal/aws/athena.go` `athenaQueryPollInterval`)。
@@ -421,16 +426,18 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 **FR-16 読み取り専用の SQL 検査** (Must)
 
-- Athena と BigQuery のクエリは、INSERT、UPDATE、DELETE、MERGE、CREATE、DROP、ALTER、TRUNCATE、GRANT、REVOKE、UNLOAD のいずれかの語を含むとき拒否する (`backend/internal/sqlguard/sqlguard.go`)。
-- この検査は、API サーバを通るすべてのクエリと、CLI の `thief athena query` に掛ける。
-  CLI の `thief bq query` は例外で、検査を通さずに任意の SQL を実行する (`backend/internal/bigquery/query.go` `ExecuteQueryUnrestricted`、以前の CLI との互換のため)。
-- この検査は語の一致で判定する。
-  コメントや文字列リテラルの中の語でも拒否する。
+- Athena と BigQuery のクエリは、コメントと文字列リテラルを除いた部分に INSERT、UPDATE、DELETE、MERGE、CREATE、DROP、ALTER、TRUNCATE、GRANT、REVOKE、UNLOAD のいずれかの語を含むとき拒否する (`backend/internal/sqlguard/sqlguard.go`)。
+- この検査は、API サーバを通るすべてのクエリと、CLI の `thief athena query` および `thief bq query` に掛ける。
+  書き込みを許すフラグは設けない。
+- 現在の実装は次の 2 点でこの要求と異なり、どちらも実装を要求に合わせる (「決定した論点」)。
+  - コメントと文字列リテラルの中の語でも拒否する。
+  - `thief bq query` は検査を通さずに任意の SQL を実行する (`backend/internal/bigquery/query.go` `ExecuteQueryUnrestricted`)。
 
 受け入れ基準:
 
-- API の Athena と BigQuery のクエリの実行と `thief athena query` で、上記 11 語のそれぞれを含む SQL が、大文字小文字を問わず拒否される (`thief bq query` は対象外)。
-- `SELECT 'drop' AS x` が拒否される (現行の判定の仕様として)。
+- API の Athena と BigQuery のクエリの実行、`thief athena query`、`thief bq query` で、上記 11 語のそれぞれを含む SQL が、大文字小文字を問わず拒否される。
+- `SELECT 'drop' AS x` と `SELECT 1 -- drop` は拒否されない。
+- `/* x */ DROP TABLE t` は拒否される。
 
 **FR-17 オブジェクトの SQL 検索** (Should)
 
@@ -612,8 +619,8 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - Cloud Run の一覧は、ロケーションごとのジョブの取得を並列にする。
   43 ロケーションで、一覧全体が 44.9 秒から 6.3 秒に (ロケーションごとのジョブの取得は 43.4 秒から 4.8 秒に) 短くなった実測がある (issue 0043)。
 - 大きな結果は件数の上限で打ち切る: オブジェクトの一覧 1000 件、オブジェクトの SQL 検索 10000 行。
-- 性能の目標値 (応答時間の上限など) は材料に無い。
-  「未確定論点」に残す。
+- 性能の目標値 (応答時間の上限など) は置かない。
+  遅さを計測で確かめた時点で、その計測を根拠に issue を起票する (「決定した論点」)。
 
 ### 可用性
 
@@ -632,9 +639,10 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - AWS SSO のキャッシュ、Datadog のトークン、Google Cloud のプロジェクトのキャッシュは、権限 0600 のファイルに保存する。
 - Secrets Manager と Parameter Store の値は一覧に載せず、backend でキャッシュしない (FR-5)。
 - Datadog の OAuth のコールバックの応答は、クエリの値を反映しない固定の文言にする (反射型 XSS の防止)。
-- HTTP の API の CORS は、リクエストの `Origin` をそのまま `Access-Control-Allow-Origin` に返す (`backend/internal/api/middleware.go` `corsMiddleware`)。
-  そのため、利用者のブラウザで開いた任意のサイトが、API の応答 (シークレットの値を含む) を読み、書き込みの API を呼べる。
-  この現状の課題の扱いは「未確定論点」に残す。
+- HTTP の API は、`Origin` を WebSocket と同じ規則で `THIEF_WEB_ORIGINS` と照合し、許可した Origin にだけ CORS のヘッダを返す (`backend/internal/api/middleware.go` `corsMiddleware`、ADR 0032)。
+  許可しない Origin からのリクエストのうち、メソッドが GET、HEAD、OPTIONS 以外のものは 403 `FORBIDDEN_ORIGIN` で拒否する。
+- API サーバは `Host` を検査し、許可しないホストのリクエストを 421 `MISDIRECTED_REQUEST` で拒否する (DNS リバインディングの防止。`hostCheckMiddleware`、ADR 0032)。
+- EC2 と ECS のセッションのルートは、Origin とアップグレードの検査を AWS のセッションの開始より前に行う (FR-7、issue 0217)。
 - backend は 4xx と 5xx の応答の本文を、先頭 2048 バイトまでログに出す (`maxErrorBodyLogBytes`)。
 
 ### 運用
@@ -642,8 +650,11 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - ビルド、テスト、Lint、フォーマットは `mise run <task>` で実行する。
   `mise run check` が fmt、lint、vuln、test をまとめて実行する。
 - pre-commit フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt`、`mise run lint`、`mise run test` を実行する。
-- CI は無い (`.github/workflows/` にワークフローが無い)。
-- backend のログは `log/slog` で出す。
+- CI は GitHub Actions に置き、`mise run check` を実行する。
+  Linux では `go test -race` に cgo が要るため、CI では `CGO_ENABLED=1` でテストを実行する。
+  ワークフローは未作成である (`.github/workflows/` が無い。「決定した論点」)。
+- backend のログは `log/slog` の `slog.NewJSONHandler` で JSON として出す。
+  現在の実装は既定のハンドラを使う (「規約と実装の差」)。
 - 実 AWS アカウントなしの動作確認に `example/` (floci) を使う (`mise run example:up`、docker compose で floci のコンテナを起動する)。
 - AWS と Google Cloud の公式アイコンは、ライセンスのためリポジトリに含めない。
   利用者が公式の配布物から展開する (`mise run frontend:fetch-aws-icons`、`mise run frontend:fetch-gcp-icons`)。
@@ -677,43 +688,53 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 ### 規約と実装の差
 
-`AGENTS.md` の記述と、2026-09-26 時点の実装は次の点で異なる。
-翻訳リソースと変換関数の行は食い違いではなく、`AGENTS.md` の記述が足りない点である。
+`AGENTS.md` の記述と、2026-10-02 時点の実装は次の点で異なる。
+どちらも実装を `AGENTS.md` に合わせる (「決定した論点」)。
 
 | 項目 | `AGENTS.md` の記述 | 実装 |
 | --- | --- | --- |
-| HTTP サーバのタイムアウト | `ReadHeaderTimeout`、`ReadTimeout`、`WriteTimeout`、`IdleTimeout` を必ず設定する | `ReadHeaderTimeout` だけを設定する。WebSocket の長時間接続と衝突するため (`backend/internal/api/server.go` のコメント) |
-| ミドルウェア | パニックの回復、リクエスト ID、アクセスログ、タイムアウト、リクエストサイズの制限を入れる | CORS とアクセスログだけ (`backend/internal/api/middleware.go`) |
+| HTTP サーバのタイムアウト | `ReadHeaderTimeout` と `IdleTimeout` を設定する。`ReadTimeout` と `WriteTimeout` は WebSocket の長時間接続と衝突するため設定しない | `ReadHeaderTimeout` だけを設定する (`backend/internal/api/server.go`) |
 | ログのハンドラ | `slog.NewJSONHandler` を推奨する | 既定のハンドラを使う |
-| エラーの応答の形 | backend の節は `{"error": {"code": "...", "message": "..."}}` 等と書く | `{"error": "...", "code": "...", "details": ...}` の平らな形で、`message` は無い (`backend/internal/api/models.go` `ErrorResponse`、ADR 0009) |
-| 翻訳リソース | `src/i18n/locales/ja/` に 14 ネームスペースがあると書き、`en` には触れていない (差ではなく記述の不足) | `ja` と `en` にそれぞれ 14 ネームスペースがある (`frontend/src/i18n/locales/`) |
-| Raw 型から Row 型への変換関数 | `lib/normalize.ts` と `lib/normalizeNonAws.ts` に集約すると書く (差ではなく記述の不足) | `normalizeGcp.ts`、`normalizePricing.ts`、`normalizeQuery.ts` にも分かれる (ADR 0008) |
+
+2026-09-26 時点で挙げた項目のうち、ミドルウェアとエラーの応答の形 (食い違い) と、翻訳リソースと Raw 型から Row 型への変換関数 (`AGENTS.md` の記述の不足) は、2026-10-02 に `AGENTS.md` を実装に合わせて直した。
 
 ## 未確定論点
 
 | 論点 | 未確定の内容 | 解消の方法 |
 | --- | --- | --- |
-| CORS の方針 | HTTP の API が任意の Origin を許可している。`THIEF_WEB_ORIGINS` に揃えるか、別の防御 (トークンなど) を入れるかが決まっていない | 開発者が方針を決め、ADR に残す。不具合として issue 0200 (`docs/issues/0200-bug-cors-reflects-any-origin.md`) に起票済みで、現在の判断は ADR 0010 (`docs/adr/0010-local-api-without-authentication.md`) にある。提案: HTTP の API も `THIEF_WEB_ORIGINS` の Origin だけを許可する |
-| 機能要求の優先度 | 優先度は起草者が付けたもので、材料に根拠が無い | プロダクトの責任者が FR ごとの優先度を確認する |
-| 利用状況の成功指標 | 利用頻度や、コンソールを開く回数の削減などの指標が無い。thief は利用状況を記録しない | プロダクトの責任者が、計測するか、指標を置かないかを決める |
-| 性能の目標値 | 一覧の応答時間などの上限が決まっていない | 開発者が、測る対象と上限を決める |
-| `thief athena query` の行数 | CLI は結果の全ページを取得し、行数の上限が無い (`docs/issues/TODO.md`) | 開発者が上限の既定値と指定方法を決める。提案: 上限を指定するフラグを足す |
-| Google Cloud のサイドバーのバッジ | `frontend/src/views/GcpSidebar.tsx` は `useCachedQueryData` を使っていない。TanStack Query の実装の詳細に依存している (`docs/issues/TODO.md`) | 開発者が AWS 側と揃えるかを決める |
 | Fargate Spot の料金 | データ源が無い (`docs/issues/pending/0059-feat-pricing-fargate-spot-rates.md`) | 利用できるデータ源が見つかった時点で、開発者が対応を決める |
-| Cost Explorer の予測の Web 表示 | `frontend/src/api/queries.ts` に `useCostForecast` があるが、画面から使う箇所が無い。予測は CLI だけで表示できる | 開発者が、Web に予測を表示するか、フックを削除するかを決める |
-| CloudFront の invalidation | backend の `POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations` はあるが、frontend から呼ぶ箇所が無い | 開発者が、UI を足すか、エンドポイントを削除するかを決める |
-| Datadog の静的キーの名前 | 実装は `DATADOG_API_KEY` と `DATADOG_APP_KEY` を読む。`CHANGES.md` は `DD_API_KEY` と `DD_APP_KEY` と書いている | 開発者が `CHANGES.md` の記述を実装に合わせる |
-| Datadog のスコープ | `usage_read` だけでダッシュボードとメトリクスの API が呼べるかを、材料では確認していない | 開発者が実際の組織で確認し、不足ならスコープを足す |
-| CI | CI が無く、品質ゲートは各開発者の pre-commit フックに依存する | 開発者が CI を置くかを決める |
-| `AGENTS.md` と実装の差 | 「規約と実装の差」の 4 項目 | 開発者が、規約を実装に合わせるか、実装を規約に合わせるかを項目ごとに決める |
-| SQL 検査の誤検知 | コメントや文字列リテラルの中の語でも拒否する (FR-16) | 開発者が、誤検知を許容するか、SQL を構文解析するかを決める |
-| `thief bq query` の検査の例外 | CLI の `thief bq query` だけが読み取り専用の検査を通らず、書き込みの SQL を実行できる (FR-16)。以前の CLI との互換を保つ理由が今もあるかが確認されていない | 開発者が、例外を残すか、検査を掛けるかを決める。提案: 検査を掛け、書き込みが要るときは明示のフラグを求める |
+
+## 決定した論点
+
+次の論点は、2026-10-02 に開発者が決めた。
+実装が要るものは、後続の作業として `docs/issues/TODO.md` に追加した。
+
+| 論点 | 決定 | 後続の作業 |
+| --- | --- | --- |
+| CORS の方針 | HTTP の API も `THIEF_WEB_ORIGINS` の Origin だけを許可し、`Host` を検査する (ADR 0032) | 無い (issue 0200 と issue 0217 で修正済み) |
+| 機能要求の優先度 | 起草者が付けた優先度で確定する | 無い |
+| 利用状況の成功指標 | 置かない。thief は利用状況を記録しない | 無い |
+| 性能の目標値 | 置かない。遅さを計測で確かめた時点で issue を起票する | 無い |
+| `thief athena query` の行数 | CLI は全ページを取得し、上限を設けない。Web の画面は現在の「さらに読み込む」で足りる (FR-13) | 無い |
+| Google Cloud のサイドバーのバッジ | AWS 側と同じ `useCachedQueryData` に揃える (FR-2) | `GcpSidebar.tsx` の書き換え |
+| Cost Explorer の予測の Web 表示 | Web の画面に予測を表示する (FR-11) | 予測の表示の追加 |
+| CloudFront の invalidation | Drawer に作成の UI を足す (FR-3) | invalidation の UI の追加 |
+| Datadog の静的キーの名前 | `CHANGES.md` の `DD_API_KEY` と `DD_APP_KEY` を、実装の `DATADOG_API_KEY` と `DATADOG_APP_KEY` に直す | 無い (2026-10-02 に修正済み) |
+| Datadog のスコープ | `usage_read` のままとする (FR-21) | 無い |
+| CI | GitHub Actions で `mise run check` を実行する | ワークフローの追加 |
+| HTTP サーバのタイムアウト | `IdleTimeout` を足す。`AGENTS.md` は、`ReadTimeout` と `WriteTimeout` を設定しない記述に直す | `IdleTimeout` の追加 |
+| ミドルウェア | `AGENTS.md` を実装 (Host の検査、CORS、アクセスログ) に合わせる | 無い (2026-10-02 に修正済み) |
+| ログのハンドラ | `slog.NewJSONHandler` で JSON にする | JSON のハンドラへの切り替え |
+| エラーの応答の形 | `AGENTS.md` を ADR 0009 の平らな形に合わせる | 無い (2026-10-02 に修正済み) |
+| `AGENTS.md` の記述の不足 | 翻訳リソースの `en` と、変換関数の `normalizeGcp.ts`、`normalizePricing.ts`、`normalizeQuery.ts` を `AGENTS.md` に書き足す | 無い (2026-10-02 に修正済み) |
+| SQL 検査の誤検知 | コメントと文字列リテラルを除いてから検査する (FR-16) | `sqlguard` の書き換え |
+| `thief bq query` の検査の例外 | 検査を掛け、書き込みを許すフラグは設けない (FR-16) | `thief bq query` への検査の適用 |
 
 ## 関連資料
 
 - 設計判断の記録: `docs/adr/`
 - issue: `docs/issues/closed/`、`docs/issues/pending/`、`docs/issues/TODO.md`
-- CORS の不具合: `docs/issues/0200-bug-cors-reflects-any-origin.md`
+- CORS の不具合と修正の方針: `docs/issues/closed/0200-bug-cors-reflects-any-origin.md`、ADR 0032 (`docs/adr/0032-api-origin-and-host-checks.md`)
 - 変更履歴: `CHANGES.md`
 - リポジトリ規約: `AGENTS.md`
 - セットアップと起動: `README.md`

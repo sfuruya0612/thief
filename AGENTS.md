@@ -175,11 +175,11 @@ backend/
 
 ### HTTP / Web API サーバ
 
-- サーバは `net/http` の `http.Server` を直接使う。`http.ListenAndServe` のラッパーではなく、`Server` 構造体に `ReadHeaderTimeout`、`ReadTimeout`、`WriteTimeout`、`IdleTimeout` を必ず設定する(`ReadHeaderTimeout` は最低限必須)。
+- サーバは `net/http` の `http.Server` を直接使う。`http.ListenAndServe` のラッパーではなく、`Server` 構造体に `ReadHeaderTimeout` と `IdleTimeout` を設定する。`ReadTimeout` と `WriteTimeout` は、EC2 Start Session / ECS Exec の WebSocket の長時間接続がハンドラ内でブロックすることと衝突するため設定しない (docs/prd/thief.md の「決定した論点」)。
 - ルーティングは Go 1.22+ の `http.ServeMux`(メソッド別パターン対応)で十分。複雑な要件があるときのみ軽量ルータの追加を検討する。
-- ミドルウェアチェーンは関数合成で組む。標準的に入れるもの: パニックリカバリ、リクエスト ID 付与、構造化アクセスログ、タイムアウト、リクエストサイズ制限。
+- ミドルウェアチェーンは関数合成で組む (`internal/api/server.go` `Handler`)。外側から順に、構造化アクセスログ (`loggingMiddleware`)、Host の検査 (`hostCheckMiddleware`)、CORS と Origin の検査 (`corsMiddleware`) を入れる (docs/adr/0032)。
 - ハンドラは `func(w http.ResponseWriter, r *http.Request)` の形を保ちつつ、内部でユースケース層(service)を呼ぶ。ハンドラ内にビジネスロジックを書かない。
-- レスポンスの JSON エンコードは `json.NewEncoder(w).Encode(v)` を使う。エラー時は統一フォーマット(`{"error": {"code": "...", "message": "..."}}` 等)で返す。
+- レスポンスの JSON エンコードは `json.NewEncoder(w).Encode(v)` を使う。エラー時は `writeError` を経由し、平らな統一フォーマット `{"error": "...", "code": "...", "details": ...}` (`internal/api/models.go` `ErrorResponse`。`details` は省略可) で返す (docs/adr/0009)。
 - グレースフルシャットダウン: `signal.NotifyContext` で受けたキャンセルで `srv.Shutdown(ctx)` を呼ぶ。
 
 ### CLI (Cobra)
@@ -263,7 +263,7 @@ backend/
 - **対象スタック**: Vite + React 18 + TypeScript (strict)。ビルド対象は **Web ブラウザのみ**(Flutter 時代の macOS Desktop 対応は廃止済み)。
 - **状態管理**: サーバ状態は **TanStack Query (`@tanstack/react-query`)**、UI 状態は `useState`/`useReducer` + カスタムフック。Redux/Zustand/Riverpod 相当のライブラリは導入しない(YAGNI)。
 - **ルーティング**: react-router 等は導入しない。profile タブ・サービス選択・トップレベルビュー (`AppView`: `aws`/`gcp`/`datadog`/`tidb`) は React state + `localStorage`(`cloudlens:v1` キー、`lib/storage.ts`)で管理する。
-- **多言語対応**: react-i18next 導入済み。翻訳リソースは `src/i18n/locales/ja/` に 14 ネームスペース (account / app / cost / drawerAws / drawerStorage / errors / gcp / logviewer / pricing / query / session / sidebar / topbar / tweaks)。Drawer のタブ名や AWS 由来の英語メッセージを表示する部品 (`DrawerError` 等) は英語ハードコードとし i18n に載せない (docs/issues/closed/0066 の方針)。
+- **多言語対応**: react-i18next 導入済み。翻訳リソースは `src/i18n/locales/ja/` と `src/i18n/locales/en/` にそれぞれ 14 ネームスペース (account / app / cost / drawerAws / drawerStorage / errors / gcp / logviewer / pricing / query / session / sidebar / topbar / tweaks)。Drawer のタブ名や AWS 由来の英語メッセージを表示する部品 (`DrawerError` 等) は英語ハードコードとし i18n に載せない (docs/issues/closed/0066 の方針)。
 
 ### ディレクトリ構造
 
@@ -281,7 +281,7 @@ frontend/
     ├── api/{client,endpoints,queries,terminal}.ts
     ├── lib/*.ts                         # normalize / format / storage / 集計などの純関数
     ├── hooks/use*.ts
-    ├── i18n/locales/ja/*.json           # react-i18next の翻訳リソース
+    ├── i18n/locales/{ja,en}/*.json      # react-i18next の翻訳リソース
     ├── components/
     │   ├── {TopBar,Sidebar,StatsRow,FacetBar,StatusBar,DataTable,TweaksPanel,SSOExpiredBanner}.tsx
     │   ├── session/ Drawer/ icons/ primitives/ tables/
@@ -291,7 +291,7 @@ frontend/
         └── nonaws/{BigQueryView,CloudLoggingView,DatadogView,DatadogMetricsView,DatadogDashboardView,TiDBView}.tsx
 ```
 
-- `types/*.ts` は Raw(バックエンド snake_case JSON)と Row(UI camelCase 表示用)を明確に分離する。変換は `lib/normalize.ts` / `lib/normalizeNonAws.ts` の純関数(`xxxFromRaw`)に集約する。
+- `types/*.ts` は Raw(バックエンド snake_case JSON)と Row(UI camelCase 表示用)を明確に分離する。変換は `lib/normalize.ts` / `lib/normalizeNonAws.ts` / `lib/normalizeGcp.ts` / `lib/normalizePricing.ts` / `lib/normalizeQuery.ts` の純関数(`xxxFromRaw`)に集約する (docs/adr/0008)。
 - feature-first ではなく、種類別(`api`/`lib`/`hooks`/`components`/`views`)にディレクトリを切る。React + TanStack Query 規模のアプリではこの方が把握しやすい。
 
 ### API クライアントとエラーハンドリング

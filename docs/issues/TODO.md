@@ -136,7 +136,7 @@
 - [x] Frontend で Object Storage の Object を DuckDB Wasm + OPFS で検索、可視化できるようにしたい。 (docs/issues/closed/0196, docs/issues/closed/0197)
     - 検索可能なデータ容量は 1 GB までとしておき、これは環境変数で調整可能。
     - 対象とすファイルは csv,  parquet, jsonl, json など、AWS, Google Cloud の Managed サービスが出力する拡張子で代表的なものとする
-- [ ] `thief athena query` の結果取得に行数の上限を指定できるようにしたい (issue 0193 のレビューで判明。`GetAthenaQueryResultsAll` は NextToken が尽きるまで全ページを取得し、大量行を返す SELECT では実行時間とメモリが無制限に増える)
+- [x] `thief athena query` の結果取得に行数の上限を指定できるようにしたい (issue 0193 のレビューで判明。`GetAthenaQueryResultsAll` は NextToken が尽きるまで全ページを取得し、大量行を返す SELECT では実行時間とメモリが無制限に増える) (対応しない。CLI は全ページを取得し上限を設けないと 2026-10-02 に決めた。docs/prd/thief.md の「決定した論点」)
 - [ ] Google Cloud のサイドバーの件数バッジも AWS 側と同じ `useCachedQueryData` に揃えたい (`frontend/src/views/GcpSidebar.tsx` の `SvcItem` は `useQuery({ queryKey: ["gcp", svc, project], enabled: false })` で QueryObserver を作り、同一 queryKey の共有 options に queryFn 無しのオブザーバを足している。docs/issues/closed/0187 のとおり `query-core` の「queryFn が無ければ他オブザーバの options から補う」フォールバックが効くため現時点で不具合は出ないが、ライブラリの実装詳細への依存であり、AWS 側だけが対策済みという非対称も残る)
 - [x] Object Storage (S3 / GCS) の Object をぜんぶ一覧で表示するのではなく、フォルダごとに階層構造で表示できるようにしたい (docs/issues/closed/0207)
 - [x] Object Storage の DuckDB によるクエリを複数ファイルに対してかけられるようにしたい (docs/issues/closed/0208)
@@ -144,3 +144,10 @@
 - [x] frontend の dev server (mise run frontend:run) で duckdb-wasm の worker の sourcemap 警告 (points to a source file outside its package) がコンソールに出続けるので抑止したい (docs/issues/closed/0214)
 - [x] backend のビルドとリンクが遅いので、CGO_ENABLED=0 で cgo (DataDog/zstd) を外してリンクを速くしたい (docs/issues/closed/0215)
 - [x] pre-commit の backend チェック (lint / test) が遅いので、govulncheck を専用タスクに分けて go test の自動 vet を止めたい (docs/issues/closed/0216)
+- [ ] Cost Explorer のコストの予測を Web の画面にも表示したい (docs/prd/thief.md の FR-11 と「決定した論点」。`frontend/src/api/queries.ts` の `useCostForecast` は画面から使う箇所が無く、予測は CLI の `thief cost forecast` でしか見られない)
+- [ ] CloudFront の Drawer から invalidation を作成できるようにしたい (docs/prd/thief.md の FR-3 と「決定した論点」。backend の `POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations` は実装済みだが frontend から呼ぶ箇所が無い)
+- [ ] GitHub Actions で `mise run check` を実行する CI を置きたい (docs/prd/thief.md の「運用」と「決定した論点」。`.github/workflows/` が無く、品質ゲートが各開発者の pre-commit フックに依存している。Linux では `go test -race` に cgo が要るため `CGO_ENABLED=1` でテストを実行する)
+- [ ] API サーバの `http.Server` に `IdleTimeout` を設定したい (docs/prd/thief.md の「規約と実装の差」と「決定した論点」。`backend/internal/api/server.go` の `HTTPServer` は `ReadHeaderTimeout` だけを設定しており、AGENTS.md の「HTTP / Web API サーバ」と食い違う)
+- [ ] backend のログを `slog.NewJSONHandler` で JSON にしたい (docs/prd/thief.md の「規約と実装の差」と「決定した論点」。現在は `slog.SetDefault` も JSON のハンドラも無く、既定のハンドラで出している)
+- [ ] 読み取り専用の SQL 検査 (`backend/internal/sqlguard/sqlguard.go`) で、コメントと文字列リテラルを除いてから禁止語を検査したい (docs/prd/thief.md の FR-16 と「決定した論点」。現在は `SELECT 'drop' AS x` のような文字列リテラルやコメントの中の語でも拒否する)
+- [ ] CLI の `thief bq query` にも読み取り専用の SQL 検査を掛けたい (docs/prd/thief.md の FR-16 と「決定した論点」。`backend/internal/bigquery/query.go` の `ExecuteQueryUnrestricted` は検査を通さずに任意の SQL を実行する。書き込みを許すフラグは設けない)
