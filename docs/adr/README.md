@@ -14,7 +14,7 @@ thief の設計判断の記録。
 | [0007](0007-golden-json-type-contract.md) | backend と frontend の型の一致をゴールデン JSON で検査する | Accepted | 2026-08-05 |
 | [0008](0008-raw-and-row-types.md) | frontend の型を Raw 型と Row 型の 2 層に分ける | Accepted | 2026-07-08 |
 | [0009](0009-error-classification-by-code.md) | API のエラーを HTTP ステータスとコードで分類し、frontend はコードで分岐する | Accepted | 2026-07-08 |
-| [0010](0010-local-api-without-authentication.md) | API サーバをループバックで待ち受け、利用者の認証を持たない | Accepted | 2026-07-08 |
+| [0010](0010-local-api-without-authentication.md) | API サーバをループバックで待ち受け、利用者の認証を持たない | Superseded by 0032 | 2026-07-08 |
 | [0011](0011-read-header-timeout-only.md) | HTTP サーバのタイムアウトは ReadHeaderTimeout だけを設定する | Accepted | 2026-07-08 |
 | [0012](0012-browser-terminal-over-websocket.md) | ブラウザのターミナルは Go で SSM のデータチャネルを中継し、常駐のドックに置く | Accepted | 2026-07-08 |
 | [0013](0013-sso-device-authorization-in-ssoauth.md) | AWS SSO のデバイス認可を internal/ssoauth に集め、ログアウトで AWS 側のセッションも失効させる | Accepted | 2026-08-24 |
@@ -36,3 +36,4 @@ thief の設計判断の記録。
 | [0029](0029-object-list-delimiter-hierarchy.md) | オブジェクトの階層は API の区切り文字で 1 階層ずつ取得し、フラットモードを残す | Accepted | 2026-09-28 |
 | [0030](0030-object-query-multiple-objects.md) | オブジェクトの SQL 検索は、同じ形式の複数のオブジェクトを読み取り関数のリスト引数で 1 つのビューにまとめる | Accepted | 2026-09-28 |
 | [0031](0031-vuln-check-in-check-task-not-precommit.md) | govulncheck は check タスクと backend:vuln で実行し、pre-commit フックでは実行しない | Accepted | 2026-09-29 |
+| [0032](0032-api-origin-and-host-checks.md) | API サーバは Origin と Host を検査し、利用者の認証は持たない | Accepted | 2026-10-02 |

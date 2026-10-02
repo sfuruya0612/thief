@@ -39,6 +39,10 @@ type Server struct {
 	resourceCache *cache.Cache[any]
 	mux           *http.ServeMux
 
+	// allowedHosts は Host ヘッダの検査で許可するホストの一覧。NewServer が cfg から
+	// 起動時に組み立てる (allowedHostsFromConfig 参照)。
+	allowedHosts []string
+
 	// ec2Resources は EC2 の一覧を取得する関数。テストで差し替えられるよう、関数として持つ。
 	ec2Resources func(ctx context.Context, profile, region string) ([]awsinternal.EC2Resource, error)
 	// s3Objects は S3 オブジェクトの一覧を取得する関数。テストで差し替えられるよう、
@@ -69,6 +73,7 @@ type Server struct {
 func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	s := &Server{
 		cfg:                cfg,
+		allowedHosts:       allowedHostsFromConfig(cfg),
 		resourceCache:      cache.New[any](5 * time.Minute),
 		ssoLoginSessions:   newSSOLoginSessionStore(),
 		ssoLogin:           defaultSSOLoginDeps(),
@@ -109,9 +114,14 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 }
 
 // Handler returns the HTTP handler wrapped in middleware.
+//
+// 適用の順は loggingMiddleware → Host の検査 → corsMiddleware → mux。Host の検査を
+// CORS より外側に置くのは、DNS リバインディングでは Origin のホストと Host が一致し、
+// Origin の検査だけでは同一オリジンとして通ってしまうためである。
 func (s *Server) Handler() http.Handler {
 	var h http.Handler = s.mux
-	h = corsMiddleware(h)
+	h = corsMiddleware(h, s.cfg.WebOrigins)
+	h = hostCheckMiddleware(h, s.allowedHosts)
 	h = loggingMiddleware(h)
 	return h
 }

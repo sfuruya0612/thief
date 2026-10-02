@@ -27,6 +27,7 @@ func newTestServer(t *testing.T) *Server {
 	cfg.PriceCacheDir = t.TempDir()
 	return &Server{
 		cfg:           cfg,
+		allowedHosts:  allowedHostsFromConfig(cfg),
 		snippets:      snippet.NewStore(t.TempDir()),
 		resourceCache: c,
 		// NewServer と同様に SSO ログイン系のフィールドも初期化する (未初期化のまま
