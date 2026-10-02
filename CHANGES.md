@@ -36,6 +36,8 @@
   - @sfuruya0612
 - [FIX] 英語 UI で常駐ターミナルドックのリサイズハンドルのツールチップが日本語のまま表示される不具合を修正する (en の `drawerStorage.json` に `terminal.resizeDock` が無く、`fallbackLng: 'ja'` により日本語の文言が表示されていた。取得失敗の警告のツールチップ (`fetchFailedWarning.tooltip`) と Tags の見出し (`drawerTags.fetchFailedHeading`) も同じく en に無かったため追加する。ja と en の全ネームスペースのキー集合を比べるテスト `frontend/src/i18n/locales.test.ts` を加える。issue 0209)
   - @sfuruya0612
+- [FIX] EC2 Session と ECS Exec の WebSocket のルートが、Origin とアップグレードの検査より前に AWS のセッションを開始し、他サイトの `<img>` などの GET で ECS の ExecuteCommand や Session Manager のセッションを始められる不具合を修正する (`websocket.Accept` を AWS の呼び出しより前に呼び、アップグレードの要求でないリクエストを 426、`THIEF_WEB_ORIGINS` で許可しない Origin を 403 で、AWS を呼ばずに拒否する。アップグレード後のセッションの開始とデータチャネルへの接続の失敗は、HTTP のエラーではなく `{"type":"error"}` のメッセージでターミナルに表示する。issue 0217)
+  - @sfuruya0612
 
 - [UPDATE] CLI の全コマンドが Ctrl-C と SIGTERM でキャンセルされる context で AWS / Google Cloud / Datadog / TiDB を呼び出すようにする (main が `signal.NotifyContext` で作った context を cobra の `ExecuteContextC` 経由で各コマンドへ渡し、それまで各コマンドが個別に呼んでいた `context.Background()` 30 箇所を `commandContext(cmd)` に置き換える。これで一覧取得や BigQuery のクエリ、SSO デバイス認可の承認待ちを Ctrl-C で即座に打ち切れる。context を受け取る口が無かった TiDB Cloud のクライアントには第一引数として context を追加し、Digest 認証の 2 往復の両方に紐付ける。`sso generate-config` のアカウント選択とロール選択、`ssm param put` / `secretsmanager put` の標準入力からの値の読み取りも、読み取りを別の goroutine に出して context のキャンセルで待機を打ち切るようにする (`signal.NotifyContext` はシグナルの既定の動作を止めるため、context を見ない読み取りを残すと入力待ちの間 Ctrl-C が無反応になる)。ただし SSM セッションの切断と API サーバのシャットダウンは、中断で context がキャンセル済みでも完了させる必要があるため専用の短命 context を使う。`server` コマンドが自前で張っていた `signal.NotifyContext` は main の 1 箇所に集約する)
   - @sfuruya0612

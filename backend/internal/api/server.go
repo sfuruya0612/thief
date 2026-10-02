@@ -15,6 +15,7 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	ddclient "github.com/sfuruya0612/thief/backend/internal/datadog"
 	"github.com/sfuruya0612/thief/backend/internal/gcp"
+	"github.com/sfuruya0612/thief/backend/internal/session"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	tidbclient "github.com/sfuruya0612/thief/backend/internal/tidb"
 	"golang.org/x/sync/singleflight"
@@ -55,6 +56,14 @@ type Server struct {
 	// 接続せずに差し替えられるよう、関数として持つ。
 	ecsTaskCountSeries func(ctx context.Context, profile, region string, r awsinternal.TimeseriesRange, w awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error)
 
+	// startSSMSession / executeECSCommand / openDataChannel / terminateSSMSession は EC2 Session と
+	// ECS Exec のセッションの確立と終了に使う関数。テストで実 AWS へ接続せずに差し替えられるよう、
+	// ec2Resources と同じ形で関数として持つ。
+	startSSMSession     func(ctx context.Context, profile, region, target string) (*awsinternal.StartSessionResult, error)
+	executeECSCommand   func(ctx context.Context, profile, region, cluster, task, container, command string) (*awsinternal.StartSessionResult, error)
+	openDataChannel     func(ctx context.Context, streamURL, tokenValue, sessionID string) (*session.DataChannel, error)
+	terminateSSMSession func(ctx context.Context, profile, region, sessionID string) error
+
 	// SSO デバイス認可 (start / complete エンドポイント) の進行中セッションと外部依存。
 	ssoLoginSessions *ssoLoginSessionStore
 	ssoLogin         ssoLoginDeps
@@ -72,17 +81,21 @@ type Server struct {
 // if projectID is empty or ADC fails, BigQuery endpoints return 503.
 func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	s := &Server{
-		cfg:                cfg,
-		allowedHosts:       allowedHostsFromConfig(cfg),
-		resourceCache:      cache.New[any](5 * time.Minute),
-		ssoLoginSessions:   newSSOLoginSessionStore(),
-		ssoLogin:           defaultSSOLoginDeps(),
-		ddLoginSessions:    newDatadogLoginSessionStore(),
-		ddAuth:             defaultDatadogAuthDeps(),
-		ec2Resources:       awsinternal.ListEC2Resources,
-		s3Objects:          awsinternal.ListS3Objects,
-		gcsObjects:         gcp.ListObjects,
-		ecsTaskCountSeries: awsinternal.ListECSTaskCountSeries,
+		cfg:                 cfg,
+		allowedHosts:        allowedHostsFromConfig(cfg),
+		resourceCache:       cache.New[any](5 * time.Minute),
+		ssoLoginSessions:    newSSOLoginSessionStore(),
+		ssoLogin:            defaultSSOLoginDeps(),
+		ddLoginSessions:     newDatadogLoginSessionStore(),
+		ddAuth:              defaultDatadogAuthDeps(),
+		ec2Resources:        awsinternal.ListEC2Resources,
+		s3Objects:           awsinternal.ListS3Objects,
+		gcsObjects:          gcp.ListObjects,
+		ecsTaskCountSeries:  awsinternal.ListECSTaskCountSeries,
+		startSSMSession:     awsinternal.StartSSMSession,
+		executeECSCommand:   awsinternal.ExecuteECSCommand,
+		openDataChannel:     session.OpenDataChannel,
+		terminateSSMSession: awsinternal.TerminateSSMSession,
 	}
 
 	// BigQuery: try to initialise but don't fail server startup.

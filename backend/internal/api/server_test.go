@@ -15,6 +15,7 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/datadogauth"
 	"github.com/sfuruya0612/thief/backend/internal/gcp"
+	"github.com/sfuruya0612/thief/backend/internal/session"
 	"github.com/sfuruya0612/thief/backend/internal/snippet"
 	"github.com/sfuruya0612/thief/backend/internal/ssoauth"
 )
@@ -55,6 +56,21 @@ func newTestServer(t *testing.T) *Server {
 		},
 		ecsTaskCountSeries: func(context.Context, string, string, awsinternal.TimeseriesRange, awsinternal.TimeseriesWindow) ([]awsinternal.TimeseriesSeries, error) {
 			return nil, errors.New("ecs task count series is not configured in newTestServer")
+		},
+		// セッション系も NewServer と同様に初期化する。実 AWS へ接続する既定の実装ではなく、
+		// 呼ばれたらエラーを返すダミーにする (セッションのテストは newSessionTestServer で
+		// 差し替えること)。
+		startSSMSession: func(context.Context, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return nil, errors.New("start ssm session is not configured in newTestServer")
+		},
+		executeECSCommand: func(context.Context, string, string, string, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return nil, errors.New("execute ecs command is not configured in newTestServer")
+		},
+		openDataChannel: func(context.Context, string, string, string) (*session.DataChannel, error) {
+			return nil, errors.New("open data channel is not configured in newTestServer")
+		},
+		terminateSSMSession: func(context.Context, string, string, string) error {
+			return errors.New("terminate ssm session is not configured in newTestServer")
 		},
 	}
 }

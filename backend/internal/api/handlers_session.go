@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -15,25 +16,46 @@ import (
 // 旧 CLI (cmd/ecs.go の ecsExecCmd) のデフォルト値に揃える。
 const ecsExecDefaultCommand = "/bin/sh"
 
+// sessionErrorMessage はアップグレード後にセッションの確立へ失敗したことをブラウザへ伝える
+// TEXT メッセージ。frontend (components/Terminal/Terminal.tsx) は {"type":"error","message":...}
+// を解釈して画面に表示する (session/bridge.go の controlMessage と同じ形)。
+type sessionErrorMessage struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
 // handleEC2Session は EC2 インスタンスへの SSM Session Manager セッションを開始し、
 // ブラウザ WebSocket とデータチャネルの間をブリッジする。
+//
+// AWS のセッションを開始する前に websocket.Accept で Origin とアップグレードの検査を行う。
+// 順序を逆にすると、他サイトからの単純 GET (<img src="..."> など) が Origin の検査を受けずに
+// AWS の API を呼べてしまう (GET は corsMiddleware と hostCheckMiddleware を通る)。
 func (s *Server) handleEC2Session(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	instance := r.PathValue("instance")
 
-	result, err := awsinternal.StartSSMSession(r.Context(), profile, region, instance)
-	if err != nil {
-		writeAWSError(w, err)
+	browser, ok := s.acceptSessionWebSocket(w, r)
+	if !ok {
 		return
 	}
 
-	s.runSessionBridge(w, r, result, func(ctx context.Context) error {
-		return awsinternal.TerminateSSMSession(ctx, profile, region, result.SessionID)
+	result, err := s.startSSMSession(r.Context(), profile, region, instance)
+	if err != nil {
+		slog.Warn("failed to start ssm session", "err", err)
+		failSessionSetup(browser, err.Error())
+		return
+	}
+
+	s.runSessionBridge(r.Context(), browser, result, func(ctx context.Context) error {
+		return s.terminateSSMSession(ctx, profile, region, result.SessionID)
 	})
 }
 
 // handleECSExec は ECS タスクコンテナへの ExecuteCommand セッションを開始し、
 // ブラウザ WebSocket とデータチャネルの間をブリッジする。
+//
+// handleEC2Session と同じく、AWS の呼び出しより前に websocket.Accept を呼ぶ。
+// container の欠落は AWS を呼ばないため、従来どおりアップグレードより前に 400 で返す。
 func (s *Server) handleECSExec(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	cluster := r.PathValue("cluster")
@@ -48,31 +70,28 @@ func (s *Server) handleECSExec(w http.ResponseWriter, r *http.Request) {
 		command = ecsExecDefaultCommand
 	}
 
-	result, err := awsinternal.ExecuteECSCommand(r.Context(), profile, region, cluster, task, container, command)
-	if err != nil {
-		writeAWSError(w, err)
+	browser, ok := s.acceptSessionWebSocket(w, r)
+	if !ok {
 		return
 	}
 
-	s.runSessionBridge(w, r, result, func(ctx context.Context) error {
-		return awsinternal.TerminateSSMSession(ctx, profile, region, result.SessionID)
+	result, err := s.executeECSCommand(r.Context(), profile, region, cluster, task, container, command)
+	if err != nil {
+		slog.Warn("failed to execute ecs command", "err", err)
+		failSessionSetup(browser, err.Error())
+		return
+	}
+
+	s.runSessionBridge(r.Context(), browser, result, func(ctx context.Context) error {
+		return s.terminateSSMSession(ctx, profile, region, result.SessionID)
 	})
 }
 
-// runSessionBridge はデータチャネルへ接続し、ブラウザ WebSocket をアップグレードした上でブリッジを開始する。
-// StartSSMSession/ExecuteECSCommand が成功した直後に呼ぶこと。
-// データチャネル接続やアップグレードに失敗した場合は、AWS 側のセッションが残らないよう terminate を呼んでから
-// 通常の HTTP エラーを返す (アップグレード前なので通常のレスポンスがまだ書ける)。
-func (s *Server) runSessionBridge(w http.ResponseWriter, r *http.Request, result *awsinternal.StartSessionResult, terminate session.TerminateFunc) {
-	ctx := r.Context()
-
-	dc, err := session.OpenDataChannel(ctx, result.StreamURL, result.TokenValue, result.SessionID)
-	if err != nil {
-		writeInternalError(w, "open data channel: "+err.Error())
-		terminateBestEffort(terminate)
-		return
-	}
-
+// acceptSessionWebSocket はセッション用の WebSocket アップグレードを受け付ける。
+// Origin の検査 (cfg.WebOrigins) とアップグレードのリクエストであることの検査は
+// websocket.Accept が行う。失敗時は Accept が書いた応答をそのまま返し、ok=false を返す。
+// AWS のセッションを開始する前に必ずこれを呼ぶこと。
+func (s *Server) acceptSessionWebSocket(w http.ResponseWriter, r *http.Request) (*websocket.Conn, bool) {
 	// OriginPatterns は cfg.WebOrigins (デフォルト localhost:8088/127.0.0.1:8088、環境変数
 	// THIEF_WEB_ORIGINS で上書き可能) に従う。DNS rebinding 対策のためここにのみ渡し、
 	// InsecureSkipVerify は使わない。
@@ -80,11 +99,22 @@ func (s *Server) runSessionBridge(w http.ResponseWriter, r *http.Request, result
 		OriginPatterns: s.cfg.WebOrigins,
 	})
 	if err != nil {
-		slog.Warn("failed to accept browser websocket", "err", err)
-		if closeErr := dc.Close(); closeErr != nil {
-			slog.Warn("failed to close data channel after accept failure", "err", closeErr)
-		}
+		slog.Warn("failed to accept session websocket", "err", err)
+		return nil, false
+	}
+	return browser, true
+}
+
+// runSessionBridge はデータチャネルへ接続し、ブリッジを開始する。呼び出し時点でブラウザ
+// WebSocket はアップグレード済みであること。
+// データチャネルへの接続に失敗した場合は、AWS 側のセッションが残らないよう terminate を
+// 呼んでから、ブラウザへエラーメッセージを送って閉じる (アップグレード後は通常の HTTP
+// エラーを返せないため)。
+func (s *Server) runSessionBridge(ctx context.Context, browser *websocket.Conn, result *awsinternal.StartSessionResult, terminate session.TerminateFunc) {
+	dc, err := s.openDataChannel(ctx, result.StreamURL, result.TokenValue, result.SessionID)
+	if err != nil {
 		terminateBestEffort(terminate)
+		failSessionSetup(browser, "open data channel: "+err.Error())
 		return
 	}
 
@@ -94,7 +124,27 @@ func (s *Server) runSessionBridge(w http.ResponseWriter, r *http.Request, result
 	}
 }
 
-// terminateBestEffort はアップグレード前のセットアップ失敗時に、専用の短命 context で
+// failSessionSetup はアップグレード後のセッション確立失敗をブラウザへ通知し、WebSocket を
+// 閉じる。アップグレード後は HTTP のエラーを返せないため、TEXT メッセージで原因を伝える。
+// 送信・クローズのエラーはログに残すのみで呼び出し元には伝播しない (この直後にハンドラが
+// 終了するため。notifyLogTailEnd と同じ規約)。
+func failSessionSetup(browser *websocket.Conn, message string) {
+	ctx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
+	defer cancel()
+
+	payload, err := json.Marshal(sessionErrorMessage{Type: "error", Message: message})
+	if err != nil {
+		slog.Warn("failed to marshal session error message", "err", err)
+	} else if err := browser.Write(ctx, websocket.MessageText, payload); err != nil {
+		slog.Warn("failed to notify browser of session error", "err", err)
+	}
+
+	if err := browser.Close(websocket.StatusInternalError, ""); err != nil {
+		slog.Warn("failed to close browser websocket after session setup failure", "err", err)
+	}
+}
+
+// terminateBestEffort はセッション確立の途中で失敗したときに、専用の短命 context で
 // セッション終了処理を試みる。エラーはログに残すのみで呼び出し元には伝播しない。
 func terminateBestEffort(terminate session.TerminateFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
