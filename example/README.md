@@ -53,6 +53,11 @@ mise run example:seed
 - ECS: クラスタ `thief-example-cluster` (タグ `Env=example`)
 - RDS: DB インスタンス `thief-example-db` (mysql、db.t3.micro、タグ `Env=example`)
 - ElastiCache: クラスタ `thief-example-cache` (memcached。floci の `CreateCacheCluster` は memcached だけを受け付けるため redis にしない)
+- Kinesis: ストリーム `thief-example-stream` (シャード 2、保持 24 時間)
+- API Gateway: REST API `thief-example-api` と HTTP API `thief-example-http`
+- NAT Gateway: Elastic IP を 1 つ確保し、既定 VPC のサブネット `subnet-default-ap-northeast-1-a` にゲートウェイ 1 つ (タグ `Name=thief-example-nat`)
+- ELB: Application Load Balancer `thief-example-alb` (internet-facing、サブネットは `subnet-default-ap-northeast-1-a` と `-c`)
+- CloudFront: ディストリビューション 1 つ (コメント `thief example`、オリジンは `thief-example-data.s3.amazonaws.com`。ID は floci が割り当てる)
 
 `mise run example:up` で floci が起動した後に実行すること。
 
@@ -109,6 +114,21 @@ mise run example:seed
 6. `S`、`dynamo`、Enter で `thief-example-users` の行 (State `active`、Mode `on-demand`、Items `3`) が出る。Drawer の Overview は Resource ID、Capacity mode、Item count、Size、Global secondary indexes、Region の順
 7. `S`、`cache`、Enter で `thief-example-cache` の行 (State `available`、Engine `memcached`、Replication Group `—`、AZs `—`) が出る。Drawer の Overview は Resource ID、Engine、Engine version、Replication group、Node type、Nodes、AZs、Endpoint、Port、Region の順で、floci はノードの情報を返さないため Node type は空、Nodes は `0`、AZs は `—` になる。`2` の Tags は `No tags`
 8. `q` で終了する
+
+### TUI (`thief tui`) の ELB / CloudFront / API Gateway / NAT Gateway / Kinesis / SQS 一覧
+
+`example/seed.sh` が投入した資源で確かめる。
+
+1. 上の EC2 一覧の 1 と 2 と同じく `thief` を導入し、`mise run example:up` を動かしておく
+2. `mise run example:seed`
+3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢に `ELB`、`CloudFront`、`API Gateway`、`NAT Gateway`、`Kinesis`、`SQS` が `ElastiCache` の後にこの順に出る
+4. `sqs` と打って Enter を押すと、一覧に `thief-example-queue`、`thief-example-dlq`、`thief-example-fifo.fifo` の行 (State `active`、Available `0`、In flight `0`、Retention `4d`、Region `ap-northeast-1`) が出て、Type は `thief-example-fifo.fifo` だけ `FIFO`、他は `Standard` になる (Web UI の SQS 一覧と同じ表記)。Drawer の Overview は Resource ID (キューの ARN)、Type、Messages available、Messages in flight、Retention (`4 days`)、Region の順で、`2` の Tags は `No tags` になる (seed のキューにタグが無いため)
+5. `S`、`elb`、Enter で `thief-example-alb` の行 (State `active`。作成の直後は `provisioning` で、数分後に `active` になる。Type `application`、Scheme `internet-facing`、AZs `ap-northeast-1a, ap-northeast-1c`) が出る。Drawer の Overview は Resource ID (ロードバランサの ARN)、Type、Scheme、DNS name、VPC (`vpc-default-ap-northeast-1`)、AZs、Region の順で、`2` の Tags は `No tags` (Web UI と同じく ELB はタグを取得しない)
+6. `S`、`cloudfront`、Enter で、ディストリビューション ID の行 (State `deployed`、Domain `<ID>.cloudfront.net`、Alternate domains `—`、Origins `thief-example-data.s3.amazonaws.com`) が出る。Drawer の見出しの Name はコメントの `thief example` で、Overview は Resource ID、Domain、Alternate domains、Origins、Enabled (`yes`)、Price class (`PriceClass_All`) の順。`2` の Tags は `No tags`
+7. `S`、`api`、Enter で `thief-example-api` (Type `REST`) と `thief-example-http` (Type `HTTP`) の行 (State `active`、Stage は空、Endpoint は `https://<API ID>.execute-api.ap-northeast-1.amazonaws.com`) が出る。Drawer の Overview は Resource ID (API ID)、Type、Stage、Endpoint、Region の順で、`2` の Tags は `No tags`
+8. `S`、`nat`、Enter で `thief-example-nat` の行 (State `available`、Gateway ID `nat-...`、VPC `vpc-default-ap-northeast-1`、Elastic IP は floci が割り当てた値、Uptime は作成からの経過) が出る。Drawer の Overview は Resource ID、VPC、Subnet (`subnet-default-ap-northeast-1-a`)、Elastic IP、Region、Uptime、Launched (作成日を UTC で表示) の順で、`2` の Tags に `Name` が出る
+9. `S`、`kinesis`、Enter で `thief-example-stream` の行 (State `active`、Mode `provisioned`、Shards `2`、Retention `24h`、Encryption `NONE`) が出る。Drawer の Overview は Resource ID (ストリームの ARN)、Capacity mode、Shards、Retention、Encryption、Region の順で、`2` の Tags は `No tags` (Web UI と同じく Kinesis はタグを取得しない)
+10. `q` で終了する
 
 ## 動作確認できない機能
 

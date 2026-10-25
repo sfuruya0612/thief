@@ -46,6 +46,12 @@ func newTUIDeps() tui.Deps {
 			tui.NewRDSService(awsinternal.ListRDSResources),
 			tui.NewDynamoService(awsinternal.ListDynamoResources),
 			tui.NewCacheService(awsinternal.ListElastiCacheResources),
+			tui.NewELBService(awsinternal.ListELBResources),
+			tui.NewCloudFrontService(awsinternal.ListCloudFrontResources),
+			tui.NewAPIGatewayService(awsinternal.ListAPIGatewayResources),
+			tui.NewNATGatewayService(awsinternal.ListNATGatewayResources),
+			tui.NewKinesisService(awsinternal.ListKinesisResources),
+			tui.NewSQSService(awsinternal.ListSQSResources),
 		},
 		StartSession: sessionManagerCommand,
 	}

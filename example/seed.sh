@@ -146,4 +146,53 @@ aws_ elasticache create-cache-cluster \
   --cache-node-type cache.t3.micro \
   --num-cache-nodes 1
 
+echo "==> Kinesis: ストリームを作成 (TUI の Kinesis 一覧の確認用)"
+aws_ kinesis create-stream --stream-name thief-example-stream --shard-count 2
+
+echo "==> API Gateway: REST API と HTTP API を作成 (TUI の API Gateway 一覧の確認用)"
+aws_ apigateway create-rest-api --name thief-example-api
+aws_ apigatewayv2 create-api --name thief-example-http --protocol-type HTTP
+
+# floci は既定 VPC (vpc-default-ap-northeast-1) と AZ ごとのサブネット (subnet-default-ap-northeast-1-{a,b,c}) を
+# 最初から持つため、VPC は作らずそれを使う。
+echo "==> NAT Gateway: Elastic IP を確保してゲートウェイを作成 (TUI の NAT Gateway 一覧の確認用)"
+nat_alloc="$(aws_ ec2 allocate-address --domain vpc --query AllocationId --output text)"
+aws_ ec2 create-nat-gateway \
+  --subnet-id subnet-default-ap-northeast-1-a \
+  --allocation-id "$nat_alloc" \
+  --tag-specifications 'ResourceType=natgateway,Tags=[{Key=Name,Value=thief-example-nat}]'
+
+echo "==> ELB: Application Load Balancer を作成 (TUI の ELB 一覧の確認用)"
+aws_ elbv2 create-load-balancer \
+  --name thief-example-alb \
+  --subnets subnet-default-ap-northeast-1-a subnet-default-ap-northeast-1-c \
+  --scheme internet-facing \
+  --type application
+
+echo "==> CloudFront: ディストリビューションを作成 (TUI の CloudFront 一覧の確認用)"
+cat > "$tmpdir/distribution.json" <<'EOF'
+{
+  "CallerReference": "thief-example-1",
+  "Comment": "thief example",
+  "Enabled": true,
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "s3-data",
+        "DomainName": "thief-example-data.s3.amazonaws.com",
+        "S3OriginConfig": {"OriginAccessIdentity": ""}
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "s3-data",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "ForwardedValues": {"QueryString": false, "Cookies": {"Forward": "none"}},
+    "MinTTL": 0
+  }
+}
+EOF
+aws_ cloudfront create-distribution --distribution-config "file://$tmpdir/distribution.json"
+
 echo "==> 完了"
