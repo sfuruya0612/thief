@@ -60,6 +60,26 @@ mise run example:seed
 5. プロファイル選択で `floci` を選ぶ
 6. S3 (バケット一覧、オブジェクトブラウザ)、DynamoDB (テーブル一覧、schema / items タブ)、SQS、SSM Parameter Store、Secrets Manager、CloudFormation (スタック一覧、Events / Resources の Drawer) の一覧表示を確認する
 
+### TUI (`thief tui`) の EC2 一覧
+
+`example/seed.sh` は EC2 インスタンスを作らないため、手で 2 台作ってから TUI を起動する。認証情報は `example/home/.aws/credentials` の `floci` プロファイル (access_key 認証) を使う。
+
+1. `mise run backend:install` で `thief` を `$(go env GOPATH)/bin` に導入する
+2. 別のターミナルで `mise run example:up` を実行する (前面で動き続ける)
+3. `example/seed.sh` と同じダミーの認証情報とリージョンで EC2 インスタンスを 2 台作る
+
+   ```sh
+   export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-northeast-1
+   aws --endpoint-url http://localhost:4566 ec2 run-instances --image-id ami-12345678 --instance-type t3.micro \
+     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=web-01}]'
+   aws --endpoint-url http://localhost:4566 ec2 run-instances --image-id ami-12345678 --instance-type t3.micro \
+     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=batch-01}]'
+   ```
+
+4. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動すると、一覧に `web-01` と `batch-01` の行が出る
+5. `/` で `web` と打つと `web-01` の 1 行だけになる。選択中の行の右の Drawer に Overview (Resource ID、Type、AZ、Region など) が出て、`2` で Tags に切り替えると `Name` のタグが出る (`1` で Overview に戻る)
+6. `q` で終了する
+
 ## 動作確認できない機能
 
 以下はエミュレータ経由での確認ができない。実アカウント + 実プロファイルで確認すること。

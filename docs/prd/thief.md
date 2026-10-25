@@ -1,13 +1,16 @@
 # thief PRD
 
 Created: 2026-09-26
-Model: Claude Opus 5.5
+Model: Claude Fable 5.1
 Status: Draft
+Updated: 2026-10-23
 
 ## 概要
 
-thief は、AWS、Google Cloud、Datadog、TiDB Cloud のリソースとコストを、手元の端末から 1 つの Web UI と CLI で閲覧する開発者向けツールである。
-1 つの Go バイナリ (`thief`) が API サーバと CLI を兼ね、ブラウザで動く React の SPA がその API を使う。
+thief は、AWS、Google Cloud、Datadog、TiDB Cloud のリソースとコストを、手元の端末から Web UI、CLI、全画面の TUI で閲覧する開発者向けツールである。
+TUI は Web UI に相当する操作を端末の中で行うことを目指し、第 1 段階では AWS のリソースの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッションを扱う。
+1 つの Go バイナリ (`thief`) が API サーバ、TUI (`thief tui`)、CLI を兼ね、ブラウザで動く React の SPA がその API を使い、TUI は API サーバを経由せず CLI と同じ取得層をプロセス内で呼ぶ。
+
 ## 背景と課題
 
 ### 本 PRD を書く理由
@@ -17,6 +20,9 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 本 PRD は、実装済みのコード、`docs/issues/` の issue 199 件 (closed 198 件と pending 1 件)、`docs/issues/TODO.md` から要求を逆算して書き起こしたものである。
   本 PRD の作成中に起票した issue 0200 (CORS の不具合) と issue 0217 (セッションのルートの Origin の検査) は材料に含めず、修正の結果だけを反映した。
 以下では、これら 3 つを**材料**と呼ぶ。
+TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-14、FR-10 の `thief tui` の行、FR-29、FR-30、スコープの TUI の項目、非機能要求の性能とセキュリティの TUI の行、制約、未確定論点の TUI の行、決定した論点の 2026-10-23 の表、関連資料の ADR 0033) は 2026-10-23 の改訂で加えたものであり、改訂前の材料の issue と TODO には無い。
+`docs/issues/TODO.md` の TUI の後続作業の 3 行は、この改訂で PRD と同時に加えたものであり、改訂前の材料ではない。
+根拠は、同じ日に開発者が決めた TUI の追加 (「決定した論点」)、開発者が動作を確かめたプロトタイプ (`backend/internal/tui/`、`backend/internal/cli/tui.go`)、TUI が合わせる対象である Web UI の実装済みのコード (`frontend/src/lib/serviceMeta.ts`、`frontend/src/components/tables/columns.tsx`、`frontend/src/components/Drawer/overviewRows.tsx`) である。
 
 - issue は 2026-07-12 から 2026-09-26 まで git 管理の対象外だった (コミット b4ca037、ADR 0027)。
   2026-09-26 に `docs/issues/` へ移し、git で管理することにした (ADR 0028)。
@@ -28,7 +34,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 ### thief が解く課題
 
-材料に課題として書かれているものと、材料には課題として書かれておらず実装から推定したものを分けて示す。
+材料に課題として書かれているもの、材料には課題として書かれておらず実装から推定したもの、2026-10-23 の TUI の追加の決定で挙げたものの 3 つを分けて示す。
 
 材料に書かれている課題は、次のとおりである。
 
@@ -55,10 +61,19 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - Athena、CloudWatch Logs、BigQuery の調査で、それぞれのコンソールを行き来する必要がある。
   thief はこれらを 1 つの UI で検索させる (`frontend/src/views/AthenaView.tsx`、`frontend/src/views/CloudWatchLogsView.tsx`、`frontend/src/views/nonaws/BigQueryView.tsx`)。
 
+次は 2026-10-23 に開発者が TUI の追加を決めたときの課題である (ADR 0033 の「状況」)。
+
+- 端末の中だけで、プロファイル、リージョン、サービスを切り替えながら一覧と Drawer (Overview と Tags) を見比べる手段が無い。
+  Web UI を使うには `thief server` で API サーバを起動し、ブラウザで frontend を開く必要がある。
+  CLI の一覧コマンド (`thief ec2 ls` など) は 1 回の出力で終わる。
+  thief は全画面の TUI (`thief tui`) で、API サーバとブラウザを起動せずに一覧、Drawer、対話セッションを行わせる (FR-29、FR-30)。
+
 ## 目的
 
-- 利用者が 1 つの UI から、4 つの外部サービス (AWS、Google Cloud、Datadog、TiDB Cloud) のリソース一覧、詳細、コストに到達できる。
+- 利用者が Web UI から、4 つの外部サービス (AWS、Google Cloud、Datadog、TiDB Cloud) のリソース一覧、詳細、コストに到達できる。
 - 利用者がブラウザだけで EC2 と ECS のシェルに入れる。
+- 利用者がブラウザと API サーバを起動せずに、端末の中だけで AWS のリソースの一覧と Drawer (Overview と Tags) を確認し、EC2 と ECS のシェルに入れる (TUI の第 1 段階)。
+  TUI の最終的な目標は Web UI に相当する操作であり、第 2 段階以降の範囲と順序は「未確定論点」で決める。
 - 利用者が SSO トークンの期限切れを画面上で知り、画面を離れずに再ログインできる。
 - 利用者が CLI からも Web UI と同じ主要なリソースを一覧でき、結果をタブ区切りか CSV で受け取れる。
 - 利用者の認証情報と、外部サービスから取得したデータを、利用者の端末の外に送らない。
@@ -76,6 +91,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 | backend と frontend の型契約の一致 | 不一致 0 件 | `frontend/` で `npm run lint` を実行する。`frontend/src/types/contract.check.ts` の型検査が失敗しないことを確認する |
 | AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 23 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing) のどちらかを持つことをコードで確認する |
 | CLI の一覧コマンドの存在 | FR-10 の表の一覧コマンドが 27 個すべて存在する。Web にだけある機能 (Pricing、分割表示など) は対象外とする | 表の各コマンドに `--help` を付けて実行し、終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき表のコマンドで始まることを確認する |
+| TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-23 時点は `ec2` の 1 個である | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、その `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-25 時点の期待値は `ec2` の 1 個で、サービスを足すたびに広げる)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
 
 ## ユーザーとユースケース
 
@@ -102,6 +118,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 | UC-11 | 端末上での一覧と加工 | CLI でリソースを一覧し、CSV に出力して他のツールに渡す | FR-10 |
 | UC-12 | 表示の調整 | 2 つのサービスを並べて表示し、テーマ、言語、Drawer の位置を切り替える | FR-25、FR-26 |
 | UC-13 | backend の起動待ち | frontend だけが先に起動しているときに、接続待ちであることを知る | FR-27 |
+| UC-14 | 端末の中での一覧と接続 | ブラウザを開かずに `thief tui` を起動し、プロファイル、リージョン、サービスを切り替えながら AWS のリソースを一覧と Drawer (Overview と Tags) で確認し、EC2 インスタンスか ECS のタスクのシェルに入る | FR-29、FR-30 |
 
 ## スコープ
 
@@ -117,6 +134,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - AWS SSO のログインとログアウト、Datadog の OAuth のログインとログアウト
 - CLI (`thief <service> ...`) による一覧、参照、一部の書き込み
 - 利用者の端末上で動く API サーバ (`thief server`) と Web UI
+- 全画面の TUI (`thief tui`) による AWS のリソースの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッション (第 1 段階。FR-29、FR-30)
 
 「機能要求」に挙げた機能は、すべて対象とする。
 
@@ -128,7 +146,10 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - 複数人で共有するサーバとしての運用 (利用者の認証、認可、監査ログを持たない)。
 - thief 本体の Docker による起動 (2026-07-18 のコミット cb2da77 で削除した)。
   `example/` のエミュレータ (floci) は docker compose で起動し、これは対象外に含めない。
-- ブラウザ以外の GUI のクライアント (CLI は除く。Flutter 時代の macOS デスクトップ対応は廃止した。`AGENTS.md` の frontend 「基本方針」)。
+- ブラウザ以外の GUI のクライアント (CLI と TUI は除く。Flutter 時代の macOS デスクトップ対応は廃止した。`AGENTS.md` の frontend 「基本方針」)。
+- TUI の第 1 段階に含めないもの: Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー (Athena、CloudWatch Logs、BigQuery、Cloud Logging)、リソースの変更操作 (FR-5、FR-6、FR-20 の値とオブジェクトの書き込み、FR-3 の invalidation の作成) は第 2 段階以降で扱う (2026-10-23 の決定。段階ごとの範囲と順序は第 1 段階の完了後に開発者が決める。「未確定論点」の「TUI の第 2 段階以降の範囲」)。
+  コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化 (最後に使ったプロファイル、リージョン、サービス) は、材料に TUI で扱うかの記述が無く、起草者の整理として第 1 段階では扱わない (扱うかは同じ未確定論点で決める)。
+  EC2 と ECS への対話セッション (FR-30) は第 1 段階に含める。
 - URL によるルーティング (react-router などを導入しない。`AGENTS.md` の frontend 「基本方針」)。
 - EC2 の台数の時系列グラフ (標準で取れるメトリクスが無いため撤回した。issue 0186)。
 - Fargate Spot の料金表示 (データ源が無いため保留した。`docs/issues/pending/0059-feat-pricing-fargate-spot-rates.md`)。
@@ -138,6 +159,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 
 優先度は材料に記録が無い。
 本 PRD では、起草者が次の基準で付け、2026-10-02 に開発者が確認した。
+2026-10-23 に追加した FR-29 と FR-30 の Must は、TUI の追加の決定 (「決定した論点」) に基づいて起草者が付けたものであり、開発者の確認は未了である。
 
 - **Must**：欠けると UC の主目的が果たせない機能
 - **Should**：UC の主目的は果たせるが、手間が増える機能
@@ -330,7 +352,9 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - 参照のコマンドとして `athena query`、`bq query`、`bq table info`、`logs events`、`s3 objects`、`s3 download`、`gcp gcs download`、`ssm param get`、`secretsmanager get`、`ecr images`、`rds parameters`、`elasticache parameters`、`ecs services`、`ecs tasks`、`rds cluster`、`rds cluster-parameters`、`athena catalogs`、`athena databases`、`athena tables`、`gcp run ls`、`gcp iam ls`、`gcp serviceaccounts ls`、`gcp logging ls`、`gcp gcs ls`、`gcp gcs objects`、`gcp projects refresh`、`bq table ls`、`tidb project`、`tidb cost`、`datadog estimated`、`cost service`、`cost account`、`cost usage-type`、`cost overview`、`elb listeners`、`elb rules`、`elb target-groups`、`elb target-health`、`cfn describe`、`cfn changeset`、`cost forecast` を持つ。
 - `thief server` で API サーバを起動する。
 - 上記の列挙は 2026-09-26 時点の `backend/internal/cli/` のコマンド (テスト用のものを除く) をすべて挙げたものである。
+- 2026-10-23 に、全画面の TUI を起動する `thief tui` を加えた (FR-29)。
 - SIGINT か SIGTERM を受けたら処理を取り消し、終了コード 130 で終わる (`backend/internal/cli/run.go` `interruptExitCode`)。
+  `thief tui` は、`q`、画面で押した Ctrl-C、SIGTERM では終了コード 0 で終わり、プロセスの外から送られた SIGINT (`kill -INT`) だけが 130 になる (FR-29)。
 - 設定は、コマンドライン引数、環境変数、設定ファイル、既定値の順で優先する。
 
 受け入れ基準:
@@ -339,6 +363,93 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 - `thief ec2 ls -o csv --no-header` の出力にヘッダ行が無い。
 - 一覧の実行中に Ctrl-C を押すと、終了コードが 130 になる。
 - 環境変数 `THIEF_REGION` と `-r` の両方を指定すると、`-r` の値が使われる。
+
+### TUI
+
+**FR-29 全画面の TUI による AWS のリソースの一覧と詳細** (Must)
+
+- `thief tui` で、端末の中で動く全画面の TUI を起動する (`backend/internal/tui/`)。
+  共通のフラグ `-p/--profile` と `-r/--region` で、起動時のプロファイルとリージョンを指定できる。
+- TUI は API サーバ (`thief server`) を経由せず、CLI と同じ取得層 (`backend/internal/aws/`) をプロセス内で直接呼ぶ (ADR 0033)。
+  利用者は TUI のために API サーバとブラウザを起動しなくてよい。
+- 第 1 段階の対象サービスは、Web UI の AWS のサイドバー (FR-2) にある 23 サービスのうち、一覧のビューを持つ 19 サービスとする。
+  ID と名前は、`ec2` (EC2)、`lambda` (Lambda)、`ecr` (ECR)、`ecs` (ECS)、`s3` (S3)、`rds` (RDS)、`dynamo` (DynamoDB)、`cache` (ElastiCache)、`elb` (ELB)、`cloudfront` (CloudFront)、`apigw` (API Gateway)、`natgw` (NAT Gateway)、`kinesis` (Kinesis)、`sqs` (SQS)、`iam` (IAM)、`waf` (WAF)、`secrets` (Secrets Manager)、`ssm` (Parameter Store)、`cfn` (CloudFormation) である (ID は `frontend/src/lib/serviceMeta.ts` の `SERVICE_TO_PATH` のキー、名前は同じファイルの `SERVICES` の `name`)。
+  2026-10-23 時点のプロトタイプは `ec2` だけを持ち、残りの 18 サービスは第 1 段階の残りとして後続の issue で足す (「決定した論点」)。
+  専用のビューを持つ 4 サービス (Athena、CloudWatch Logs、Cost Explorer、Pricing) は対象に含めない (「スコープ」)。
+  サービスは `S` のキーで開く選択肢から切り替える。
+- 画面は、ヘッダ (サービス名、プロファイル、リージョン、取得中の表示)、一覧、Drawer、通知行、キー操作のヒントの行からなる。
+  一覧と Drawer は左右に並べ、`tab` で操作の対象を切り替える。
+- 一覧の列は、Web UI でそのサービスを選んだときに表示する一覧 (`frontend/src/views/AccountView.tsx` が `ServicePanel` に渡す `frontend/src/components/tables/columns.tsx` の列定義) と同じ項目とする。
+  列の幅は見出しと表示中の値の最大幅から決め、端末の幅に収まらないときは広い列から縮める。
+- `/` で絞り込みの入力を開き、入力した文字列を含む行 (すべての列の値を対象とする。大文字と小文字を区別しない) だけを表示する。
+- 一覧で選んだ行の Drawer に、Overview と Tags を表示する。
+  Overview は、Name と State に続けて、Web UI の Drawer の Overview と同じ項目 (`frontend/src/components/Drawer/overviewRows.tsx`) を並べる。
+  Tags は、Web UI の Drawer の Tags タブと同じキーと値を表示し、タグが無い行では `No tags` と表示する。
+  Web UI が一覧とは別の取得でタグを得るサービス (CloudFormation は `frontend/src/components/Drawer/DrawerCFNTags.tsx` がスタックの詳細 `backend/internal/aws/cfn.go` `DescribeCFNStackDetail` から取る) では、TUI も行を選んだときに同じ取得関数でタグを取る。
+  Web UI のサービス固有のタブ (ECS の Services、Tasks など) を TUI の Drawer に置くかは、第 1 段階では決めない (「未確定論点」)。
+- プロファイル (`p`)、リージョン (`R`)、サービス (`S`) の選択肢は、文字を打つだけで名前と説明の部分一致で絞り込める。
+  矢印キーか `ctrl+n` / `ctrl+p` で移動し、`enter` で決める。
+  プロファイルの選択肢には、SSO のプロファイルではアカウント ID、ロール名、SSO の状態 (FR-1 と同じ `valid`、`expired`、`not_logged_in`) を名前に添えて表示する。
+  他のプロファイルは名前だけを表示する (`backend/internal/aws/profiles.go` の `Profile.AccountID` は SSO のプロファイルにしか無い)。
+  リージョンの選択肢は FR-1 と同じ `DescribeRegions` の結果から作る。
+- `r` で表示中のサービスを取得し直す。
+  TUI はリソースの一覧の取得結果をキャッシュせず、プロファイル、リージョン、サービスを切り替えるたびに取得する。
+  プロファイルの一覧は起動時に 1 回取得する。
+  リソースの一覧の取得に失敗したときは、失敗の内容を一覧の領域に表示し、次の取得を始めるまで残す。
+- SSO トークンの期限切れは、FR-9 と同じ判定 (`backend/internal/aws/errors.go` `IsSSOTokenExpired`) でバナーに表示し、`thief sso login` の実行を案内する。
+  TUI の中でデバイス認可を行うかは、第 1 段階では決めない (「未確定論点」)。
+- 通知 (セッションの終了と失敗、プロファイルとリージョンの一覧の取得の失敗、セッションを開始できない行の選択) はキー操作のヒントの行の上に表示し、6 秒が経つかいずれかのキーを押すと消える。
+  通知は 1 行で表示し、ヒントの行を隠さない。
+  失敗の内容が改行を含むとき (`errors.Join` で複数の失敗をまとめたセッションの失敗など) は、改行を空白に置き換える。
+- `q` か `ctrl+c` で終了する (対話セッションの中を除く。FR-30)。
+  絞り込みの入力中と選択肢の表示中は `q` を入力の文字として扱い、`ctrl+c` だけで終了する。
+  `q`、画面で押した Ctrl-C (raw モードのキー入力として届く)、SIGTERM (bubbletea が `QuitMsg` に変換する) では終了コードは 0 であり、CLI の中断の終了コード 130 (FR-10) を適用しない (ADR 0033)。
+  プロセスの外から送られた SIGINT (`kill -INT`) は bubbletea が中断として扱い、CLI と同じく 130 で終わる。
+
+受け入れ基準:
+
+- `thief tui --help` の終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき `thief tui` で始まる。
+- 19 サービスそれぞれについて、`Service.Columns()` の見出しの並びが Web UI の列定義の `header` の並びと一致し、`Row.Overview()` のキーの並びが `overviewRows.tsx` の同じサービスの項目名から `Name` と `State` を除いた並びと一致し (`Name` と `State` は Drawer の描画 `refreshDrawer` が先頭に置く)、`Row.State()` と State の列が Web UI の `StatusBadge` が表示する値 (資源の `State` フィールドの生の値) と一致し、`Cells()` と `Overview()` の値が Web UI の同じセルと項目が描画する文字列と一致し (空の値を `—` にするのは Web UI が `Dash` か `dash` を描画する項目に限る)、`Row.Tags()` が Web UI の Drawer の Tags タブと同じキーと値を返す (CloudFormation は一覧でタグを取れないため、`Row.Tags()` ではなく行を選んだときに取得するタグが Web UI の Tags タブと一致する)。
+- 19 サービスそれぞれについて、`Service` を作る関数に偽の一覧関数を渡して `Load` を呼ぶとその関数が呼ばれることを単体テストで確認し、`tui.Deps` を組み立てる関数が各 `Service` に渡す一覧関数が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が呼ぶ `backend/internal/aws/` の関数と同じであることをコードの読み合わせで確認する。
+- 改行を含む失敗の内容を通知に渡したとき、`View()` の出力で通知が 1 行であり、キー操作のヒントの行が最後の行に表示されることを単体テストで確認する。
+- `mise run backend:install` で `thief` を `$(go env GOPATH)/bin` に導入し (以下の `thief` はそのパスのもの)、`example/` の floci を起動し (`mise run example:up`)、`example/seed.sh` と同じダミーの認証情報とリージョン (`AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-northeast-1`) で `aws --endpoint-url http://localhost:4566 ec2 run-instances --image-id ami-12345678 --instance-type t3.micro --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=web-01}]'` と、Name を `batch-01` にした同じコマンドを実行して EC2 インスタンスを 2 台作ってから、リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動すると、一覧に `web-01` と `batch-01` の行が表示される (`example/seed.sh` は EC2 インスタンスを作らない。この手順は `example/README.md` の「確認手順」に記録している。`thief tui` の認証情報は `example/home/.aws/credentials` の `floci` を使う)。
+  選んだ行の Drawer の Overview に Name、State、Resource ID、Type、AZ、Region、Private IP、Public IP、VPC、Uptime、Launched が表示される。
+  Drawer の Tags に `Name` と `web-01` が表示される。
+- 上の環境で `/` を押して `web` と入力すると、`web-01` の 1 行だけが表示される。
+- 上の環境で `p` を押して `flo` と入力すると、選択肢が `floci` だけになり、件数が `(1/1)` と表示される (`example/home/.aws/config` のプロファイルは `floci` だけである)。
+- 実 AWS の、認証情報が無効なプロファイルに `p` で切り替えると、一覧の領域に `list EC2 instances:` で始まる失敗が表示され、通知行には何も表示されない。
+  続けて `R` を押すと、通知行に `list regions:` で始まる失敗が表示され、キー操作のヒントの行は表示されたままである。
+- 通知を表示してから 6 秒後に、通知行が消えている。
+- 実 AWS の SSO プロファイルで、`~/.aws/sso/cache/` の該当するトークンの `expiresAt` を過去の時刻に書き換え、`refreshToken` のキーがあれば削除してから起動すると (SDK は `clientId`、`clientSecret`、`refreshToken` が揃うとトークンを更新する。`github.com/aws/aws-sdk-go-v2/credentials/ssocreds` の `SSOTokenProvider`)、一覧の取得が失敗し、バナーに `thief sso login` が表示される。
+- floci の環境で `mise run example:down` で floci を止めてから `r` を押すと、一覧の領域に失敗が表示される。
+  `mise run example:up` で floci を起動し直してから `r` を押すと、失敗の表示が消えて取得中の表示になる。
+- `q` で終了したとき、画面で Ctrl-C を押して終了したとき、`kill -TERM <pid>` で終了したときのプロセスの終了コードが 0 である。
+- `kill -INT <pid>` で終了したときのプロセスの終了コードが 130 である。
+- `thief tui` のプロセスは TCP の待ち受けを持たない (`lsof -nP -a -p <pid> -iTCP -sTCP:LISTEN` の出力が空である)。
+- `backend/internal/tui/` は `backend/internal/api` に依存しない (`backend/` で実行した `go list -deps ./internal/tui/` の出力に `internal/api` が含まれない)。
+
+**FR-30 TUI からの対話セッション** (Must)
+
+- EC2 の一覧で選んだインスタンスに、`s` で Session Manager のセッションを開始する。
+- ECS では、クラスタを選び、タスクとコンテナを選んで ECS Exec で接続する。
+  既定のコマンドは FR-7 と同じ `/bin/sh` とする。
+  タスクとコンテナの選び方 (Drawer のタブか選択肢か) は開発者が決める (「未確定論点」)。
+  2026-10-23 時点のプロトタイプは EC2 のセッションだけを持ち、ECS Exec は後続の issue で足す (「決定した論点」)。
+- セッションは CLI の `thief ec2 session` と `thief ecs exec` と同じく、PATH にある `session-manager-plugin` に端末を渡して行う (「外部仕様の前提」)。
+  セッションの間は TUI の画面を離れ、プラグインが終了したら TUI の画面に戻る。
+- プラグインの終了後、AWS 側のセッションを `TerminateSSMSession` で終える (FR-7 と同じ)。
+  セッションの終了を通知行に表示する。
+- セッションの中で押した Ctrl-C はプラグインに渡り、TUI を終了させない。
+
+受け入れ基準:
+
+- 実 AWS アカウントの、SSM Agent が動く EC2 インスタンスの行を選んで `s` を押すと、`session-manager-plugin` が起動し、シェルで `echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
+  `exit` で抜けると TUI の画面に戻り、通知行に `session closed` が表示される。
+- セッションから戻った後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
+- セッションの中で Ctrl-C を押してから `exit` で抜け、`r` を押すと一覧を取得し直せる。
+- 実 AWS アカウントの、ECS Exec を有効にしたタスクで、クラスタ、タスク、コンテナを選んで接続すると、シェルで `echo ok` を実行すると `ok` が返る (クラスタ、タスク、コンテナの指定の手順は、「未確定論点」の「TUI の ECS のタスクとコンテナの選び方」の解消後に確定する。この基準はその解消までは実行できない)。
+  `exit` の後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
+- `session-manager-plugin` が PATH に無いとき、通知行に `session-manager-plugin not found in PATH` が表示され、TUI は終了しない。
 
 ### 分析とコスト
 
@@ -614,6 +725,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
   EC2 Spot を除く料金 (FR-12) は、このメモリのキャッシュではなく、期限の無いファイルのキャッシュに置く (`backend/internal/pricecache/pricecache.go`)。
   EC2 Spot の料金はどちらのキャッシュにも置かず、表示のたびに取得する (`backend/internal/api/handlers_pricing.go`)。
 - frontend は取得結果を 60 秒間、新しいものとして扱う (`staleTime`)。
+- TUI はリソースの一覧の取得結果をキャッシュしない (FR-29)。
 - 外部 API の並列呼び出しは、同時実行数を上限付きにする。
   上限は既定 30、WAF と IAM は 10 とする。
 - Cloud Run の一覧は、ロケーションごとのジョブの取得を並列にする。
@@ -633,6 +745,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 ### セキュリティ
 
 - API サーバは既定で `127.0.0.1:8089` で待ち受ける (`THIEF_LISTEN_ADDR` で変えられる)。
+- TUI はネットワークの待ち受けを持たず、API サーバを起動しない (FR-29)。
 - API には利用者の認証が無い。
   このため、同じ端末で動く他のプロセスも API を呼べる。
 - WebSocket の接続は `THIEF_WEB_ORIGINS` の Origin だけを受け付ける (FR-7)。
@@ -671,6 +784,10 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
   標準ライブラリを第一とする。
 - frontend は Vite、React 18、TypeScript (strict)、TanStack Query で作る。
   状態管理ライブラリとルーターは導入しない。
+- TUI は `github.com/charmbracelet/bubbletea`、`bubbles`、`lipgloss` で作り、他の TUI フレームワークは導入しない (ADR 0033)。
+  bubbletea は CLI の対話の選択 (`backend/internal/util/selecter.go` `Select`) で既に直接依存であり、`bubbles` と `lipgloss` を直接依存に加える。
+- TUI は API サーバを経由せず、取得層をプロセス内で呼ぶ (ADR 0033)。
+  サービスの追加は、`backend/internal/tui/service.go` の `Service` と `Row` を満たす型を置き、`backend/internal/cli/tui.go` の `Deps.Services` に足す形で行う (`AGENTS.md` の backend 「プロジェクト構造」)。
 - backend の型と frontend の Raw 型は、ゴールデン JSON で突き合わせる (`backend/internal/contract/contract.go` `Registry`、`frontend/src/types/contract.check.ts`)。
 - frontend は `http://localhost:8088`、backend は `127.0.0.1:8089` で動く。
 
@@ -680,7 +797,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
   SSO のトークンのキャッシュは AWS CLI と互換にする。
 - Google Cloud は ADC だけを使う。
   gcloud CLI には依存しない。
-- CLI の `thief ec2 session` と `thief ecs exec` は、PATH にある `session-manager-plugin` を起動する (`backend/internal/cli/session_plugin.go`)。
+- CLI の `thief ec2 session` と `thief ecs exec` と、TUI の対話セッション (FR-30) は、PATH にある `session-manager-plugin` を起動する (`backend/internal/cli/session_plugin.go`、`backend/internal/cli/tui.go` `sessionManagerCommand`)。
   Web UI のターミナルは、このプラグインを使わない (FR-7)。
 - Cost Explorer と `DescribeRegions` の呼び出し先は us-east-1 とする。
 - AWS の EC2 には、稼働台数の標準メトリクスが無い。
@@ -703,6 +820,11 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 | 論点 | 未確定の内容 | 解消の方法 |
 | --- | --- | --- |
 | Fargate Spot の料金 | データ源が無い (`docs/issues/pending/0059-feat-pricing-fargate-spot-rates.md`) | 利用できるデータ源が見つかった時点で、開発者が対応を決める |
+| TUI の第 2 段階以降の範囲 | 第 2 段階以降で扱うと決めた Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作の、段階ごとの範囲と順序。材料に無いコストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化 (起草者の整理) を TUI で扱うか | 第 1 段階 (FR-29、FR-30) の完了後に開発者が決める |
+| TUI の Drawer のサービス固有のタブ | Web UI の Drawer にあるサービス固有のタブ (ECS の Services、Tasks、RDS の Instance Parameters、Cluster Parameters など) を TUI に置くか | サービスごとの要望が出た時点で、開発者がサービス単位で決める |
+| TUI の ECS のタスクとコンテナの選び方 | FR-30 の ECS Exec で、タスクとコンテナを Drawer のタブで選ぶか、選択肢で選ぶか | ECS Exec の issue の実装時に開発者が決める |
+| FR-29 と FR-30 の優先度 | 起草者が付けた Must で確定するか | 開発者が確認する |
+| TUI の中の SSO の再ログイン | FR-9 のデバイス認可を TUI の中で行うか、`thief sso login` の案内に留めるか | 第 1 段階の完了後に開発者が決める |
 
 ## 決定した論点
 
@@ -730,9 +852,20 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 | SQL 検査の誤検知 | コメントと文字列リテラルを除いてから検査する (FR-16) | `sqlguard` の書き換え |
 | `thief bq query` の検査の例外 | 検査を掛け、書き込みを許すフラグは設けない (FR-16) | `thief bq query` への検査の適用 |
 
+次の論点は、2026-10-23 に開発者が決めた。
+
+| 論点 | 決定 | 後続の作業 |
+| --- | --- | --- |
+| TUI の追加 | Web UI に相当する操作を端末の中で行う全画面の TUI (`thief tui`) を追加する。第 1 段階は AWS の一覧、Drawer (Overview と Tags)、対話セッションとする (「TUI の第 1 段階の範囲」)。「やらないこと」の「ブラウザ以外の GUI のクライアント」から TUI を除く | FR-29 と FR-30 の実装 |
+| TUI の接続方式 | API サーバを経由せず、取得層をプロセス内で直接呼ぶ (ADR 0033) | 無い |
+| TUI のフレームワーク | bubbletea、bubbles、lipgloss を使う。tview は採らない (ADR 0033) | 無い |
+| TUI の第 1 段階の範囲 | AWS の 19 サービスの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッション。Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は第 1 段階の完了後に決める (「未確定論点」)。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は材料に無く、第 1 段階では扱わない (「スコープ」) | `ec2` 以外の 18 サービスの追加、ECS Exec の追加 |
+| TUI の進め方 | `ec2` だけのプロトタイプを先に作って体験を確かめ、その後に PRD の改訂、ADR 0033、issue の起票、実装の順で正規の手順に戻す | PRD の改訂 (この改訂)、ADR 0033、`AGENTS.md`、`CHANGES.md`、`docs/issues/TODO.md` の TUI の記述は書き終えており、プロトタイプを issue として検証したうえで同じコミットで入れる。その後に残りの issue を実装する (プロトタイプの動作は 2026-10-23 に確認済み) |
+
 ## 関連資料
 
 - 設計判断の記録: `docs/adr/`
+- TUI の接続方式とフレームワーク: ADR 0033 (`docs/adr/0033-tui-in-process-bubbletea.md`)
 - issue: `docs/issues/closed/`、`docs/issues/pending/`、`docs/issues/TODO.md`
 - CORS の不具合と修正の方針: `docs/issues/closed/0200-bug-cors-reflects-any-origin.md`、ADR 0032 (`docs/adr/0032-api-origin-and-host-checks.md`)
 - 変更履歴: `CHANGES.md`

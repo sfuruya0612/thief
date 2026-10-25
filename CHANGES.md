@@ -26,6 +26,8 @@
   - @sfuruya0612
 - [ADD] S3 / GCS の Objects タブで、バケットをフォルダの階層として 1 階層ずつ辿れるようにする (backend が区切り文字 `/` で一覧して応答に `prefixes` を足し、既存のエンドポイントにクエリパラメータ `delimiter` (空か `/`) を足す。frontend はフォルダ行とパンくずで辿る階層モードと、従来の平らな一覧のフラットモードをトグルで切り替える。打ち切りは、オブジェクトとフォルダを合わせて 1000 件を超える残りがあるときだけ行い、GCS のちょうど 1000 件のときの打ち切りをやめる。issue 0207)
   - @sfuruya0612
+- [ADD] CLI に全画面の TUI (`thief tui`) のプロトタイプを追加する (Web UI の AWS のビューに相当する操作を端末の中で行う第 1 段階のプロトタイプとして、EC2 の一覧、`/` による絞り込み、Overview と Tags の Drawer、`p` のプロファイル切替、`R` のリージョン切替、`S` のサービス切替、`r` の再取得、`s` の EC2 Session を実装する。プロファイル / リージョン / サービスの選択肢は文字を打つだけで名前と説明で絞り込め、移動は矢印キーか ctrl+n / ctrl+p で行う。セッションの終了などの通知はキー操作のヒントの上に 1 行で出し (改行は空白に置き換える)、数秒で消えるかキーを押すと消え、ヒントを隠さない。一覧と Drawer の State は Web UI の `StatusBadge` と同じ資源の `State` の生の値を表示し (EC2 の `pending` は `updating` ではなく `pending` と出る)、Drawer の State の色だけを `aws.NormalizeState` で正規化して選ぶ。プロファイル / リージョン / サービスを切り替えると旧い行を消してから取り直し、セッションの開始中と実行中は `s` を無視し、プロファイルの一覧が届く前の `p` は一覧を取り直してから選択肢を開く。backend の `internal/aws` をプロセス内で直接呼び、`thief server` は要らない。一覧の列幅は見出しと表示中の値の最大幅から決め、収まらないときは広い列から縮める。SSO の期限切れは Web と同じ判定 (`aws.IsAccessDenied` で IAM の権限不足を除いてから `aws.IsSSOTokenExpired`) でバナーを出す。対話セッションは `tea.ExecProcess` で session-manager-plugin に端末を渡し、終了後に AWS 側のセッションを切断する。画面の部品に `github.com/charmbracelet/bubbles` と `lipgloss` を直接依存に加える。第 1 段階の残り (EC2 以外の 18 サービスの一覧と Drawer、ECS Exec) は後続の issue で足す。Google Cloud、Datadog、TiDB、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は未確定とする。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は第 1 段階では扱わず、扱うかは未確定とする (docs/prd/thief.md の「未確定論点」))
+  - @sfuruya0612
 - [CHANGE] S3 / GCS のオブジェクト SQL 検索で、一覧で選んだ同じ形式の複数のオブジェクトを 1 回の検索に掛けられるようにする (選んだ全オブジェクトを読み取り関数のリスト引数で 1 つの `obj` ビューにし、由来のオブジェクトのキーを `object_key` 列で区別する。1 件の検索でも `object_key` 列が増えるため `SELECT *` の結果の列が変わり、データが `object_key` 列を持つオブジェクトは列名の衝突 (Binder Error) で検索に失敗する。`THIEF_OBJECT_QUERY_MAX_BYTES` は 1 回の検索で取り込む合計サイズの上限になり、1 回に選べるのは 50 件まで、取り込みは並列度 4 で行う。`DataTable` のチェックボックス列を props `selection` で制御化して選択に使う。issue 0208)
   - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
@@ -441,6 +443,8 @@
 
 ### misc
 
+- 全画面の TUI の要求 (FR-29、FR-30) と 2026-10-23 の決定を PRD (docs/prd/thief.md) に追加し、TUI を取得層のプロセス内呼び出しと bubbletea で作る決定を ADR 0033 に記録し、`AGENTS.md` の backend の「プロジェクト構造」に `internal/tui/` の節と TUI の規約を加える (docs/adr/README.md の索引と docs/issues/TODO.md の TUI の後続作業の 3 行を含む)
+  - @sfuruya0612
 - pre-commit の backend チェックから govulncheck を専用タスク `backend:vuln` に分け、`go test` の自動 vet を止める (`mise run check` と `mise run backend:vuln` では従来どおり govulncheck が走る。`backend:test` は `-vet=off` とし、vet は `backend:lint` の `go vet ./...` に一本化する。各 2 回計測した 2 回目の値で `mise run backend:lint` が 21.28 秒から 14.52 秒、キャッシュ済みの `mise run backend:test` が 7.86 秒から 4.99 秒になる。ADR 0031。docs/issues/closed/0216)
   - @sfuruya0612
 - backend のビルドとテストを `mise.toml` の `[env]` で `CGO_ENABLED=0` に固定する (`github.com/DataDog/zstd` の cgo が強制していた外部リンクが外れ、`mise run backend:install` の所要時間が 17.40 秒から 11.90 秒になる。Linux では `-race` に cgo が要るため `env CGO_ENABLED=1` で上書きする。docs/issues/closed/0215)

@@ -59,6 +59,7 @@ including AWS, BigQuery, Datadog, and TiDB.`,
 		newGCPCmd(),
 		newAthenaCmd(),
 		newServerCmd(),
+		newTUICmd(),
 	)
 	return root
 }

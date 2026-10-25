@@ -2,6 +2,7 @@
 
 Created: 2026-10-25
 Model: Claude Fable 5.1
+Completed: 2026-10-25
 
 ## 背景
 
@@ -64,3 +65,72 @@ FR-29 の残りの 18 サービスと FR-30 の ECS Exec は後続の issue で�
 - docs/prd/thief.md の FR-29、FR-30、「決定した論点」の 2026-10-23 の表
 - docs/adr/0033-tui-in-process-bubbletea.md
 - issue 0219 から 0223 (18 サービスの一覧と Drawer)、issue 0224 (ECS Exec)。この issue が入れる `Service` と `Row` のインターフェース、`Deps` の組み立ての関数、`Load` の配線のテストの形を、それらの issue が使う。
+
+## 動作確認
+
+2026-10-25 に floci で確認した。`thief` は `mise run backend:install` で導入した。floci は `docker compose -f example/compose.yaml up -d` で起動した (`mise run example:up` と同じ compose ファイル。`example:up` は前面で動き続けるため `-d` を付けた)。EC2 インスタンスは `example/README.md` の「TUI (`thief tui`) の EC2 一覧」の `run-instances` で `web-01` と `batch-01` の 2 台を作った。
+
+TUI の操作は Python の `pty.fork` で `HOME="$(pwd)/example/home" thief tui -p floci` を起動する駆動スクリプトで行った (`~/.claude/tmp/claude-2013771024/-Users-shoichi-furuya-apps-thief/fa65ebe8-98bd-4ac0-b99c-e41e7390dfc1/scratchpad/tui_smoke.py`。結果は同じ場所の `tui_smoke.out` で、22 項目すべて OK)。スクリプトは次の 3 点を扱う。端末の背景色の問い合わせ (OSC 11) に応答する (応答が無いと起動が 5 秒止まる)。キーは 1 文字ずつ送る (まとめて送ると bubbletea が `1/` のような複数文字を 1 つの KeyMsg にし、単独キーの判定に掛からない)。画面はウィンドウの幅を 1 桁変えて全面を描き直させ、ANSI シーケンスを取り除いて読む。
+
+### floci で確認した項目
+
+| 項目 | 結果 |
+| --- | --- |
+| `thief tui --help` | 終了コード 0。次の出力が出る |
+| 2 台の一覧 | タイトルが `EC2 (2)`、列が `Name State Type Region AZ Private IP Public IP Uptime`、行が `web-01 running t3.micro ap-northeast-1 b 172.31.16.10 — 0h 0m` と `batch-01 running t3.micro ap-northeast-1 b 172.31.16.11 — 0h 0m` |
+| Drawer の Overview | `Name web-01`、`State running`、`Resource ID i-f9181993c6a93adb4`、`Type t3.micro`、`AZ ap-northeast-1b`、`Region ap-northeast-1`、`Private IP 172.31.16.10`、`Public IP —`、`VPC`、`Uptime`、`Launched` の順に出る (Resource ID は実行ごとに変わる) |
+| Drawer の Tags (`2`) | `Name  web-01` の 1 行。`1` で Overview に戻る |
+| `/` で `web` | 一覧が `web-01` の 1 行になり、タイトルが `/ web` になる。Enter で絞り込みを保ったままタイトルが `EC2 (1/2)  / web` になる。`/` の後の esc で入力が消え `EC2 (2)` と 2 行に戻る |
+| `p` で `floci` | `p` を押すと `Select a profile (1/1)` と選択肢 `floci` の 1 件が出る。`floci` と入力しても `(1/1)` と `floci` のまま (`example/home/.aws/config` のプロファイルは `floci` の 1 件だけなので、入力で件数が減ることは floci では確かめられない。入力で件数が減ることは `model_test.go` の `TestModel_PickerFiltersByTyping` で確認している)。esc で入力が消え `> type to filter` に戻り、もう 1 度 esc で閉じて一覧に戻る |
+| `lsof -nP -p <pid> -a -i -sTCP:LISTEN` | 出力なし |
+| `mise run example:down` の後の `r` | 取得中の表示の後、一覧の領域に `list EC2 instances: describe ec2 instances: operation error EC2: DescribeInstances, exceeded maximum number of attempts, 3, https response error StatusCode: 0, RequestID: , request send failed, Post "http://localhost:4566/": dial tcp [::1]:4566: connect: connection refused` が出る |
+| `example:up` の後の `r` | 失敗の表示が消え、`EC2 (0)` と `No EC2 resources found` になる (コンテナを作り直すとインスタンスは消える)。2 台を作り直して `r` を押すと 2 行に戻る |
+| `mise run example:down` の後の `R` | 通知行に `loading regions...` が出て、約 5.5 秒後に `list regions: describe regions: operation error EC2: DescribeRegions, exceeded maximum number of attempts, 3, https response error StatusCode: 0, ...` に変わる。どちらの間もキー操作のヒントの行 (`/ filter  j/k move ... q quit`) は最後の行に表示されたまま。キーを押さずに 6 秒待つと通知行が消えている |
+| `q`、画面の Ctrl-C、`kill -TERM <pid>` | 終了コード 0 |
+| `kill -INT <pid>` | 終了コード 130 |
+| `cd backend && go list -deps ./internal/tui/` | `internal/api` を含まない |
+
+`thief tui --help` の出力。
+
+```
+Opens a full-screen terminal UI that lists AWS resources, shows their details,
+and starts interactive sessions, like the web UI but inside the terminal.
+
+Usage:
+  thief tui [flags]
+
+Flags:
+  -h, --help   help for tui
+
+Global Flags:
+  -g, --group-by string   Group output by column name(s) and show count (comma-separated for multiple)
+      --no-header         Hide the header in output
+  -o, --output string     Output format (tab/csv)
+  -p, --profile string    AWS profile (default uses environment or config file)
+  -r, --region string     AWS region (default ap-northeast-1)
+```
+
+### 実 AWS が要る項目 (未確認)
+
+次の項目は確認していない。この issue の実装は開発者の離席中の自律実行で行い、実 AWS のプロファイル (認証情報が無効なプロファイルと SSO のプロファイル) と、Session Manager で接続できる EC2 インスタンスを使わなかったためである。開発者が実 AWS で確認し、結果をこの節に追記する。
+
+- FR-29: 認証情報が無効なプロファイルに `p` で切り替えたときの `list EC2 instances:` の失敗表示と、続けて `R` を押したときの `list regions:` の通知 (floci を止めた状態の `r` と `R` で、同じ経路の失敗表示は確認した)
+- FR-29: SSO の期限切れのバナー (`thief sso login` の案内)
+- FR-30: EC2 のセッションでの `echo ok`、終了後の `session closed` の通知、`aws ssm describe-sessions` でのセッションの切断、Ctrl-C の後の `exit` と `r`、`session-manager-plugin` が無いときの通知
+
+
+## 解決方法
+
+プロトタイプを作り直さず、完了条件に挙げた差分だけを直してコミットした。
+
+- 通知の 1 行化: `backend/internal/tui/model.go` の `setStatus` が `statusLineReplacer` (`strings.NewReplacer`) で CRLF、CR、LF を空白に置き換える。`model_test.go` の `TestModel_StatusWithNewlinesRendersAsOneLine` は、`finalize` が失敗する `sessionReadyMsg` の後に終了エラー付きの `sessionExitMsg` を渡し (2 つの失敗は `case sessionExitMsg` が `errors.Join` でまとめる)、通知に改行が無いこと、`View()` の最後の行がキー操作のヒントであること、2 つの失敗が 1 行に入ることを確かめる。`TestModel_StatusReplacesCRLFAndCR` は CRLF、CR、LF、混在のそれぞれが 1 つの空白になることを確かめる。
+- `tui.Deps` の組み立て: `backend/internal/cli/tui.go` に `newTUIDeps() tui.Deps` を切り出し、`runTUI` は `tui.Run(newTUIDeps(), cfg.Profile, cfg.Region)` を呼ぶ。`backend/internal/cli/tui_test.go` の `TestNewTUIDeps_ServicesAreEC2Only` は、`Services` の `ID()` の集合が `ec2` の 1 個で重複が無いこと、`ListProfiles`、`ListRegions`、`StartSession` が nil でないことを確かめる。
+- `Load` の配線のテスト: `backend/internal/tui/ec2_test.go` の `TestEC2Service_LoadWrapsErrorAndSetsRegion` を `NewEC2Service` に偽の一覧関数を渡す形に直し、呼ばれた `profile/region` の記録が `p/us-west-2` の 1 件であること、偽の一覧関数が返した `aws.EC2Resource` が行になることを確かめる。
+- State の表示: `backend/internal/tui/service.go` の `Row.State()` のコメントを「Web UI の `StatusBadge` が表示する値 (資源の `State` フィールドの生の値)」に改め、`ec2.go` の `State()` は `EC2Resource.State` を返す。`model.go` の `refreshDrawer` は `stateStyle(aws.NormalizeState(row.State())).Render(row.State())` で、色の選択にだけ正規化した値を使う。`TestEC2Service_LoadWrapsErrorAndSetsRegion` の期待値を `pending` に変え、`model_test.go` の `TestModel_DrawerShowsRawState` は `State()` が `available` の行を選んだとき Drawer に `available` が出ることを確かめる。
+- 空の値の表示: `ec2.go` の `Cells()` の Private IP と `Overview()` の VPC から `orDash` を外した。`ec2_test.go` の `TestEC2Row_EmptyValuesFollowWebUI` は、空の資源の列が `web, stopped, "", ap-northeast-1, "", "", —, —` であること、Overview の Private IP、Public IP、Uptime、Launched が `—` で VPC が空文字列であることを確かめる。
+- floci の記録: `example/README.md` の「確認手順」に「TUI (`thief tui`) の EC2 一覧」を足し、`run-instances` で `web-01` と `batch-01` を作り、`HOME="$(pwd)/example/home" thief tui -p floci` で `/` の絞り込みと Drawer を確かめる手順を書いた。
+- PRD: 成功指標「TUI の AWS サービスの網羅」の測定方法を `newTUIDeps` と `backend/internal/cli/tui_test.go` (2026-10-25 時点の期待値は `ec2` の 1 個) に書き換え、FR-29 の通知の「プロトタイプは改行をそのまま描画しており」の括弧書きを削除し、FR-29 の floci の EC2 の括弧書きを `example/README.md` の「確認手順」への参照に書き換えた。
+- `CHANGES.md` と関連文書: TUI の [ADD] のエントリに、通知の 1 行化 (改行は空白に置き換える) と、一覧と Drawer の State が資源の `State` の生の値になること (EC2 の `pending` は `updating` ではなく `pending` と出る) を足した。`docs/adr/README.md` の 0033 の行、`AGENTS.md` の `internal/tui/` の節、ADR 0033 に書き換えが要る文は無かった。
+- 動作確認: 「## 動作確認」に記録した。floci で確かめた 22 項目はすべて期待どおりで、実 AWS が要る項目は未確認として理由を書いた。
+- `mise run check`: `mise run backend:vuln` (govulncheck) は、Go 1.26.6 の標準ライブラリ (`crypto/x509` の GO-2026-6809 は Go 1.26.10、`net/http`、`crypto/tls`、`mime/multipart`、`html/template` の 9 件は Go 1.26.9 で修正) と `golang.org/x/net` v0.59.0 (GO-2026-6617 など、v0.60.0 で修正) の 12 件で失敗する。最初の検査では 2 件、レビューの反映後の再検査では 12 件で、増加は govulncheck が実行のたびに取得する脆弱性データベースの更新による。いずれもこの issue の差分 (bubbles と lipgloss の追加) が触らない既存の依存であり、Go のツールチェインと `x/net` のバージョンは HEAD と同じなので、既知の失敗として扱い、ツールチェインと `x/net` の更新を `docs/issues/TODO.md` に積んだ。それ以外 (gofmt、goimports、`backend:lint`、`backend:test`、prettier、`frontend:lint`、`frontend:test`) は通る。
+- レビューの反映: 多観点レビュー (完了条件、テスト、規約の 3 観点) の指摘で次を直した。SSO の期限切れの判定を Web UI の `writeAWSError` と同じ順にし、`aws.IsAccessDenied` で IAM の権限不足を除いてから `aws.IsSSOTokenExpired` を見る (`TestModel_AccessDeniedDoesNotRaiseSSOBanner`)。プロファイルとリージョンの切替でもサービスの切替と同じく旧い行を消してから取り直す `reloadForNewTarget` にまとめ、取得中に `s` を押しても旧い行でセッションを始めない (`TestModel_ProfileSwitchClearsRowsUntilReload`、`TestModel_RegionSwitchClearsRowsUntilReload`、`r` は行を残す `TestModel_ReloadKeepsRowsWhileLoading`)。`sessionStarting` を `startSession` で立て `sessionReadyMsg` で下ろし、開始中と `inSession` の間は `s` を無視する (`TestModel_SessionKeyIgnoredWhileStarting`、`TestModel_SessionKeyIgnoredDuringSession`)。`Init` の重複した `spinner.Tick` を除く (`TestModel_InitTicksSpinnerOnce`)。プロファイルの一覧が届く前の `p` は空の選択肢を開かず、`profilePickerPending` を立てて取り直し、届いたら開く (`TestModel_ProfileKeyBeforeProfilesLoadedWaitsForList`、失敗は `TestModel_ProfileKeyBeforeProfilesLoadedReportsFailure`)。`backend/internal/cli/tui.go` の `sessionManagerCommand` を `tuiSessionDeps` を受ける `sessionManagerCommandWith` に分け、`tui_test.go` で成功時の引数と `finalize` の切断、開始の失敗、plugin が無いときの切断、切断の失敗の両方の報告を確かめる (`run_test.go` の `context.Background` の許可一覧は `sessionManagerCommandWith` に改名)。`TestModel_DrawerShowsRawState` は `View()` 全体ではなく Drawer の `State` の行を見る。幅 40 で 200 文字の通知が 1 行に収まりヒントが最後の行に残ることを `TestModel_LongStatusFitsNarrowWidth` で確かめる。`SupportsSession` が偽のサービスの `s` と `profilesLoadedMsg` の失敗のテストを足した。`ec2.go` と `ec2_test.go` の dash の規則のコメント、`example/README.md` の `mise run example:up` の説明 (前面で動き続ける)、`CHANGES.md` の State の色の文を直した。

@@ -102,7 +102,7 @@ ORM、リッチなロガー(zap/zerolog 等)、自前 DI コンテナなどは�
 
 ### プロジェクト構造
 
-単一の `cmd/thief` が API サーバ (`thief server`) と CLI の両方を提供する。
+単一の `cmd/thief` が API サーバ (`thief server`)、全画面の TUI (`thief tui`)、CLI のすべてを提供する。
 
 ```
 backend/
@@ -114,6 +114,7 @@ backend/
     ├── gcp/ bigquery/ datadog/ tidb/   # 各クラウド・外部サービスの取得層
     ├── contract/            # backend 型 → frontend ゴールデン JSON の生成・検査
     ├── cache/ pricecache/   # リソース / 価格キャッシュ
+    ├── tui/                 # 全画面の TUI (bubbletea)。Service / Row の抽象 (service.go)、サービス別の実装 (<service>.go)、Model (model.go)
     ├── session/ snippet/ sqlguard/ util/
     └── config/ ssoauth/ datadogauth/   # 設定・認証
 ```
@@ -121,6 +122,7 @@ backend/
 - AWS リソースの追加はリポジトリ内 skill `.claude/skills/add-aws-service/SKILL.md` の手順に従う。
 - `aws/<service>.go` は `ResourceID`/`ResourceName`/`ResourceState`/`ServiceName` を実装する resource インターフェース (`aws/resource.go`) を満たす型と `List<Service>Resources(ctx, profile, region)` を公開する。SDK 型 → Resource 型の変換はプライベートヘルパー (`<service>FromXxx`) に分離する。
 - 公開する必要がないものはすべて `internal/` 配下に置く。1 パッケージ 1 責務、循環参照は禁止。
+- TUI (`internal/tui/`) は `internal/aws` などの取得層をプロセス内で直接呼び、HTTP の API は経由しない。サービスの追加は `Service` と `Row` (`tui/service.go`) を満たす型を `tui/<service>.go` に置き、`cli/tui.go` の `Deps.Services` に足す。画面の部品は bubbletea / bubbles / lipgloss を使い、他の TUI フレームワークは導入しない。
 
 ### エラーハンドリング
 

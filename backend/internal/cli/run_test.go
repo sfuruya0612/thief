@@ -494,6 +494,9 @@ func TestNoRootContextOutsideDesignatedFunctions(t *testing.T) {
 		"run.go:commandContext",
 		// 中断でコマンドの context がキャンセル済みでもシャットダウンの猶予を与える。
 		"server.go:newServerCmd",
+		// TUI の対話セッションの切断。子プロセスの終了後に呼ばれ、その時点で TUI 側の
+		// context は生きているが、ec2.go / ecs.go と同じ短命 context で切断を通す。
+		"tui.go:sessionManagerCommandWith",
 	}
 
 	got := rootContextCallSites(t, ".")
