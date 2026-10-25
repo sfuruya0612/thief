@@ -598,8 +598,17 @@ func (m Model) refreshDrawer() Model {
 	switch m.tab {
 	case tabTags:
 		tags := row.Tags()
+		// タグの取得に失敗した行は、Web UI の DrawerTags と同じく本文の先頭に見出しを出し、タグがあればその下に並べ、"No tags" は出さない。
+		failed := false
+		if f, ok := row.(TagsFetchFailer); ok && f.TagsFetchFailed() {
+			failed = true
+			b.WriteString(statusStyle.Render("Tags (fetch failed)"))
+			b.WriteString("\n")
+		}
 		if len(tags) == 0 {
-			b.WriteString(mutedStyle.Render("No tags"))
+			if !failed {
+				b.WriteString(mutedStyle.Render("No tags"))
+			}
 			break
 		}
 		keys := make([]string, 0, len(tags))

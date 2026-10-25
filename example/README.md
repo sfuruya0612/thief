@@ -51,6 +51,8 @@ mise run example:seed
 - Lambda: 関数 `thief-example-hello` (python3.12、256 MB、30 秒、タグ `Env=example`。デプロイパッケージを作るため `zip` コマンドが要る)
 - ECR: リポジトリ 2 つ (`thief-example/web` はタグ不変 + プッシュ時スキャン、`thief-example/batch` は既定の設定)
 - ECS: クラスタ `thief-example-cluster` (タグ `Env=example`)
+- RDS: DB インスタンス `thief-example-db` (mysql、db.t3.micro、タグ `Env=example`)
+- ElastiCache: クラスタ `thief-example-cache` (memcached。floci の `CreateCacheCluster` は memcached だけを受け付けるため redis にしない)
 
 `mise run example:up` で floci が起動した後に実行すること。
 
@@ -94,6 +96,19 @@ mise run example:seed
 5. `S`、`ecr`、Enter で `thief-example/web` (Tag mutability `IMMUTABLE`、Scan on push `✓`) と `thief-example/batch` (`MUTABLE`、`—`) の 2 行が出る。Drawer の Overview の Scan on push は `enabled` / `disabled`、Tags は `No tags`
 6. `S`、`ecs`、Enter で `thief-example-cluster` の行 (State `active`、件数はすべて `0`) が出る。`2` の Tags に `Env` が出る。`s` を押すと `ECS does not support sessions` の通知が出てセッションは始まらない
 7. `q` で終了する
+
+### TUI (`thief tui`) の S3 / RDS / DynamoDB / ElastiCache 一覧
+
+`example/seed.sh` が投入した資源で確かめる。S3 は backend と同じく `THIEF_S3_PATH_STYLE=true` が要る (floci が path-style でのみ S3 を提供するため)。
+
+1. 上の EC2 一覧の 1 と 2 と同じく `thief` を導入し、`mise run example:up` を動かしておく
+2. `mise run example:seed`
+3. リポジトリのルートで `HOME="$(pwd)/example/home" THIEF_S3_PATH_STYLE=true thief tui -p floci` を起動し、`S` で開く選択肢に `EC2`、`Lambda`、`ECR`、`ECS`、`S3`、`RDS`、`DynamoDB`、`ElastiCache` がこの順に出る
+4. `s3` と打って Enter を押すと、一覧に `thief-example-data` と `thief-example-logs` の行 (State は空、Region `ap-northeast-1`、Public `private`) が出る (seed 以外に CloudFormation のスタックが作るバケットと floci が Lambda 用に作るバケットも出る)。Drawer の Overview は Resource ID、Region、Created、Public access (`blocked`)、Encryption の順で、`2` の Tags は `No tags` になる (S3 の資源にタグが無いため。Web UI と同じ)
+5. `S`、`rds`、Enter で `thief-example-db` の行 (State `available`、Engine `mysql`、Cluster `—`、Class `db.t3.micro`、MultiAZ `—`) が出る。Drawer の Overview は Resource ID、Engine、Engine version、Cluster、Class、Multi-AZ (`no`)、Endpoint、Port、VPC、Region、Uptime、Launched の順で、floci は作成時刻を返さないため Uptime と Launched は `—` になる。`2` の Tags に `Env` が出る
+6. `S`、`dynamo`、Enter で `thief-example-users` の行 (State `active`、Mode `on-demand`、Items `3`) が出る。Drawer の Overview は Resource ID、Capacity mode、Item count、Size、Global secondary indexes、Region の順
+7. `S`、`cache`、Enter で `thief-example-cache` の行 (State `available`、Engine `memcached`、Replication Group `—`、AZs `—`) が出る。Drawer の Overview は Resource ID、Engine、Engine version、Replication group、Node type、Nodes、AZs、Endpoint、Port、Region の順で、floci はノードの情報を返さないため Node type は空、Nodes は `0`、AZs は `—` になる。`2` の Tags は `No tags`
+8. `q` で終了する
 
 ## 動作確認できない機能
 

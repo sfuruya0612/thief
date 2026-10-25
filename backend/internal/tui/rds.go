@@ -1,0 +1,114 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/sfuruya0612/thief/backend/internal/aws"
+)
+
+// rdsService は RDS インスタンスの一覧を提供する Service。
+type rdsService struct {
+	list func(ctx context.Context, profile, region string) ([]aws.RDSResource, error)
+	now  func() time.Time
+}
+
+// NewRDSService は RDS の Service を返す。list には aws.ListRDSResources を渡す。
+func NewRDSService(list func(ctx context.Context, profile, region string) ([]aws.RDSResource, error)) Service {
+	return &rdsService{list: list, now: time.Now}
+}
+
+func (s *rdsService) ID() string    { return "rds" }
+func (s *rdsService) Title() string { return "RDS" }
+
+// Columns は Web UI の rdsColumns (frontend/src/components/tables/columns.tsx) と同じ列。
+// 値が無いセルの表示も Web UI に合わせ、Cluster と Uptime は dash、Endpoint は空文字列にする。
+// MultiAZ は真なら check、偽なら dash。
+func (s *rdsService) Columns() []Column {
+	return []Column{
+		{Title: "Identifier"},
+		{Title: "State"},
+		{Title: "Engine"},
+		{Title: "Engine Version"},
+		{Title: "Cluster"},
+		{Title: "Class"},
+		{Title: "Region"},
+		{Title: "MultiAZ"},
+		{Title: "Endpoint"},
+		{Title: "Uptime"},
+	}
+}
+
+func (s *rdsService) Load(ctx context.Context, profile, region string) ([]Row, error) {
+	items, err := s.list(ctx, profile, region)
+	if err != nil {
+		return nil, fmt.Errorf("list RDS instances: %w", err)
+	}
+	now := s.now()
+	rows := make([]Row, 0, len(items))
+	for _, it := range items {
+		rows = append(rows, rdsRow{res: it, region: region, now: now})
+	}
+	return rows, nil
+}
+
+func (s *rdsService) SupportsSession() bool { return false }
+
+// rdsRow は RDS インスタンス 1 つの行。ID はインスタンス識別子。
+type rdsRow struct {
+	res    aws.RDSResource
+	region string
+	now    time.Time
+}
+
+func (r rdsRow) ID() string   { return r.res.ID }
+func (r rdsRow) Name() string { return r.res.Name }
+
+// State は RDSResource.State の生の値 (available など) を返す。ResourceState() は aws.NormalizeState で
+// available を running に変えるため、Web UI の StatusBadge と食い違うので使わない。
+func (r rdsRow) State() string { return r.res.State }
+
+func (r rdsRow) Cells() []string {
+	multiAZ := dash
+	if r.res.MultiAZ {
+		multiAZ = check
+	}
+	return []string{
+		r.res.Name,
+		r.State(),
+		r.res.Engine,
+		r.res.EngineVersion,
+		orDash(r.res.ClusterID),
+		r.res.Class,
+		r.region,
+		multiAZ,
+		r.res.Endpoint,
+		orDash(formatUptime(r.res.LaunchTime, r.now)),
+	}
+}
+
+// Overview は Web UI の rdsOverviewRows (frontend/src/components/Drawer/overviewRows.tsx) と同じ項目。
+// Multi-AZ は yes か no、Cluster、Uptime、Launched は空なら dash、Port は 10 進、他の項目は生の値にする。
+func (r rdsRow) Overview() []KV {
+	multiAZ := "no"
+	if r.res.MultiAZ {
+		multiAZ = "yes"
+	}
+	return []KV{
+		{Key: "Resource ID", Value: r.res.ID},
+		{Key: "Engine", Value: r.res.Engine},
+		{Key: "Engine version", Value: r.res.EngineVersion},
+		{Key: "Cluster", Value: orDash(r.res.ClusterID)},
+		{Key: "Class", Value: r.res.Class},
+		{Key: "Multi-AZ", Value: multiAZ},
+		{Key: "Endpoint", Value: r.res.Endpoint},
+		{Key: "Port", Value: formatInt32(r.res.Port)},
+		{Key: "VPC", Value: r.res.VpcID},
+		{Key: "Region", Value: r.region},
+		{Key: "Uptime", Value: orDash(formatUptime(r.res.LaunchTime, r.now))},
+		{Key: "Launched", Value: orDash(formatLaunched(r.res.LaunchTime))},
+	}
+}
+
+func (r rdsRow) Tags() map[string]string { return r.res.Tags }

@@ -128,4 +128,22 @@ aws_ ecr create-repository --repository-name thief-example/batch
 echo "==> ECS: クラスタを作成 (TUI の ECS 一覧の確認用)"
 aws_ ecs create-cluster --cluster-name thief-example-cluster --tags key=Env,value=example
 
+echo "==> RDS: DB インスタンスを作成 (TUI の RDS 一覧の確認用)"
+aws_ rds create-db-instance \
+  --db-instance-identifier thief-example-db \
+  --db-instance-class db.t3.micro \
+  --engine mysql \
+  --master-username admin \
+  --master-user-password dummy-password \
+  --allocated-storage 20 \
+  --tags Key=Env,Value=example
+
+# floci の CreateCacheCluster は memcached だけを受け付ける (redis は CreateReplicationGroup が要る)。
+echo "==> ElastiCache: クラスタを作成 (TUI の ElastiCache 一覧の確認用)"
+aws_ elasticache create-cache-cluster \
+  --cache-cluster-id thief-example-cache \
+  --engine memcached \
+  --cache-node-type cache.t3.micro \
+  --num-cache-nodes 1
+
 echo "==> 完了"

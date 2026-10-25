@@ -1228,3 +1228,76 @@ func TestModel_RowsAfterLoadErrorSelectFirstRow(t *testing.T) {
 		t.Errorf("Drawer should show the Overview of the first row\n%s", v)
 	}
 }
+
+// TestModel_TagsTabShowsFetchFailedHeading は TagsFetchFailed() が真の行を選ぶと Drawer の Tags タブの先頭に
+// "Tags (fetch failed)" が出て、タグがあればその下に並ぶことを確かめる。
+func TestModel_TagsTabShowsFetchFailedHeading(t *testing.T) {
+	rows := []Row{dynamoRow{region: "ap-northeast-1", res: aws.DynamoResource{
+		ID: "t", Name: "t", State: "active", TagsFetchFailed: true, Tags: map[string]string{"Env": "prod"},
+	}}}
+	m := newTestModel(t, &fakeService{id: "dynamo", rows: rows, columns: (&dynamoService{}).Columns()}, Deps{})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+	m = keys(t, m, "2")
+
+	drawer := m.drawer.View()
+	if !strings.Contains(drawer, "Tags (fetch failed)") {
+		t.Errorf("Tags tab should show the fetch failed heading\n%s", drawer)
+	}
+	if !strings.Contains(drawer, "Env") || !strings.Contains(drawer, "prod") {
+		t.Errorf("Tags tab should still list the tags\n%s", drawer)
+	}
+	// 見出しは本文の先頭で、タグより前に出る。
+	if strings.Index(drawer, "Tags (fetch failed)") > strings.Index(drawer, "Env") {
+		t.Errorf("the fetch failed heading must precede the tags\n%s", drawer)
+	}
+	if strings.Contains(drawer, "No tags") {
+		t.Errorf("Tags tab must not say No tags when tags exist\n%s", drawer)
+	}
+}
+
+// TestModel_TagsTabFetchFailedWithoutTagsOmitsNoTags は TagsFetchFailed() が真でタグが空の行では、
+// 見出しだけが出て "No tags" が出ないことを確かめる (Web UI の DrawerTags は取得失敗の見出しだけを出す)。
+// Tags は backend の fetchDynamoTableTags が失敗時に返すのと同じ空の map にする。
+func TestModel_TagsTabFetchFailedWithoutTagsOmitsNoTags(t *testing.T) {
+	rows := []Row{dynamoRow{region: "ap-northeast-1", res: aws.DynamoResource{ID: "t", Name: "t", TagsFetchFailed: true, Tags: map[string]string{}}}}
+	m := newTestModel(t, &fakeService{id: "dynamo", rows: rows, columns: (&dynamoService{}).Columns()}, Deps{})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+	m = keys(t, m, "2")
+
+	drawer := m.drawer.View()
+	if !strings.Contains(drawer, "Tags (fetch failed)") {
+		t.Errorf("Tags tab should show the fetch failed heading\n%s", drawer)
+	}
+	if strings.Contains(drawer, "No tags") {
+		t.Errorf("Tags tab must not say No tags when the fetch failed\n%s", drawer)
+	}
+}
+
+// TestModel_TagsTabWithoutFailureShowsNoTags は TagsFetchFailed() が偽でタグが空の行では "No tags" だけが出て、
+// 取得失敗の見出しが出ないことを確かめる。TagsFetchFailer を実装しない行 (S3) も同じ。
+func TestModel_TagsTabWithoutFailureShowsNoTags(t *testing.T) {
+	tests := []struct {
+		name string
+		row  Row
+		cols []Column
+	}{
+		{name: "dynamo not failed", row: dynamoRow{region: "ap-northeast-1", res: aws.DynamoResource{ID: "t", Name: "t", Tags: map[string]string{}}}, cols: (&dynamoService{}).Columns()},
+		{name: "s3 without TagsFetchFailer", row: s3Row{region: "ap-northeast-1", res: aws.S3Resource{ID: "b", Name: "b"}}, cols: (&s3Service{}).Columns()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rows := []Row{tt.row}
+			m := newTestModel(t, &fakeService{id: "x", rows: rows, columns: tt.cols}, Deps{})
+			m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+			m = keys(t, m, "2")
+
+			drawer := m.drawer.View()
+			if !strings.Contains(drawer, "No tags") {
+				t.Errorf("Tags tab should say No tags\n%s", drawer)
+			}
+			if strings.Contains(drawer, "fetch failed") {
+				t.Errorf("Tags tab must not show the fetch failed heading\n%s", drawer)
+			}
+		})
+	}
+}

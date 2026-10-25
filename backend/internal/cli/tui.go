@@ -42,6 +42,10 @@ func newTUIDeps() tui.Deps {
 			tui.NewLambdaService(awsinternal.ListLambdaResources),
 			tui.NewECRService(awsinternal.ListECRResources),
 			tui.NewECSService(awsinternal.ListECSResources),
+			tui.NewS3Service(awsinternal.ListS3Resources),
+			tui.NewRDSService(awsinternal.ListRDSResources),
+			tui.NewDynamoService(awsinternal.ListDynamoResources),
+			tui.NewCacheService(awsinternal.ListElastiCacheResources),
 		},
 		StartSession: sessionManagerCommand,
 	}

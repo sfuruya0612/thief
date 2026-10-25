@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/sfuruya0612/thief/backend/internal/aws"
 )
@@ -22,7 +21,7 @@ func (s *ecsService) ID() string    { return "ecs" }
 func (s *ecsService) Title() string { return "ECS" }
 
 // Columns は Web UI の ecsColumns (frontend/src/components/tables/columns.tsx) と同じ列。
-// 件数は 10 進の文字列にし、Web UI に dash を描画するセルは無い。
+// 件数は区切り無しの 10 進の文字列 (formatInt32) にし、Web UI に dash を描画するセルは無い。
 func (s *ecsService) Columns() []Column {
 	return []Column{
 		{Title: "Cluster"},
@@ -67,10 +66,10 @@ func (r ecsRow) Cells() []string {
 	return []string{
 		r.res.Name,
 		r.State(),
-		formatCount(r.res.ActiveServices),
-		formatCount(r.res.RunningTasks),
-		formatCount(r.res.PendingTasks),
-		formatCount(r.res.RegisteredEC2),
+		formatInt32(r.res.ActiveServices),
+		formatInt32(r.res.RunningTasks),
+		formatInt32(r.res.PendingTasks),
+		formatInt32(r.res.RegisteredEC2),
 		r.region,
 	}
 }
@@ -79,17 +78,12 @@ func (r ecsRow) Cells() []string {
 func (r ecsRow) Overview() []KV {
 	return []KV{
 		{Key: "Resource ID", Value: r.res.ID},
-		{Key: "Active services", Value: formatCount(r.res.ActiveServices)},
-		{Key: "Running tasks", Value: formatCount(r.res.RunningTasks)},
-		{Key: "Pending tasks", Value: formatCount(r.res.PendingTasks)},
-		{Key: "Registered EC2", Value: formatCount(r.res.RegisteredEC2)},
+		{Key: "Active services", Value: formatInt32(r.res.ActiveServices)},
+		{Key: "Running tasks", Value: formatInt32(r.res.RunningTasks)},
+		{Key: "Pending tasks", Value: formatInt32(r.res.PendingTasks)},
+		{Key: "Registered EC2", Value: formatInt32(r.res.RegisteredEC2)},
 		{Key: "Region", Value: r.region},
 	}
 }
 
 func (r ecsRow) Tags() map[string]string { return r.res.Tags }
-
-// formatCount は件数を Web UI と同じ 10 進表記にする。
-func formatCount(n int32) string {
-	return strconv.FormatInt(int64(n), 10)
-}

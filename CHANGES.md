@@ -30,6 +30,8 @@
   - @sfuruya0612
 - [ADD] TUI (`thief tui`) に Lambda、ECR、ECS の一覧と Drawer を追加する (`S` のサービスの選択肢に `Lambda`、`ECR`、`ECS` が Web UI のサイドバーと同じ並びで加わる。列は Web UI の `lambdaColumns` / `ecrColumns` / `ecsColumns`、Drawer の Overview は `lambdaOverviewRows` / `ecrOverviewRows` / `ecsOverviewRows` と同じ項目と表示文字列にし、Lambda の Memory は `<n> MB`、Timeout は `<n>s`、ECR の Scan on push は一覧で `✓` か `—`、Overview で `enabled` か `disabled`、Created が無ければ `—`、ECS の件数は 10 進にする。Drawer の Tags は、Lambda と ECS が資源のタグを表示し (Lambda は一覧がタグを取らないため `No tags` になる)、ECR は `No tags` を表示する。ECS の `s` は、ECS Exec を足す issue 0224 まで `ECS does not support sessions` の通知を出す。`example/seed.sh` が Lambda 関数、ECR リポジトリ 2 つ、ECS クラスタを投入し、`example/README.md` の「確認手順」に TUI の 3 サービスの手順を足す。issue 0219)
   - @sfuruya0612
+- [ADD] TUI (`thief tui`) に S3、RDS、DynamoDB、ElastiCache の一覧と Drawer を追加する (`S` のサービスの選択肢に `S3`、`RDS`、`DynamoDB`、`ElastiCache` が Web UI のサイドバーと同じ並びで加わる。列は Web UI の `s3Columns` / `rdsColumns` / `dynamoColumns` / `cacheColumns`、Drawer の Overview は `s3OverviewRows` / `rdsOverviewRows` / `dynamoOverviewRows` / `cacheOverviewRows` と同じ項目と表示文字列にする。S3 の Public は一覧で `public` か `private`、Overview で `allowed` か `blocked`、RDS の MultiAZ は一覧で `✓` か `—`、Overview で `yes` か `no`、Uptime は EC2 と同じ形 (1 日以上は `<n>d <n>h`、1 日未満は `<n>h <n>m`)、DynamoDB の件数は `,` 区切り、サイズは `1.5 KB` の形、ElastiCache の AZs は `, ` 区切りで表示し、Web UI が `—` にする空の値は `—` にする。Drawer の Tags は、RDS と DynamoDB が資源のタグを表示し、DynamoDB はタグの取得に失敗した資源で見出し `Tags (fetch failed)` を出す。S3 と ElastiCache は `No tags` を表示する。`example/seed.sh` が RDS の DB インスタンスと ElastiCache のクラスタ (memcached) を投入し、`example/README.md` の「確認手順」に TUI の 4 サービスの手順を足す。issue 0220)
+  - @sfuruya0612
 - [CHANGE] S3 / GCS のオブジェクト SQL 検索で、一覧で選んだ同じ形式の複数のオブジェクトを 1 回の検索に掛けられるようにする (選んだ全オブジェクトを読み取り関数のリスト引数で 1 つの `obj` ビューにし、由来のオブジェクトのキーを `object_key` 列で区別する。1 件の検索でも `object_key` 列が増えるため `SELECT *` の結果の列が変わり、データが `object_key` 列を持つオブジェクトは列名の衝突 (Binder Error) で検索に失敗する。`THIEF_OBJECT_QUERY_MAX_BYTES` は 1 回の検索で取り込む合計サイズの上限になり、1 回に選べるのは 50 件まで、取り込みは並列度 4 で行う。`DataTable` のチェックボックス列を props `selection` で制御化して選択に使う。issue 0208)
   - @sfuruya0612
 - [FIX] SSO 期限切れ時に再ログイン導線 (`SSOExpiredBanner`) が表示されず `Missing queryFn` になる不具合を修正する (サイドバーの件数バッジが、同じ queryKey のリソース一覧クエリの options を `queryFn: skipToken` で上書きしていた。TanStack Query v5 は同一 queryKey のクエリ options をオブザーバごとに共有するため、`Sidebar` の再描画後に `invalidateQueries(['aws'])` が走ると、リソース一覧の再取得が本来の queryFn ではなく skipToken で実行され `Missing queryFn` で失敗し、401 `SSO_TOKEN_EXPIRED` が ApiError として届かなくなっていた。件数バッジを `useQuery` から、`QueryObserver` を作らず `useSyncExternalStore` でクエリキャッシュを直接購読する `useCachedQueryData` に置き換え、共有クエリの options に触れないようにする。issue 0187)
@@ -447,6 +449,8 @@
 
 ### misc
 
+- TUI の ECS が件数の変換に使う `formatCount(int32)` を `formatInt32` に改名して `backend/internal/tui/format.go` へ移す (issue 0220 が足した `,` 区切りの `formatCount(int64)` と名前が衝突するため。ECS の表示は変えない。issue 0220)
+  - @sfuruya0612
 - 全画面の TUI の要求 (FR-29、FR-30) と 2026-10-23 の決定を PRD (docs/prd/thief.md) に追加し、TUI を取得層のプロセス内呼び出しと bubbletea で作る決定を ADR 0033 に記録し、`AGENTS.md` の backend の「プロジェクト構造」に `internal/tui/` の節と TUI の規約を加える (docs/adr/README.md の索引と docs/issues/TODO.md の TUI の後続作業の 3 行を含む)
   - @sfuruya0612
 - pre-commit の backend チェックから govulncheck を専用タスク `backend:vuln` に分け、`go test` の自動 vet を止める (`mise run check` と `mise run backend:vuln` では従来どおり govulncheck が走る。`backend:test` は `-vet=off` とし、vet は `backend:lint` の `go vet ./...` に一本化する。各 2 回計測した 2 回目の値で `mise run backend:lint` が 21.28 秒から 14.52 秒、キャッシュ済みの `mise run backend:test` が 7.86 秒から 4.99 秒になる。ADR 0031。docs/issues/closed/0216)

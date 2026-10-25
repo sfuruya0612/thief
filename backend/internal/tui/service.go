@@ -30,6 +30,13 @@ type Row interface {
 	Tags() map[string]string
 }
 
+// TagsFetchFailer は、タグの取得に失敗したことを Drawer に示す Row が任意に実装する。
+// refreshDrawer は Row をこの型に型アサーションし、真なら Tags タブの先頭に "Tags (fetch failed)" を出す
+// (Web UI の DrawerTags の見出しと同じ英語の文字列)。取得失敗を持たないサービスは実装しない。
+type TagsFetchFailer interface {
+	TagsFetchFailed() bool
+}
+
 // Service は TUI が表示する 1 サービス。Web UI の ServicePanel に相当する。
 type Service interface {
 	// ID はサービスの識別子 (ec2 など)。
