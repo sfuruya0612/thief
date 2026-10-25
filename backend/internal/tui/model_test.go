@@ -1124,3 +1124,107 @@ func TestModel_LongStatusFitsNarrowWidth(t *testing.T) {
 		t.Errorf("the key hints must stay on the last line: %q", last)
 	}
 }
+
+// TestModel_ServiceSwitchToFewerColumnsSelectsFirstRow は、列数の少ないサービスへ切り替えても
+// panic せず (bubbles の table は SetColumns でも旧い行を描き直し、行のセルの数が列の数を超えると
+// panic する)、取り直した一覧の先頭の行が選ばれて Drawer に Overview が出ることを確かめる。
+// issue 0219 の floci の確認で、Lambda (6 列) から ECR (5 列) への切替が panic し、切替の後の
+// Drawer が "No row selected" のままになる (行が無いときの SetCursor(0) が -1 に丸められる) ことを
+// 見つけた。
+func TestModel_ServiceSwitchToFewerColumnsSelectsFirstRow(t *testing.T) {
+	wide := &fakeService{id: "wide", rows: testRows()}
+	narrow := &fakeService{id: "narrow", rows: testRows(), columns: []Column{{Title: "A"}, {Title: "B"}, {Title: "C"}}}
+	m, err := New(context.Background(), Deps{Services: []Service{wide, narrow}}, "first", "ap-northeast-1")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.statusTTL = time.Millisecond
+	m = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
+	if m.selectedRow() == nil {
+		t.Fatal("the first row should be selected after the initial load")
+	}
+
+	m = keys(t, m, "S", "down")
+	m, cmd := updateCmd(t, m, keyMsg("enter"))
+	if m.service.ID() != "narrow" || !m.loading {
+		t.Fatalf("service=%q loading=%v, want narrow/true", m.service.ID(), m.loading)
+	}
+	if strings.Contains(m.View(), "web-1") {
+		t.Errorf("rows of the old service must be cleared while loading\n%s", m.View())
+	}
+
+	m = apply(t, m, cmd)
+	if m.selectedRow() == nil || m.table.Cursor() != 0 {
+		t.Fatalf("the first row should be selected after the reload: cursor=%d\n%s", m.table.Cursor(), m.View())
+	}
+	if v := m.View(); strings.Contains(v, "No row selected") || !strings.Contains(v, "Resource ID") {
+		t.Errorf("Drawer should show the Overview of the first row\n%s", v)
+	}
+}
+
+// TestModel_RowsAfterEmptyListSelectFirstRow は、一覧が空のとき (取得の失敗や 0 件) を経てから
+// 行が届いても先頭の行が選ばれることを確かめる。
+func TestModel_RowsAfterEmptyListSelectFirstRow(t *testing.T) {
+	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: nil})
+	if m.selectedRow() != nil || !strings.Contains(m.View(), "No row selected") {
+		t.Fatalf("no row should be selected while the list is empty\n%s", m.View())
+	}
+
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
+	if m.selectedRow() == nil || m.table.Cursor() != 0 {
+		t.Fatalf("the first row should be selected once rows arrive: cursor=%d", m.table.Cursor())
+	}
+	if v := m.View(); strings.Contains(v, "No row selected") || !strings.Contains(v, "Resource ID") {
+		t.Errorf("Drawer should show the Overview of the first row\n%s", v)
+	}
+}
+
+// TestModel_ReloadKeepsCursorOnSelectedRow は、2 行目を選んだまま r で取り直しても、行が届いた後の
+// カーソルと選択が 2 行目のまま保たれることを確かめる (applyFilter が列を入れ替える前に行を空にする
+// ようにした修正で、選択が先頭に戻らないことの回帰テスト)。
+func TestModel_ReloadKeepsCursorOnSelectedRow(t *testing.T) {
+	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
+	m = keys(t, m, "down")
+	if r := m.selectedRow(); r == nil || r.ID() != "i-db" {
+		t.Fatalf("down should select the second row, got %v", r)
+	}
+
+	m, cmd := updateCmd(t, m, keyMsg("r"))
+	if !m.loading {
+		t.Fatal("r should start a reload")
+	}
+	m = apply(t, m, cmd)
+	if m.loading {
+		t.Fatal("the reload should have finished")
+	}
+	if r := m.selectedRow(); m.table.Cursor() != 1 || r == nil || r.ID() != "i-db" {
+		t.Fatalf("the second row should stay selected after the reload: cursor=%d row=%v", m.table.Cursor(), r)
+	}
+	if v := m.View(); !strings.Contains(v, "i-db") {
+		t.Errorf("Drawer should show the Overview of the second row\n%s", v)
+	}
+}
+
+// TestModel_RowsAfterLoadErrorSelectFirstRow は、取得の失敗の後に r で行が届いたとき、先頭の行が
+// 選ばれて Drawer に Overview が出ることを確かめる (失敗で行が空になった後の SetCursor(0) が -1 に
+// 丸められる経路の回帰テスト)。
+func TestModel_RowsAfterLoadErrorSelectFirstRow(t *testing.T) {
+	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
+	m = update(t, m, rowsLoadedMsg{seq: 0, err: errors.New("boom")})
+	if m.err == nil || m.selectedRow() != nil || !strings.Contains(m.View(), "No row selected") {
+		t.Fatalf("no row should be selected after a failed load\n%s", m.View())
+	}
+
+	m, cmd := updateCmd(t, m, keyMsg("r"))
+	m = apply(t, m, cmd)
+	if r := m.selectedRow(); m.err != nil || m.table.Cursor() != 0 || r == nil || r.ID() != "i-web" {
+		t.Fatalf("the first row should be selected once rows arrive: err=%v cursor=%d row=%v", m.err, m.table.Cursor(), r)
+	}
+	if v := m.View(); strings.Contains(v, "No row selected") || !strings.Contains(v, "Resource ID") {
+		t.Errorf("Drawer should show the Overview of the first row\n%s", v)
+	}
+}

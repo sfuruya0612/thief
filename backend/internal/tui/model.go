@@ -562,9 +562,15 @@ func (m Model) applyFilter() Model {
 	for _, r := range m.visible {
 		trows = append(trows, table.Row(fitCells(r.Cells(), ncols)))
 	}
+	// 列を入れ替える前に行を空にする。bubbles の table は SetColumns でも行を描き直し、
+	// 行のセルの数が列の数を超えると panic するため (サービスの切替で列数が減るとき、
+	// 旧いサービスの行が新しい列で描かれる)。
+	m.table.SetRows(nil)
 	m.table.SetColumns(m.tableColumns(m.tableInnerWidth()))
 	m.table.SetRows(trows)
-	if m.table.Cursor() >= len(trows) {
+	// 行が無いときの SetCursor は -1 に丸められるため、負のカーソルも先頭に戻す。
+	// 戻さないと、次に行が届いても選択が無いままで Drawer が "No row selected" になる。
+	if c := m.table.Cursor(); c < 0 || c >= len(trows) {
 		m.table.SetCursor(0)
 	}
 	return m.refreshDrawer()

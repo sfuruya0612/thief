@@ -48,6 +48,9 @@ mise run example:seed
 - SSM Parameter Store: パラメータ 3 件 (`String` x2、`SecureString` x1)
 - Secrets Manager: シークレット 1 件
 - CloudFormation: 最小スタック `thief-example-stack` (S3 バケット 1 個を作成するテンプレート)
+- Lambda: 関数 `thief-example-hello` (python3.12、256 MB、30 秒、タグ `Env=example`。デプロイパッケージを作るため `zip` コマンドが要る)
+- ECR: リポジトリ 2 つ (`thief-example/web` はタグ不変 + プッシュ時スキャン、`thief-example/batch` は既定の設定)
+- ECS: クラスタ `thief-example-cluster` (タグ `Env=example`)
 
 `mise run example:up` で floci が起動した後に実行すること。
 
@@ -79,6 +82,18 @@ mise run example:seed
 4. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動すると、一覧に `web-01` と `batch-01` の行が出る
 5. `/` で `web` と打つと `web-01` の 1 行だけになる。選択中の行の右の Drawer に Overview (Resource ID、Type、AZ、Region など) が出て、`2` で Tags に切り替えると `Name` のタグが出る (`1` で Overview に戻る)
 6. `q` で終了する
+
+### TUI (`thief tui`) の Lambda / ECR / ECS 一覧
+
+`example/seed.sh` が投入した資源で確かめる。EC2 インスタンスは要らない。
+
+1. 上の EC2 一覧の 1 と 2 と同じく `thief` を導入し、`mise run example:up` を動かしておく
+2. `mise run example:seed`
+3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢に `EC2`、`Lambda`、`ECR`、`ECS` がこの順に出る
+4. `lambda` と打って Enter を押すと、一覧に `thief-example-hello` の行 (State `active`、Runtime `python3.12`、Memory `256 MB`、Timeout `30s`) が出る。Drawer の Overview に Handler `index.handler` と Role が出て、`2` の Tags は `No tags` になる (一覧の取得がタグを取らないため。Web UI と同じ)
+5. `S`、`ecr`、Enter で `thief-example/web` (Tag mutability `IMMUTABLE`、Scan on push `✓`) と `thief-example/batch` (`MUTABLE`、`—`) の 2 行が出る。Drawer の Overview の Scan on push は `enabled` / `disabled`、Tags は `No tags`
+6. `S`、`ecs`、Enter で `thief-example-cluster` の行 (State `active`、件数はすべて `0`) が出る。`2` の Tags に `Env` が出る。`s` を押すと `ECS does not support sessions` の通知が出てセッションは始まらない
+7. `q` で終了する
 
 ## 動作確認できない機能
 

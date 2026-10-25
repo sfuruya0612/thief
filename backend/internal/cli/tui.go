@@ -36,8 +36,12 @@ func newTUIDeps() tui.Deps {
 	return tui.Deps{
 		ListProfiles: awsinternal.ListProfiles,
 		ListRegions:  awsinternal.ListRegions,
+		// 並びは Web UI のサイドバー (frontend/src/lib/serviceMeta.ts の SERVICES) と同じにする。
 		Services: []tui.Service{
 			tui.NewEC2Service(awsinternal.ListEC2Resources),
+			tui.NewLambdaService(awsinternal.ListLambdaResources),
+			tui.NewECRService(awsinternal.ListECRResources),
+			tui.NewECSService(awsinternal.ListECSResources),
 		},
 		StartSession: sessionManagerCommand,
 	}

@@ -10,19 +10,22 @@ import (
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
 )
 
-// TestNewTUIDeps_ServicesAreEC2Only は TUI に載せるサービスの集合を固定する。
-// 第 1 段階の残りのサービスを足したら、ここの集合も更新する (docs/prd/thief.md の成功指標)。
-func TestNewTUIDeps_ServicesAreEC2Only(t *testing.T) {
+// TestNewTUIDeps_ServicesFollowWebUIOrder は TUI に載せるサービスの集合と並びを固定する。
+// 並びは Web UI のサイドバー (frontend/src/lib/serviceMeta.ts の SERVICES) と同じで、第 1 段階の残りの
+// サービスを足したら (issue 0220 から 0223)、ここの期待値も更新する (docs/prd/thief.md の成功指標)。
+func TestNewTUIDeps_ServicesFollowWebUIOrder(t *testing.T) {
 	deps := newTUIDeps()
 
-	got := map[string]bool{}
+	var got []string
+	seen := map[string]bool{}
 	for _, s := range deps.Services {
-		if got[s.ID()] {
+		if seen[s.ID()] {
 			t.Errorf("service %q is registered twice", s.ID())
 		}
-		got[s.ID()] = true
+		seen[s.ID()] = true
+		got = append(got, s.ID())
 	}
-	want := map[string]bool{"ec2": true}
+	want := []string{"ec2", "lambda", "ecr", "ecs"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("service IDs = %v, want %v", got, want)
 	}

@@ -6,6 +6,13 @@
 # 環境変数で渡す。
 set -euo pipefail
 
+# Lambda のデプロイパッケージの作成に zip が要る。途中で止まると投入が中途半端になるため、
+# 資源を作る前に確かめる。
+if ! command -v zip >/dev/null 2>&1; then
+  echo "zip is required to build the Lambda deployment package" >&2
+  exit 1
+fi
+
 ENDPOINT_URL="http://localhost:4566"
 export AWS_ACCESS_KEY_ID="test"
 export AWS_SECRET_ACCESS_KEY="test"
@@ -95,5 +102,30 @@ EOF
 aws_ cloudformation create-stack \
   --stack-name thief-example-stack \
   --template-body "file://$tmpdir/stack.yaml"
+
+echo "==> Lambda: 関数を作成 (TUI の Lambda 一覧の確認用)"
+cat > "$tmpdir/index.py" <<'EOF'
+def handler(event, context):
+    return {"statusCode": 200, "body": "hello from thief example"}
+EOF
+zip -j -q "$tmpdir/fn.zip" "$tmpdir/index.py"
+aws_ lambda create-function \
+  --function-name thief-example-hello \
+  --runtime python3.12 \
+  --handler index.handler \
+  --role arn:aws:iam::000000000000:role/thief-example-lambda-role \
+  --memory-size 256 \
+  --timeout 30 \
+  --tags Env=example \
+  --zip-file "fileb://$tmpdir/fn.zip"
+
+echo "==> ECR: リポジトリを作成 (TUI の ECR 一覧の確認用)"
+aws_ ecr create-repository --repository-name thief-example/web \
+  --image-tag-mutability IMMUTABLE \
+  --image-scanning-configuration scanOnPush=true
+aws_ ecr create-repository --repository-name thief-example/batch
+
+echo "==> ECS: クラスタを作成 (TUI の ECS 一覧の確認用)"
+aws_ ecs create-cluster --cluster-name thief-example-cluster --tags key=Env,value=example
 
 echo "==> 完了"
