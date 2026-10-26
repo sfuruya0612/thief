@@ -56,3 +56,13 @@ func formatBytes(n int64) string {
 func formatInt32(n int32) string {
 	return strconv.FormatInt(int64(n), 10)
 }
+
+// fetchFailed は項目ごとの取得失敗 (IAM の MFA、Policies、Groups と WAF の Associated) を値の文字列で示す。
+// Web UI は値の横に警告アイコン (frontend/src/components/primitives/FetchFailedWarning.tsx) を出すが、
+// TUI は value が空なら "fetch failed"、空でなければ "<value> (fetch failed)" を返す。
+func fetchFailed(value string) string {
+	if value == "" {
+		return "fetch failed"
+	}
+	return value + " (fetch failed)"
+}

@@ -58,6 +58,8 @@ mise run example:seed
 - NAT Gateway: Elastic IP を 1 つ確保し、既定 VPC のサブネット `subnet-default-ap-northeast-1-a` にゲートウェイ 1 つ (タグ `Name=thief-example-nat`)
 - ELB: Application Load Balancer `thief-example-alb` (internet-facing、サブネットは `subnet-default-ap-northeast-1-a` と `-c`)
 - CloudFront: ディストリビューション 1 つ (コメント `thief example`、オリジンは `thief-example-data.s3.amazonaws.com`。ID は floci が割り当てる)
+- IAM: ユーザー `thief-example-user` (グループ `thief-example-group` に所属、管理ポリシー `ReadOnlyAccess` を付与) とロール `thief-example-role` (`AWSLambdaBasicExecutionRole` を付与)
+- WAF: Web ACL `thief-example-waf` (REGIONAL、ルール無し、タグ `Env=example`。floci の `ListResourcesForWebACL` は資源の種類を無視するため ALB とは関連付けない)
 
 `mise run example:up` で floci が起動した後に実行すること。
 
@@ -129,6 +131,19 @@ mise run example:seed
 8. `S`、`nat`、Enter で `thief-example-nat` の行 (State `available`、Gateway ID `nat-...`、VPC `vpc-default-ap-northeast-1`、Elastic IP は floci が割り当てた値、Uptime は作成からの経過) が出る。Drawer の Overview は Resource ID、VPC、Subnet (`subnet-default-ap-northeast-1-a`)、Elastic IP、Region、Uptime、Launched (作成日を UTC で表示) の順で、`2` の Tags に `Name` が出る
 9. `S`、`kinesis`、Enter で `thief-example-stream` の行 (State `active`、Mode `provisioned`、Shards `2`、Retention `24h`、Encryption `NONE`) が出る。Drawer の Overview は Resource ID (ストリームの ARN)、Capacity mode、Shards、Retention、Encryption、Region の順で、`2` の Tags は `No tags` (Web UI と同じく Kinesis はタグを取得しない)
 10. `q` で終了する
+
+### TUI (`thief tui`) の IAM / WAF / Secrets Manager / Parameter Store 一覧
+
+`example/seed.sh` が投入した資源で確かめる。IAM は floci がリージョンを持たないため、どのリージョンでも同じ一覧になる。
+
+1. 上の EC2 一覧の 1 と 2 と同じく `thief` を導入し、`mise run example:up` を動かしておく
+2. `mise run example:seed`
+3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢に `IAM`、`WAF`、`Secrets Manager`、`Parameter Store` が `SQS` の後にこの順に出る
+4. `ssm` と打って Enter を押すと、一覧に `/thief/example/app-name` (Type `String`)、`/thief/example/db-password` (Type `SecureString`)、`/thief/example/max-connections` (Type `String`) の行 (Version `1`、Last modified は投入時刻) が出る。Drawer の Overview は先頭の Name と State (空) の後に Type、Tier (空。floci は Tier を返さない)、Version、Last modified、Region の順で、Name は繰り返されない。`2` の Tags は `No tags` (Web UI と同じく Parameter Store はタグを取得しない)
+5. `S`、`secrets`、Enter で `thief/example/db-credentials` の行 (Description `—`、Last changed は投入時刻) が出る。Drawer の Overview は先頭の Name と State (空) の後に Description (`—`)、Last changed、Region の順で、Name は繰り返されない。`2` の Tags は `No tags`
+6. `S`、`iam`、Enter で `thief-example-user` (Kind `user`、MFA `✕`、Policies `1`、Groups `1`) と `thief-example-role` (Kind `role`、MFA `✕`、Policies `1`、Groups `0`) の行が出る。Activity は空、Last active は `—` (floci は最終利用の時刻を返さない)。Drawer の Overview は Resource ID、ARN、Kind、MFA (`disabled`)、Last active (`—`)、Policies attached、Groups の順。`2` の Tags は `No tags` (Web UI と同じく IAM はタグを取得しない)
+7. `S`、`waf`、Enter で `thief-example-waf` の行 (Description `thief example web ACL`、State `active`、Scope `REGIONAL`、Rules `0`、Associated `0`) が出る。Drawer の Overview は Resource ID (Web ACL の ID)、Scope、Description、Rules、Associated resources、Region の順。`2` の Tags は `Env example`
+8. `q` で終了する
 
 ## 動作確認できない機能
 

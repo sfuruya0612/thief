@@ -1273,6 +1273,23 @@ func TestModel_TagsTabFetchFailedWithoutTagsOmitsNoTags(t *testing.T) {
 	}
 }
 
+// TestModel_TagsTabFetchFailedHeadingForWAFRow は WAF の行 (backend の wafACLDetail が取得失敗のときに返す空の非 nil map と
+// TagsFetchFailed が真) を Drawer に通し、見出しだけが出て "No tags" が出ないことを確かめる。
+func TestModel_TagsTabFetchFailedHeadingForWAFRow(t *testing.T) {
+	rows := []Row{wafRow{region: "ap-northeast-1", res: aws.WAFResource{ID: "acl-1", Name: "web-acl", State: "active", Scope: "REGIONAL", Tags: map[string]string{}, TagsFetchFailed: true}}}
+	m := newTestModel(t, &fakeService{id: "waf", rows: rows, columns: (&wafService{}).Columns()}, Deps{})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+	m = keys(t, m, "2")
+
+	drawer := m.drawer.View()
+	if !strings.Contains(drawer, "Tags (fetch failed)") {
+		t.Errorf("Tags tab should show the fetch failed heading\n%s", drawer)
+	}
+	if strings.Contains(drawer, "No tags") {
+		t.Errorf("Tags tab must not say No tags when the fetch failed\n%s", drawer)
+	}
+}
+
 // TestModel_TagsTabWithoutFailureShowsNoTags は TagsFetchFailed() が偽でタグが空の行では "No tags" だけが出て、
 // 取得失敗の見出しが出ないことを確かめる。TagsFetchFailer を実装しない行 (S3) も同じ。
 func TestModel_TagsTabWithoutFailureShowsNoTags(t *testing.T) {

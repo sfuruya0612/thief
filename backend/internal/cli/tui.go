@@ -52,6 +52,10 @@ func newTUIDeps() tui.Deps {
 			tui.NewNATGatewayService(awsinternal.ListNATGatewayResources),
 			tui.NewKinesisService(awsinternal.ListKinesisResources),
 			tui.NewSQSService(awsinternal.ListSQSResources),
+			tui.NewIAMService(awsinternal.ListIAMResources),
+			tui.NewWAFService(awsinternal.ListWAFResources),
+			tui.NewSecretsService(awsinternal.ListSecretResources),
+			tui.NewSSMService(awsinternal.ListSSMParameters),
 		},
 		StartSession: sessionManagerCommand,
 	}

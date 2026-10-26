@@ -53,3 +53,21 @@ func TestFormatInt32(t *testing.T) {
 		t.Errorf("formatInt32(3306) = %q, want 3306 (no separator)", got)
 	}
 }
+
+// TestFetchFailed は取得失敗の表記が、値が無いとき "fetch failed"、あるとき "<value> (fetch failed)" になることを確かめる。
+func TestFetchFailed(t *testing.T) {
+	tests := []struct {
+		value string
+		want  string
+	}{
+		{"", "fetch failed"},
+		{"0", "0 (fetch failed)"},
+		{"3", "3 (fetch failed)"},
+		{"disabled", "disabled (fetch failed)"},
+	}
+	for _, tt := range tests {
+		if got := fetchFailed(tt.value); got != tt.want {
+			t.Errorf("fetchFailed(%q) = %q, want %q", tt.value, got, tt.want)
+		}
+	}
+}

@@ -195,4 +195,26 @@ cat > "$tmpdir/distribution.json" <<'EOF'
 EOF
 aws_ cloudfront create-distribution --distribution-config "file://$tmpdir/distribution.json"
 
+echo "==> IAM: ユーザー (グループとポリシー付き) とロールを作成 (TUI の IAM 一覧の確認用)"
+aws_ iam create-user --user-name thief-example-user
+aws_ iam create-group --group-name thief-example-group
+aws_ iam add-user-to-group --group-name thief-example-group --user-name thief-example-user
+aws_ iam attach-user-policy --user-name thief-example-user \
+  --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess
+aws_ iam create-role --role-name thief-example-role \
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+aws_ iam attach-role-policy --role-name thief-example-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+# floci の ListResourcesForWebACL は ResourceType を無視して同じ関連資源を種類ごとに返すため
+# (backend は種類ごとの結果を合算する)、ALB との関連付けは行わず Associated は 0 にする。
+echo "==> WAF: Web ACL を作成 (TUI の WAF 一覧の確認用)"
+aws_ wafv2 create-web-acl \
+  --name thief-example-waf \
+  --scope REGIONAL \
+  --default-action Allow={} \
+  --description "thief example web ACL" \
+  --visibility-config SampledRequestsEnabled=false,CloudWatchMetricsEnabled=false,MetricName=thiefExample \
+  --tags Key=Env,Value=example
+
 echo "==> 完了"
