@@ -1650,3 +1650,464 @@ func TestModel_TagFetcherFetchesRowSelectedDuringReload(t *testing.T) {
 		t.Errorf("Tags tab should show batch's tags\n%s", drawer)
 	}
 }
+
+// --- ECS Exec (issue 0224) ---
+
+// ecsExecCalls は ECS Exec の偽の Deps が記録する呼び出し。
+type ecsExecCalls struct {
+	listTasks      []string // profile/region/cluster/service
+	listContainers []string // profile/region/cluster/task
+	starts         []string // profile/region/cluster/task/container/command
+}
+
+// applyChain は Cmd を実行して得たメッセージを Model に適用し、その適用が返した Cmd も続けて実行する。
+// ECS Exec のようにメッセージが次の取得を連鎖させる経路で使う。選択肢が開くか、セッションに入るか、
+// Cmd が尽きるまで続ける (セッションに入った後の tea.ExecProcess は実行しない)。
+func applyChain(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	const maxRounds = 10
+	for round := 0; cmd != nil && m.picker == nil && !m.inSession; round++ {
+		if round == maxRounds {
+			t.Fatal("applyChain did not settle")
+		}
+		var next []tea.Cmd
+		for _, msg := range drain(t, cmd) {
+			var c tea.Cmd
+			m, c = updateCmd(t, m, msg)
+			if c != nil {
+				next = append(next, c)
+			}
+		}
+		cmd = tea.Batch(next...)
+	}
+	return m
+}
+
+// ecsExecTestModel は ECS のクラスタ行 1 つ (demo) を持つ Model と、偽の Deps の呼び出しの記録を返す。
+// tasks と containers は偽の ListECSTasks と ListECSContainers が返す値。
+func ecsExecTestModel(t *testing.T, tasks []aws.ECSTaskResource, containers []aws.ECSContainerResource) (Model, *ecsExecCalls) {
+	t.Helper()
+	rec := &ecsExecCalls{}
+	rows := []Row{ecsRow{region: "ap-northeast-1", res: aws.ECSResource{ID: "arn:aws:ecs:ap-northeast-1:123456789012:cluster/demo", Name: "demo", State: "active"}}}
+	m := newTestModel(t, &fakeService{id: "ecs", rows: rows}, Deps{
+		ListECSTasks: func(_ context.Context, profile, region, cluster, service string) ([]aws.ECSTaskResource, error) {
+			rec.listTasks = append(rec.listTasks, profile+"/"+region+"/"+cluster+"/"+service)
+			return tasks, nil
+		},
+		ListECSContainers: func(_ context.Context, profile, region, cluster, task string) ([]aws.ECSContainerResource, error) {
+			rec.listContainers = append(rec.listContainers, profile+"/"+region+"/"+cluster+"/"+task)
+			return containers, nil
+		},
+		StartECSExec: func(_ context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error) {
+			rec.starts = append(rec.starts, strings.Join([]string{profile, region, cluster, task, container, command}, "/"))
+			return exec.Command("true"), nil, nil
+		},
+	})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+	return m, rec
+}
+
+func ecsTestTask(id, group, status string) aws.ECSTaskResource {
+	return aws.ECSTaskResource{ARN: "arn:aws:ecs:ap-northeast-1:123456789012:task/demo/" + id, Group: group, LastStatus: status}
+}
+
+func TestECSTaskID(t *testing.T) {
+	tests := []struct{ arn, want string }{
+		{arn: "arn:aws:ecs:ap-northeast-1:123456789012:task/demo/abcdef1234567890", want: "abcdef1234567890"},
+		{arn: "abcdef1234567890", want: "abcdef1234567890"},
+		{arn: "", want: ""},
+	}
+	for _, tt := range tests {
+		if got := ecsTaskID(tt.arn); got != tt.want {
+			t.Errorf("ecsTaskID(%q) = %q, want %q", tt.arn, got, tt.want)
+		}
+	}
+}
+
+// TestModel_ECSExecSingleTaskAndContainerStartsWithoutPicker はタスク 1 件とコンテナ 1 件のとき、選択肢を出さずに
+// クラスタ名、タスク ID、コンテナ名、/bin/sh で StartECSExec を呼び、EC2 と同じ sessionReadyMsg の経路でセッションに入ることを確かめる。
+func TestModel_ECSExecSingleTaskAndContainerStartsWithoutPicker(t *testing.T) {
+	m, rec := ecsExecTestModel(t,
+		[]aws.ECSTaskResource{ecsTestTask("abcdef1234567890", "service:web", "running")},
+		[]aws.ECSContainerResource{{Name: "app", RuntimeID: "rt-1", LastStatus: "running", ExecEnabled: true}},
+	)
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	if !m.sessionStarting || !strings.Contains(m.status, "listing tasks of demo") {
+		t.Fatalf("starting=%v status=%q", m.sessionStarting, m.status)
+	}
+	m = applyChain(t, m, cmd)
+	if want := []string{"first/ap-northeast-1/demo/"}; !reflect.DeepEqual(rec.listTasks, want) {
+		t.Errorf("ListECSTasks calls = %v, want %v", rec.listTasks, want)
+	}
+	if want := []string{"first/ap-northeast-1/demo/abcdef1234567890"}; !reflect.DeepEqual(rec.listContainers, want) {
+		t.Errorf("ListECSContainers calls = %v, want %v", rec.listContainers, want)
+	}
+	if want := []string{"first/ap-northeast-1/demo/abcdef1234567890/app//bin/sh"}; !reflect.DeepEqual(rec.starts, want) {
+		t.Errorf("StartECSExec calls = %v, want %v", rec.starts, want)
+	}
+	if m.picker != nil {
+		t.Error("no picker must open with a single task and a single container")
+	}
+	if !m.inSession || m.sessionStarting || m.ecsExec.active {
+		t.Errorf("inSession=%v starting=%v ecsExec=%+v, want in session", m.inSession, m.sessionStarting, m.ecsExec)
+	}
+	m = update(t, m, sessionExitMsg{})
+	m, cmd = updateCmd(t, m, keyMsg("s"))
+	applyChain(t, m, cmd)
+	if len(rec.starts) != 2 {
+		t.Errorf("after the session ends, s should start again: starts=%v", rec.starts)
+	}
+}
+
+// TestModel_ECSExecMultipleTasksOpensPicker はタスクが複数のとき選択肢が出て、選んだタスクのタスク ID で
+// ListECSContainers が呼ばれることを確かめる。
+func TestModel_ECSExecMultipleTasksOpensPicker(t *testing.T) {
+	m, rec := ecsExecTestModel(t,
+		[]aws.ECSTaskResource{ecsTestTask("task-a", "service:web", "running"), ecsTestTask("task-b", "service:worker", "running")},
+		[]aws.ECSContainerResource{{Name: "app", RuntimeID: "rt-1", ExecEnabled: true}},
+	)
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil || m.picker.kind != pickerECSTask {
+		t.Fatalf("picker = %+v, want the task picker", m.picker)
+	}
+	view := m.View()
+	for _, want := range []string{"Select a task in demo", "task-a", "service:web", "task-b", "service:worker"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view should contain %q\n%s", want, view)
+		}
+	}
+	if len(rec.listContainers) != 0 {
+		t.Fatalf("ListECSContainers must wait for the choice: %v", rec.listContainers)
+	}
+	// 2 件目を選ぶ。
+	m = keys(t, m, "down")
+	m, cmd = updateCmd(t, m, keyMsg("enter"))
+	m = applyChain(t, m, cmd)
+	if want := []string{"first/ap-northeast-1/demo/task-b"}; !reflect.DeepEqual(rec.listContainers, want) {
+		t.Errorf("ListECSContainers calls = %v, want %v", rec.listContainers, want)
+	}
+	if want := []string{"first/ap-northeast-1/demo/task-b/app//bin/sh"}; !reflect.DeepEqual(rec.starts, want) {
+		t.Errorf("StartECSExec calls = %v, want %v", rec.starts, want)
+	}
+}
+
+// TestModel_ECSExecContainerPickerOnlyListsExecEnabled は ECS Exec が有効なコンテナだけが候補になり、
+// 複数あれば選択肢が出て、選んだコンテナ名で StartECSExec が呼ばれることを確かめる。
+func TestModel_ECSExecContainerPickerOnlyListsExecEnabled(t *testing.T) {
+	m, rec := ecsExecTestModel(t,
+		[]aws.ECSTaskResource{ecsTestTask("task-a", "service:web", "running")},
+		[]aws.ECSContainerResource{
+			{Name: "app", RuntimeID: "rt-1", LastStatus: "running", ExecEnabled: true},
+			{Name: "sidecar", RuntimeID: "", LastStatus: "running", ExecEnabled: false},
+			{Name: "log", RuntimeID: "rt-3", LastStatus: "running", ExecEnabled: true},
+		},
+	)
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil || m.picker.kind != pickerECSContainer {
+		t.Fatalf("picker = %+v, want the container picker", m.picker)
+	}
+	labels := make([]string, 0, len(m.picker.items))
+	for _, it := range m.picker.items {
+		labels = append(labels, it.Label)
+	}
+	if want := []string{"app", "log"}; !reflect.DeepEqual(labels, want) {
+		t.Errorf("container candidates = %v, want %v", labels, want)
+	}
+	if !strings.Contains(m.View(), "Select a container in task-a") {
+		t.Errorf("view:\n%s", m.View())
+	}
+	m = keys(t, m, "down")
+	m, cmd = updateCmd(t, m, keyMsg("enter"))
+	m = applyChain(t, m, cmd)
+	if want := []string{"first/ap-northeast-1/demo/task-a/log//bin/sh"}; !reflect.DeepEqual(rec.starts, want) {
+		t.Errorf("StartECSExec calls = %v, want %v", rec.starts, want)
+	}
+	if !m.inSession {
+		t.Error("the chosen container should enter the session")
+	}
+}
+
+// TestModel_ECSExecNoCandidatesNotifies はタスクが 0 件、または ECS Exec が有効なコンテナが無いときに通知し、
+// 後段を呼ばず、s を再び受け付けることを確かめる。
+func TestModel_ECSExecNoCandidatesNotifies(t *testing.T) {
+	t.Run("no tasks", func(t *testing.T) {
+		m, rec := ecsExecTestModel(t, nil, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
+		m, cmd := updateCmd(t, m, keyMsg("s"))
+		m = applyChain(t, m, cmd)
+		if m.status != "no running tasks" {
+			t.Errorf("status = %q", m.status)
+		}
+		if len(rec.listContainers) != 0 || len(rec.starts) != 0 {
+			t.Errorf("containers=%v starts=%v, want no calls", rec.listContainers, rec.starts)
+		}
+		if m.sessionStarting || m.ecsExec.active {
+			t.Error("s must be accepted again after the notice")
+		}
+		m, cmd = updateCmd(t, m, keyMsg("s"))
+		applyChain(t, m, cmd)
+		if len(rec.listTasks) != 2 {
+			t.Errorf("ListECSTasks calls = %v, want 2", rec.listTasks)
+		}
+	})
+	t.Run("no exec-enabled container", func(t *testing.T) {
+		m, rec := ecsExecTestModel(t,
+			[]aws.ECSTaskResource{ecsTestTask("task-a", "service:web", "running")},
+			[]aws.ECSContainerResource{{Name: "app", ExecEnabled: false}, {Name: "sidecar", ExecEnabled: false}},
+		)
+		m, cmd := updateCmd(t, m, keyMsg("s"))
+		m = applyChain(t, m, cmd)
+		if m.status != "no container with ECS Exec enabled" {
+			t.Errorf("status = %q", m.status)
+		}
+		if len(rec.starts) != 0 || m.picker != nil {
+			t.Errorf("starts=%v picker=%v, want no start and no picker", rec.starts, m.picker)
+		}
+		if m.sessionStarting {
+			t.Error("s must be accepted again after the notice")
+		}
+		m, cmd = updateCmd(t, m, keyMsg("s"))
+		applyChain(t, m, cmd)
+		if len(rec.listTasks) != 2 {
+			t.Errorf("ListECSTasks calls = %v, want 2", rec.listTasks)
+		}
+	})
+}
+
+// TestModel_ECSExecListFailuresAreNotified は ListECSTasks と ListECSContainers の失敗が通知行に出て、
+// 後段を呼ばないことを確かめる。
+func TestModel_ECSExecListFailuresAreNotified(t *testing.T) {
+	t.Run("tasks", func(t *testing.T) {
+		m, rec := ecsExecTestModel(t, nil, nil)
+		m.deps.ListECSTasks = func(context.Context, string, string, string, string) ([]aws.ECSTaskResource, error) {
+			return nil, errors.New("AccessDeniedException")
+		}
+		m, cmd := updateCmd(t, m, keyMsg("s"))
+		m = applyChain(t, m, cmd)
+		if !strings.Contains(m.status, "list tasks: AccessDeniedException") {
+			t.Errorf("status = %q", m.status)
+		}
+		if len(rec.listContainers) != 0 || len(rec.starts) != 0 || m.sessionStarting {
+			t.Errorf("containers=%v starts=%v starting=%v", rec.listContainers, rec.starts, m.sessionStarting)
+		}
+	})
+	t.Run("containers", func(t *testing.T) {
+		m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, nil)
+		m.deps.ListECSContainers = func(context.Context, string, string, string, string) ([]aws.ECSContainerResource, error) {
+			return nil, errors.New("describe ecs task task-a: boom")
+		}
+		m, cmd := updateCmd(t, m, keyMsg("s"))
+		m = applyChain(t, m, cmd)
+		if !strings.Contains(m.status, "list containers: describe ecs task task-a: boom") {
+			t.Errorf("status = %q", m.status)
+		}
+		if len(rec.starts) != 0 || m.sessionStarting {
+			t.Errorf("starts=%v starting=%v", rec.starts, m.sessionStarting)
+		}
+	})
+}
+
+// TestModel_ECSExecWithoutDepsSetsStatus は StartECSExec が無い Deps で s を押すと EC2 と同じ通知が出ることを確かめる。
+func TestModel_ECSExecWithoutDepsSetsStatus(t *testing.T) {
+	rows := []Row{ecsRow{region: "ap-northeast-1", res: aws.ECSResource{ID: "arn:a", Name: "demo"}}}
+	m := newTestModel(t, &fakeService{id: "ecs", rows: rows}, Deps{
+		ListECSTasks: func(context.Context, string, string, string, string) ([]aws.ECSTaskResource, error) {
+			t.Fatal("ListECSTasks must not be called without StartECSExec")
+			return nil, nil
+		},
+	})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+	m = keys(t, m, "s")
+	if m.status != "sessions are not available" || m.sessionStarting {
+		t.Errorf("status=%q starting=%v", m.status, m.sessionStarting)
+	}
+}
+
+// TestModel_ECSExecNoRowSelected は行が無いときに no row selected を通知することを確かめる。
+func TestModel_ECSExecNoRowSelected(t *testing.T) {
+	m, rec := ecsExecTestModel(t, nil, nil)
+	m.rows = nil
+	m = m.applyFilter()
+	m = keys(t, m, "s")
+	if m.status != "no row selected" || len(rec.listTasks) != 0 {
+		t.Errorf("status=%q listTasks=%v", m.status, rec.listTasks)
+	}
+}
+
+// TestModel_ECSExecPickerCancelAllowsRetry は選択肢を esc で取り消すと開始をやめ、s を再び受け付けることを確かめる。
+func TestModel_ECSExecPickerCancelAllowsRetry(t *testing.T) {
+	m, rec := ecsExecTestModel(t,
+		[]aws.ECSTaskResource{ecsTestTask("task-a", "", ""), ecsTestTask("task-b", "", "")},
+		[]aws.ECSContainerResource{{Name: "app", ExecEnabled: true}},
+	)
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil {
+		t.Fatal("task picker should be open")
+	}
+	m = keys(t, m, "esc")
+	if m.picker != nil || m.sessionStarting || m.ecsExec.active {
+		t.Errorf("esc should cancel: picker=%v starting=%v ecsExec=%+v", m.picker, m.sessionStarting, m.ecsExec)
+	}
+	if len(rec.listContainers) != 0 || len(rec.starts) != 0 {
+		t.Errorf("containers=%v starts=%v, want no calls after cancel", rec.listContainers, rec.starts)
+	}
+	m, cmd = updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil || len(rec.listTasks) != 2 {
+		t.Errorf("s after cancel should list tasks again: picker=%v listTasks=%v", m.picker, rec.listTasks)
+	}
+}
+
+// TestModel_ECSExecSecondSKeyIgnoredWhileSelecting はタスクの取得中に s を押しても二度目の取得を始めないことを確かめる。
+func TestModel_ECSExecSecondSKeyIgnoredWhileSelecting(t *testing.T) {
+	m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
+	m, first := updateCmd(t, m, keyMsg("s"))
+	m, second := updateCmd(t, m, keyMsg("s"))
+	if second != nil {
+		t.Error("the second s must be ignored while the first selection is in flight")
+	}
+	m = applyChain(t, m, first)
+	if !m.inSession || len(rec.listTasks) != 1 || len(rec.starts) != 1 {
+		t.Errorf("inSession=%v listTasks=%v starts=%v, want one session from one call each", m.inSession, rec.listTasks, rec.starts)
+	}
+}
+
+// TestModel_ECSExecTargetSwitchDropsStaleResults はタスクの取得中にプロファイルを切り替えると、選択をやめ、
+// 旧い対象の結果を捨てることを確かめる。
+func TestModel_ECSExecTargetSwitchDropsStaleResults(t *testing.T) {
+	m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	msgs := drain(t, cmd)
+	var stale ecsTasksMsg
+	for _, msg := range msgs {
+		if tm, ok := msg.(ecsTasksMsg); ok {
+			stale = tm
+		}
+	}
+	if stale.seq == 0 {
+		t.Fatalf("msgs = %v, want an ecsTasksMsg", msgs)
+	}
+	m.profile = "second"
+	m, _ = m.reloadForNewTarget()
+	if m.sessionStarting || m.ecsExec.active {
+		t.Errorf("target switch should cancel the selection: starting=%v ecsExec=%+v", m.sessionStarting, m.ecsExec)
+	}
+	after, cmd := updateCmd(t, m, stale)
+	if cmd != nil || after.picker != nil || after.sessionStarting || len(rec.listContainers) != 0 || len(rec.starts) != 0 {
+		t.Errorf("stale tasks must be dropped: cmd=%v picker=%v starting=%v containers=%v starts=%v", cmd, after.picker, after.sessionStarting, rec.listContainers, rec.starts)
+	}
+}
+
+// TestModel_ECSExecContainerPickerCancelAllowsRetry はコンテナの選択肢を esc で取り消すと開始をやめ、
+// s を再び受け付けることを確かめる (タスクの選択肢の取り消しとは別の分岐)。
+func TestModel_ECSExecContainerPickerCancelAllowsRetry(t *testing.T) {
+	m, rec := ecsExecTestModel(t,
+		[]aws.ECSTaskResource{ecsTestTask("task-a", "", ""), ecsTestTask("task-b", "", "")},
+		[]aws.ECSContainerResource{{Name: "app", ExecEnabled: true}, {Name: "log", ExecEnabled: true}},
+	)
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil || m.picker.kind != pickerECSTask {
+		t.Fatalf("picker = %+v, want the task picker", m.picker)
+	}
+	m, cmd = updateCmd(t, m, keyMsg("enter"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil || m.picker.kind != pickerECSContainer {
+		t.Fatalf("picker = %+v, want the container picker", m.picker)
+	}
+	m = keys(t, m, "esc")
+	if m.picker != nil || m.sessionStarting || m.ecsExec.active {
+		t.Errorf("esc should cancel: picker=%v starting=%v ecsExec=%+v", m.picker, m.sessionStarting, m.ecsExec)
+	}
+	if len(rec.starts) != 0 {
+		t.Errorf("starts=%v, want no start after cancel", rec.starts)
+	}
+	m, cmd = updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if m.picker == nil || m.picker.kind != pickerECSTask || len(rec.listTasks) != 2 {
+		t.Errorf("s after cancel should list tasks again: picker=%v listTasks=%v", m.picker, rec.listTasks)
+	}
+}
+
+// TestModel_ECSExecTargetSwitchDropsStaleContainers はコンテナの取得中にプロファイルを切り替えると、
+// 旧い対象のコンテナの結果を捨てて StartECSExec を呼ばないことを確かめる。
+func TestModel_ECSExecTargetSwitchDropsStaleContainers(t *testing.T) {
+	m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	// タスクの結果まで適用し、コンテナの取得の Cmd を手元に残す。
+	var containersCmd tea.Cmd
+	for _, msg := range drain(t, cmd) {
+		var c tea.Cmd
+		m, c = updateCmd(t, m, msg)
+		if _, ok := msg.(ecsTasksMsg); ok {
+			containersCmd = c
+		}
+	}
+	if containersCmd == nil || !m.ecsExec.active || m.ecsExec.task != "task-a" {
+		t.Fatalf("containers cmd = %v, ecsExec = %+v, want the container fetch in flight", containersCmd, m.ecsExec)
+	}
+	var stale ecsContainersMsg
+	for _, msg := range drain(t, containersCmd) {
+		if cm, ok := msg.(ecsContainersMsg); ok {
+			stale = cm
+		}
+	}
+	if stale.seq == 0 || len(stale.containers) != 1 {
+		t.Fatalf("stale = %+v, want the containers of task-a", stale)
+	}
+	m.profile = "second"
+	m, _ = m.reloadForNewTarget()
+	after, cmd := updateCmd(t, m, stale)
+	if cmd != nil || after.picker != nil || after.sessionStarting || after.inSession || len(rec.starts) != 0 {
+		t.Errorf("stale containers must be dropped: cmd=%v picker=%v starting=%v inSession=%v starts=%v", cmd, after.picker, after.sessionStarting, after.inSession, rec.starts)
+	}
+}
+
+// TestModel_ECSExecStartFailureAllowsRetry は StartECSExec の失敗が session: に続けて通知され、
+// 状態が残らず s を再び受け付けることを確かめる。
+func TestModel_ECSExecStartFailureAllowsRetry(t *testing.T) {
+	m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
+	m.deps.StartECSExec = func(_ context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error) {
+		rec.starts = append(rec.starts, strings.Join([]string{profile, region, cluster, task, container, command}, "/"))
+		return nil, nil, errors.New("execute command: AccessDeniedException")
+	}
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = applyChain(t, m, cmd)
+	if !strings.Contains(m.status, "session: execute command: AccessDeniedException") {
+		t.Errorf("status = %q", m.status)
+	}
+	if m.inSession || m.sessionStarting || m.ecsExec.active || m.sessionFinalize != nil {
+		t.Errorf("failure must leave no state: inSession=%v starting=%v ecsExec=%+v finalize=%v", m.inSession, m.sessionStarting, m.ecsExec, m.sessionFinalize != nil)
+	}
+	m, cmd = updateCmd(t, m, keyMsg("s"))
+	applyChain(t, m, cmd)
+	if len(rec.starts) != 2 {
+		t.Errorf("s after the failure should try again: starts=%v", rec.starts)
+	}
+}
+
+// TestModel_ECSExecWithoutListDepsSetsStatus は ListECSTasks または ListECSContainers だけが無い Deps でも
+// sessions are not available を通知し、取得を始めないことを確かめる。
+func TestModel_ECSExecWithoutListDepsSetsStatus(t *testing.T) {
+	for _, missing := range []string{"ListECSTasks", "ListECSContainers"} {
+		t.Run(missing, func(t *testing.T) {
+			m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
+			switch missing {
+			case "ListECSTasks":
+				m.deps.ListECSTasks = nil
+			case "ListECSContainers":
+				m.deps.ListECSContainers = nil
+			}
+			m, cmd := updateCmd(t, m, keyMsg("s"))
+			m = applyChain(t, m, cmd)
+			if m.status != "sessions are not available" || m.sessionStarting {
+				t.Errorf("status=%q starting=%v", m.status, m.sessionStarting)
+			}
+			if len(rec.listTasks) != 0 || len(rec.starts) != 0 {
+				t.Errorf("listTasks=%v starts=%v, want no calls", rec.listTasks, rec.starts)
+			}
+		})
+	}
+}

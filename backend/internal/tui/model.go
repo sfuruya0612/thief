@@ -30,6 +30,22 @@ type Deps struct {
 	// StartSession は対話セッションの子プロセスを組み立てる。返す finalize は子プロセスの
 	// 終了後に必ず呼ぶ (AWS 側のセッションの切断)。
 	StartSession func(ctx context.Context, profile, region, target string) (*exec.Cmd, func() error, error)
+	// ListECSTasks はクラスタのタスクを返す (aws.ListECSTasks)。TUI は service に空文字列を渡す。
+	ListECSTasks func(ctx context.Context, profile, region, cluster, service string) ([]aws.ECSTaskResource, error)
+	// ListECSContainers はタスクのコンテナを返す (aws.ListECSContainers)。task はタスク ID。
+	ListECSContainers func(ctx context.Context, profile, region, cluster, task string) ([]aws.ECSContainerResource, error)
+	// StartECSExec は ECS Exec の子プロセスを組み立てる。cluster はクラスタ名、task はタスク ID、container は
+	// コンテナ名。返す finalize の扱いは StartSession と同じ。
+	StartECSExec func(ctx context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error)
+}
+
+// ecsExecState は ECS Exec の接続先の選択の進行状態。s を押してから StartECSExec を呼ぶまで active が真で、
+// その間 sessionStarting も真。seq は選択を始めたときの ecsSeq で、Update は一致する結果だけを受け取る。
+type ecsExecState struct {
+	active  bool
+	seq     int
+	cluster string
+	task    string
 }
 
 type focusArea int
@@ -113,6 +129,13 @@ type Model struct {
 	inSession       bool
 	sessionFinalize func() error
 
+	// ecsExec は ECS Exec の接続先の選択の進行状態。ecsSeq は選択を始めるたびに進め、ecsExec.seq に写す。
+	// 届いた結果は ecsExec.active が真で seq が一致するときだけ使う。選択の取り消しと対象の切替
+	// (reloadForNewTarget) は cancelECSExec で ecsExec を空にし (active が偽、seq が 0)、
+	// 旧い選択のタスクとコンテナの結果を捨てる。
+	ecsExec ecsExecState
+	ecsSeq  int
+
 	// profilePickerPending はプロファイルの一覧が届く前に p を押したことを表す。
 	// 一覧が届いたら picker を開く。
 	profilePickerPending bool
@@ -187,6 +210,21 @@ type tagsFetchedMsg struct {
 	id   string
 	tags map[string]string
 	err  error
+}
+
+// ecsTasksMsg は ListECSTasks の結果。seq は ecsExecState.seq。
+type ecsTasksMsg struct {
+	seq   int
+	tasks []aws.ECSTaskResource
+	err   error
+}
+
+// ecsContainersMsg は ListECSContainers の結果。task は取得したタスク ID。
+type ecsContainersMsg struct {
+	seq        int
+	task       string
+	containers []aws.ECSContainerResource
+	err        error
 }
 
 type sessionReadyMsg struct {
@@ -365,6 +403,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ecsTasksMsg:
+		if !m.ecsExec.active || msg.seq != m.ecsExec.seq {
+			return m, nil
+		}
+		if msg.err != nil {
+			m = m.cancelECSExec()
+			return m.setStatus(fmt.Sprintf("list tasks: %v", msg.err))
+		}
+		if len(msg.tasks) == 0 {
+			m = m.cancelECSExec()
+			return m.setStatus("no running tasks")
+		}
+		if len(msg.tasks) == 1 {
+			return m.listECSContainers(ecsTaskID(msg.tasks[0].ARN))
+		}
+		items := make([]pickerItem, 0, len(msg.tasks))
+		for _, t := range msg.tasks {
+			id := ecsTaskID(t.ARN)
+			items = append(items, pickerItem{Label: id, Detail: strings.TrimSpace(t.Group + "  " + t.LastStatus), Value: id})
+		}
+		p := newPicker(pickerECSTask, fmt.Sprintf("Select a task in %s", m.ecsExec.cluster), items, "")
+		m.picker = &p
+		m, _ = m.setStatus("")
+		return m, nil
+
+	case ecsContainersMsg:
+		if !m.ecsExec.active || msg.seq != m.ecsExec.seq {
+			return m, nil
+		}
+		if msg.err != nil {
+			m = m.cancelECSExec()
+			return m.setStatus(fmt.Sprintf("list containers: %v", msg.err))
+		}
+		// Web UI の ECSExecLauncher と同じく、ECS Exec が有効なコンテナだけを候補にする。
+		candidates := make([]aws.ECSContainerResource, 0, len(msg.containers))
+		for _, c := range msg.containers {
+			if c.ExecEnabled {
+				candidates = append(candidates, c)
+			}
+		}
+		if len(candidates) == 0 {
+			m = m.cancelECSExec()
+			return m.setStatus("no container with ECS Exec enabled")
+		}
+		if len(candidates) == 1 {
+			return m.startECSExecProcess(candidates[0].Name)
+		}
+		items := make([]pickerItem, 0, len(candidates))
+		for _, c := range candidates {
+			items = append(items, pickerItem{Label: c.Name, Detail: c.LastStatus, Value: c.Name})
+		}
+		p := newPicker(pickerECSContainer, fmt.Sprintf("Select a container in %s", msg.task), items, "")
+		m.picker = &p
+		m, _ = m.setStatus("")
+		return m, nil
+
 	case sessionReadyMsg:
 		m.sessionStarting = false
 		if msg.err != nil {
@@ -492,9 +586,17 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	kind := m.picker.kind
 	m.picker = nil
 	if chosen == nil {
+		if kind == pickerECSTask || kind == pickerECSContainer {
+			// 取り消しは ECS Exec の開始をやめる。sessionStarting を戻さないと s が効かなくなる。
+			m = m.cancelECSExec()
+		}
 		return m, nil
 	}
 	switch kind {
+	case pickerECSTask:
+		return m.listECSContainers(chosen.Value)
+	case pickerECSContainer:
+		return m.startECSExecProcess(chosen.Value)
 	case pickerProfile:
 		if chosen.Value == m.profile {
 			return m, nil
@@ -526,6 +628,10 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // 旧い対象の行を先に消し、取得中に s を押しても旧い行 (別の対象のリソース ID) で
 // セッションを始めないようにする。r の再取得は同じ対象なので行を残す (startLoad)。
 func (m Model) reloadForNewTarget() (Model, tea.Cmd) {
+	// 進行中の ECS Exec の接続先の選択は旧い対象のものなのでやめる。届いていない結果は ecsExec が空 (active が偽) なので捨てられる。
+	if m.ecsExec.active {
+		m = m.cancelECSExec()
+	}
 	m.rows = nil
 	m = m.applyFilter()
 	return m.startLoad()
@@ -586,6 +692,9 @@ func (m Model) startSession() (tea.Model, tea.Cmd) {
 	if !m.service.SupportsSession() {
 		return m.setStatus(fmt.Sprintf("%s does not support sessions", m.service.Title()))
 	}
+	if m.service.ID() == ecsServiceID {
+		return m.startECSExec()
+	}
 	if m.deps.StartSession == nil {
 		return m.setStatus("sessions are not available")
 	}
@@ -600,6 +709,61 @@ func (m Model) startSession() (tea.Model, tea.Cmd) {
 		cmd, finalize, err := start(ctx, profile, region, target)
 		return sessionReadyMsg{cmd: cmd, finalize: finalize, err: err}
 	})
+}
+
+// startECSExec は ECS のクラスタの行で s を押したときの入口。タスクの一覧を取り、ecsTasksMsg から
+// タスクとコンテナを選ばせて (1 件なら選択肢を出さない)、startECSExecProcess で Deps.StartECSExec を呼ぶ。
+// Web UI の ECSExecLauncher と同じ選び方。選択の間は sessionStarting を真にして s の二度押しを止める。
+func (m Model) startECSExec() (tea.Model, tea.Cmd) {
+	if m.deps.StartECSExec == nil || m.deps.ListECSTasks == nil || m.deps.ListECSContainers == nil {
+		return m.setStatus("sessions are not available")
+	}
+	row := m.selectedRow()
+	if row == nil {
+		return m.setStatus("no row selected")
+	}
+	// cluster はクラスタ名 (Row.Name())。Web UI と CLI の --cluster が使うのも名前で、ARN ではない。
+	cluster := row.Name()
+	m.sessionStarting = true
+	m.ecsSeq++
+	m.ecsExec = ecsExecState{active: true, seq: m.ecsSeq, cluster: cluster}
+	m, statusCmd := m.setStatus(fmt.Sprintf("listing tasks of %s...", cluster))
+	list, ctx, profile, region, seq := m.deps.ListECSTasks, m.ctx, m.profile, m.region, m.ecsSeq
+	return m, tea.Batch(statusCmd, func() tea.Msg {
+		tasks, err := list(ctx, profile, region, cluster, "")
+		return ecsTasksMsg{seq: seq, tasks: tasks, err: err}
+	})
+}
+
+// listECSContainers は選んだタスク (タスク ID) のコンテナを取る。結果は ecsContainersMsg で届く。
+func (m Model) listECSContainers(task string) (tea.Model, tea.Cmd) {
+	m.ecsExec.task = task
+	m, statusCmd := m.setStatus(fmt.Sprintf("listing containers of %s...", task))
+	list, ctx, profile, region, cluster, seq := m.deps.ListECSContainers, m.ctx, m.profile, m.region, m.ecsExec.cluster, m.ecsExec.seq
+	return m, tea.Batch(statusCmd, func() tea.Msg {
+		containers, err := list(ctx, profile, region, cluster, task)
+		return ecsContainersMsg{seq: seq, task: task, containers: containers, err: err}
+	})
+}
+
+// startECSExecProcess は選んだコンテナで Deps.StartECSExec を呼ぶ。結果は EC2 と同じ sessionReadyMsg で届き、
+// sessionStarting はそこで戻る。接続先の選択はここで終わる (active を倒す)。
+func (m Model) startECSExecProcess(container string) (tea.Model, tea.Cmd) {
+	st := m.ecsExec
+	m.ecsExec = ecsExecState{}
+	m, statusCmd := m.setStatus(fmt.Sprintf("starting session to %s/%s/%s...", st.cluster, st.task, container))
+	start, ctx, profile, region := m.deps.StartECSExec, m.ctx, m.profile, m.region
+	return m, tea.Batch(statusCmd, func() tea.Msg {
+		cmd, finalize, err := start(ctx, profile, region, st.cluster, st.task, container, ecsExecDefaultCommand)
+		return sessionReadyMsg{cmd: cmd, finalize: finalize, err: err}
+	})
+}
+
+// cancelECSExec は ECS Exec の接続先の選択をやめ、s を再び受け付ける。
+func (m Model) cancelECSExec() Model {
+	m.ecsExec = ecsExecState{}
+	m.sessionStarting = false
+	return m
 }
 
 // statusLineReplacer は通知を 1 行にするための置換。CRLF を先に置き、CR と LF が別々に 2 つの空白にならないようにする。

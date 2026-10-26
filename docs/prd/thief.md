@@ -433,8 +433,8 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - EC2 の一覧で選んだインスタンスに、`s` で Session Manager のセッションを開始する。
 - ECS では、クラスタを選び、タスクとコンテナを選んで ECS Exec で接続する。
   既定のコマンドは FR-7 と同じ `/bin/sh` とする。
-  タスクとコンテナの選び方 (Drawer のタブか選択肢か) は開発者が決める (「未確定論点」)。
-  2026-10-23 時点のプロトタイプは EC2 のセッションだけを持ち、ECS Exec は後続の issue で足す (「決定した論点」)。
+  タスクとコンテナは、クラスタ行で `s` を押した後に、絞り込み付きの選択肢で順に選ぶ (「決定した論点」の「TUI の ECS のタスクとコンテナの選び方」)。
+  候補が 1 件のときは選択肢を出さずに自動で選ぶ。候補は実行中のタスクと、ECS Exec が有効なコンテナに限る。
 - セッションは CLI の `thief ec2 session` と `thief ecs exec` と同じく、PATH にある `session-manager-plugin` に端末を渡して行う (「外部仕様の前提」)。
   セッションの間は TUI の画面を離れ、プラグインが終了したら TUI の画面に戻る。
 - プラグインの終了後、AWS 側のセッションを `TerminateSSMSession` で終える (FR-7 と同じ)。
@@ -447,7 +447,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   `exit` で抜けると TUI の画面に戻り、通知行に `session closed` が表示される。
 - セッションから戻った後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
 - セッションの中で Ctrl-C を押してから `exit` で抜け、`r` を押すと一覧を取得し直せる。
-- 実 AWS アカウントの、ECS Exec を有効にしたタスクで、クラスタ、タスク、コンテナを選んで接続すると、シェルで `echo ok` を実行すると `ok` が返る (クラスタ、タスク、コンテナの指定の手順は、「未確定論点」の「TUI の ECS のタスクとコンテナの選び方」の解消後に確定する。この基準はその解消までは実行できない)。
+- 実 AWS アカウントの、ECS Exec を有効にしたタスクを持つクラスタの行を選んで `s` を押し、タスクとコンテナの選択肢で接続先を選ぶと `session-manager-plugin` が起動し、シェルで `echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
   `exit` の後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
 - `session-manager-plugin` が PATH に無いとき、通知行に `session-manager-plugin not found in PATH` が表示され、TUI は終了しない。
 
@@ -822,7 +822,6 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | Fargate Spot の料金 | データ源が無い (`docs/issues/pending/0059-feat-pricing-fargate-spot-rates.md`) | 利用できるデータ源が見つかった時点で、開発者が対応を決める |
 | TUI の第 2 段階以降の範囲 | 第 2 段階以降で扱うと決めた Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作の、段階ごとの範囲と順序。材料に無いコストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化 (起草者の整理) を TUI で扱うか | 第 1 段階 (FR-29、FR-30) の完了後に開発者が決める |
 | TUI の Drawer のサービス固有のタブ | Web UI の Drawer にあるサービス固有のタブ (ECS の Services、Tasks、RDS の Instance Parameters、Cluster Parameters など) を TUI に置くか | サービスごとの要望が出た時点で、開発者がサービス単位で決める |
-| TUI の ECS のタスクとコンテナの選び方 | FR-30 の ECS Exec で、タスクとコンテナを Drawer のタブで選ぶか、選択肢で選ぶか | ECS Exec の issue の実装時に開発者が決める |
 | FR-29 と FR-30 の優先度 | 起草者が付けた Must で確定するか | 開発者が確認する |
 | TUI の中の SSO の再ログイン | FR-9 のデバイス認可を TUI の中で行うか、`thief sso login` の案内に留めるか | 第 1 段階の完了後に開発者が決める |
 
@@ -861,6 +860,12 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | TUI のフレームワーク | bubbletea、bubbles、lipgloss を使う。tview は採らない (ADR 0033) | 無い |
 | TUI の第 1 段階の範囲 | AWS の 19 サービスの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッション。Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は第 1 段階の完了後に決める (「未確定論点」)。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は材料に無く、第 1 段階では扱わない (「スコープ」) | `ec2` 以外の 18 サービスの追加、ECS Exec の追加 |
 | TUI の進め方 | `ec2` だけのプロトタイプを先に作って体験を確かめ、その後に PRD の改訂、ADR 0033、issue の起票、実装の順で正規の手順に戻す | PRD の改訂 (この改訂)、ADR 0033、`AGENTS.md`、`CHANGES.md`、`docs/issues/TODO.md` の TUI の記述は書き終えており、プロトタイプを issue として検証したうえで同じコミットで入れる。その後に残りの issue を実装する (プロトタイプの動作は 2026-10-23 に確認済み) |
+
+次の論点は、2026-10-26 に issue 0224 の実装で、issue の設計判断の第一候補のとおりに決めた。開発者の確認は実装の報告で得る。
+
+| 論点 | 決定 | 後続の作業 |
+| --- | --- | --- |
+| TUI の ECS のタスクとコンテナの選び方 | 選択肢で選ぶ。クラスタ行で `s` を押すと、実行中のタスク、次に ECS Exec が有効なコンテナを、サービスの切替と同じ絞り込み付きの選択肢で順に選ぶ。候補が 1 件なら自動で選ぶ (FR-30)。Drawer のタブで選ぶ案は、TUI の Drawer を Overview と Tags に固定しており、Web UI でも接続先の選択がタブではなく Terminal タブの中の選択であるため採らない | 開発者がこの方式を確認する (確認で方式が変わればこの行と FR-30 を直す)。FR-30 の ECS の受け入れ基準を実 AWS で確認する (issue 0224 では未確認) |
 
 ## 関連資料
 

@@ -14,9 +14,9 @@ func TestECSService_IDTitleAndColumns(t *testing.T) {
 	if svc.ID() != "ecs" || svc.Title() != "ECS" {
 		t.Errorf("ID/Title = %q/%q, want ecs/ECS", svc.ID(), svc.Title())
 	}
-	// ECS Exec は issue 0224 で足すまで無効。
-	if svc.SupportsSession() {
-		t.Error("SupportsSession must be false until ECS Exec is added")
+	// クラスタの行で s を押すと ECS Exec の接続先の選択が始まる (issue 0224)。
+	if !svc.SupportsSession() {
+		t.Error("SupportsSession must be true for ECS Exec")
 	}
 	// Web UI の ecsColumns の header の並び。
 	want := []Column{{Title: "Cluster"}, {Title: "State"}, {Title: "Active svc"}, {Title: "Running"}, {Title: "Pending"}, {Title: "Registered EC2"}, {Title: "Region"}}

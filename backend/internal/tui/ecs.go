@@ -3,9 +3,17 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sfuruya0612/thief/backend/internal/aws"
 )
+
+// ecsServiceID は ECS の Service.ID()。Model はこの値で ECS Exec の経路 (startECSExec) に分岐する。
+const ecsServiceID = "ecs"
+
+// ecsExecDefaultCommand は ECS Exec で実行するコマンド。CLI の thief ecs exec の --command の既定値と
+// Web UI の ECSExecLauncher と同じ。
+const ecsExecDefaultCommand = "/bin/sh"
 
 // ecsService は ECS クラスタの一覧を提供する Service。
 type ecsService struct {
@@ -17,7 +25,7 @@ func NewECSService(list func(ctx context.Context, profile, region string) ([]aws
 	return &ecsService{list: list}
 }
 
-func (s *ecsService) ID() string    { return "ecs" }
+func (s *ecsService) ID() string    { return ecsServiceID }
 func (s *ecsService) Title() string { return "ECS" }
 
 // Columns は Web UI の ecsColumns (frontend/src/components/tables/columns.tsx) と同じ列。
@@ -46,8 +54,9 @@ func (s *ecsService) Load(ctx context.Context, profile, region string) ([]Row, e
 	return rows, nil
 }
 
-// SupportsSession は false を返す。ECS Exec (タスクとコンテナの選択) は issue 0224 で足す。
-func (s *ecsService) SupportsSession() bool { return false }
+// SupportsSession は true を返す。クラスタの行で s を押すと、Model がタスクとコンテナを選ばせて
+// Deps.StartECSExec で ECS Exec を始める (startECSExec)。
+func (s *ecsService) SupportsSession() bool { return true }
 
 // ecsRow は ECS クラスタ 1 つの行。ID はクラスタの ARN。
 type ecsRow struct {
@@ -87,3 +96,13 @@ func (r ecsRow) Overview() []KV {
 }
 
 func (r ecsRow) Tags() map[string]string { return r.res.Tags }
+
+// ecsTaskID はタスクの ARN (arn:aws:ecs:<region>:<account>:task/<cluster>/<task-id>) からタスク ID を返す。
+// Web UI の ECSExecLauncher が arnSuffix で取るものと同じで、ListECSContainers と StartECSExec の task に渡す。
+// "/" が無ければそのまま返す。
+func ecsTaskID(arn string) string {
+	if i := strings.LastIndex(arn, "/"); i >= 0 {
+		return arn[i+1:]
+	}
+	return arn
+}

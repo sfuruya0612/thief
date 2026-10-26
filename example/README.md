@@ -101,7 +101,7 @@ mise run example:seed
 3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢に `EC2`、`Lambda`、`ECR`、`ECS` がこの順に出る
 4. `lambda` と打って Enter を押すと、一覧に `thief-example-hello` の行 (State `active`、Runtime `python3.12`、Memory `256 MB`、Timeout `30s`) が出る。Drawer の Overview に Handler `index.handler` と Role が出て、`2` の Tags は `No tags` になる (一覧の取得がタグを取らないため。Web UI と同じ)
 5. `S`、`ecr`、Enter で `thief-example/web` (Tag mutability `IMMUTABLE`、Scan on push `✓`) と `thief-example/batch` (`MUTABLE`、`—`) の 2 行が出る。Drawer の Overview の Scan on push は `enabled` / `disabled`、Tags は `No tags`
-6. `S`、`ecs`、Enter で `thief-example-cluster` の行 (State `active`、件数はすべて `0`) が出る。`2` の Tags に `Env` が出る。`s` を押すと `ECS does not support sessions` の通知が出てセッションは始まらない
+6. `S`、`ecs`、Enter で `thief-example-cluster` の行 (State `active`、件数はすべて `0`) が出る。`2` の Tags に `Env` が出る。`s` を押すと `no running tasks` の通知が出てセッションは始まらない (floci の seed はタスクを持たない。タスクとコンテナの選択肢と ECS Exec の接続は実 AWS で確認する)
 7. `q` で終了する
 
 ### TUI (`thief tui`) の S3 / RDS / DynamoDB / ElastiCache 一覧

@@ -58,7 +58,10 @@ func newTUIDeps() tui.Deps {
 			tui.NewSSMService(awsinternal.ListSSMParameters),
 			tui.NewCFNService(awsinternal.ListCFNStacks, awsinternal.DescribeCFNStackDetail),
 		},
-		StartSession: sessionManagerCommand,
+		StartSession:      sessionManagerCommand,
+		ListECSTasks:      awsinternal.ListECSTasks,
+		ListECSContainers: awsinternal.ListECSContainers,
+		StartECSExec:      ecsExecCommand,
 	}
 }
 
@@ -127,5 +130,57 @@ func sessionManagerCommandWith(ctx context.Context, deps tuiSessionDeps, profile
 
 	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", region)
 	c := exec.Command(plug, string(sessJSON), region, "StartSession", profile, string(paramsJSON), ssmEndpoint)
+	return c, finalize, nil
+}
+
+// ecsExecCommand は ECS Exec を開始し、session-manager-plugin を起動する exec.Cmd と、プロセスの終了後に
+// AWS 側のセッションを切断する finalize を返す。ecsExecuteCommandWith (ecs.go) と同じ手順を、TUI が
+// 子プロセスの実行を bubbletea に委ねられる形に分けたもの (EC2 の sessionManagerCommand と同じ関係)。
+func ecsExecCommand(ctx context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error) {
+	return ecsExecCommandWith(ctx, profile, region, cluster, task, container, command, defaultECSExecSessionDeps())
+}
+
+// ecsExecCommandWith は ecsExecCommand の本体。deps で AWS の呼び出しと plugin の解決を差し替えられる
+// (deps.execPlugin は使わない。プロセスの実行は bubbletea が行う)。セッションの開始後に失敗した場合は、
+// ここで切断してから返す。
+func ecsExecCommandWith(ctx context.Context, profile, region, cluster, task, container, command string, deps ecsExecSessionDeps) (*exec.Cmd, func() error, error) {
+	session, err := deps.executeSession(ctx, profile, region, cluster, task, container, command)
+	if err != nil {
+		return nil, nil, fmt.Errorf("execute command: %w", err)
+	}
+
+	// 切断は呼び出し元の ctx とは別の短命 context で行う (sessionManagerCommandWith と同じ理由)。
+	finalize := func() error {
+		termCtx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
+		defer cancel()
+		if err := deps.terminateSession(termCtx, profile, region, session.SessionID); err != nil {
+			return fmt.Errorf("terminate session: %w", err)
+		}
+		return nil
+	}
+	failAfterStart := func(cause error) (*exec.Cmd, func() error, error) {
+		if termErr := finalize(); termErr != nil {
+			return nil, nil, fmt.Errorf("%w; %w", cause, termErr)
+		}
+		return nil, nil, cause
+	}
+
+	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
+	if err != nil {
+		return failAfterStart(fmt.Errorf("marshal session: %w", err))
+	}
+	targetJSON, err := util.Parser(struct {
+		Target string `json:"Target"`
+	}{Target: session.Target()})
+	if err != nil {
+		return failAfterStart(fmt.Errorf("marshal target: %w", err))
+	}
+	plug, err := deps.lookupPlugin()
+	if err != nil {
+		return failAfterStart(err)
+	}
+
+	ecsEndpoint := fmt.Sprintf("https://ecs.%s.amazonaws.com", region)
+	c := exec.Command(plug, string(sessJSON), region, "StartSession", profile, string(targetJSON), ecsEndpoint)
 	return c, finalize, nil
 }

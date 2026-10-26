@@ -15,6 +15,9 @@ const (
 	pickerProfile pickerKind = iota
 	pickerRegion
 	pickerService
+	// pickerECSTask と pickerECSContainer は ECS Exec の接続先 (タスク、コンテナ) の選択。
+	pickerECSTask
+	pickerECSContainer
 )
 
 // pickerItem はピッカーの 1 行。Value が選択結果になる。
