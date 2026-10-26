@@ -123,6 +123,7 @@ backend/
 - `aws/<service>.go` は `ResourceID`/`ResourceName`/`ResourceState`/`ServiceName` を実装する resource インターフェース (`aws/resource.go`) を満たす型と `List<Service>Resources(ctx, profile, region)` を公開する。SDK 型 → Resource 型の変換はプライベートヘルパー (`<service>FromXxx`) に分離する。
 - 公開する必要がないものはすべて `internal/` 配下に置く。1 パッケージ 1 責務、循環参照は禁止。
 - TUI (`internal/tui/`) は `internal/aws` などの取得層をプロセス内で直接呼び、HTTP の API は経由しない。サービスの追加は `Service` と `Row` (`tui/service.go`) を満たす型を `tui/<service>.go` に置き、`cli/tui.go` の `Deps.Services` に足す。画面の部品は bubbletea / bubbles / lipgloss を使い、他の TUI フレームワークは導入しない。
+- TUI の対話セッションは `internal/session` の DataChannel をプロセス内で使い、`github.com/charmbracelet/x/vt` の端末エミュレータで本文中央のフロートウィンドウに描画する。`x/vt` は VT の制御シーケンスを解釈して端末画面を再現するために必要で、標準ライブラリと既存の依存では代替できない。`session-manager-plugin` は TUI では使わない (CLI は使う)。ウィンドウは `github.com/charmbracelet/x/cellbuf` で重ねる。`cellbuf` は `lipgloss` の間接依存で、ANSI 付き文字列を矩形へ重ねる API が `lipgloss` に無いため直接依存にする。同時 1 セッション、`Ctrl-]` で閉じる。ADR 0034。
 
 ### エラーハンドリング
 

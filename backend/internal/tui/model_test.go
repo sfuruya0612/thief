@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +41,78 @@ func (f *fakeService) Load(_ context.Context, profile, region string) ([]Row, er
 	return f.rows, f.err
 }
 func (f *fakeService) SupportsSession() bool { return !f.noSession }
+
+// fakeInteractiveSession は TUI のセッション制御をテストするための InteractiveSession。
+type fakeInteractiveSession struct {
+	mu       sync.Mutex
+	reads    chan SessionOutput
+	readErr  error
+	inputs   [][]byte
+	inputErr error
+	sizes    [][2]uint32
+	sizeErr  error
+	closeRun int
+	closeErr error
+}
+
+func newFakeInteractiveSession() *fakeInteractiveSession {
+	return &fakeInteractiveSession{reads: make(chan SessionOutput, 16)}
+}
+
+func (s *fakeInteractiveSession) Read(ctx context.Context) (SessionOutput, error) {
+	if s.readErr != nil {
+		return SessionOutput{}, s.readErr
+	}
+	select {
+	case output := <-s.reads:
+		return output, nil
+	case <-ctx.Done():
+		return SessionOutput{}, ctx.Err()
+	}
+}
+
+func (s *fakeInteractiveSession) SendInput(_ context.Context, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inputs = append(s.inputs, append([]byte(nil), data...))
+	return s.inputErr
+}
+
+func (s *fakeInteractiveSession) SendSize(_ context.Context, cols, rows uint32) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sizes = append(s.sizes, [2]uint32{cols, rows})
+	return s.sizeErr
+}
+
+func (s *fakeInteractiveSession) Close(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeRun++
+	return s.closeErr
+}
+
+func (s *fakeInteractiveSession) closeCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeRun
+}
+
+func (s *fakeInteractiveSession) inputBytes() [][]byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([][]byte, len(s.inputs))
+	copy(out, s.inputs)
+	return out
+}
+
+func (s *fakeInteractiveSession) sizeCalls() [][2]uint32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([][2]uint32, len(s.sizes))
+	copy(out, s.sizes)
+	return out
+}
 
 func testRows() []Row {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
@@ -123,6 +195,19 @@ func keys(t *testing.T, m Model, ks ...string) Model {
 	return m
 }
 
+// eventually はテストの非同期処理 (セッションの writer goroutine など) が条件を満たすまで待つ。
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
 func keyMsg(k string) tea.KeyMsg {
 	switch k {
 	case "enter":
@@ -145,6 +230,8 @@ func keyMsg(k string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlN}
 	case "ctrl+p":
 		return tea.KeyMsg{Type: tea.KeyCtrlP}
+	case "ctrl+]":
+		return tea.KeyMsg{Type: tea.KeyCtrlCloseBracket}
 	case "backspace":
 		return tea.KeyMsg{Type: tea.KeyBackspace}
 	}
@@ -466,9 +553,9 @@ func TestModel_ServicePickerSwitchesService(t *testing.T) {
 }
 
 func TestModel_SessionWithoutSelectionSetsStatus(t *testing.T) {
-	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{StartSession: func(context.Context, string, string, string) (*exec.Cmd, func() error, error) {
-		t.Fatal("StartSession must not be called without a selection")
-		return nil, nil, nil
+	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
+		t.Fatal("OpenEC2Session must not be called without a selection")
+		return nil, nil
 	}})
 	m, cmd := updateCmd(t, m, keyMsg("s"))
 	if msgs := drain(t, cmd); len(msgs) != 0 {
@@ -479,13 +566,13 @@ func TestModel_SessionWithoutSelectionSetsStatus(t *testing.T) {
 	}
 }
 
-func TestModel_SessionLifecycleRunsFinalizeAfterExit(t *testing.T) {
-	var finalized int
+func TestModel_SessionLifecycleShowsOutputAndCloses(t *testing.T) {
+	session := newFakeInteractiveSession()
 	var startedTarget string
 	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{
-		StartSession: func(_ context.Context, profile, region, target string) (*exec.Cmd, func() error, error) {
+		OpenEC2Session: func(_ context.Context, profile, region, target string) (InteractiveSession, error) {
 			startedTarget = profile + "/" + region + "/" + target
-			return exec.Command("true"), func() error { finalized++; return nil }, nil
+			return session, nil
 		},
 	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
@@ -503,56 +590,110 @@ func TestModel_SessionLifecycleRunsFinalizeAfterExit(t *testing.T) {
 		t.Fatalf("msg = %#v, want sessionReadyMsg without error", msgs[0])
 	}
 	if startedTarget != "first/ap-northeast-1/i-web" {
-		t.Errorf("StartSession args = %q", startedTarget)
+		t.Errorf("OpenEC2Session args = %q", startedTarget)
 	}
 
 	m, cmd = updateCmd(t, m, ready)
-	if !m.inSession || cmd == nil {
-		t.Fatal("sessionReadyMsg should enter the session and return the exec cmd")
+	if m.session == nil || m.session.closed || cmd == nil {
+		t.Fatal("sessionReadyMsg should open the floating window and return the read cmd")
 	}
-	if finalized != 0 {
-		t.Fatal("finalize must not run before the process exits")
+	if header := m.session.View(); !strings.Contains(header, "i-web") ||
+		!strings.Contains(header, "first") || !strings.Contains(header, "ap-northeast-1") ||
+		!strings.Contains(header, "Ctrl-] close") {
+		t.Errorf("floating window should show the target, profile, region and close hint\n%s", header)
+	}
+	eventually(t, "initial SendSize", func() bool { return len(session.sizeCalls()) == 1 })
+
+	m = update(t, m, sessionOutputMsg{seq: m.session.seq, output: SessionOutput{Data: []byte("hello")}})
+	view := m.View()
+	if !strings.Contains(view, "hello") {
+		t.Errorf("floating window should contain the session output\n%s", view)
+	}
+	if got := lipgloss.Height(view); got != m.height {
+		t.Errorf("View height with a session = %d, want %d\n%s", got, m.height, view)
+	}
+	if !strings.Contains(view, "╰") {
+		t.Errorf("View with a session should keep the bottom border\n%s", view)
 	}
 
-	m, cmd = updateCmd(t, m, sessionExitMsg{})
-	if m.inSession {
-		t.Error("sessionExitMsg should leave the session")
+	m, cmd = updateCmd(t, m, sessionOutputMsg{seq: m.session.seq, output: SessionOutput{Closed: true, Message: "bye"}})
+	if m.session == nil || !m.session.closed {
+		t.Fatal("channel_closed should keep the window and mark it closed")
 	}
 	m = apply(t, m, cmd)
-	if finalized != 1 {
-		t.Errorf("finalize ran %d times, want 1", finalized)
+	if session.closeCount() != 1 {
+		t.Errorf("Close calls = %d, want 1", session.closeCount())
 	}
 	if m.status != "session closed" {
-		t.Errorf("status = %q", m.status)
+		t.Errorf("status = %q, want session closed", m.status)
 	}
-	view := m.View()
-	if !strings.Contains(view, "session closed") || !strings.Contains(view, "q quit") {
-		t.Errorf("status must not hide the key hints\n%s", view)
+	if !strings.Contains(m.View(), "Session closed") {
+		t.Errorf("window should show Session closed\n%s", m.View())
+	}
+
+	m = keys(t, m, "ctrl+]")
+	if m.session != nil {
+		t.Error("ctrl+] should dismiss a closed session window")
 	}
 }
 
-func TestModel_SessionExitErrorAndFinalizeErrorAreBothReported(t *testing.T) {
-	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{})
+func TestModel_SessionCloseErrorIsReported(t *testing.T) {
+	session := newFakeInteractiveSession()
+	session.closeErr = errors.New("terminate failed")
+	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{
+		OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
+			return session, nil
+		},
+	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
-	m = update(t, m, sessionReadyMsg{cmd: exec.Command("true"), finalize: func() error { return errors.New("terminate failed") }})
-
-	m, cmd := updateCmd(t, m, sessionExitMsg{err: errors.New("exit status 1")})
-	m = apply(t, m, cmd)
-	for _, want := range []string{"exit status 1", "terminate failed"} {
-		if !strings.Contains(m.status, want) {
-			t.Errorf("status %q should mention %q", m.status, want)
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	for _, msg := range drain(t, cmd) {
+		if ready, ok := msg.(sessionReadyMsg); ok {
+			m, _ = updateCmd(t, m, ready)
+			break
 		}
+	}
+	if m.session == nil {
+		t.Fatal("session window should be open")
+	}
+
+	m, cmd = updateCmd(t, m, sessionOutputMsg{seq: m.session.seq, output: SessionOutput{Closed: true}})
+	m = apply(t, m, cmd)
+	if !strings.Contains(m.status, "session closed with error: terminate failed") {
+		t.Errorf("status = %q", m.status)
+	}
+	if !strings.Contains(m.View(), "Session closed with error") {
+		t.Errorf("window should show the close error\n%s", m.View())
 	}
 }
 
 func TestModel_SessionStartErrorSetsStatus(t *testing.T) {
-	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{})
+	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{
+		OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
+			return nil, errors.New("start session failed")
+		},
+	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
-	m = update(t, m, sessionReadyMsg{err: errors.New("session-manager-plugin not found in PATH")})
-	if m.inSession {
-		t.Error("a failed start must not enter the session")
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = apply(t, m, cmd)
+	if m.session != nil {
+		t.Error("a failed start must not open the window")
 	}
-	if !strings.Contains(m.status, "session-manager-plugin not found") {
+	if !strings.Contains(m.status, "session: start session failed") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+func TestModel_SessionStartAfterChannelFailureUsesClosedError(t *testing.T) {
+	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{
+		OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
+			return nil, &SessionStartError{Started: true, Err: errors.New("open data channel failed")}
+		},
+	})
+	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
+	m, cmd := updateCmd(t, m, keyMsg("s"))
+	m = apply(t, m, cmd)
+	if !strings.Contains(m.status, "session closed with error: open data channel failed") {
 		t.Errorf("status = %q", m.status)
 	}
 }
@@ -791,8 +932,7 @@ func TestModel_CtrlCQuitsFromPicker(t *testing.T) {
 func TestModel_StatusWithNewlinesRendersAsOneLine(t *testing.T) {
 	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
-	m = update(t, m, sessionReadyMsg{cmd: exec.Command("true"), finalize: func() error { return errors.New("terminate failed") }})
-	m, cmd := updateCmd(t, m, sessionExitMsg{err: errors.New("exit status 1")})
+	m, cmd := updateCmd(t, m, sessionClosedMsg{err: errors.Join(errors.New("exit status 1"), errors.New("terminate failed"))})
 	m = apply(t, m, cmd)
 
 	if strings.Contains(m.status, "\n") {
@@ -923,9 +1063,9 @@ func TestModel_InitTicksSpinnerOnce(t *testing.T) {
 func TestModel_ProfileSwitchClearsRowsUntilReload(t *testing.T) {
 	svc := &fakeService{id: "ec2", rows: testRows()}
 	var started int
-	m := newTestModel(t, svc, Deps{StartSession: func(context.Context, string, string, string) (*exec.Cmd, func() error, error) {
+	m := newTestModel(t, svc, Deps{OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
 		started++
-		return nil, nil, nil
+		return newFakeInteractiveSession(), nil
 	}})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
 	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{{Name: "first"}, {Name: "second"}}})
@@ -986,9 +1126,9 @@ func TestModel_ReloadKeepsRowsWhileLoading(t *testing.T) {
 func TestModel_SessionKeyIgnoredWhileStarting(t *testing.T) {
 	var started int
 	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{
-		StartSession: func(context.Context, string, string, string) (*exec.Cmd, func() error, error) {
+		OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
 			started++
-			return nil, nil, errors.New("plugin missing")
+			return nil, errors.New("plugin missing")
 		},
 	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
@@ -1003,9 +1143,9 @@ func TestModel_SessionKeyIgnoredWhileStarting(t *testing.T) {
 	}
 	m = apply(t, m, first)
 	if started != 1 {
-		t.Fatalf("StartSession ran %d times, want 1", started)
+		t.Fatalf("OpenEC2Session ran %d times, want 1", started)
 	}
-	if m.sessionStarting || !strings.Contains(m.status, "plugin missing") {
+	if m.sessionStarting || !strings.Contains(m.status, "session: plugin missing") {
 		t.Errorf("a failed start must clear the flag and report: starting=%v status=%q", m.sessionStarting, m.status)
 	}
 
@@ -1013,29 +1153,38 @@ func TestModel_SessionKeyIgnoredWhileStarting(t *testing.T) {
 	m, cmd := updateCmd(t, m, keyMsg("s"))
 	apply(t, m, cmd)
 	if started != 2 {
-		t.Errorf("StartSession ran %d times after retry, want 2", started)
+		t.Errorf("OpenEC2Session ran %d times after retry, want 2", started)
 	}
 }
 
-func TestModel_SessionKeyIgnoredDuringSession(t *testing.T) {
+func TestModel_SessionKeyIsSentToActiveSession(t *testing.T) {
 	var started int
+	session := newFakeInteractiveSession()
 	m := newTestModel(t, &fakeService{id: "ec2", rows: testRows()}, Deps{
-		StartSession: func(context.Context, string, string, string) (*exec.Cmd, func() error, error) {
+		OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
 			started++
-			return exec.Command("true"), nil, nil
+			return session, nil
 		},
 	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
 	m, cmd := updateCmd(t, m, keyMsg("s"))
 	m = apply(t, m, cmd)
-	if !m.inSession || m.sessionStarting {
-		t.Fatalf("inSession=%v starting=%v, want true/false", m.inSession, m.sessionStarting)
+	if m.session == nil || m.sessionStarting {
+		t.Fatalf("session=%v starting=%v, want open/not starting", m.session, m.sessionStarting)
 	}
+
 	m, cmd = updateCmd(t, m, keyMsg("s"))
 	if cmd != nil || started != 1 {
-		t.Errorf("s during a session must do nothing: cmd=%v started=%d", cmd, started)
+		t.Errorf("s during a session must go to the session, not start another: cmd=%v started=%d", cmd, started)
 	}
-	m = update(t, m, sessionExitMsg{})
+	eventually(t, "session input", func() bool {
+		got := session.inputBytes()
+		return len(got) > 0 && string(got[len(got)-1]) == "s"
+	})
+
+	m, cmd = updateCmd(t, m, sessionOutputMsg{seq: m.session.seq, output: SessionOutput{Closed: true}})
+	m = apply(t, m, cmd)
+	m = keys(t, m, "ctrl+]")
 	m, cmd = updateCmd(t, m, keyMsg("s"))
 	apply(t, m, cmd)
 	if started != 2 {
@@ -1046,9 +1195,9 @@ func TestModel_SessionKeyIgnoredDuringSession(t *testing.T) {
 func TestModel_SessionKeyOnServiceWithoutSessions(t *testing.T) {
 	var started int
 	m := newTestModel(t, &fakeService{id: "ecs", rows: testRows(), noSession: true}, Deps{
-		StartSession: func(context.Context, string, string, string) (*exec.Cmd, func() error, error) {
+		OpenEC2Session: func(context.Context, string, string, string) (InteractiveSession, error) {
 			started++
-			return nil, nil, nil
+			return nil, nil
 		},
 	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
@@ -1662,11 +1811,11 @@ type ecsExecCalls struct {
 
 // applyChain は Cmd を実行して得たメッセージを Model に適用し、その適用が返した Cmd も続けて実行する。
 // ECS Exec のようにメッセージが次の取得を連鎖させる経路で使う。選択肢が開くか、セッションに入るか、
-// Cmd が尽きるまで続ける (セッションに入った後の tea.ExecProcess は実行しない)。
+// Cmd が尽きるまで続ける (セッションに入った後の プロセス内 DataChannel は実行しない)。
 func applyChain(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
 	const maxRounds = 10
-	for round := 0; cmd != nil && m.picker == nil && !m.inSession; round++ {
+	for round := 0; cmd != nil && m.picker == nil && m.session == nil; round++ {
 		if round == maxRounds {
 			t.Fatal("applyChain did not settle")
 		}
@@ -1698,9 +1847,9 @@ func ecsExecTestModel(t *testing.T, tasks []aws.ECSTaskResource, containers []aw
 			rec.listContainers = append(rec.listContainers, profile+"/"+region+"/"+cluster+"/"+task)
 			return containers, nil
 		},
-		StartECSExec: func(_ context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error) {
+		OpenECSExecSession: func(_ context.Context, profile, region, cluster, task, container, command string) (InteractiveSession, error) {
 			rec.starts = append(rec.starts, strings.Join([]string{profile, region, cluster, task, container, command}, "/"))
-			return exec.Command("true"), nil, nil
+			return newFakeInteractiveSession(), nil
 		},
 	})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: rows})
@@ -1725,7 +1874,7 @@ func TestECSTaskID(t *testing.T) {
 }
 
 // TestModel_ECSExecSingleTaskAndContainerStartsWithoutPicker はタスク 1 件とコンテナ 1 件のとき、選択肢を出さずに
-// クラスタ名、タスク ID、コンテナ名、/bin/sh で StartECSExec を呼び、EC2 と同じ sessionReadyMsg の経路でセッションに入ることを確かめる。
+// クラスタ名、タスク ID、コンテナ名、/bin/sh で OpenECSExecSession を呼び、EC2 と同じ sessionReadyMsg の経路でセッションに入ることを確かめる。
 func TestModel_ECSExecSingleTaskAndContainerStartsWithoutPicker(t *testing.T) {
 	m, rec := ecsExecTestModel(t,
 		[]aws.ECSTaskResource{ecsTestTask("abcdef1234567890", "service:web", "running")},
@@ -1743,15 +1892,20 @@ func TestModel_ECSExecSingleTaskAndContainerStartsWithoutPicker(t *testing.T) {
 		t.Errorf("ListECSContainers calls = %v, want %v", rec.listContainers, want)
 	}
 	if want := []string{"first/ap-northeast-1/demo/abcdef1234567890/app//bin/sh"}; !reflect.DeepEqual(rec.starts, want) {
-		t.Errorf("StartECSExec calls = %v, want %v", rec.starts, want)
+		t.Errorf("OpenECSExecSession calls = %v, want %v", rec.starts, want)
 	}
 	if m.picker != nil {
 		t.Error("no picker must open with a single task and a single container")
 	}
-	if !m.inSession || m.sessionStarting || m.ecsExec.active {
-		t.Errorf("inSession=%v starting=%v ecsExec=%+v, want in session", m.inSession, m.sessionStarting, m.ecsExec)
+	if m.session == nil || m.sessionStarting || m.ecsExec.active {
+		t.Errorf("session=%v starting=%v ecsExec=%+v, want in session", m.session, m.sessionStarting, m.ecsExec)
 	}
-	m = update(t, m, sessionExitMsg{})
+	if view := m.session.View(); !strings.Contains(view, "demo") || !strings.Contains(view, "abcdef1234567890") || !strings.Contains(view, "app") {
+		t.Errorf("ECS window title should show cluster, task and container\n%s", view)
+	}
+	m, cmd = updateCmd(t, m, sessionOutputMsg{seq: m.session.seq, output: SessionOutput{Closed: true}})
+	m = apply(t, m, cmd)
+	m = keys(t, m, "ctrl+]")
 	m, cmd = updateCmd(t, m, keyMsg("s"))
 	applyChain(t, m, cmd)
 	if len(rec.starts) != 2 {
@@ -1788,12 +1942,12 @@ func TestModel_ECSExecMultipleTasksOpensPicker(t *testing.T) {
 		t.Errorf("ListECSContainers calls = %v, want %v", rec.listContainers, want)
 	}
 	if want := []string{"first/ap-northeast-1/demo/task-b/app//bin/sh"}; !reflect.DeepEqual(rec.starts, want) {
-		t.Errorf("StartECSExec calls = %v, want %v", rec.starts, want)
+		t.Errorf("OpenECSExecSession calls = %v, want %v", rec.starts, want)
 	}
 }
 
 // TestModel_ECSExecContainerPickerOnlyListsExecEnabled は ECS Exec が有効なコンテナだけが候補になり、
-// 複数あれば選択肢が出て、選んだコンテナ名で StartECSExec が呼ばれることを確かめる。
+// 複数あれば選択肢が出て、選んだコンテナ名で OpenECSExecSession が呼ばれることを確かめる。
 func TestModel_ECSExecContainerPickerOnlyListsExecEnabled(t *testing.T) {
 	m, rec := ecsExecTestModel(t,
 		[]aws.ECSTaskResource{ecsTestTask("task-a", "service:web", "running")},
@@ -1822,10 +1976,10 @@ func TestModel_ECSExecContainerPickerOnlyListsExecEnabled(t *testing.T) {
 	m, cmd = updateCmd(t, m, keyMsg("enter"))
 	m = applyChain(t, m, cmd)
 	if want := []string{"first/ap-northeast-1/demo/task-a/log//bin/sh"}; !reflect.DeepEqual(rec.starts, want) {
-		t.Errorf("StartECSExec calls = %v, want %v", rec.starts, want)
+		t.Errorf("OpenECSExecSession calls = %v, want %v", rec.starts, want)
 	}
-	if !m.inSession {
-		t.Error("the chosen container should enter the session")
+	if m.session == nil {
+		t.Error("the chosen container should open the session window")
 	}
 }
 
@@ -1908,12 +2062,12 @@ func TestModel_ECSExecListFailuresAreNotified(t *testing.T) {
 	})
 }
 
-// TestModel_ECSExecWithoutDepsSetsStatus は StartECSExec が無い Deps で s を押すと EC2 と同じ通知が出ることを確かめる。
+// TestModel_ECSExecWithoutDepsSetsStatus は OpenECSExecSession が無い Deps で s を押すと EC2 と同じ通知が出ることを確かめる。
 func TestModel_ECSExecWithoutDepsSetsStatus(t *testing.T) {
 	rows := []Row{ecsRow{region: "ap-northeast-1", res: aws.ECSResource{ID: "arn:a", Name: "demo"}}}
 	m := newTestModel(t, &fakeService{id: "ecs", rows: rows}, Deps{
 		ListECSTasks: func(context.Context, string, string, string, string) ([]aws.ECSTaskResource, error) {
-			t.Fatal("ListECSTasks must not be called without StartECSExec")
+			t.Fatal("ListECSTasks must not be called without OpenECSExecSession")
 			return nil, nil
 		},
 	})
@@ -1969,8 +2123,8 @@ func TestModel_ECSExecSecondSKeyIgnoredWhileSelecting(t *testing.T) {
 		t.Error("the second s must be ignored while the first selection is in flight")
 	}
 	m = applyChain(t, m, first)
-	if !m.inSession || len(rec.listTasks) != 1 || len(rec.starts) != 1 {
-		t.Errorf("inSession=%v listTasks=%v starts=%v, want one session from one call each", m.inSession, rec.listTasks, rec.starts)
+	if m.session == nil || len(rec.listTasks) != 1 || len(rec.starts) != 1 {
+		t.Errorf("session=%v listTasks=%v starts=%v, want one session from one call each", m.session, rec.listTasks, rec.starts)
 	}
 }
 
@@ -2032,7 +2186,7 @@ func TestModel_ECSExecContainerPickerCancelAllowsRetry(t *testing.T) {
 }
 
 // TestModel_ECSExecTargetSwitchDropsStaleContainers はコンテナの取得中にプロファイルを切り替えると、
-// 旧い対象のコンテナの結果を捨てて StartECSExec を呼ばないことを確かめる。
+// 旧い対象のコンテナの結果を捨てて OpenECSExecSession を呼ばないことを確かめる。
 func TestModel_ECSExecTargetSwitchDropsStaleContainers(t *testing.T) {
 	m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
 	m, cmd := updateCmd(t, m, keyMsg("s"))
@@ -2060,26 +2214,26 @@ func TestModel_ECSExecTargetSwitchDropsStaleContainers(t *testing.T) {
 	m.profile = "second"
 	m, _ = m.reloadForNewTarget()
 	after, cmd := updateCmd(t, m, stale)
-	if cmd != nil || after.picker != nil || after.sessionStarting || after.inSession || len(rec.starts) != 0 {
-		t.Errorf("stale containers must be dropped: cmd=%v picker=%v starting=%v inSession=%v starts=%v", cmd, after.picker, after.sessionStarting, after.inSession, rec.starts)
+	if cmd != nil || after.picker != nil || after.sessionStarting || after.session != nil || len(rec.starts) != 0 {
+		t.Errorf("stale containers must be dropped: cmd=%v picker=%v starting=%v session=%v starts=%v", cmd, after.picker, after.sessionStarting, after.session, rec.starts)
 	}
 }
 
-// TestModel_ECSExecStartFailureAllowsRetry は StartECSExec の失敗が session: に続けて通知され、
+// TestModel_ECSExecStartFailureAllowsRetry は OpenECSExecSession の失敗が session: に続けて通知され、
 // 状態が残らず s を再び受け付けることを確かめる。
 func TestModel_ECSExecStartFailureAllowsRetry(t *testing.T) {
 	m, rec := ecsExecTestModel(t, []aws.ECSTaskResource{ecsTestTask("task-a", "", "")}, []aws.ECSContainerResource{{Name: "app", ExecEnabled: true}})
-	m.deps.StartECSExec = func(_ context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error) {
+	m.deps.OpenECSExecSession = func(_ context.Context, profile, region, cluster, task, container, command string) (InteractiveSession, error) {
 		rec.starts = append(rec.starts, strings.Join([]string{profile, region, cluster, task, container, command}, "/"))
-		return nil, nil, errors.New("execute command: AccessDeniedException")
+		return nil, errors.New("execute command: AccessDeniedException")
 	}
 	m, cmd := updateCmd(t, m, keyMsg("s"))
 	m = applyChain(t, m, cmd)
 	if !strings.Contains(m.status, "session: execute command: AccessDeniedException") {
 		t.Errorf("status = %q", m.status)
 	}
-	if m.inSession || m.sessionStarting || m.ecsExec.active || m.sessionFinalize != nil {
-		t.Errorf("failure must leave no state: inSession=%v starting=%v ecsExec=%+v finalize=%v", m.inSession, m.sessionStarting, m.ecsExec, m.sessionFinalize != nil)
+	if m.session != nil || m.sessionStarting || m.ecsExec.active {
+		t.Errorf("failure must leave no state: session=%v starting=%v ecsExec=%+v", m.session, m.sessionStarting, m.ecsExec)
 	}
 	m, cmd = updateCmd(t, m, keyMsg("s"))
 	applyChain(t, m, cmd)

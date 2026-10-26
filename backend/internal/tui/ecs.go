@@ -55,7 +55,7 @@ func (s *ecsService) Load(ctx context.Context, profile, region string) ([]Row, e
 }
 
 // SupportsSession は true を返す。クラスタの行で s を押すと、Model がタスクとコンテナを選ばせて
-// Deps.StartECSExec で ECS Exec を始める (startECSExec)。
+// Deps.OpenECSExecSession で ECS Exec を始める (startECSExec)。
 func (s *ecsService) SupportsSession() bool { return true }
 
 // ecsRow は ECS クラスタ 1 つの行。ID はクラスタの ARN。
@@ -98,7 +98,7 @@ func (r ecsRow) Overview() []KV {
 func (r ecsRow) Tags() map[string]string { return r.res.Tags }
 
 // ecsTaskID はタスクの ARN (arn:aws:ecs:<region>:<account>:task/<cluster>/<task-id>) からタスク ID を返す。
-// Web UI の ECSExecLauncher が arnSuffix で取るものと同じで、ListECSContainers と StartECSExec の task に渡す。
+// Web UI の ECSExecLauncher が arnSuffix で取るものと同じで、ListECSContainers と OpenECSExecSession の task に渡す。
 // "/" が無ければそのまま返す。
 func ecsTaskID(arn string) string {
 	if i := strings.LastIndex(arn, "/"); i >= 0 {

@@ -2,6 +2,7 @@
 
 Created: 2026-10-26
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-26
 
 ## 背景
 
@@ -93,3 +94,60 @@ TUI の EC2 Session Manager と ECS Exec のセッションを、TUI を終了�
 - `docs/issues/closed/0218`、`docs/issues/closed/0224`
 - `backend/internal/session/datachannel.go`、`backend/internal/session/bridge.go`
 - `backend/internal/aws/ssm_session.go`、`backend/internal/aws/ecs_exec.go`
+
+## 解決方法
+
+- `backend/internal/tui/session.go` を追加し、`InteractiveSession`、`SessionOutput`、`SessionStartError`、`sessionWindow`、`sessionRuntime`、`sessionStartSlot` を実装した。
+  `sessionRuntime` は入力とリサイズの書き込みを 1 本の writer goroutine で直列化し、送信の失敗を `lastErr` に保持して読み取り側へ渡す。`InteractiveSession.Close` を冪等にした。
+  `sessionStartSlot` は、開始処理が作ったセッションを Update が受け取るまで保持し、TUI が開始処理の途中で終了した場合もそのセッションを閉じる。
+- `backend/internal/tui/terminal.go` を追加し、`github.com/charmbracelet/x/vt` の `Emulator` を `TerminalScreen` で包んだ。
+  `github.com/charmbracelet/x/cellbuf` でフロートウィンドウを本文中央に重ね、カーソルを反転セルで描いた。
+- `backend/internal/tui/keys.go` を追加し、bubbletea のキーを VT のバイト列へ変換した。
+  通常文字、Alt、Enter、Tab、Backspace、Esc、Ctrl キー、矢印、Home、End、PageUp、PageDown、Insert、Delete、F1 から F12、Shift 付きの矢印と Home / End を扱った。
+- `backend/internal/tui/model.go` の `Deps` を `OpenEC2Session` と `OpenECSExecSession` に変え、`tea.ExecProcess` と `*exec.Cmd` の経路を削除した。
+  EC2 と ECS の両方で、開始前に本文が 50 桁 x 18 行以上あるかを確認し、小さい場合は AWS のセッションを開始しない。
+  `sessionReadyMsg`、`sessionOutputMsg`、`sessionClosedMsg`、`sessionCleanupMsg` を世代付きにした。
+  出力の反映、リモートの終了、`Ctrl-]`、TUI 終了時の後始末を実装した。
+  フロートウィンドウのヘッダには接続先、プロファイル、リージョンを表示する。
+  `Ctrl-]` 以外のキーはセッションへ送り、リモート終了後のウィンドウでは `Ctrl-]` だけを受け付ける。
+  読み取りの失敗は `Close` の結果と結合して通知行に `session closed with error: <理由>` を出し、初期 `SendSize` と `SendInput` の失敗も同じ通知に載せる。
+  ユーザーが `Ctrl-]` で閉じたセッションの終了結果だけを通知するため、`closedSessionSeq` で世代を確認する。
+- `backend/internal/tui/program.go` の `Run` が最終 Model を受け取り、終了時に `shutdownSession` を呼ぶようにした。
+- `backend/internal/cli/tui.go` に `tuiSession` アダプタを追加し、`aws.StartSSMSession` / `aws.ExecuteECSCommand`、`session.OpenDataChannel`、`aws.TerminateSSMSession` を接続した。
+  `session-manager-plugin` を使う TUI 用の `sessionManagerCommand`、`ecsExecCommand` と `tuiSessionDeps` を削除し、新しいアダプタの依存は `tuiAdapterDeps` に改名した。
+  `tuiSession.Close` は呼び出し元の context から切り離した短命 context で `TerminateSSMSession` を呼ぶ。
+  CLI のプラグイン経路は残した。
+- `backend/internal/cli/run_test.go` の `TestNoRootContextOutsideDesignatedFunctions` の許可リストから削除した TUI のプラグイン関数を外し、開始後の後始末で短命 context を作る `tui.go:terminateTUISession` を追加した。`tuiSession.Close` は `context.WithoutCancel` で呼び出し元のキャンセルを切り離すため、`context.Background` を使わず許可リストに含めない。
+- `backend/go.mod` と `backend/go.sum` に `github.com/charmbracelet/x/vt` v0.1.0 と `github.com/charmbracelet/x/cellbuf` v0.0.15 を直接依存として追加した。`github.com/charmbracelet/x/ansi` は `ansi.Truncate` を使うため、間接依存から直接依存に移した。
+- `docs/prd/thief.md` の FR-30 と「外部仕様の前提」を、TUI はプロセス内 DataChannel、CLI はプラグインという書き分けに更新した。
+  同じファイルの「関連資料」に ADR 0034 を追加した。
+- `docs/adr/0034-tui-floating-terminal-window.md` を追加し、`docs/adr/README.md` に 0034 を追加した。
+  ADR 0033 の Status を `Superseded by 0034` にした。
+- `AGENTS.md` の「プロジェクト構造」の TUI の項目に、フロート端末、`x/vt` / `cellbuf`、同時 1 セッション、`Ctrl-]` を追記した。
+- `example/README.md` の「動作確認できない機能」を、Web UI と TUI は DataChannel、CLI は `session-manager-plugin` という書き分けに更新した。
+- `CHANGES.md` の `## develop` に [ADD] エントリを追加した。
+
+完了条件の検証:
+
+- `backend/internal/tui` の `session_test.go` と `model_test.go` に、出力描画、キー変換、`Ctrl-C` / `q` のリモート送信と TUI を終了しないこと、`Ctrl-]` の終了、リモート終了後のキー無視、リサイズ、通知行で `Resize` と `SendSize` を呼ばないこと、ウィンドウを開いたときの View の高さと下枠の保持のテストを追加した。
+  開始前と開始後の失敗の区別、初期 `SendSize` と `SendInput` の失敗、読み取りエラー、古い出力・古い開始結果・古い終了通知の破棄、同時 1 セッション、TUI 終了時の `Close`、`sessionStartSlot` の late set、50 桁 × 18 行の境界もテストした。
+- `backend/internal/cli/tui_test.go` に、EC2 / ECS のアダプタが `StartSSMSession` / `ExecuteECSCommand` と `OpenDataChannel` を正しい識別子で呼ぶこと、`Close` が `TerminateSSMSession` を短命 context で呼ぶこと、`Close` が冪等であること、`OpenDataChannel` の失敗で切断することのテストを追加した。
+- `backend/` で `go test -race -cover ./internal/tui/ ./internal/cli/` を実行し、`internal/tui` が ok (coverage 94.2%)、`internal/cli` が ok (coverage 51.0%) だった。
+- `mise run backend:lint` が通った。
+- `mise run check` は `backend:vuln` で、issue 0218 から続く既知の 12 件 (GO-2026-6809、6617、6613、6612、6611、6610、6608、6607、6605、6603、6600、6599) により失敗した。
+  今回の変更と `x/vt` / `x/cellbuf` / `x/ansi` の直接依存化に由来する新たな脆弱性は検出されていない。
+- `session-manager-plugin` を PATH から外した状態でも TUI がプラグイン解決を呼ばないことを、`TestOpenTUIEC2SessionWith_NoPluginLookup` で確認した。
+  `newTUIDeps` が `openTUIEC2Session` / `openTUIECSExecSession` を配線し、アダプタが `session.OpenDataChannel` だけを使う。
+- 実 AWS アカウントでの EC2 Session Manager と ECS Exec の接続、`echo ok`、`Ctrl-]` 後の `aws ssm describe-sessions --state Active` は、実アカウントの認証情報がこの実行環境に無いため確認していない。
+  `example/` の floci では DataChannel の実エージェント接続を確認できない。
+  この 2 点は未確認として残す。
+
+方針からの乖離:
+
+- なし。
+
+## 動作確認
+
+- 実 AWS アカウントでの EC2 Session Manager と ECS Exec の接続、`echo ok`、`Ctrl-]` 後の `aws ssm describe-sessions --state Active` は、実アカウントの認証情報がこの実行環境に無いため未確認である。
+- `example/` の floci では DataChannel の実エージェント接続を確認できない。
+- 上記の 2 点は、実 AWS のプロファイルと SSM Agent / ECS Exec を有効にしたタスクを持つ環境で開発者が確認する。この issue ではコードと単体テストまでを完了とし、実接続の確認は未完了の残余リスクとして記録する。

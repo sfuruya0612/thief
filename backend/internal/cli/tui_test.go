@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/session"
+	"github.com/sfuruya0612/thief/backend/internal/tui"
 )
 
 // TestNewTUIDeps_ServicesFollowWebUIOrder は TUI に載せるサービスの集合と並びを固定する。
@@ -30,261 +32,325 @@ func TestNewTUIDeps_ServicesFollowWebUIOrder(t *testing.T) {
 		t.Errorf("service IDs = %v, want %v", got, want)
 	}
 
-	if deps.ListProfiles == nil || deps.ListRegions == nil || deps.StartSession == nil {
-		t.Errorf("deps must wire ListProfiles, ListRegions and StartSession: %+v", deps)
+	if deps.ListProfiles == nil || deps.ListRegions == nil || deps.OpenEC2Session == nil || deps.OpenECSExecSession == nil {
+		t.Errorf("deps must wire ListProfiles, ListRegions, OpenEC2Session and OpenECSExecSession: %+v", deps)
 	}
-	// ECS Exec の 3 関数は、同じシグネチャの別の関数を配線しても非 nil の確認では通るため、関数の同一性で固定する。
+	// 同じシグネチャの別の関数を配線しても非 nil の確認では通るため、関数の同一性で固定する。
 	wired := map[string][2]uintptr{
-		"ListECSTasks":      {reflect.ValueOf(deps.ListECSTasks).Pointer(), reflect.ValueOf(awsinternal.ListECSTasks).Pointer()},
-		"ListECSContainers": {reflect.ValueOf(deps.ListECSContainers).Pointer(), reflect.ValueOf(awsinternal.ListECSContainers).Pointer()},
-		"StartECSExec":      {reflect.ValueOf(deps.StartECSExec).Pointer(), reflect.ValueOf(ecsExecCommand).Pointer()},
+		"OpenEC2Session":     {reflect.ValueOf(deps.OpenEC2Session).Pointer(), reflect.ValueOf(openTUIEC2Session).Pointer()},
+		"OpenECSExecSession": {reflect.ValueOf(deps.OpenECSExecSession).Pointer(), reflect.ValueOf(openTUIECSExecSession).Pointer()},
+		"ListECSTasks":       {reflect.ValueOf(deps.ListECSTasks).Pointer(), reflect.ValueOf(awsinternal.ListECSTasks).Pointer()},
+		"ListECSContainers":  {reflect.ValueOf(deps.ListECSContainers).Pointer(), reflect.ValueOf(awsinternal.ListECSContainers).Pointer()},
 	}
 	for name, pair := range wired {
 		if pair[0] == 0 || pair[0] != pair[1] {
-			t.Errorf("deps.%s must be the production function (awsinternal.%s or ecsExecCommand)", name, name)
+			t.Errorf("deps.%s must be the production function", name)
 		}
 	}
 }
 
-// tuiSessionCall は tuiSessionDeps の偽物が記録する呼び出し。
-type tuiSessionCall struct {
-	startTargets []string
-	terminateIDs []string
+func TestDefaultTUIAdapterDeps_UsesDataChannel(t *testing.T) {
+	deps := defaultTUIAdapterDeps()
+	wired := map[string][2]uintptr{
+		"startSession":     {reflect.ValueOf(deps.startSession).Pointer(), reflect.ValueOf(awsinternal.StartSSMSession).Pointer()},
+		"executeSession":   {reflect.ValueOf(deps.executeSession).Pointer(), reflect.ValueOf(awsinternal.ExecuteECSCommand).Pointer()},
+		"openDataChannel":  {reflect.ValueOf(deps.openDataChannel).Pointer(), reflect.ValueOf(openTUIDataChannel).Pointer()},
+		"terminateSession": {reflect.ValueOf(deps.terminateSession).Pointer(), reflect.ValueOf(awsinternal.TerminateSSMSession).Pointer()},
+	}
+	for name, pair := range wired {
+		if pair[0] == 0 || pair[0] != pair[1] {
+			t.Errorf("%s is not wired to the production DataChannel function", name)
+		}
+	}
 }
 
-func okTUISessionDeps(rec *tuiSessionCall) tuiSessionDeps {
-	return tuiSessionDeps{
-		startSession: func(_ context.Context, _, _, target string) (*awsinternal.StartSessionResult, error) {
-			rec.startTargets = append(rec.startTargets, target)
-			return &awsinternal.StartSessionResult{
-				SessionID:  "sess-1",
-				StreamURL:  "wss://ssmmessages.example/stream",
-				TokenValue: "token-1",
-			}, nil
+// fakeTUIChannel は tuiDataChannel の偽物。
+type fakeTUIChannel struct {
+	readResult session.ReadResult
+	readErr    error
+
+	inputs []struct {
+		payloadType session.PayloadType
+		data        []byte
+	}
+	sizes    [][2]uint32
+	closeRun int
+	closeErr error
+}
+
+func (c *fakeTUIChannel) Read(context.Context) (session.ReadResult, error) {
+	return c.readResult, c.readErr
+}
+
+func (c *fakeTUIChannel) SendInput(_ context.Context, payloadType session.PayloadType, data []byte) error {
+	c.inputs = append(c.inputs, struct {
+		payloadType session.PayloadType
+		data        []byte
+	}{payloadType: payloadType, data: append([]byte(nil), data...)})
+	return nil
+}
+
+func (c *fakeTUIChannel) SendSize(_ context.Context, cols, rows uint32) error {
+	c.sizes = append(c.sizes, [2]uint32{cols, rows})
+	return nil
+}
+
+func (c *fakeTUIChannel) Close() error {
+	c.closeRun++
+	return c.closeErr
+}
+
+type tuiSessionCalls struct {
+	startTargets     []string
+	executeArgs      []string
+	openArgs         []string
+	terminateIDs     []string
+	terminateProfile string
+	terminateRegion  string
+}
+
+func TestOpenTUIEC2SessionWith_Success(t *testing.T) {
+	rec := &tuiSessionCalls{}
+	channel := &fakeTUIChannel{
+		readResult: session.ReadResult{Output: []byte("ok"), Closed: true, CloseMessage: "bye"},
+	}
+	deps := tuiAdapterDeps{
+		startSession: func(_ context.Context, profile, region, target string) (*awsinternal.StartSessionResult, error) {
+			rec.startTargets = append(rec.startTargets, profile+"/"+region+"/"+target)
+			return &awsinternal.StartSessionResult{SessionID: "sess-1", StreamURL: "wss://stream", TokenValue: "token-1"}, nil
 		},
-		lookupPlugin: func() (string, error) { return "/usr/local/bin/session-manager-plugin", nil },
+		openDataChannel: func(_ context.Context, streamURL, tokenValue, sessionID string) (tuiDataChannel, error) {
+			rec.openArgs = append(rec.openArgs, streamURL+"/"+tokenValue+"/"+sessionID)
+			return channel, nil
+		},
+		terminateSession: func(ctx context.Context, profile, region, sessionID string) error {
+			if _, ok := ctx.Deadline(); !ok {
+				t.Error("terminate context must have a deadline")
+			}
+			rec.terminateIDs = append(rec.terminateIDs, sessionID)
+			rec.terminateProfile, rec.terminateRegion = profile, region
+			return nil
+		},
+	}
+
+	got, err := openTUIEC2SessionWith(context.Background(), deps, "prof", "ap-northeast-1", "i-web")
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if want := []string{"prof/ap-northeast-1/i-web"}; !reflect.DeepEqual(rec.startTargets, want) {
+		t.Errorf("start targets = %v, want %v", rec.startTargets, want)
+	}
+	if want := []string{"wss://stream/token-1/sess-1"}; !reflect.DeepEqual(rec.openArgs, want) {
+		t.Errorf("open args = %v, want %v", rec.openArgs, want)
+	}
+
+	output, err := got.Read(context.Background())
+	if err != nil || string(output.Data) != "ok" || !output.Closed || output.Message != "bye" {
+		t.Errorf("Read = %+v, %v", output, err)
+	}
+	if err := got.SendInput(context.Background(), []byte("x")); err != nil {
+		t.Fatalf("SendInput: %v", err)
+	}
+	if len(channel.inputs) != 1 || channel.inputs[0].payloadType != session.PayloadTypeOutput || string(channel.inputs[0].data) != "x" {
+		t.Errorf("inputs = %+v", channel.inputs)
+	}
+	if err := got.SendSize(context.Background(), 80, 24); err != nil {
+		t.Fatalf("SendSize: %v", err)
+	}
+	if len(channel.sizes) != 1 || channel.sizes[0] != [2]uint32{80, 24} {
+		t.Errorf("sizes = %v", channel.sizes)
+	}
+
+	if err := got.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if channel.closeRun != 1 || len(rec.terminateIDs) != 1 || rec.terminateIDs[0] != "sess-1" {
+		t.Errorf("close calls = %d, terminate = %v", channel.closeRun, rec.terminateIDs)
+	}
+	if rec.terminateProfile != "prof" || rec.terminateRegion != "ap-northeast-1" {
+		t.Errorf("terminate profile/region = %q/%q", rec.terminateProfile, rec.terminateRegion)
+	}
+	// Close は冪等で、2 回目はデータチャネルも Terminate も呼ばない。
+	if err := got.Close(context.Background()); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	if channel.closeRun != 1 || len(rec.terminateIDs) != 1 {
+		t.Errorf("second Close must be idempotent: channel=%d terminate=%v", channel.closeRun, rec.terminateIDs)
+	}
+}
+
+func TestTUISessionCloseUsesDetachedContext(t *testing.T) {
+	channel := &fakeTUIChannel{}
+	deps := tuiAdapterDeps{
+		startSession: func(context.Context, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return &awsinternal.StartSessionResult{SessionID: "sess-1", StreamURL: "wss://stream", TokenValue: "token-1"}, nil
+		},
+		openDataChannel: func(context.Context, string, string, string) (tuiDataChannel, error) {
+			return channel, nil
+		},
+		terminateSession: func(ctx context.Context, _, _, _ string) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	got, err := openTUIEC2SessionWith(context.Background(), deps, "prof", "ap-northeast-1", "i-web")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := got.Close(ctx); err != nil {
+		t.Errorf("Close with canceled context = %v, want nil", err)
+	}
+}
+
+func TestOpenTUIEC2SessionWith_OpenDataChannelFailureTerminates(t *testing.T) {
+	rec := &tuiSessionCalls{}
+	deps := tuiAdapterDeps{
+		startSession: func(context.Context, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return &awsinternal.StartSessionResult{SessionID: "sess-1", StreamURL: "wss://stream", TokenValue: "token-1"}, nil
+		},
+		openDataChannel: func(context.Context, string, string, string) (tuiDataChannel, error) {
+			return nil, errors.New("dial failed")
+		},
+		terminateSession: func(ctx context.Context, _, _, sessionID string) error {
+			if _, ok := ctx.Deadline(); !ok {
+				t.Error("cleanup context must have a deadline")
+			}
+			rec.terminateIDs = append(rec.terminateIDs, sessionID)
+			return errors.New("terminate failed")
+		},
+	}
+
+	_, err := openTUIEC2SessionWith(context.Background(), deps, "prof", "ap-northeast-1", "i-web")
+	if err == nil {
+		t.Fatal("error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "terminate session: terminate failed") {
+		t.Errorf("error = %q, want both open and terminate failures", err)
+	}
+	var startErr *tui.SessionStartError
+	if !errors.As(err, &startErr) || !startErr.Started {
+		t.Errorf("error = %#v, want started SessionStartError", err)
+	}
+	if !strings.Contains(err.Error(), "open data channel: dial failed") {
+		t.Errorf("error = %q", err)
+	}
+	if !reflect.DeepEqual(rec.terminateIDs, []string{"sess-1"}) {
+		t.Errorf("terminate = %v, want [sess-1]", rec.terminateIDs)
+	}
+}
+
+func TestOpenTUIEC2SessionWith_StartFailureDoesNotTerminate(t *testing.T) {
+	rec := &tuiSessionCalls{}
+	deps := tuiAdapterDeps{
+		startSession: func(context.Context, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return nil, errors.New("AccessDeniedException")
+		},
+		openDataChannel: func(context.Context, string, string, string) (tuiDataChannel, error) {
+			t.Fatal("OpenDataChannel must not run when StartSSMSession fails")
+			return nil, nil
+		},
+		terminateSession: func(context.Context, string, string, string) error {
+			rec.terminateIDs = append(rec.terminateIDs, "unexpected")
+			return nil
+		},
+	}
+
+	_, err := openTUIEC2SessionWith(context.Background(), deps, "prof", "ap-northeast-1", "i-web")
+	if err == nil || !strings.Contains(err.Error(), "start session: AccessDeniedException") {
+		t.Fatalf("error = %v", err)
+	}
+	var startErr *tui.SessionStartError
+	if !errors.As(err, &startErr) || startErr.Started {
+		t.Errorf("error = %#v, want not-started SessionStartError", err)
+	}
+	if len(rec.terminateIDs) != 0 {
+		t.Errorf("terminate = %v, want none", rec.terminateIDs)
+	}
+}
+
+func TestOpenTUIECSExecSessionWith_Success(t *testing.T) {
+	rec := &tuiSessionCalls{}
+	channel := &fakeTUIChannel{}
+	deps := tuiAdapterDeps{
+		executeSession: func(_ context.Context, profile, region, cluster, task, container, command string) (*awsinternal.StartSessionResult, error) {
+			rec.executeArgs = append(rec.executeArgs, strings.Join([]string{profile, region, cluster, task, container, command}, "/"))
+			return &awsinternal.StartSessionResult{SessionID: "sess-1", StreamURL: "wss://stream", TokenValue: "token-1"}, nil
+		},
+		openDataChannel: func(context.Context, string, string, string) (tuiDataChannel, error) {
+			return channel, nil
+		},
 		terminateSession: func(_ context.Context, _, _, sessionID string) error {
 			rec.terminateIDs = append(rec.terminateIDs, sessionID)
 			return nil
 		},
 	}
-}
 
-func TestSessionManagerCommandWith_Success(t *testing.T) {
-	rec := &tuiSessionCall{}
-	cmd, finalize, err := sessionManagerCommandWith(context.Background(), okTUISessionDeps(rec), "prof", "ap-northeast-1", "i-web")
+	got, err := openTUIECSExecSessionWith(context.Background(), deps, "prof", "ap-northeast-1", "demo", "task-a", "app", "/bin/sh")
 	if err != nil {
 		t.Fatalf("error = %v, want nil", err)
 	}
-	if cmd == nil || finalize == nil {
-		t.Fatal("cmd and finalize must be returned on success")
+	want := []string{"prof/ap-northeast-1/demo/task-a/app//bin/sh"}
+	if !reflect.DeepEqual(rec.executeArgs, want) {
+		t.Errorf("ExecuteECSCommand args = %v, want %v", rec.executeArgs, want)
 	}
-	if got := rec.startTargets; len(got) != 1 || got[0] != "i-web" {
-		t.Errorf("StartSSMSession targets = %v, want [i-web]", got)
+	if err := got.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
-	// 引数は startEC2SessionWith と同じ並び: セッション JSON、リージョン、StartSession、プロファイル、入力 JSON、エンドポイント。
-	args := cmd.Args
-	if len(args) != 7 || args[0] != "/usr/local/bin/session-manager-plugin" || args[2] != "ap-northeast-1" ||
-		args[3] != "StartSession" || args[4] != "prof" || args[6] != "https://ssm.ap-northeast-1.amazonaws.com" {
-		t.Errorf("cmd.Args = %q", args)
-	}
-	if !strings.Contains(args[1], "sess-1") || !strings.Contains(args[5], "i-web") {
-		t.Errorf("session JSON / params JSON = %q / %q", args[1], args[5])
-	}
-	if len(rec.terminateIDs) != 0 {
-		t.Errorf("terminate must not run before finalize: %v", rec.terminateIDs)
-	}
-	if err := finalize(); err != nil {
-		t.Fatalf("finalize() error = %v", err)
-	}
-	if got := rec.terminateIDs; len(got) != 1 || got[0] != "sess-1" {
-		t.Errorf("TerminateSSMSession IDs = %v, want [sess-1]", got)
+	if channel.closeRun != 1 || !reflect.DeepEqual(rec.terminateIDs, []string{"sess-1"}) {
+		t.Errorf("close=%d terminate=%v", channel.closeRun, rec.terminateIDs)
 	}
 }
 
-func TestSessionManagerCommandWith_Failures(t *testing.T) {
-	tests := []struct {
-		name          string
-		modify        func(d *tuiSessionDeps)
-		wantErr       []string
-		wantTerminate int
-	}{
-		{
-			name: "start session fails before anything to terminate",
-			modify: func(d *tuiSessionDeps) {
-				d.startSession = func(context.Context, string, string, string) (*awsinternal.StartSessionResult, error) {
-					return nil, errors.New("AccessDeniedException")
-				}
-			},
-			wantErr:       []string{"start session: AccessDeniedException"},
-			wantTerminate: 0,
+func TestOpenTUIEC2SessionWith_NoPluginLookup(t *testing.T) {
+	// PATH に session-manager-plugin が無くても、TUI のアダプタはプラグインを解決しない。
+	t.Setenv("PATH", "")
+	channel := &fakeTUIChannel{}
+	deps := tuiAdapterDeps{
+		startSession: func(context.Context, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return &awsinternal.StartSessionResult{SessionID: "sess-1", StreamURL: "wss://stream", TokenValue: "token-1"}, nil
 		},
-		{
-			name: "plugin missing terminates the started session",
-			modify: func(d *tuiSessionDeps) {
-				d.lookupPlugin = func() (string, error) { return "", errors.New("session-manager-plugin not found in PATH") }
-			},
-			wantErr:       []string{"session-manager-plugin not found in PATH"},
-			wantTerminate: 1,
+		openDataChannel: func(context.Context, string, string, string) (tuiDataChannel, error) {
+			return channel, nil
 		},
-		{
-			name: "plugin missing and terminate fails reports both",
-			modify: func(d *tuiSessionDeps) {
-				d.lookupPlugin = func() (string, error) { return "", errors.New("session-manager-plugin not found in PATH") }
-				d.terminateSession = func(context.Context, string, string, string) error { return errors.New("terminate boom") }
-			},
-			wantErr:       []string{"session-manager-plugin not found in PATH", "terminate session: terminate boom"},
-			wantTerminate: 0,
-		},
+		terminateSession: func(context.Context, string, string, string) error { return nil },
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := &tuiSessionCall{}
-			deps := okTUISessionDeps(rec)
-			tt.modify(&deps)
-			cmd, finalize, err := sessionManagerCommandWith(context.Background(), deps, "prof", "ap-northeast-1", "i-web")
-			if err == nil {
-				t.Fatal("error = nil, want an error")
-			}
-			if cmd != nil || finalize != nil {
-				t.Errorf("cmd = %v, finalize nil = %v, want both nil on failure", cmd, finalize == nil)
-			}
-			for _, want := range tt.wantErr {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error %q should contain %q", err, want)
-				}
-			}
-			if len(rec.terminateIDs) != tt.wantTerminate {
-				t.Errorf("terminate calls = %v, want %d", rec.terminateIDs, tt.wantTerminate)
-			}
-		})
-	}
-}
-
-// TestECSExecCommandWith_Success は組み立てる exec.Cmd の引数が ecsExecuteCommandWith (ecs.go) の
-// TestECSExecuteCommandSendsPluginArgsAndTerminates と同じ並びであることと、finalize が切断を呼ぶことを確かめる。
-func TestECSExecCommandWith_Success(t *testing.T) {
-	rec := &ecsSessionCall{}
-	cmd, finalize, err := ecsExecCommandWith(context.Background(), "test-profile", "ap-northeast-1", "my-cluster", "abcdef1234567890", "my-container", "/bin/sh", okECSSessionDeps(rec))
+	got, err := openTUIEC2SessionWith(context.Background(), deps, "prof", "ap-northeast-1", "i-web")
 	if err != nil {
 		t.Fatalf("error = %v, want nil", err)
 	}
-	if cmd == nil || finalize == nil {
-		t.Fatal("cmd and finalize must be returned on success")
-	}
-	wantArgs := []string{
-		"/usr/local/bin/session-manager-plugin",
-		`{"SessionId":"sess-1","StreamUrl":"wss://ssmmessages.example/stream","TokenValue":"token-1"}`,
-		"ap-northeast-1",
-		"StartSession",
-		"test-profile",
-		`{"Target":"ecs:my-cluster_abcdef1234567890_runtime-id"}`,
-		"https://ecs.ap-northeast-1.amazonaws.com",
-	}
-	if !reflect.DeepEqual(cmd.Args, wantArgs) {
-		t.Errorf("cmd.Args = %q, want %q", cmd.Args, wantArgs)
-	}
-	wantExecute := []string{"test-profile", "ap-northeast-1", "my-cluster", "abcdef1234567890", "my-container", "/bin/sh"}
-	if !reflect.DeepEqual(rec.executeSessionArgs, wantExecute) {
-		t.Errorf("executeSession args = %v, want %v", rec.executeSessionArgs, wantExecute)
-	}
-	if rec.pluginArgs != nil {
-		t.Errorf("execPlugin must not run (bubbletea runs the process): %v", rec.pluginArgs)
-	}
-	if len(rec.terminateIDs) != 0 {
-		t.Errorf("terminate must not run before finalize: %v", rec.terminateIDs)
-	}
-	if err := finalize(); err != nil {
-		t.Fatalf("finalize() error = %v", err)
-	}
-	if got := rec.terminateIDs; len(got) != 1 || got[0] != "sess-1" || rec.terminateProfile != "test-profile" || rec.terminateRegion != "ap-northeast-1" {
-		t.Errorf("terminate IDs = %v (profile %q region %q), want [sess-1] with test-profile / ap-northeast-1", got, rec.terminateProfile, rec.terminateRegion)
+	if err := got.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 }
 
-// TestECSExecCommandWith_Failures は ExecuteCommand の失敗では切断を呼ばず、セッションの確立後の失敗
-// (plugin の探索、切断の失敗) では切断を試みてから失敗を返すことを確かめる。
-func TestECSExecCommandWith_Failures(t *testing.T) {
-	tests := []struct {
-		name          string
-		modify        func(d *ecsExecSessionDeps)
-		wantErr       []string
-		wantTerminate int
-	}{
-		{
-			name: "execute command fails before anything to terminate",
-			modify: func(d *ecsExecSessionDeps) {
-				d.executeSession = func(context.Context, string, string, string, string, string, string) (*awsinternal.ECSExecSession, error) {
-					return nil, errors.New("AccessDeniedException")
-				}
-			},
-			wantErr:       []string{"execute command: AccessDeniedException"},
-			wantTerminate: 0,
+func TestOpenTUIECSExecSessionWith_OpenDataChannelFailureTerminates(t *testing.T) {
+	rec := &tuiSessionCalls{}
+	deps := tuiAdapterDeps{
+		executeSession: func(context.Context, string, string, string, string, string, string) (*awsinternal.StartSessionResult, error) {
+			return &awsinternal.StartSessionResult{SessionID: "sess-1", StreamURL: "wss://stream", TokenValue: "token-1"}, nil
 		},
-		{
-			name: "plugin missing terminates the started session",
-			modify: func(d *ecsExecSessionDeps) {
-				d.lookupPlugin = func() (string, error) { return "", errors.New("session-manager-plugin not found in PATH") }
-			},
-			wantErr:       []string{"session-manager-plugin not found in PATH"},
-			wantTerminate: 1,
+		openDataChannel: func(context.Context, string, string, string) (tuiDataChannel, error) {
+			return nil, errors.New("dial failed")
 		},
-		{
-			name: "plugin missing and terminate failing reports both",
-			modify: func(d *ecsExecSessionDeps) {
-				d.lookupPlugin = func() (string, error) { return "", errors.New("session-manager-plugin not found in PATH") }
-				prev := d.terminateSession
-				d.terminateSession = func(ctx context.Context, profile, region, sessionID string) error {
-					// 切断の呼び出しは記録したうえで失敗させる。
-					if err := prev(ctx, profile, region, sessionID); err != nil {
-						return err
-					}
-					return errors.New("terminate boom")
-				}
-			},
-			wantErr:       []string{"session-manager-plugin not found in PATH", "terminate session: terminate boom"},
-			wantTerminate: 1,
+		terminateSession: func(_ context.Context, _, _, sessionID string) error {
+			rec.terminateIDs = append(rec.terminateIDs, sessionID)
+			return nil
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := &ecsSessionCall{}
-			deps := okECSSessionDeps(rec)
-			tt.modify(&deps)
-			cmd, finalize, err := ecsExecCommandWith(context.Background(), "test-profile", "ap-northeast-1", "my-cluster", "abcdef1234567890", "my-container", "/bin/sh", deps)
-			if err == nil {
-				t.Fatal("error = nil, want an error")
-			}
-			if cmd != nil || finalize != nil {
-				t.Errorf("cmd = %v, finalize nil = %v, want both nil on failure", cmd, finalize == nil)
-			}
-			for _, want := range tt.wantErr {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error %q should contain %q", err, want)
-				}
-			}
-			if len(rec.terminateIDs) != tt.wantTerminate {
-				t.Errorf("terminate calls = %v, want %d", rec.terminateIDs, tt.wantTerminate)
-			}
-			for _, id := range rec.terminateIDs {
-				if id != "sess-1" {
-					t.Errorf("terminate must use the started session ID: %v", rec.terminateIDs)
-				}
-			}
-		})
-	}
-}
 
-// TestECSExecCommandWith_FinalizeError は finalize が切断の失敗を包んで返すことを確かめる。
-func TestECSExecCommandWith_FinalizeError(t *testing.T) {
-	rec := &ecsSessionCall{}
-	deps := okECSSessionDeps(rec)
-	deps.terminateSession = func(context.Context, string, string, string) error { return errors.New("terminate boom") }
-	_, finalize, err := ecsExecCommandWith(context.Background(), "test-profile", "ap-northeast-1", "my-cluster", "abcdef1234567890", "my-container", "/bin/sh", deps)
-	if err != nil {
-		t.Fatalf("error = %v, want nil", err)
+	_, err := openTUIECSExecSessionWith(context.Background(), deps, "prof", "ap-northeast-1", "demo", "task-a", "app", "/bin/sh")
+	if err == nil || !strings.Contains(err.Error(), "open data channel: dial failed") {
+		t.Fatalf("error = %v", err)
 	}
-	if err := finalize(); err == nil || !strings.Contains(err.Error(), "terminate session: terminate boom") {
-		t.Errorf("finalize() error = %v, want the terminate failure", err)
+	var startErr *tui.SessionStartError
+	if !errors.As(err, &startErr) || !startErr.Started {
+		t.Errorf("error = %#v, want started SessionStartError", err)
+	}
+	if !reflect.DeepEqual(rec.terminateIDs, []string{"sess-1"}) {
+		t.Errorf("terminate = %v, want [sess-1]", rec.terminateIDs)
 	}
 }

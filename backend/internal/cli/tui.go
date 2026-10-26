@@ -2,12 +2,13 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os/exec"
+	"sync"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/session"
 	"github.com/sfuruya0612/thief/backend/internal/tui"
-	"github.com/sfuruya0612/thief/backend/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -58,129 +59,163 @@ func newTUIDeps() tui.Deps {
 			tui.NewSSMService(awsinternal.ListSSMParameters),
 			tui.NewCFNService(awsinternal.ListCFNStacks, awsinternal.DescribeCFNStackDetail),
 		},
-		StartSession:      sessionManagerCommand,
-		ListECSTasks:      awsinternal.ListECSTasks,
-		ListECSContainers: awsinternal.ListECSContainers,
-		StartECSExec:      ecsExecCommand,
+		OpenEC2Session:     openTUIEC2Session,
+		ListECSTasks:       awsinternal.ListECSTasks,
+		ListECSContainers:  awsinternal.ListECSContainers,
+		OpenECSExecSession: openTUIECSExecSession,
 	}
 }
 
-// tuiSessionDeps は sessionManagerCommandWith が使う AWS の呼び出しと plugin の解決。
-// ec2SessionDeps (ec2.go) と同じく、テストで差し替えるために関数で持つ。
-type tuiSessionDeps struct {
+// tuiDataChannel は TUI のセッションが使うデータチャネルの操作。テストで差し替える。
+type tuiDataChannel interface {
+	Read(ctx context.Context) (session.ReadResult, error)
+	SendInput(ctx context.Context, payloadType session.PayloadType, payload []byte) error
+	SendSize(ctx context.Context, cols, rows uint32) error
+	Close() error
+}
+
+// tuiAdapterDeps は TUI のセッション開始が使う AWS とデータチャネルの呼び出し。
+type tuiAdapterDeps struct {
 	startSession     func(ctx context.Context, profile, region, target string) (*awsinternal.StartSessionResult, error)
-	lookupPlugin     func() (string, error)
+	executeSession   func(ctx context.Context, profile, region, cluster, task, container, command string) (*awsinternal.StartSessionResult, error)
+	openDataChannel  func(ctx context.Context, streamURL, tokenValue, sessionID string) (tuiDataChannel, error)
 	terminateSession func(ctx context.Context, profile, region, sessionID string) error
 }
 
-// defaultTUISessionDeps は本番で使う実装を返す。
-func defaultTUISessionDeps() tuiSessionDeps {
-	return tuiSessionDeps{
+// defaultTUIAdapterDeps は本番で使う実装を返す。
+func defaultTUIAdapterDeps() tuiAdapterDeps {
+	return tuiAdapterDeps{
 		startSession:     awsinternal.StartSSMSession,
-		lookupPlugin:     lookupSessionManagerPlugin,
+		executeSession:   awsinternal.ExecuteECSCommand,
+		openDataChannel:  openTUIDataChannel,
 		terminateSession: awsinternal.TerminateSSMSession,
 	}
 }
 
-// sessionManagerCommand は SSM セッションを開始し、session-manager-plugin を起動する exec.Cmd と、
-// プロセスの終了後に AWS 側のセッションを切断する finalize を返す。
-// startEC2SessionWith (ec2.go) と同じ手順を、TUI が子プロセスの実行を bubbletea に委ねられる
-// 形に分けたもの。セッションの開始後に失敗した場合は、ここで切断してから返す。
-func sessionManagerCommand(ctx context.Context, profile, region, target string) (*exec.Cmd, func() error, error) {
-	return sessionManagerCommandWith(ctx, defaultTUISessionDeps(), profile, region, target)
+// openTUIDataChannel は TUI のセッション用に SSM のデータチャネルを開く。
+func openTUIDataChannel(ctx context.Context, streamURL, tokenValue, sessionID string) (tuiDataChannel, error) {
+	return session.OpenDataChannel(ctx, streamURL, tokenValue, sessionID)
 }
 
-// sessionManagerCommandWith は sessionManagerCommand の本体。deps で AWS の呼び出しを差し替えられる。
-func sessionManagerCommandWith(ctx context.Context, deps tuiSessionDeps, profile, region, target string) (*exec.Cmd, func() error, error) {
-	session, err := deps.startSession(ctx, profile, region, target)
-	if err != nil {
-		return nil, nil, fmt.Errorf("start session: %w", err)
-	}
+// tuiSession は backend/internal/session の DataChannel を TUI の InteractiveSession に合わせる。
+type tuiSession struct {
+	dc        tuiDataChannel
+	terminate func(ctx context.Context) error
 
-	// 切断は呼び出し元の ctx とは別の短命 context で行う (startEC2SessionWith と同じ理由)。
-	finalize := func() error {
-		termCtx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
-		defer cancel()
-		if err := deps.terminateSession(termCtx, profile, region, session.SessionID); err != nil {
-			return fmt.Errorf("terminate session: %w", err)
-		}
-		return nil
-	}
-	failAfterStart := func(cause error) (*exec.Cmd, func() error, error) {
-		if termErr := finalize(); termErr != nil {
-			return nil, nil, fmt.Errorf("%w; %w", cause, termErr)
-		}
-		return nil, nil, cause
-	}
-
-	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
-	if err != nil {
-		return failAfterStart(fmt.Errorf("marshal session: %w", err))
-	}
-	paramsJSON, err := util.Parser(struct {
-		Target string
-	}{Target: target})
-	if err != nil {
-		return failAfterStart(fmt.Errorf("marshal start session input: %w", err))
-	}
-	plug, err := deps.lookupPlugin()
-	if err != nil {
-		return failAfterStart(err)
-	}
-
-	ssmEndpoint := fmt.Sprintf("https://ssm.%s.amazonaws.com", region)
-	c := exec.Command(plug, string(sessJSON), region, "StartSession", profile, string(paramsJSON), ssmEndpoint)
-	return c, finalize, nil
+	closeOnce sync.Once
+	closeErr  error
 }
 
-// ecsExecCommand は ECS Exec を開始し、session-manager-plugin を起動する exec.Cmd と、プロセスの終了後に
-// AWS 側のセッションを切断する finalize を返す。ecsExecuteCommandWith (ecs.go) と同じ手順を、TUI が
-// 子プロセスの実行を bubbletea に委ねられる形に分けたもの (EC2 の sessionManagerCommand と同じ関係)。
-func ecsExecCommand(ctx context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error) {
-	return ecsExecCommandWith(ctx, profile, region, cluster, task, container, command, defaultECSExecSessionDeps())
+// Read はデータチャネルの出力を TUI の SessionOutput に変換する。
+func (s *tuiSession) Read(ctx context.Context) (tui.SessionOutput, error) {
+	result, err := s.dc.Read(ctx)
+	if err != nil {
+		return tui.SessionOutput{}, err
+	}
+	return tui.SessionOutput{
+		Data:    result.Output,
+		Closed:  result.Closed,
+		Message: result.CloseMessage,
+	}, nil
 }
 
-// ecsExecCommandWith は ecsExecCommand の本体。deps で AWS の呼び出しと plugin の解決を差し替えられる
-// (deps.execPlugin は使わない。プロセスの実行は bubbletea が行う)。セッションの開始後に失敗した場合は、
-// ここで切断してから返す。
-func ecsExecCommandWith(ctx context.Context, profile, region, cluster, task, container, command string, deps ecsExecSessionDeps) (*exec.Cmd, func() error, error) {
-	session, err := deps.executeSession(ctx, profile, region, cluster, task, container, command)
-	if err != nil {
-		return nil, nil, fmt.Errorf("execute command: %w", err)
-	}
+// SendInput は端末入力をデータチャネルへ送る。
+func (s *tuiSession) SendInput(ctx context.Context, data []byte) error {
+	return s.dc.SendInput(ctx, session.PayloadTypeOutput, data)
+}
 
-	// 切断は呼び出し元の ctx とは別の短命 context で行う (sessionManagerCommandWith と同じ理由)。
-	finalize := func() error {
-		termCtx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
-		defer cancel()
-		if err := deps.terminateSession(termCtx, profile, region, session.SessionID); err != nil {
-			return fmt.Errorf("terminate session: %w", err)
+// SendSize は端末サイズをデータチャネルへ送る。
+func (s *tuiSession) SendSize(ctx context.Context, cols, rows uint32) error {
+	return s.dc.SendSize(ctx, cols, rows)
+}
+
+// Close はデータチャネルを閉じ、AWS 側のセッションを終了する。2 回目以降は最初の結果を返す。
+func (s *tuiSession) Close(ctx context.Context) error {
+	s.closeOnce.Do(func() {
+		// リモートの channel_closed の後に呼ばれることがある。データチャネルの Close は
+		// すでに閉じている場合にエラーを返し得るため、切断の成否は TerminateSSMSession で判定する。
+		_ = s.dc.Close()
+		if s.terminate != nil {
+			// 呼び出し元の context がキャンセル済みでも AWS 側のセッションを終えるため、
+			// キャンセルを切り離した短命 context で切断する。
+			termCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), awsinternal.TerminateSessionGracePeriod)
+			defer cancel()
+			s.closeErr = s.terminate(termCtx)
 		}
-		return nil
+	})
+	return s.closeErr
+}
+
+// openTUIEC2Session は EC2 の Session Manager のセッションを開始し、TUI 用のアダプタを返す。
+func openTUIEC2Session(ctx context.Context, profile, region, target string) (tui.InteractiveSession, error) {
+	return openTUIEC2SessionWith(ctx, defaultTUIAdapterDeps(), profile, region, target)
+}
+
+// openTUIEC2SessionWith は openTUIEC2Session の本体。deps で外部呼び出しを差し替えられる。
+func openTUIEC2SessionWith(ctx context.Context, deps tuiAdapterDeps, profile, region, target string) (tui.InteractiveSession, error) {
+	started, err := deps.startSession(ctx, profile, region, target)
+	if err != nil {
+		return nil, &tui.SessionStartError{Started: false, Err: fmt.Errorf("start session: %w", err)}
 	}
-	failAfterStart := func(cause error) (*exec.Cmd, func() error, error) {
-		if termErr := finalize(); termErr != nil {
-			return nil, nil, fmt.Errorf("%w; %w", cause, termErr)
+
+	dc, err := deps.openDataChannel(ctx, started.StreamURL, started.TokenValue, started.SessionID)
+	if err != nil {
+		termErr := terminateTUISession(deps, profile, region, started.SessionID)
+		return nil, &tui.SessionStartError{
+			Started: true,
+			Err:     errors.Join(fmt.Errorf("open data channel: %w", err), termErr),
 		}
-		return nil, nil, cause
 	}
 
-	sessJSON, err := sessionManagerSessionJSON(session.SessionID, session.StreamURL, session.TokenValue)
+	return &tuiSession{
+		dc: dc,
+		terminate: func(ctx context.Context) error {
+			if err := deps.terminateSession(ctx, profile, region, started.SessionID); err != nil {
+				return fmt.Errorf("terminate session: %w", err)
+			}
+			return nil
+		},
+	}, nil
+}
+
+// openTUIECSExecSession は ECS Exec のセッションを開始し、TUI 用のアダプタを返す。
+func openTUIECSExecSession(ctx context.Context, profile, region, cluster, task, container, command string) (tui.InteractiveSession, error) {
+	return openTUIECSExecSessionWith(ctx, defaultTUIAdapterDeps(), profile, region, cluster, task, container, command)
+}
+
+// openTUIECSExecSessionWith は openTUIECSExecSession の本体。deps で外部呼び出しを差し替えられる。
+func openTUIECSExecSessionWith(ctx context.Context, deps tuiAdapterDeps, profile, region, cluster, task, container, command string) (tui.InteractiveSession, error) {
+	started, err := deps.executeSession(ctx, profile, region, cluster, task, container, command)
 	if err != nil {
-		return failAfterStart(fmt.Errorf("marshal session: %w", err))
-	}
-	targetJSON, err := util.Parser(struct {
-		Target string `json:"Target"`
-	}{Target: session.Target()})
-	if err != nil {
-		return failAfterStart(fmt.Errorf("marshal target: %w", err))
-	}
-	plug, err := deps.lookupPlugin()
-	if err != nil {
-		return failAfterStart(err)
+		return nil, &tui.SessionStartError{Started: false, Err: fmt.Errorf("execute command: %w", err)}
 	}
 
-	ecsEndpoint := fmt.Sprintf("https://ecs.%s.amazonaws.com", region)
-	c := exec.Command(plug, string(sessJSON), region, "StartSession", profile, string(targetJSON), ecsEndpoint)
-	return c, finalize, nil
+	dc, err := deps.openDataChannel(ctx, started.StreamURL, started.TokenValue, started.SessionID)
+	if err != nil {
+		termErr := terminateTUISession(deps, profile, region, started.SessionID)
+		return nil, &tui.SessionStartError{
+			Started: true,
+			Err:     errors.Join(fmt.Errorf("open data channel: %w", err), termErr),
+		}
+	}
+
+	return &tuiSession{
+		dc: dc,
+		terminate: func(ctx context.Context) error {
+			if err := deps.terminateSession(ctx, profile, region, started.SessionID); err != nil {
+				return fmt.Errorf("terminate session: %w", err)
+			}
+			return nil
+		},
+	}, nil
+}
+
+// terminateTUISession は開始後の後始末で AWS 側のセッションを切断する。
+func terminateTUISession(deps tuiAdapterDeps, profile, region, sessionID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), awsinternal.TerminateSessionGracePeriod)
+	defer cancel()
+	if err := deps.terminateSession(ctx, profile, region, sessionID); err != nil {
+		return fmt.Errorf("terminate session: %w", err)
+	}
+	return nil
 }

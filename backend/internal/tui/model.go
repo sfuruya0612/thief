@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -27,19 +26,19 @@ type Deps struct {
 	ListRegions func(ctx context.Context, profile string) ([]aws.RegionResource, error)
 	// Services は表示できるサービス。先頭を初期表示にする。
 	Services []Service
-	// StartSession は対話セッションの子プロセスを組み立てる。返す finalize は子プロセスの
-	// 終了後に必ず呼ぶ (AWS 側のセッションの切断)。
-	StartSession func(ctx context.Context, profile, region, target string) (*exec.Cmd, func() error, error)
+	// OpenEC2Session は EC2 の Session Manager のセッションを開始し、TUI のフロートウィンドウが
+	// 使う InteractiveSession を返す。
+	OpenEC2Session func(ctx context.Context, profile, region, target string) (InteractiveSession, error)
 	// ListECSTasks はクラスタのタスクを返す (aws.ListECSTasks)。TUI は service に空文字列を渡す。
 	ListECSTasks func(ctx context.Context, profile, region, cluster, service string) ([]aws.ECSTaskResource, error)
 	// ListECSContainers はタスクのコンテナを返す (aws.ListECSContainers)。task はタスク ID。
 	ListECSContainers func(ctx context.Context, profile, region, cluster, task string) ([]aws.ECSContainerResource, error)
-	// StartECSExec は ECS Exec の子プロセスを組み立てる。cluster はクラスタ名、task はタスク ID、container は
-	// コンテナ名。返す finalize の扱いは StartSession と同じ。
-	StartECSExec func(ctx context.Context, profile, region, cluster, task, container, command string) (*exec.Cmd, func() error, error)
+	// OpenECSExecSession は ECS Exec のセッションを開始し、TUI のフロートウィンドウが使う
+	// InteractiveSession を返す。cluster はクラスタ名、task はタスク ID、container はコンテナ名。
+	OpenECSExecSession func(ctx context.Context, profile, region, cluster, task, container, command string) (InteractiveSession, error)
 }
 
-// ecsExecState は ECS Exec の接続先の選択の進行状態。s を押してから StartECSExec を呼ぶまで active が真で、
+// ecsExecState は ECS Exec の接続先の選択の進行状態。s を押してから OpenECSExecSession を呼ぶまで active が真で、
 // その間 sessionStarting も真。seq は選択を始めたときの ecsSeq で、Update は一致する結果だけを受け取る。
 type ecsExecState struct {
 	active  bool
@@ -124,10 +123,14 @@ type Model struct {
 	height int
 
 	// sessionStarting は s を押してから sessionReadyMsg を受け取るまで真。二度押しで 2 つ目の
-	// セッションを開始しないためのガード。inSession は子プロセスの実行中に真。
-	sessionStarting bool
-	inSession       bool
-	sessionFinalize func() error
+	// セッションを開始しないためのガード。sessionSeq は開始の世代で、対象の切替や終了後に
+	// 届いた古い結果を捨てる。sessionStartCancel は開始中のセッション開始を取り消す。
+	sessionStarting    bool
+	sessionSeq         int
+	sessionStartCancel context.CancelFunc
+	sessionStartSlot   *sessionStartSlot
+	session            *sessionWindow
+	closedSessionSeq   int
 
 	// ecsExec は ECS Exec の接続先の選択の進行状態。ecsSeq は選択を始めるたびに進め、ecsExec.seq に写す。
 	// 届いた結果は ecsExec.active が真で seq が一致するときだけ使う。選択の取り消しと対象の切替
@@ -160,16 +163,17 @@ func New(ctx context.Context, deps Deps, profile, region string) (Model, error) 
 	styles.Selected = styles.Selected.Foreground(lipgloss.Color("0")).Background(accentColor).Bold(false)
 
 	m := Model{
-		deps:    deps,
-		ctx:     ctx,
-		service: deps.Services[0],
-		profile: profile,
-		region:  region,
-		filter:  ti,
-		spinner: sp,
-		table:   table.New(table.WithFocused(true), table.WithStyles(styles)),
-		drawer:  viewport.New(0, 0),
-		loading: true,
+		deps:             deps,
+		ctx:              ctx,
+		service:          deps.Services[0],
+		profile:          profile,
+		region:           region,
+		filter:           ti,
+		spinner:          sp,
+		table:            table.New(table.WithFocused(true), table.WithStyles(styles)),
+		drawer:           viewport.New(0, 0),
+		loading:          true,
+		sessionStartSlot: newSessionStartSlot(),
 
 		tags:        map[string]tagsResult{},
 		tagsPending: map[string]bool{},
@@ -227,17 +231,29 @@ type ecsContainersMsg struct {
 	err        error
 }
 
+// sessionReadyMsg はセッションの開始結果。seq は開始時の sessionSeq。
 type sessionReadyMsg struct {
-	cmd      *exec.Cmd
-	finalize func() error
-	err      error
+	seq     int
+	title   string
+	session InteractiveSession
+	err     error
 }
 
-type sessionExitMsg struct {
+// sessionOutputMsg はセッションの読み取り結果。seq はウィンドウの世代。
+type sessionOutputMsg struct {
+	seq    int
+	output SessionOutput
+	err    error
+}
+
+// sessionClosedMsg はセッションの終了結果。seq はウィンドウの世代。
+type sessionClosedMsg struct {
+	seq int
 	err error
 }
 
-type sessionClosedMsg struct {
+// sessionCleanupMsg はウィンドウを開けなかったセッションの後始末の結果。
+type sessionCleanupMsg struct {
 	err error
 }
 
@@ -334,6 +350,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m = m.resize()
+		if m.session != nil {
+			areaWidth, areaHeight := m.sessionAreaSize()
+			if width, height, ok := sessionWindowSize(areaWidth, areaHeight); ok &&
+				(width != m.session.width || height != m.session.height) {
+				m.session.resize(width, height)
+			}
+			// 本文が最小サイズを下回ったときは、最後のウィンドウサイズを維持する。
+			// ここで閉じると、一瞬の端末縮小でセッションを失う。
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -460,36 +485,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case sessionReadyMsg:
-		m.sessionStarting = false
-		if msg.err != nil {
-			return m.setStatus(fmt.Sprintf("session: %v", msg.err))
-		}
-		m.inSession = true
-		m.sessionFinalize = msg.finalize
-		m, _ = m.setStatus("")
-		return m, tea.ExecProcess(msg.cmd, func(err error) tea.Msg { return sessionExitMsg{err: err} })
+		return m.finishSessionStart(msg)
 
-	case sessionExitMsg:
-		m.inSession = false
-		finalize := m.sessionFinalize
-		m.sessionFinalize = nil
-		exitErr := msg.err
-		return m, func() tea.Msg {
-			var err error
-			if finalize != nil {
-				err = finalize()
-			}
-			if exitErr != nil {
-				err = errors.Join(fmt.Errorf("session process: %w", exitErr), err)
-			}
-			return sessionClosedMsg{err: err}
-		}
+	case sessionOutputMsg:
+		return m.handleSessionOutput(msg)
 
 	case sessionClosedMsg:
+		return m.finishSessionClose(msg)
+
+	case sessionCleanupMsg:
 		if msg.err != nil {
 			return m.setStatus(fmt.Sprintf("session closed with error: %v", msg.err))
 		}
-		return m.setStatus("session closed")
+		return m, nil
 
 	case statusExpiredMsg:
 		if msg.seq != m.statusSeq {
@@ -510,11 +518,22 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.status != "" {
 		m, _ = m.setStatus("")
 	}
+	if m.session != nil {
+		return m.updateSessionKey(msg)
+	}
 	if m.picker != nil {
 		return m.updatePicker(msg)
 	}
 	if m.filtering {
 		return m.updateFilter(msg)
+	}
+	if m.sessionStarting {
+		switch msg.String() {
+		case "/", "p", "R", "S", "r":
+			// セッションの開始中に別の画面や再取得を開くと、届いたウィンドウと
+			// 選択肢や読み込み表示が重なる。開始が終わるまで待つ。
+			return m, nil
+		}
 	}
 
 	switch msg.String() {
@@ -632,6 +651,13 @@ func (m Model) reloadForNewTarget() (Model, tea.Cmd) {
 	if m.ecsExec.active {
 		m = m.cancelECSExec()
 	}
+	// セッションの開始中に対象が変わったら開始を取り消し、届いた結果を捨てる。
+	if m.sessionStartCancel != nil {
+		m.sessionStartCancel()
+		m.sessionStartCancel = nil
+	}
+	m.sessionStarting = false
+	m.sessionSeq++
 	m.rows = nil
 	m = m.applyFilter()
 	return m.startLoad()
@@ -686,7 +712,7 @@ func (m Model) openServicePicker() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) startSession() (tea.Model, tea.Cmd) {
-	if m.sessionStarting || m.inSession {
+	if m.sessionStarting || m.session != nil {
 		return m, nil
 	}
 	if !m.service.SupportsSession() {
@@ -695,32 +721,49 @@ func (m Model) startSession() (tea.Model, tea.Cmd) {
 	if m.service.ID() == ecsServiceID {
 		return m.startECSExec()
 	}
-	if m.deps.StartSession == nil {
+	if m.deps.OpenEC2Session == nil {
 		return m.setStatus("sessions are not available")
 	}
 	row := m.selectedRow()
 	if row == nil {
 		return m.setStatus("no row selected")
 	}
+	areaWidth, areaHeight := m.sessionAreaSize()
+	if _, _, ok := sessionWindowSize(areaWidth, areaHeight); !ok {
+		return m.setStatus("terminal too small for a session window")
+	}
+
+	m.sessionSeq++
+	seq := m.sessionSeq
+	m.closedSessionSeq = 0
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.sessionStartCancel = cancel
 	m.sessionStarting = true
 	m, statusCmd := m.setStatus(fmt.Sprintf("starting session to %s...", row.ID()))
-	start, ctx, profile, region, target := m.deps.StartSession, m.ctx, m.profile, m.region, row.ID()
+	open, profile, region, target := m.deps.OpenEC2Session, m.profile, m.region, row.ID()
+	title := fmt.Sprintf("%s  %s  %s / %s", m.service.Title(), row.ID(), m.profile, m.region)
+	slot := m.sessionStartSlot
 	return m, tea.Batch(statusCmd, func() tea.Msg {
-		cmd, finalize, err := start(ctx, profile, region, target)
-		return sessionReadyMsg{cmd: cmd, finalize: finalize, err: err}
+		session, err := open(ctx, profile, region, target)
+		slot.set(session)
+		return sessionReadyMsg{seq: seq, title: title, session: session, err: err}
 	})
 }
 
 // startECSExec は ECS のクラスタの行で s を押したときの入口。タスクの一覧を取り、ecsTasksMsg から
-// タスクとコンテナを選ばせて (1 件なら選択肢を出さない)、startECSExecProcess で Deps.StartECSExec を呼ぶ。
+// タスクとコンテナを選ばせて (1 件なら選択肢を出さない)、startECSExecProcess で Deps.OpenECSExecSession を呼ぶ。
 // Web UI の ECSExecLauncher と同じ選び方。選択の間は sessionStarting を真にして s の二度押しを止める。
 func (m Model) startECSExec() (tea.Model, tea.Cmd) {
-	if m.deps.StartECSExec == nil || m.deps.ListECSTasks == nil || m.deps.ListECSContainers == nil {
+	if m.deps.OpenECSExecSession == nil || m.deps.ListECSTasks == nil || m.deps.ListECSContainers == nil {
 		return m.setStatus("sessions are not available")
 	}
 	row := m.selectedRow()
 	if row == nil {
 		return m.setStatus("no row selected")
+	}
+	areaWidth, areaHeight := m.sessionAreaSize()
+	if _, _, ok := sessionWindowSize(areaWidth, areaHeight); !ok {
+		return m.setStatus("terminal too small for a session window")
 	}
 	// cluster はクラスタ名 (Row.Name())。Web UI と CLI の --cluster が使うのも名前で、ARN ではない。
 	cluster := row.Name()
@@ -746,16 +789,24 @@ func (m Model) listECSContainers(task string) (tea.Model, tea.Cmd) {
 	})
 }
 
-// startECSExecProcess は選んだコンテナで Deps.StartECSExec を呼ぶ。結果は EC2 と同じ sessionReadyMsg で届き、
-// sessionStarting はそこで戻る。接続先の選択はここで終わる (active を倒す)。
+// startECSExecProcess は選んだコンテナで Deps.OpenECSExecSession を呼ぶ。結果は EC2 と同じ
+// sessionReadyMsg で届き、sessionStarting はそこで戻る。接続先の選択はここで終わる (active を倒す)。
 func (m Model) startECSExecProcess(container string) (tea.Model, tea.Cmd) {
 	st := m.ecsExec
 	m.ecsExec = ecsExecState{}
+	m.sessionSeq++
+	seq := m.sessionSeq
+	m.closedSessionSeq = 0
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.sessionStartCancel = cancel
 	m, statusCmd := m.setStatus(fmt.Sprintf("starting session to %s/%s/%s...", st.cluster, st.task, container))
-	start, ctx, profile, region := m.deps.StartECSExec, m.ctx, m.profile, m.region
+	open, profile, region := m.deps.OpenECSExecSession, m.profile, m.region
+	title := fmt.Sprintf("ECS  %s / %s / %s  %s / %s", st.cluster, st.task, container, m.profile, m.region)
+	slot := m.sessionStartSlot
 	return m, tea.Batch(statusCmd, func() tea.Msg {
-		cmd, finalize, err := start(ctx, profile, region, st.cluster, st.task, container, ecsExecDefaultCommand)
-		return sessionReadyMsg{cmd: cmd, finalize: finalize, err: err}
+		session, err := open(ctx, profile, region, st.cluster, st.task, container, ecsExecDefaultCommand)
+		slot.set(session)
+		return sessionReadyMsg{seq: seq, title: title, session: session, err: err}
 	})
 }
 
@@ -764,6 +815,211 @@ func (m Model) cancelECSExec() Model {
 	m.ecsExec = ecsExecState{}
 	m.sessionStarting = false
 	return m
+}
+
+// finishSessionStart はセッションの開始結果を処理し、成功したらフロートウィンドウを開く。
+func (m Model) finishSessionStart(msg sessionReadyMsg) (tea.Model, tea.Cmd) {
+	session := m.sessionStartSlot.take()
+	if session == nil {
+		session = msg.session
+	}
+	if m.sessionStartCancel != nil {
+		m.sessionStartCancel()
+		m.sessionStartCancel = nil
+	}
+	if msg.seq != m.sessionSeq {
+		// 対象の切替や終了の後に届いた結果は、AWS 側のセッションを切断して捨てる。
+		if session != nil {
+			return m, closeSessionSilentlyCmd(session)
+		}
+		return m, nil
+	}
+	m.sessionStarting = false
+	m.closedSessionSeq = 0
+
+	if msg.err != nil {
+		if session != nil {
+			m, _ = m.setStatus(fmt.Sprintf("session closed with error: %v", msg.err))
+			return m, closeSessionSilentlyCmd(session)
+		}
+		var startErr *SessionStartError
+		if errors.As(msg.err, &startErr) && startErr.Started {
+			return m.setStatus(fmt.Sprintf("session closed with error: %v", startErr.Err))
+		}
+		return m.setStatus(fmt.Sprintf("session: %v", msg.err))
+	}
+	if session == nil {
+		return m.setStatus("session: no session returned")
+	}
+
+	areaWidth, areaHeight := m.sessionAreaSize()
+	width, height, ok := sessionWindowSize(areaWidth, areaHeight)
+	if !ok {
+		m, statusCmd := m.setStatus("terminal too small for a session window")
+		return m, tea.Batch(statusCmd, cleanupSessionCmd(session))
+	}
+
+	runtime := newSessionRuntime(m.ctx, session)
+	m.session = newSessionWindow(msg.seq, msg.title, width, height, runtime)
+	m, statusCmd := m.setStatus("")
+	return m, tea.Batch(statusCmd, m.sessionReadCmd())
+}
+
+// handleSessionOutput はセッションの出力を端末画面に書き、次の読み取りを続ける。
+func (m Model) handleSessionOutput(msg sessionOutputMsg) (tea.Model, tea.Cmd) {
+	w := m.session
+	if w == nil || msg.seq != w.seq {
+		return m, nil
+	}
+
+	if len(msg.output.Data) > 0 {
+		w.write(msg.output.Data)
+	}
+	if msg.err != nil {
+		cause := msg.err
+		if err := w.runtime.lastErr(); err != nil {
+			cause = err
+		}
+		w.closed = true
+		w.closeErr = cause
+		w.runtime.stop()
+		return m, closeSessionCmd(w.seq, w.runtime, cause)
+	}
+	if msg.output.Closed {
+		w.closed = true
+		w.closeMessage = msg.output.Message
+		w.runtime.stop()
+		return m, closeSessionCmd(w.seq, w.runtime, nil)
+	}
+	return m, m.sessionReadCmd()
+}
+
+// finishSessionClose はセッションの終了結果を通知行に反映する。リモートの終了ではウィンドウを
+// 残し、ユーザーが Ctrl-] で閉じたときはウィンドウが既に無い。
+func (m Model) finishSessionClose(msg sessionClosedMsg) (tea.Model, tea.Cmd) {
+	if w := m.session; w != nil {
+		if msg.seq != w.seq {
+			// 新しいセッションが開いているときに、古いセッションの終了結果が届いた場合は捨てる。
+			return m, nil
+		}
+		w.closed = true
+		if msg.err != nil {
+			w.closeErr = msg.err
+		}
+	} else {
+		// ユーザーが Ctrl-] で閉じたセッションの終了結果だけを通知する。
+		// その後に開始したセッションの終了結果が先に届いた場合などは捨てる。
+		if msg.seq != m.closedSessionSeq {
+			return m, nil
+		}
+		m.closedSessionSeq = 0
+	}
+
+	if msg.err != nil {
+		return m.setStatus(fmt.Sprintf("session closed with error: %v", msg.err))
+	}
+	return m.setStatus("session closed")
+}
+
+// sessionReadCmd はセッションから 1 回読み取る Cmd を返す。
+func (m Model) sessionReadCmd() tea.Cmd {
+	w := m.session
+	if w == nil {
+		return nil
+	}
+	seq := w.seq
+	ctx := w.runtime.ctx
+	return func() tea.Msg {
+		output, err := w.runtime.session.Read(ctx)
+		return sessionOutputMsg{seq: seq, output: output, err: err}
+	}
+}
+
+// updateSessionKey はフロートウィンドウが開いているときのキーを処理する。
+func (m Model) updateSessionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	w := m.session
+	if w == nil {
+		return m, nil
+	}
+
+	// Ctrl-] だけがウィンドウを閉じる。閉じた後のウィンドウでは他のキーを無視する。
+	if msg.Type == tea.KeyCtrlCloseBracket {
+		if w.closed {
+			m.session = nil
+			// closeSessionCmd の結果がまだ届いていない場合に、終了失敗の通知を捨てない。
+			m.closedSessionSeq = w.seq
+			return m, nil
+		}
+		m.session = nil
+		m.closedSessionSeq = w.seq
+		w.runtime.stop()
+		return m, closeSessionCmd(w.seq, w.runtime, nil)
+	}
+	if w.closed {
+		return m, nil
+	}
+
+	data := encodeKey(msg)
+	if len(data) == 0 {
+		return m, nil
+	}
+	if !w.runtime.enqueueInput(data) {
+		return m.setStatus("session input buffer is full")
+	}
+	return m, nil
+}
+
+// sessionAreaSize はフロートウィンドウを置く本文の大きさを返す。通知行は一時的に出るため、
+// サイズの計算から除く。バナーは本文の一部として扱う。
+func (m Model) sessionAreaSize() (width, height int) {
+	height = m.bodyHeight()
+	if m.status != "" {
+		height++
+	}
+	return m.width, height
+}
+
+// shutdownSession は TUI の終了時に有効なセッションを切断する。開始処理が作ったが
+// まだ Model が受け取っていないセッションも slot から取り出して切断する。
+func (m Model) shutdownSession() {
+	m.sessionStartSlot.shutdown()
+	if m.session == nil {
+		return
+	}
+	m.session.runtime.stop()
+	ctx, cancel := context.WithTimeout(context.Background(), aws.TerminateSessionGracePeriod)
+	defer cancel()
+	// TUI は終了するため、切断の失敗を表示する先が無い。終了処理はベストエフォートにする。
+	_ = m.session.runtime.closeSession(ctx)
+}
+
+// closeSessionCmd はセッションを閉じ、終了結果と読み取りの失敗を Model へ返す。
+func closeSessionCmd(seq int, runtime *sessionRuntime, cause error) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), aws.TerminateSessionGracePeriod)
+		defer cancel()
+		return sessionClosedMsg{seq: seq, err: errors.Join(cause, runtime.closeSession(ctx))}
+	}
+}
+
+// cleanupSessionCmd は開始後にウィンドウを開けなかったセッションを閉じ、失敗だけを通知する。
+func cleanupSessionCmd(session InteractiveSession) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), aws.TerminateSessionGracePeriod)
+		defer cancel()
+		return sessionCleanupMsg{err: session.Close(ctx)}
+	}
+}
+
+// closeSessionSilentlyCmd は捨てるセッションを通知せずに閉じる。
+func closeSessionSilentlyCmd(session InteractiveSession) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), aws.TerminateSessionGracePeriod)
+		defer cancel()
+		// 対象の切替で捨てるセッションのため、切断の失敗は通知しない。
+		_ = session.Close(ctx)
+		return nil
+	}
 }
 
 // statusLineReplacer は通知を 1 行にするための置換。CRLF を先に置き、CR と LF が別々に 2 つの空白にならないようにする。
@@ -1013,6 +1269,11 @@ func (m Model) View() string {
 	}
 	if m.picker != nil {
 		b.WriteString(paneFocusedStyle.Width(m.width - borderLines).Height(m.bodyHeight()).Render(m.picker.view(m.bodyHeight())))
+	} else if m.session != nil {
+		body := m.bodyView()
+		// bodyView のペインは外側に上下 1 行ずつの枠を持つ。重ね合わせの基準も枠を含めた
+		// 実際の描画行数に合わせる。inner の bodyHeight だけを使うと下の枠が切り落とされる。
+		b.WriteString(overlayCenter(body, m.width, m.bodyHeight()+borderLines, m.session.View(), m.session.width, m.session.height))
 	} else {
 		b.WriteString(m.bodyView())
 	}
@@ -1091,6 +1352,14 @@ func (m Model) bodyView() string {
 }
 
 func (m Model) footerView() string {
+	if m.session != nil {
+		parts := []string{
+			keyStyle.Render("ctrl+]") + " " + mutedStyle.Render("close"),
+			keyStyle.Render("ctrl+c / q") + " " + mutedStyle.Render("send to session"),
+		}
+		return lipgloss.NewStyle().MaxWidth(m.width).Render(strings.Join(parts, "  "))
+	}
+
 	keys := []struct{ key, desc string }{
 		{"/", "filter"}, {"j/k", "move"}, {"tab", "focus"}, {"1/2", "tabs"},
 		{"s", "session"}, {"r", "reload"}, {"p", "profile"}, {"R", "region"},

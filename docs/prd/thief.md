@@ -435,21 +435,29 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   既定のコマンドは FR-7 と同じ `/bin/sh` とする。
   タスクとコンテナは、クラスタ行で `s` を押した後に、絞り込み付きの選択肢で順に選ぶ (「決定した論点」の「TUI の ECS のタスクとコンテナの選び方」)。
   候補が 1 件のときは選択肢を出さずに自動で選ぶ。候補は実行中のタスクと、ECS Exec が有効なコンテナに限る。
-- セッションは CLI の `thief ec2 session` と `thief ecs exec` と同じく、PATH にある `session-manager-plugin` に端末を渡して行う (「外部仕様の前提」)。
-  セッションの間は TUI の画面を離れ、プラグインが終了したら TUI の画面に戻る。
-- プラグインの終了後、AWS 側のセッションを `TerminateSSMSession` で終える (FR-7 と同じ)。
-  セッションの終了を通知行に表示する。
-- セッションの中で押した Ctrl-C はプラグインに渡り、TUI を終了させない。
+- セッションは TUI のプロセスの中で `backend/internal/session` の DataChannel を使って行う。TUI は `session-manager-plugin` を起動しない。
+  EC2 は `backend/internal/aws/ssm_session.go` の `StartSSMSession`、ECS は `backend/internal/aws/ecs_exec.go` の `ExecuteECSCommand` でセッションを開始し、`session.OpenDataChannel` でデータチャネルを開く。
+- セッションは TUI の本文の中央にフロートウィンドウとして表示する。TUI の一覧と Drawer はウィンドウの背後に残り、セッションの間も TUI の代替画面を離れない。
+  ウィンドウはユーザーによる移動とリサイズができない。端末のリサイズには追従し、端末画面の大きさを `SendSize` でリモートへ送る。
+  本文が 50 桁 x 18 行未満のときはセッションを開始しない。
+- セッション中は `Ctrl-]` だけがウィンドウを閉じる。それ以外のキー (`Ctrl-C`、`q`、通常文字、矢印、Tab などを含む) はリモートへ送る。
+  `Ctrl-C` はリモートのプロセスに渡り、TUI を終了させない。`q` もリモートへ送る。
+- `Ctrl-]` でウィンドウを閉じたとき、TUI を `SIGTERM` や `kill -INT` で終了したとき、リモートの `exit` でデータチャネルが閉じたときは、AWS 側のセッションを `TerminateSSMSession` で終える (FR-7 と同じ)。
+  リモートの `exit` では最後の画面と `Session closed` を残し、`Ctrl-]` でウィンドウを閉じる。
+  通知行には成功時に `session closed`、失敗時に `session closed with error: <理由>` を表示する。
+- フロートウィンドウは同時に 1 つだけ開く。2 つ目のセッションは、1 つ目を `Ctrl-]` で閉じるまで開始しない。
 
 受け入れ基準:
 
-- 実 AWS アカウントの、SSM Agent が動く EC2 インスタンスの行を選んで `s` を押すと、`session-manager-plugin` が起動し、シェルで `echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
-  `exit` で抜けると TUI の画面に戻り、通知行に `session closed` が表示される。
-- セッションから戻った後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
-- セッションの中で Ctrl-C を押してから `exit` で抜け、`r` を押すと一覧を取得し直せる。
-- 実 AWS アカウントの、ECS Exec を有効にしたタスクを持つクラスタの行を選んで `s` を押し、タスクとコンテナの選択肢で接続先を選ぶと `session-manager-plugin` が起動し、シェルで `echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
-  `exit` の後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
-- `session-manager-plugin` が PATH に無いとき、通知行に `session-manager-plugin not found in PATH` が表示され、TUI は終了しない。
+- 実 AWS アカウントの、SSM Agent が動く EC2 インスタンスの行を選んで `s` を押すと、TUI の本文の中央にフロートウィンドウが開き、シェルで `echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
+  ウィンドウの中の `Ctrl-C` と `q` はリモートへ送られ、TUI は終了しない。
+- `Ctrl-]` でウィンドウを閉じた後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
+- リモートで `exit` を実行すると、最後の画面と `Session closed` が残り、通知行に `session closed` が表示される。`Ctrl-]` でウィンドウが閉じる。
+- 実 AWS アカウントの、ECS Exec を有効にしたタスクを持つクラスタの行を選んで `s` を押し、タスクとコンテナの選択肢で接続先を選ぶと、TUI のフロートウィンドウにシェルが表示され、`echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
+  `Ctrl-]` の後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
+- 端末の大きさを変えると、リモートの端末の桁数と行数が新しいウィンドウの内側の大きさに追従する。
+- 本文が 50 桁 x 18 行未満のとき、`s` を押してもセッションを開始せず、通知行に `terminal too small for a session window` が表示される。
+- `session-manager-plugin` を PATH から外した状態でも、TUI の EC2 Session Manager と ECS Exec のセッションが開始できる。CLI の `thief ec2 session` と `thief ecs exec` は引き続きプラグインを必要とする。
 
 ### 分析とコスト
 
@@ -797,8 +805,8 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   SSO のトークンのキャッシュは AWS CLI と互換にする。
 - Google Cloud は ADC だけを使う。
   gcloud CLI には依存しない。
-- CLI の `thief ec2 session` と `thief ecs exec` と、TUI の対話セッション (FR-30) は、PATH にある `session-manager-plugin` を起動する (`backend/internal/cli/session_plugin.go`、`backend/internal/cli/tui.go` `sessionManagerCommand`)。
-  Web UI のターミナルは、このプラグインを使わない (FR-7)。
+- CLI の `thief ec2 session` と `thief ecs exec` は、PATH にある `session-manager-plugin` を起動する (`backend/internal/cli/session_plugin.go`)。
+  Web UI のターミナルと TUI の対話セッション (FR-30) は、このプラグインを使わず、`backend/internal/session` の DataChannel をプロセス内で扱う (FR-7、FR-30)。
 - Cost Explorer と `DescribeRegions` の呼び出し先は us-east-1 とする。
 - AWS の EC2 には、稼働台数の標準メトリクスが無い。
   Auto Scaling グループのメトリクスは有効化が任意である (issue 0186)。
@@ -871,6 +879,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 - 設計判断の記録: `docs/adr/`
 - TUI の接続方式とフレームワーク: ADR 0033 (`docs/adr/0033-tui-in-process-bubbletea.md`)
+- TUI のフロート端末: ADR 0034 (`docs/adr/0034-tui-floating-terminal-window.md`)
 - issue: `docs/issues/closed/`、`docs/issues/pending/`、`docs/issues/TODO.md`
 - CORS の不具合と修正の方針: `docs/issues/closed/0200-bug-cors-reflects-any-origin.md`、ADR 0032 (`docs/adr/0032-api-origin-and-host-checks.md`)
 - 変更履歴: `CHANGES.md`

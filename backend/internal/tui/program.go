@@ -10,11 +10,9 @@ import (
 // Run は TUI を全画面で起動し、終了まで待つ。
 //
 // 呼び出し側の ctx (main の signal.NotifyContext に連動する) は意図的に受け取らない。
-// 対話セッション中は bubbletea が端末を一時的に通常モードへ戻すため、Ctrl-C は SIGINT として
-// プロセスグループ全体に届き、main の ctx をキャンセルする。その ctx を AWS の呼び出しに使うと、
-// セッションから戻った後のすべての取得が失敗する。TUI では Ctrl-C は raw モードのキー入力として
-// Update に届き (終了として扱う)、SIGTERM は bubbletea 自身のシグナル処理が QuitMsg に変換する
-// ため、外部の ctx が無くてもシグナルで終了できる。
+// セッションは TUI の中のフロートウィンドウで動くため、セッション中も端末は代替画面のままである。
+// TUI の Ctrl-C は raw モードのキー入力として Update に届き、SIGTERM は bubbletea 自身の
+// シグナル処理が QuitMsg に変換するため、外部の ctx が無くてもシグナルで終了できる。
 func Run(deps Deps, profile, region string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -23,7 +21,12 @@ func Run(deps Deps, profile, region string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
+	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	if finalModel, ok := final.(Model); ok {
+		// セッションを開いたまま SIGTERM などで終了した場合も、AWS 側のセッションを残さない。
+		finalModel.shutdownSession()
+	}
+	if err != nil {
 		return fmt.Errorf("run tui: %w", err)
 	}
 	return nil

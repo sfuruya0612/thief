@@ -2,7 +2,7 @@
 
 Created: 2026-10-23
 Model: Claude Fable 5.1
-Status: Accepted
+Status: Superseded by 0034
 Decided: 2026-10-23
 
 ## 状況

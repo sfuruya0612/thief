@@ -159,7 +159,7 @@ mise run example:seed
 以下はエミュレータ経由での確認ができない。実アカウント + 実プロファイルで確認すること。
 
 - SSO ログイン (`aws sso login` の子プロセス起動。`floci` プロファイルは access_key 認証のためこの経路自体を通らない)
-- EC2 Start Session / ECS Exec のターミナル (session-manager-plugin のサブプロセスと実エージェント接続が前提)
+- EC2 Start Session / ECS Exec のターミナル。Web UI と TUI は `backend/internal/session` の DataChannel で実エージェントに接続する必要があり、CLI の `thief ec2 session` と `thief ecs exec` は `session-manager-plugin` のサブプロセスと実エージェント接続が前提である。いずれも floci では確認できない。
 - Cost Explorer / 請求系
 
 ## 注意
