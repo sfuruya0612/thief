@@ -81,8 +81,6 @@ TUI の ECS の一覧でクラスタの行を選んで `s` を押すと、タス
 
 ## 解決方法
 
-## 解決方法
-
 ECS のクラスタ行で `s` を押すと、タスクとコンテナを選択肢で順に選んで ECS Exec で接続する経路を `backend/internal/tui/model.go` に足し、プラグインの起動と切断の組み立てを `backend/internal/cli/tui.go` に足した。
 
 - `backend/internal/tui/ecs.go`: `SupportsSession()` を `true` にした。サービス ID を定数 `ecsServiceID`、既定のコマンドを定数 `ecsExecDefaultCommand` (`/bin/sh`) にし、タスク ARN の最後の `/` より後ろを返す `ecsTaskID` を足した。`ecs_test.go` の期待値を `true` に更新した。
