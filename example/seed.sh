@@ -101,7 +101,8 @@ EOF
 
 aws_ cloudformation create-stack \
   --stack-name thief-example-stack \
-  --template-body "file://$tmpdir/stack.yaml"
+  --template-body "file://$tmpdir/stack.yaml" \
+  --tags Key=Name,Value=thief-example-stack
 
 echo "==> Lambda: 関数を作成 (TUI の Lambda 一覧の確認用)"
 cat > "$tmpdir/index.py" <<'EOF'

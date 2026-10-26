@@ -37,6 +37,14 @@ type TagsFetchFailer interface {
 	TagsFetchFailed() bool
 }
 
+// TagFetcher は、行を選んだときに追加の API でタグを取る Row が任意に実装する (CloudFormation の DescribeStacks など)。
+// 実装する Row の Tags() は nil を返し、Model が FetchTags の結果を一覧の読み込みごとに行の ID() で保持して
+// Tags タブに出す。取得中は "Loading tags..."、失敗は "Tags (fetch failed)" の見出しになる。
+type TagFetcher interface {
+	// FetchTags は行のタグを取得して返す。失敗はエラーで返し、Drawer が見出し Tags (fetch failed) と理由を出す。
+	FetchTags(ctx context.Context) (map[string]string, error)
+}
+
 // Service は TUI が表示する 1 サービス。Web UI の ServicePanel に相当する。
 type Service interface {
 	// ID はサービスの識別子 (ec2 など)。

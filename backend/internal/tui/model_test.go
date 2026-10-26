@@ -1318,3 +1318,335 @@ func TestModel_TagsTabWithoutFailureShowsNoTags(t *testing.T) {
 		})
 	}
 }
+
+// cfnTestModel は偽の detail 関数を持つ CloudFormation の Service で Model を組み、一覧を読み込ませた
+// 直後の Model と、その読み込みが返した Cmd (選択中の行のタグの取得) を返す。
+// calls はスタック名ごとの detail の呼び出し回数。
+func cfnTestModel(t *testing.T, tags map[string]map[string]string, detailErr error) (Model, tea.Cmd, map[string]int, []Row) {
+	t.Helper()
+	calls := map[string]int{}
+	detail := func(_ context.Context, _, _, name string) (*aws.CFNStackDetail, error) {
+		calls[name]++
+		if detailErr != nil {
+			return nil, detailErr
+		}
+		return &aws.CFNStackDetail{StackName: name, Tags: tags[name]}, nil
+	}
+	list := func(context.Context, string, string) ([]aws.CFNStackResource, error) {
+		return []aws.CFNStackResource{
+			{ID: "arn:a", Name: "app", State: "CREATE_COMPLETE", DriftStatus: "IN_SYNC"},
+			{ID: "arn:b", Name: "batch", State: "UPDATE_COMPLETE", DriftStatus: "NOT_CHECKED"},
+		}, nil
+	}
+	svc := NewCFNService(list, detail)
+	rows, err := svc.Load(context.Background(), "p", "ap-northeast-1")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	m := newTestModel(t, &fakeService{id: "cfn", rows: rows, columns: svc.Columns()}, Deps{})
+	m, cmd := updateCmd(t, m, rowsLoadedMsg{seq: 0, rows: rows})
+	return m, cmd, calls, rows
+}
+
+// TestModel_TagFetcherFetchesOnLoadAndShowsLoading は TagFetcher を実装する行が選ばれると FetchTags が呼ばれ、
+// 結果が届くまで Tags タブに "Loading tags..." が出て、届いたらそのタグが出ることを確かめる。
+func TestModel_TagFetcherFetchesOnLoadAndShowsLoading(t *testing.T) {
+	m, cmd, calls, _ := cfnTestModel(t, map[string]map[string]string{"app": {"Env": "prod", "Name": "app"}}, nil)
+	if cmd == nil {
+		t.Fatal("loading the rows must return the Cmd that fetches the selected row's tags")
+	}
+	if calls["app"] != 0 {
+		t.Fatalf("FetchTags must run inside the Cmd, not synchronously: calls=%v", calls)
+	}
+	m = keys(t, m, "2")
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("Tags tab should say Loading tags... until the result arrives\n%s", drawer)
+	}
+
+	msgs := drain(t, cmd)
+	if len(msgs) != 1 {
+		t.Fatalf("msgs = %v, want one tagsFetchedMsg", msgs)
+	}
+	got, ok := msgs[0].(tagsFetchedMsg)
+	if !ok || got.seq != 0 || got.id != "arn:a" || got.err != nil {
+		t.Fatalf("msg = %+v, want tagsFetchedMsg for arn:a of generation 0", msgs[0])
+	}
+	if calls["app"] != 1 || calls["batch"] != 0 {
+		t.Errorf("calls = %v, want app once and batch never (only the selected row is fetched)", calls)
+	}
+	m = update(t, m, got)
+	drawer := m.drawer.View()
+	for _, want := range []string{"Env", "prod", "Name", "app"} {
+		if !strings.Contains(drawer, want) {
+			t.Errorf("Tags tab should show %q after the result\n%s", want, drawer)
+		}
+	}
+	for _, bad := range []string{"Loading tags...", "No tags", "fetch failed"} {
+		if strings.Contains(drawer, bad) {
+			t.Errorf("Tags tab must not show %q after a successful fetch\n%s", bad, drawer)
+		}
+	}
+}
+
+// TestModel_TagFetcherEmptyAndFailedResults は空のタグで "No tags"、失敗で "Tags (fetch failed)" とその理由が出ることを確かめる。
+func TestModel_TagFetcherEmptyAndFailedResults(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		m, cmd, _, _ := cfnTestModel(t, map[string]map[string]string{"app": {}}, nil)
+		m = apply(t, keys(t, m, "2"), cmd)
+		drawer := m.drawer.View()
+		if !strings.Contains(drawer, "No tags") || strings.Contains(drawer, "Loading") || strings.Contains(drawer, "fetch failed") {
+			t.Errorf("Tags tab should say No tags for an empty result\n%s", drawer)
+		}
+	})
+	t.Run("failed", func(t *testing.T) {
+		m, cmd, _, _ := cfnTestModel(t, nil, errors.New("boom"))
+		m = apply(t, keys(t, m, "2"), cmd)
+		drawer := m.drawer.View()
+		if !strings.Contains(drawer, "Tags (fetch failed)") || !strings.Contains(drawer, "boom") {
+			t.Errorf("Tags tab should show the fetch failed heading and the reason\n%s", drawer)
+		}
+		if strings.Contains(drawer, "No tags") || strings.Contains(drawer, "Loading") {
+			t.Errorf("Tags tab must not say No tags or Loading after a failure\n%s", drawer)
+		}
+	})
+}
+
+// TestModel_TagFetcherDropsStaleGenerationAndRefetchesAfterReload は r の再取得より前の世代の結果が表示も保持も
+// されず、再取得の後は同じ行でも FetchTags を呼び直すことを確かめる。
+func TestModel_TagFetcherDropsStaleGenerationAndRefetchesAfterReload(t *testing.T) {
+	m, oldCmd, calls, rows := cfnTestModel(t, map[string]map[string]string{"app": {"Env": "old"}}, nil)
+	m = keys(t, m, "2")
+	m, reload := updateCmd(t, m, keyMsg("r"))
+	if m.loadSeq != 1 || !m.loading {
+		t.Fatalf("r must start generation 1: seq=%d loading=%v", m.loadSeq, m.loading)
+	}
+	_ = reload
+
+	// 旧い世代の結果が届いても捨てる。
+	m = apply(t, m, oldCmd)
+	if calls["app"] != 1 {
+		t.Fatalf("calls = %v, want the old Cmd to have run once", calls)
+	}
+	if _, kept := m.tags["arn:a"]; kept {
+		t.Error("a result of the old generation must not be kept")
+	}
+	if drawer := m.drawer.View(); strings.Contains(drawer, "old") {
+		t.Errorf("a result of the old generation must not be shown\n%s", drawer)
+	}
+
+	// 新しい世代の一覧が届くと、同じ行でも取り直す。
+	m, cmd := updateCmd(t, m, rowsLoadedMsg{seq: 1, rows: rows})
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("Tags tab should be loading again after the reload\n%s", drawer)
+	}
+	m = apply(t, m, cmd)
+	if calls["app"] != 2 {
+		t.Errorf("calls = %v, want app fetched again after r", calls)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "old") {
+		t.Errorf("Tags tab should show the new generation's result\n%s", drawer)
+	}
+}
+
+// TestModel_TagFetcherReloadClearsShownTags は Tags タブに取得済みのタグが出ている状態で r を押すと、
+// 一覧が届く前でも旧いタグが消えて取得中の表示に戻ることを確かめる。
+func TestModel_TagFetcherReloadClearsShownTags(t *testing.T) {
+	m, cmd, _, _ := cfnTestModel(t, map[string]map[string]string{"app": {"Env": "old"}}, nil)
+	m = apply(t, keys(t, m, "2"), cmd)
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "old") {
+		t.Fatalf("Tags tab should show the fetched tags before r\n%s", drawer)
+	}
+	m = keys(t, m, "r")
+	drawer := m.drawer.View()
+	if strings.Contains(drawer, "old") {
+		t.Errorf("Tags tab must not keep showing the dropped generation's tags right after r\n%s", drawer)
+	}
+	if !strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("Tags tab should be back to the loading state right after r\n%s", drawer)
+	}
+}
+
+// TestModel_TagFetcherFilterStartsFetch は絞り込みの入力で選択中の行が変わったときと、esc で絞り込みを解除して
+// 選択中の行が戻ったときに、その行のタグの取得が始まることを確かめる。
+func TestModel_TagFetcherFilterStartsFetch(t *testing.T) {
+	tags := map[string]map[string]string{"app": {"Env": "prod"}, "batch": {"Env": "nightly"}}
+	m, _, calls, rows := cfnTestModel(t, tags, nil)
+	m = keys(t, m, "2")
+
+	// "/" "b" で batch だけが見え、選択が batch に変わるので batch の取得が始まる。
+	m = keys(t, m, "/")
+	m, cmd := updateCmd(t, m, keyMsg("b"))
+	if len(m.visible) != 1 || m.visible[0].ID() != "arn:b" {
+		t.Fatalf("visible = %v, want only arn:b", ids(m.visible))
+	}
+	m = apply(t, m, cmd)
+	if calls["batch"] != 1 {
+		t.Fatalf("calls = %v, want batch fetched by the filter input", calls)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "nightly") {
+		t.Errorf("Tags tab should show batch's tags\n%s", drawer)
+	}
+
+	// enter で絞り込みを残したまま r を押すと、届いた一覧でも batch だけが見え、batch を取り直す。
+	m = keys(t, m, "enter", "r")
+	m, cmd = updateCmd(t, m, rowsLoadedMsg{seq: 1, rows: rows})
+	m = apply(t, m, cmd)
+	if calls["batch"] != 2 || len(m.visible) != 1 {
+		t.Fatalf("calls = %v visible=%d, want batch fetched again with the filter kept", calls, len(m.visible))
+	}
+
+	// "/" "esc" で絞り込みを解除すると選択が app に戻り、この世代では未取得なので app の取得が始まる。
+	m = keys(t, m, "/")
+	m, cmd = updateCmd(t, m, keyMsg("esc"))
+	if m.filtering || len(m.visible) != 2 || m.table.Cursor() != 0 {
+		t.Fatalf("esc should clear the filter and select app: filtering=%v visible=%d cursor=%d", m.filtering, len(m.visible), m.table.Cursor())
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("Tags tab should be loading app's tags after esc\n%s", drawer)
+	}
+	m = apply(t, m, cmd)
+	if calls["app"] != 1 {
+		t.Errorf("calls = %v, want app fetched once by esc", calls)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "prod") {
+		t.Errorf("Tags tab should show app's tags after esc\n%s", drawer)
+	}
+}
+
+// TestModel_TagFetcherFailedResultIsNotRefetchedUntilReload は失敗した結果も世代の中で保持し、同じ行を選び直しても
+// 取り直さず、r の後に取り直すことを確かめる。
+func TestModel_TagFetcherFailedResultIsNotRefetchedUntilReload(t *testing.T) {
+	m, cmd, calls, rows := cfnTestModel(t, nil, errors.New("boom"))
+	m = apply(t, keys(t, m, "2"), cmd)
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "Tags (fetch failed)") {
+		t.Fatalf("Tags tab should show the failure\n%s", drawer)
+	}
+
+	m = keys(t, m, "down")
+	m, cmd = updateCmd(t, m, keyMsg("up"))
+	if msgs := drain(t, cmd); len(msgs) != 0 || calls["app"] != 1 {
+		t.Errorf("reselecting app must not fetch again after a failure: msgs=%v calls=%v", msgs, calls)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "Tags (fetch failed)") {
+		t.Errorf("Tags tab should still show the kept failure\n%s", drawer)
+	}
+
+	m = keys(t, m, "r")
+	m, cmd = updateCmd(t, m, rowsLoadedMsg{seq: 1, rows: rows})
+	m = apply(t, m, cmd)
+	if calls["app"] != 2 {
+		t.Errorf("calls = %v, want app fetched again after r", calls)
+	}
+}
+
+// TestModel_TagFetcherOtherRowResultKeepsDrawerScroll は別の行の結果が届いても、表示中の Drawer の
+// スクロール位置が先頭に戻らないことと、選択中の行の結果では組み直されることを確かめる。
+func TestModel_TagFetcherOtherRowResultKeepsDrawerScroll(t *testing.T) {
+	tags := map[string]map[string]string{"app": {"Env": "prod"}, "batch": {"Env": "nightly"}}
+	m, cmdA, _, _ := cfnTestModel(t, tags, nil)
+	m, cmdB := updateCmd(t, m, keyMsg("down"))
+	// Overview が Drawer に収まらない高さにしてから 1 行スクロールする。
+	m = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 8})
+	m.drawer.SetYOffset(1)
+	if m.drawer.YOffset != 1 {
+		t.Fatalf("YOffset = %d, want 1 (the Overview must be taller than the drawer)", m.drawer.YOffset)
+	}
+
+	m = apply(t, m, cmdA)
+	if m.drawer.YOffset != 1 {
+		t.Errorf("app's result must not reset batch's drawer scroll: YOffset = %d", m.drawer.YOffset)
+	}
+	m = apply(t, keys(t, m, "2"), cmdB)
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "nightly") {
+		t.Errorf("the selected row's result must redraw the drawer\n%s", drawer)
+	}
+}
+
+// TestModel_TagFetcherKeepsResultForOtherRowAndDoesNotRefetch は別の行に移ってから届いた結果は表示されないが
+// 保持され、その行に戻ったとき FetchTags を呼び直さずに出ること、同じ行の 2 度目の選択でも呼び直さないことを確かめる。
+func TestModel_TagFetcherKeepsResultForOtherRowAndDoesNotRefetch(t *testing.T) {
+	tags := map[string]map[string]string{"app": {"Env": "prod"}, "batch": {"Env": "batch"}}
+	m, cmdA, calls, _ := cfnTestModel(t, tags, nil)
+	m = keys(t, m, "2")
+
+	// 結果が届く前に別の行へ移る。移った行の取得が始まる。
+	m, cmdB := updateCmd(t, m, keyMsg("down"))
+	if m.table.Cursor() != 1 || cmdB == nil {
+		t.Fatalf("moving to batch must start its fetch: cursor=%d cmd=%v", m.table.Cursor(), cmdB)
+	}
+	m = apply(t, m, cmdA)
+	drawer := m.drawer.View()
+	if strings.Contains(drawer, "prod") || !strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("app's result must not be shown while batch is selected\n%s", drawer)
+	}
+	if res, kept := m.tags["arn:a"]; !kept || res.tags["Env"] != "prod" {
+		t.Errorf("app's result must be kept: %+v", m.tags)
+	}
+	m = apply(t, m, cmdB)
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "batch") {
+		t.Errorf("batch's result should be shown\n%s", drawer)
+	}
+
+	// 戻ると保持した結果が出て、FetchTags は呼ばれない。
+	m, cmd := updateCmd(t, m, keyMsg("up"))
+	if msgs := drain(t, cmd); len(msgs) != 0 {
+		t.Errorf("returning to app must not fetch again: msgs=%v", msgs)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "prod") {
+		t.Errorf("app's kept result should be shown\n%s", drawer)
+	}
+	m, cmd = updateCmd(t, m, keyMsg("down"))
+	if msgs := drain(t, cmd); len(msgs) != 0 {
+		t.Errorf("selecting batch again must not fetch again: msgs=%v", msgs)
+	}
+	if calls["app"] != 1 || calls["batch"] != 1 {
+		t.Errorf("calls = %v, want each stack fetched once", calls)
+	}
+}
+
+// TestModel_TagFetcherTagsTabSwitchStartsFetch は Overview タブのまま行を選んでから Tags タブへ切り替えたときにも
+// 取得が始まることを確かめる。実行中は行を選んだ時点で取得が始まるため、取得中なら 2 度目は呼ばず取得中の表示を出し、
+// 取得が始まっていない行 (取得中の記録を消して再現する) では切り替えが取得を始める。
+func TestModel_TagFetcherTagsTabSwitchStartsFetch(t *testing.T) {
+	m, _, calls, _ := cfnTestModel(t, map[string]map[string]string{"app": {"Env": "prod"}}, nil)
+	if drawer := m.drawer.View(); strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("Overview tab must not show the tags' loading state\n%s", drawer)
+	}
+	m, cmd := updateCmd(t, m, keyMsg("2"))
+	if msgs := drain(t, cmd); len(msgs) != 0 {
+		t.Errorf("switching tabs while the fetch is pending must not fetch again: msgs=%v", msgs)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "Loading tags...") {
+		t.Errorf("Tags tab should show the loading state\n%s", drawer)
+	}
+
+	m = keys(t, m, "1")
+	m.tagsPending = map[string]bool{}
+	m, cmd = updateCmd(t, m, keyMsg("2"))
+	m = apply(t, m, cmd)
+	if calls["app"] != 1 {
+		t.Errorf("calls = %v, want the tab switch to fetch app", calls)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "prod") {
+		t.Errorf("Tags tab should show the fetched tags\n%s", drawer)
+	}
+}
+
+// TestModel_TagFetcherFetchesRowSelectedDuringReload は読み込み中に選んだ行のタグを、一覧が届いたときに取ることを確かめる。
+func TestModel_TagFetcherFetchesRowSelectedDuringReload(t *testing.T) {
+	m, cmdA, calls, rows := cfnTestModel(t, map[string]map[string]string{"batch": {"Env": "batch"}}, nil)
+	m = apply(t, m, cmdA)
+	m = keys(t, m, "2", "r")
+	m, cmd := updateCmd(t, m, keyMsg("down"))
+	if msgs := drain(t, cmd); len(msgs) != 0 {
+		t.Errorf("moving while loading must not fetch: msgs=%v", msgs)
+	}
+	m, cmd = updateCmd(t, m, rowsLoadedMsg{seq: 1, rows: rows})
+	m = apply(t, m, cmd)
+	if calls["batch"] != 1 || calls["app"] != 1 {
+		t.Errorf("calls = %v, want batch fetched once the reload finished", calls)
+	}
+	if drawer := m.drawer.View(); !strings.Contains(drawer, "batch") {
+		t.Errorf("Tags tab should show batch's tags\n%s", drawer)
+	}
+}

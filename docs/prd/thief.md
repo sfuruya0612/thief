@@ -3,7 +3,7 @@
 Created: 2026-09-26
 Model: Claude Fable 5.1
 Status: Draft
-Updated: 2026-10-23
+Updated: 2026-10-26
 
 ## 概要
 
@@ -91,7 +91,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | backend と frontend の型契約の一致 | 不一致 0 件 | `frontend/` で `npm run lint` を実行する。`frontend/src/types/contract.check.ts` の型検査が失敗しないことを確認する |
 | AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 23 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing) のどちらかを持つことをコードで確認する |
 | CLI の一覧コマンドの存在 | FR-10 の表の一覧コマンドが 27 個すべて存在する。Web にだけある機能 (Pricing、分割表示など) は対象外とする | 表の各コマンドに `--help` を付けて実行し、終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき表のコマンドで始まることを確認する |
-| TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-23 時点は `ec2` の 1 個である | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、その `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-25 時点の期待値は `ec2` の 1 個で、サービスを足すたびに広げる)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
+| TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-26 時点で 19 個すべてにある (issue 0219 から 0223) | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、その `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-26 時点の期待値は 19 個すべてである)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
 
 ## ユーザーとユースケース
 
@@ -374,7 +374,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   利用者は TUI のために API サーバとブラウザを起動しなくてよい。
 - 第 1 段階の対象サービスは、Web UI の AWS のサイドバー (FR-2) にある 23 サービスのうち、一覧のビューを持つ 19 サービスとする。
   ID と名前は、`ec2` (EC2)、`lambda` (Lambda)、`ecr` (ECR)、`ecs` (ECS)、`s3` (S3)、`rds` (RDS)、`dynamo` (DynamoDB)、`cache` (ElastiCache)、`elb` (ELB)、`cloudfront` (CloudFront)、`apigw` (API Gateway)、`natgw` (NAT Gateway)、`kinesis` (Kinesis)、`sqs` (SQS)、`iam` (IAM)、`waf` (WAF)、`secrets` (Secrets Manager)、`ssm` (Parameter Store)、`cfn` (CloudFormation) である (ID は `frontend/src/lib/serviceMeta.ts` の `SERVICE_TO_PATH` のキー、名前は同じファイルの `SERVICES` の `name`)。
-  2026-10-23 時点のプロトタイプは `ec2` だけを持ち、残りの 18 サービスは第 1 段階の残りとして後続の issue で足す (「決定した論点」)。
+  2026-10-23 時点のプロトタイプは `ec2` だけを持ち、残りの 18 サービスは issue 0219 から 0223 で足して 2026-10-26 時点で 19 サービスが揃っている (「決定した論点」)。
   専用のビューを持つ 4 サービス (Athena、CloudWatch Logs、Cost Explorer、Pricing) は対象に含めない (「スコープ」)。
   サービスは `S` のキーで開く選択肢から切り替える。
 - 画面は、ヘッダ (サービス名、プロファイル、リージョン、取得中の表示)、一覧、Drawer、通知行、キー操作のヒントの行からなる。

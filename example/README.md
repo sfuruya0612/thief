@@ -47,7 +47,7 @@ mise run example:seed
 - SQS: 標準キュー 2 本 + FIFO キュー 1 本
 - SSM Parameter Store: パラメータ 3 件 (`String` x2、`SecureString` x1)
 - Secrets Manager: シークレット 1 件
-- CloudFormation: 最小スタック `thief-example-stack` (S3 バケット 1 個を作成するテンプレート)
+- CloudFormation: 最小スタック `thief-example-stack` (S3 バケット 1 個を作成するテンプレート。TUI の Tags タブの確認用に `Name` タグ付き)
 - Lambda: 関数 `thief-example-hello` (python3.12、256 MB、30 秒、タグ `Env=example`。デプロイパッケージを作るため `zip` コマンドが要る)
 - ECR: リポジトリ 2 つ (`thief-example/web` はタグ不変 + プッシュ時スキャン、`thief-example/batch` は既定の設定)
 - ECS: クラスタ `thief-example-cluster` (タグ `Env=example`)
@@ -144,6 +144,15 @@ mise run example:seed
 6. `S`、`iam`、Enter で `thief-example-user` (Kind `user`、MFA `✕`、Policies `1`、Groups `1`) と `thief-example-role` (Kind `role`、MFA `✕`、Policies `1`、Groups `0`) の行が出る。Activity は空、Last active は `—` (floci は最終利用の時刻を返さない)。Drawer の Overview は Resource ID、ARN、Kind、MFA (`disabled`)、Last active (`—`)、Policies attached、Groups の順。`2` の Tags は `No tags` (Web UI と同じく IAM はタグを取得しない)
 7. `S`、`waf`、Enter で `thief-example-waf` の行 (Description `thief example web ACL`、State `active`、Scope `REGIONAL`、Rules `0`、Associated `0`) が出る。Drawer の Overview は Resource ID (Web ACL の ID)、Scope、Description、Rules、Associated resources、Region の順。`2` の Tags は `Env example`
 8. `q` で終了する
+
+### TUI (`thief tui`) の CloudFormation 一覧とタグの取得
+
+1. 上の EC2 一覧の 1 と 2 と同じく `thief` を導入し、`mise run example:up` を動かしておく
+2. `mise run example:seed`
+3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢の最後 (`Parameter Store` の後) に `CloudFormation` が出る
+4. `cfn` と打って Enter を押すと、一覧に `thief-example-stack` の行 (State `CREATE_COMPLETE`、Drift `NOT_CHECKED`、Created は投入時刻、Updated は `—`。floci の `ListStacks` は更新時刻を返さない) が出る。Drawer の Overview は先頭の Name と State の後に Stack ID、Drift status、Created、Updated (`—`)、Region の順で、State は繰り返されない
+5. `2` の Tags は、スタックを選んだときに `DescribeStacks` で取る。届くまで `Loading tags...` と出た後、`Name  thief-example-stack` が出る。`r` で一覧を読み直すと取り直す
+6. `q` で終了する
 
 ## 動作確認できない機能
 

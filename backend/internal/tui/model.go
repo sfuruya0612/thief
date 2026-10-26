@@ -89,6 +89,12 @@ type Model struct {
 	loadSeq int
 	spinner spinner.Model
 
+	// tags は TagFetcher を実装する行から取ったタグ (か失敗) を行の ID() ごとに保持する。
+	// 一覧の読み込み (startLoad) で捨て、同じ読み込みの中では同じ行に FetchTags を呼び直さない。
+	// tagsPending は取得中の行の ID()。結果が届く前に同じ行を選び直しても二重に呼ばないためのガード。
+	tags        map[string]tagsResult
+	tagsPending map[string]bool
+
 	err        error
 	ssoExpired bool
 
@@ -142,6 +148,9 @@ func New(ctx context.Context, deps Deps, profile, region string) (Model, error) 
 		drawer:  viewport.New(0, 0),
 		loading: true,
 
+		tags:        map[string]tagsResult{},
+		tagsPending: map[string]bool{},
+
 		statusTTL: defaultStatusTTL,
 	}
 	m.table.SetColumns(m.tableColumns(0))
@@ -163,6 +172,20 @@ type regionsLoadedMsg struct {
 type rowsLoadedMsg struct {
 	seq  int
 	rows []Row
+	err  error
+}
+
+// tagsResult は TagFetcher.FetchTags の結果。err が nil でなければ取得失敗。
+type tagsResult struct {
+	tags map[string]string
+	err  error
+}
+
+// tagsFetchedMsg は FetchTags の結果。seq は取得を始めたときの loadSeq で、Update は一致する結果だけを保持する。
+type tagsFetchedMsg struct {
+	seq  int
+	id   string
+	tags map[string]string
 	err  error
 }
 
@@ -222,7 +245,38 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	m.loadSeq++
 	m.loading = true
 	m.err = nil
+	// 取得済みのタグは一覧と同じ世代のものなので捨てる。取得中の結果も seq が合わず捨てられる。
+	m.tags = map[string]tagsResult{}
+	m.tagsPending = map[string]bool{}
+	// 捨てた世代のタグを一覧が届くまで Drawer に残さない (Tags タブは取得中の表示に戻る)。
+	m = m.refreshDrawer()
 	return m, m.loadCmd()
+}
+
+// ensureTags は選択中の行が TagFetcher を実装し、タグが未取得で取得中でもなければ FetchTags の Cmd を返す。
+// 一覧の読み込み中は、表示中の行が次の読み込みで入れ替わるため呼ばない。
+func (m Model) ensureTags() (Model, tea.Cmd) {
+	if m.loading {
+		return m, nil
+	}
+	row := m.selectedRow()
+	if row == nil {
+		return m, nil
+	}
+	f, ok := row.(TagFetcher)
+	if !ok {
+		return m, nil
+	}
+	id := row.ID()
+	if _, done := m.tags[id]; done || m.tagsPending[id] {
+		return m, nil
+	}
+	m.tagsPending[id] = true
+	seq, ctx := m.loadSeq, m.ctx
+	return m, func() tea.Msg {
+		tags, err := f.FetchTags(ctx)
+		return tagsFetchedMsg{seq: seq, id: id, tags: tags, err: err}
+	}
 }
 
 // loadCmd は現在のサービス、プロファイル、リージョンで一覧を取得する Cmd を返す。
@@ -295,6 +349,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// バナーの有無で本文の高さが変わるため、寸法を取り直してから行を流し込む。
 		m = m.resize()
 		m = m.applyFilter()
+		return m.ensureTags()
+
+	case tagsFetchedMsg:
+		// r や対象の切替で世代が進んだ後に届いた結果は、旧い一覧のものなので表示も保持もしない。
+		if msg.seq != m.loadSeq {
+			return m, nil
+		}
+		delete(m.tagsPending, msg.id)
+		m.tags[msg.id] = tagsResult{tags: msg.tags, err: msg.err}
+		// 選択中の行の結果だけ Drawer を組み直す。別の行の結果で組み直すと refreshDrawer の GotoTop で
+		// 表示中の Drawer のスクロール位置が先頭に戻る。別の行の結果は保持し、その行に戻ったときに出す。
+		if row := m.selectedRow(); row != nil && row.ID() == msg.id {
+			m = m.refreshDrawer()
+		}
 		return m, nil
 
 	case sessionReadyMsg:
@@ -372,7 +440,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "1", "2":
 		m.tab = drawerTab(int(msg.String()[0] - '1'))
 		m = m.refreshDrawer()
-		return m, nil
+		return m.ensureTags()
 	case "r":
 		return m.startLoad()
 	case "p":
@@ -403,6 +471,9 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.table, cmd = m.table.Update(msg)
 		if m.table.Cursor() != before {
 			m = m.refreshDrawer()
+			var tagsCmd tea.Cmd
+			m, tagsCmd = m.ensureTags()
+			return m, tea.Batch(cmd, tagsCmd)
 		}
 		return m, cmd
 	}
@@ -467,7 +538,7 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filtering = false
 		m.filter.Blur()
 		m = m.applyFilter()
-		return m, nil
+		return m.ensureTags()
 	case "enter":
 		m.filtering = false
 		m.filter.Blur()
@@ -478,7 +549,10 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.filter, cmd = m.filter.Update(msg)
 	m = m.applyFilter()
-	return m, cmd
+	// 絞り込みで選択中の行が変わることがあるので、その行のタグの取得も始める。
+	var tagsCmd tea.Cmd
+	m, tagsCmd = m.ensureTags()
+	return m, tea.Batch(cmd, tagsCmd)
 }
 
 func (m Model) openProfilePicker() (tea.Model, tea.Cmd) {
@@ -600,10 +674,30 @@ func (m Model) refreshDrawer() Model {
 		tags := row.Tags()
 		// タグの取得に失敗した行は、Web UI の DrawerTags と同じく本文の先頭に見出しを出し、タグがあればその下に並べ、"No tags" は出さない。
 		failed := false
+		reason := ""
 		if f, ok := row.(TagsFetchFailer); ok && f.TagsFetchFailed() {
 			failed = true
+		}
+		// 行を選んだときに取る行 (TagFetcher) は、保持した結果を出す。結果が届くまでは取得中の表示。
+		if _, ok := row.(TagFetcher); ok {
+			res, done := m.tags[row.ID()]
+			if !done {
+				b.WriteString(mutedStyle.Render("Loading tags..."))
+				break
+			}
+			tags = res.tags
+			if res.err != nil {
+				failed = true
+				reason = res.err.Error()
+			}
+		}
+		if failed {
 			b.WriteString(statusStyle.Render("Tags (fetch failed)"))
 			b.WriteString("\n")
+			if reason != "" {
+				b.WriteString(mutedStyle.Render(reason))
+				b.WriteString("\n")
+			}
 		}
 		if len(tags) == 0 {
 			if !failed {

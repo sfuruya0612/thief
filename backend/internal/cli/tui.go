@@ -56,6 +56,7 @@ func newTUIDeps() tui.Deps {
 			tui.NewWAFService(awsinternal.ListWAFResources),
 			tui.NewSecretsService(awsinternal.ListSecretResources),
 			tui.NewSSMService(awsinternal.ListSSMParameters),
+			tui.NewCFNService(awsinternal.ListCFNStacks, awsinternal.DescribeCFNStackDetail),
 		},
 		StartSession: sessionManagerCommand,
 	}

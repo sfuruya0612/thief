@@ -11,8 +11,8 @@ import (
 )
 
 // TestNewTUIDeps_ServicesFollowWebUIOrder は TUI に載せるサービスの集合と並びを固定する。
-// 並びは Web UI のサイドバー (frontend/src/lib/serviceMeta.ts の SERVICES) と同じで、第 1 段階の残りの
-// サービスを足したら (issue 0223)、ここの期待値も更新する (docs/prd/thief.md の成功指標)。
+// 並びは Web UI のサイドバー (frontend/src/lib/serviceMeta.ts の SERVICES) と同じで、第 1 段階の 19 サービス
+// (docs/prd/thief.md の成功指標) が揃っている。サービスを足したら、ここの期待値も更新する。
 func TestNewTUIDeps_ServicesFollowWebUIOrder(t *testing.T) {
 	deps := newTUIDeps()
 
@@ -25,7 +25,7 @@ func TestNewTUIDeps_ServicesFollowWebUIOrder(t *testing.T) {
 		seen[s.ID()] = true
 		got = append(got, s.ID())
 	}
-	want := []string{"ec2", "lambda", "ecr", "ecs", "s3", "rds", "dynamo", "cache", "elb", "cloudfront", "apigw", "natgw", "kinesis", "sqs", "iam", "waf", "secrets", "ssm"}
+	want := []string{"ec2", "lambda", "ecr", "ecs", "s3", "rds", "dynamo", "cache", "elb", "cloudfront", "apigw", "natgw", "kinesis", "sqs", "iam", "waf", "secrets", "ssm", "cfn"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("service IDs = %v, want %v", got, want)
 	}
