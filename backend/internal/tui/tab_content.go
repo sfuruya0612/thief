@@ -10,15 +10,15 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// contentTabSpec は contentTab を使う TabSpec を返す。load はタブを開いた時点の profile、
-// region、行を受け取る。
-func contentTabSpec(id, title string, load func(ctx context.Context, profile, region string, row Row) (TabContent, error)) TabSpec {
+// contentTabSpec は contentTab を使う TabSpec を返す。load はタブを開いた時点の主スコープ、
+// 副スコープ、行を受け取る。
+func contentTabSpec(id, title string, load func(ctx context.Context, scope, region string, row Row) (TabContent, error)) TabSpec {
 	return TabSpec{
 		ID:    id,
 		Title: title,
-		New: func(ctx context.Context, profile, region string, row Row) Tab {
+		New: func(ctx context.Context, scope, region string, row Row) Tab {
 			return newContentTab(ctx, func(ctx context.Context) (TabContent, error) {
-				return load(ctx, profile, region, row)
+				return load(ctx, scope, region, row)
 			})
 		},
 	}

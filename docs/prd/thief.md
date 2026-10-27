@@ -91,7 +91,8 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | backend と frontend の型契約の一致 | 不一致 0 件 | `frontend/` で `npm run lint` を実行する。`frontend/src/types/contract.check.ts` の型検査が失敗しないことを確認する |
 | AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 23 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing) のどちらかを持つことをコードで確認する |
 | CLI の一覧コマンドの存在 | FR-10 の表の一覧コマンドが 27 個すべて存在する。Web にだけある機能 (Pricing、分割表示など) は対象外とする | 表の各コマンドに `--help` を付けて実行し、終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき表のコマンドで始まることを確認する |
-| TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-26 時点で 19 個すべてにある (issue 0219 から 0223) | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、その `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-26 時点の期待値は 19 個すべてである)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
+| TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-26 時点で 19 個すべてにある (issue 0219 から 0223) | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、AWS プロバイダーの `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-26 時点の期待値は 19 個すべてである)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
+| TUI の非 AWS プロバイダーの網羅 | FR-31 の 9 サービスすべてに TUI の一覧がある。2026-10-27 時点で 9 個すべてにある (issue 0234) | `newTUIDeps` の `Providers` の `Services` の各要素の `ID()` の集合が、Google Cloud の 4 個、Datadog の 3 個、TiDB Cloud の 2 個の ID の集合と一致することを `backend/internal/cli/tui_test.go` で確認する |
 
 ## ユーザーとユースケース
 
@@ -391,7 +392,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - 一覧で選んだ行の Drawer に、Web UI の Drawer と同じサービス固有タブを表示する。
   タブの並びと名前は `frontend/src/components/Drawer/Drawer.tsx` の `DRAWER_TABS` と同じにし、Overview を先頭、Tags を末尾にする。ECR は Web UI と同じく Tags を持たない。
   サービス固有タブの本文は、Web UI の同じタブが一覧とは別に取得するデータを、TUI が `backend/internal/aws` の同じ関数でプロセス内から取得して表示する。読み込み中、取得失敗、空、成功を区別する。
-  Overview は、Name と State に続けて、Web UI の Drawer の Overview と同じ項目 (`frontend/src/components/Drawer/overviewRows.tsx`) を並べる。
+  Overview は、Name と、State が空でない場合は State に続けて、Web UI の Drawer の Overview と同じ項目 (`frontend/src/components/Drawer/overviewRows.tsx`) を並べる。
   Tags は、Web UI の Drawer の Tags タブと同じキーと値を表示し、タグが無い行では `No tags` と表示する。
   Web UI が一覧とは別の取得でタグを得るサービス (CloudFormation は `frontend/src/components/Drawer/DrawerCFNTags.tsx` がスタックの詳細 `backend/internal/aws/cfn.go` `DescribeCFNStackDetail` から取る) では、TUI も行を選んだときに同じ取得関数でタグを取る。
 - Drawer のタブは `1` から `9` で直接選び、`[` と `]` で前後に移動する。タブ数より大きい数字は無視し、`[` は先頭、`]` は末尾で止める。
@@ -503,6 +504,44 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - 端末の大きさを変えると、リモートの端末の桁数と行数が新しいウィンドウの内側の大きさに追従する。
 - 本文が 50 桁 x 18 行未満のとき、`s` を押してもセッションを開始せず、通知行に `terminal too small for a session window` が表示される。
 - `session-manager-plugin` を PATH から外した状態でも、TUI の EC2 Session Manager と ECS Exec のセッションが開始できる。CLI の `thief ec2 session` と `thief ecs exec` は引き続きプラグインを必要とする。
+
+**FR-31 TUI の Google Cloud、Datadog、TiDB Cloud のリソースの一覧と詳細** (Must)
+
+- TUI は `P` でプロバイダー (AWS、Google Cloud、Datadog、TiDB Cloud) を切り替える。
+  プロバイダーごとに最後に選んだスコープ、リージョン、サービスを保持し、戻ったときに復元する。TUI を終了すると保持した状態は失われる。
+- プロバイダーごとの一覧の取得範囲は次のとおりとする。
+  - AWS: プロファイル (`p`) とリージョン (`R`)。FR-29 と同じ。
+  - Google Cloud: プロジェクト (`p`)。`p` はローカルのプロジェクト一覧のキャッシュを優先し、無いときだけ Cloud Resource Manager から取得する (FR-28 と同じ)。
+  - Datadog: 組織 (`p`)。親組織は空文字で表し、Sub Organization は小文字の public ID で表す。
+  - TiDB Cloud: 一覧の取得範囲を持たない。プロジェクト自体を一覧に表示する。
+  主スコープが必須のプロバイダーでスコープが未選択のときは、プロバイダーを切り替えた時点でスコープの一覧を取り、届いたらピッカーを開く。
+- 一覧を持つサービスは次のとおりとする。列、Overview、サービス固有タブの項目と表示文字列は、Web UI の同じサービスの列定義、`overviewRows.tsx`、`DRAWER_TABS` に合わせる。
+  - Google Cloud: Cloud Run (`cloudrun`)、Cloud Storage (`gcs`)、IAM (`gcpiam`)、Service Accounts (`gcpserviceaccounts`)。Cloud Storage は S3 と同じ Objects タブを持ち、列と操作は Web UI の GCS ではなく TUI の S3 に揃える (Object、Size、Updated、Storage class。Content type は表示しない)。
+  - Datadog: Dashboards (`datadog-dashboards`。Widgets タブを持つ)、Cost (Historical) (`datadog-cost-historical`)、Cost (Estimated) (`datadog-cost-estimated`)。
+  - TiDB Cloud: Projects (`tidb-projects`。Clusters タブを持つ)、Cost (`tidb-cost`)。
+  BigQuery、Cloud Logging、Datadog Metrics はクエリエディタ / ログビューア / メトリクスクエリのため、AWS の Athena と CloudWatch Logs と同じく TUI の対象に含めない。
+  Datadog のコストと TiDB Cloud のコストは、期間の入力欄を持たず、設定された月 (無ければ当月) の 1 か月分だけを表示する。
+- Datadog の認証は、API サーバと同じ保存済み OAuth トークンと静的キー (`DATADOG_API_KEY` / `DATADOG_APP_KEY`) を使う。期限切れのトークンはリフレッシュして保存する。
+  Sub Organization では静的キーへ倒さず、`thief datadog auth login --org <org>` の実行を案内する。
+- 枠線、タイトル、選択中のタブ、一覧の選択行、キー操作のヒントは、選択中のプロバイダーのイメージカラーを使う。
+  フォーカスしていない側の枠線は、同じ色を暗くした色を使う。色は ANSI 256 色の番号で持ち、端末のパレットに依存しない。
+  - AWS: オレンジ (208、暗い色は 94)
+  - Google Cloud: ブルー (69、暗い色は 25)
+  - Datadog: パープル (97、暗い色は 55)
+  - TiDB Cloud: レッド (160、暗い色は 88)
+- SSO の期限切れのバナーは AWS だけに出す。ほかのプロバイダーの失敗は一覧の領域に表示する。
+  プロバイダーの切り替え、スコープの切り替え、サービスの切り替えのたびに取得し直し、一覧の取得結果をキャッシュしない (FR-29 と同じ)。
+- リソースの変更操作、オブジェクトのプレビュー / アップロード / ダウンロード / SQL 検索、分割表示、TUI の状態の永続化は含めない。
+
+受け入れ基準:
+
+- `P` のピッカーに AWS、Google Cloud、Datadog、TiDB Cloud が表示され、選ぶとヘッダのプロバイダー名、サービスの一覧、スコープの表示、枠線の色が切り替わる。
+- Google Cloud に切り替えてプロジェクトを選ぶと Cloud Run の一覧が表示され、`S` で Cloud Storage、IAM、Service Accounts に切り替えられる。Cloud Storage の Objects タブでフォルダの階層移動、prefix 検索、階層 / フラット表示の切り替えができる。
+- Datadog に切り替えると親組織の Dashboards が表示され、`p` で Sub Organization を選べる。Dashboards の Widgets タブにウィジェットの種別、タイトル、クエリが表示される。Cost (Historical) と Cost (Estimated) は当月の請求を表示する。
+- TiDB Cloud に切り替えると Projects が表示され、Clusters タブでプロジェクトのクラスタが表示される。Cost は当月の請求を表示する。
+- プロバイダーを切り替えて戻ると、最後に選んだスコープとサービスが復元される。
+- Google Cloud、Datadog、TiDB Cloud の一覧の取得に失敗したときは、AWS の SSO の期限切れのバナーを出さず、失敗の内容を一覧の領域に表示する。
+- `backend/internal/tui/` は `backend/internal/api` に依存しない (`go list -deps ./internal/tui/` の出力に `internal/api` が含まれない)。
 
 ### 分析とコスト
 
@@ -842,7 +881,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - TUI は `github.com/charmbracelet/bubbletea`、`bubbles`、`lipgloss` で作り、他の TUI フレームワークは導入しない (ADR 0033)。
   bubbletea は CLI の対話の選択 (`backend/internal/util/selecter.go` `Select`) で既に直接依存であり、`bubbles` と `lipgloss` を直接依存に加える。
 - TUI は API サーバを経由せず、取得層をプロセス内で呼ぶ (ADR 0033)。
-  サービスの追加は、`backend/internal/tui/service.go` の `Service` と `Row` を満たす型を置き、`backend/internal/cli/tui.go` の `Deps.Services` に足す形で行う (`AGENTS.md` の backend 「プロジェクト構造」)。
+  サービスの追加は、`backend/internal/tui/service.go` の `Service` と `Row` を満たす型を置き、`backend/internal/tui/provider.go` の `Provider` を実装するプロバイダーの `Services` に足す形で行う。`backend/internal/cli/tui.go` の `newTUIDeps` がプロバイダーを `Deps.Providers` に並べる (`AGENTS.md` の backend 「プロジェクト構造」、ADR 0036)。
 - backend の型と frontend の Raw 型は、ゴールデン JSON で突き合わせる (`backend/internal/contract/contract.go` `Registry`、`frontend/src/types/contract.check.ts`)。
 - frontend は `http://localhost:8088`、backend は `127.0.0.1:8089` で動く。
 
@@ -875,7 +914,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | 論点 | 未確定の内容 | 解消の方法 |
 | --- | --- | --- |
 | Fargate Spot の料金 | データ源が無い (`docs/issues/pending/0059-feat-pricing-fargate-spot-rates.md`) | 利用できるデータ源が見つかった時点で、開発者が対応を決める |
-| TUI の第 2 段階以降の範囲 | 第 2 段階以降で扱うと決めた Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作の、段階ごとの範囲と順序。材料に無いコストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化 (起草者の整理) を TUI で扱うか | 第 1 段階 (FR-29、FR-30) の完了後に開発者が決める |
+| TUI の第 2 段階以降の範囲 | FR-31 で決めた非 AWS プロバイダーの一覧以外の範囲 (分析のビュー、リソースの変更操作、コストの期間指定、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化) を TUI で扱うか、扱う場合の順序 | FR-31 の実装後に開発者が決める |
 | FR-29 と FR-30 の優先度 | 起草者が付けた Must で確定するか | 開発者が確認する |
 | TUI の中の SSO の再ログイン | FR-9 のデバイス認可を TUI の中で行うか、`thief sso login` の案内に留めるか | 第 1 段階の完了後に開発者が決める |
 
@@ -922,11 +961,20 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | TUI の ECS のタスクとコンテナの選び方 | クラスタ行で `s` を押したときの選択肢と、Drawer の Tasks タブのタスク詳細の両方から選ぶ。クラスタ行の `s` では、実行中のタスク、次に ECS Exec が有効なコンテナを、サービスの切替と同じ絞り込み付きの選択肢で順に選び、候補が 1 件なら自動で選ぶ。Tasks タブではタスクの詳細にコンテナ一覧を出し、ECS Exec が有効なコンテナを選んで `s` または `enter` で接続する。Exec が無効なコンテナでは接続しない (FR-30) | 実 AWS で Tasks タブからの接続と FR-30 の ECS の受け入れ基準を確認済み (2026-10-27) |
 | TUI の Drawer のサービス固有タブ | Web UI の `DRAWER_TABS` と同じタブを TUI の Drawer に置く。タブは `Tab` サブモデルとして実装し、`1` から `9` と `[` / `]` で切り替える。読み込み中、失敗、空、成功を区別し、ECR は Tags を持たない | issue 0226 から 0230 で 19 サービス分を実装済み。実 AWS での確認も済み (2026-10-27) |
 
+次の論点は、2026-10-27 に開発者が決めた。TUI の第 2 段階の最初の範囲である。
+
+| 論点 | 決定 | 後続の作業 |
+| --- | --- | --- |
+| TUI のプロバイダーの切り替え | `P` で AWS、Google Cloud、Datadog、TiDB Cloud を切り替える。プロバイダーごとにスコープ、リージョン、サービスを保持し、戻ったときに復元する (FR-31、ADR 0036) | issue 0234 で実装 |
+| TUI の非 AWS プロバイダーの対象 | 一覧を持つサービスに限る。Google Cloud は Cloud Run、Cloud Storage、IAM、Service Accounts、Datadog は Dashboards と Cost 2 種、TiDB Cloud は Projects と Cost を載せる。BigQuery、Cloud Logging、Datadog Metrics は分析のビューとして除く (FR-31) | issue 0234 で実装 |
+| TUI の枠線の色 | プロバイダーのイメージカラーを使い、フォーカスしていない側は同じ色を暗くする。色は ANSI 256 色で固定する (FR-31、ADR 0036) | issue 0234 で実装 |
+
 ## 関連資料
 
 - 設計判断の記録: `docs/adr/`
 - TUI の接続方式とフレームワーク: ADR 0033 (`docs/adr/0033-tui-in-process-bubbletea.md`)
 - TUI のフロート端末: ADR 0034 (`docs/adr/0034-tui-floating-terminal-window.md`)
+- TUI のプロバイダー抽象とイメージカラー: ADR 0036 (`docs/adr/0036-tui-provider-abstraction.md`)
 - issue: `docs/issues/closed/`、`docs/issues/pending/`、`docs/issues/TODO.md`
 - CORS の不具合と修正の方針: `docs/issues/closed/0200-bug-cors-reflects-any-origin.md`、ADR 0032 (`docs/adr/0032-api-origin-and-host-checks.md`)
 - 変更履歴: `CHANGES.md`

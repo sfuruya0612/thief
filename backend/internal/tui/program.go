@@ -14,7 +14,7 @@ import (
 // セッションは TUI の中のフロートウィンドウで動くため、セッション中も端末は代替画面のままである。
 // TUI の Ctrl-C は raw モードのキー入力として Update に届き、SIGTERM は bubbletea 自身の
 // シグナル処理が QuitMsg に変換するため、外部の ctx が無くてもシグナルで終了できる。
-func Run(deps Deps, profile, region string) error {
+func Run(deps Deps, target Target) error {
 	// TUI は代替画面を占有するため、取得層や SDK のログが stderr に出ると画面が壊れる。
 	// TUI の実行中だけ既定のロガーを破棄し、終了後に元へ戻す。
 	restoreLogger := discardLogs()
@@ -23,7 +23,7 @@ func Run(deps Deps, profile, region string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	m, err := New(ctx, deps, profile, region)
+	m, err := New(ctx, deps, target)
 	if err != nil {
 		return err
 	}

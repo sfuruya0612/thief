@@ -324,7 +324,7 @@ func TestModel_TabSelectionResetsOnServiceChange(t *testing.T) {
 		fakeService: &fakeService{id: "second", rows: testRows()},
 		tabs:        []TabSpec{{ID: tabOverview, Title: "Overview"}, {ID: "second-tab", Title: "Second"}},
 	}
-	m, err := New(context.Background(), Deps{Services: []Service{first, second}}, "profile", "region")
+	m, err := New(context.Background(), Deps{Services: []Service{first, second}}, Target{Scope: "profile", Region: "region"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

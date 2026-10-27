@@ -7,7 +7,10 @@ import (
 	"sync"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/config"
+	"github.com/sfuruya0612/thief/backend/internal/gcp"
 	"github.com/sfuruya0612/thief/backend/internal/session"
+	tidbclient "github.com/sfuruya0612/thief/backend/internal/tidb"
 	"github.com/sfuruya0612/thief/backend/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -16,8 +19,9 @@ func newTUICmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tui",
 		Short: "Open the interactive terminal UI",
-		Long: `Opens a full-screen terminal UI that lists AWS resources, shows their details,
-and starts interactive sessions, like the web UI but inside the terminal.`,
+		Long: `Opens a full-screen terminal UI that lists AWS, Google Cloud, Datadog, and TiDB Cloud
+resources, shows their details, and starts interactive AWS sessions, like the web UI but
+inside the terminal. Press P to switch providers.`,
 		RunE: runTUI,
 	}
 }
@@ -28,42 +32,99 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return tui.Run(newTUIDeps(), cfg.Profile, cfg.Region)
+	return tui.Run(newTUIDeps(cfg), tui.Target{
+		Provider: tui.ProviderAWS,
+		Scope:    cfg.Profile,
+		Region:   cfg.Region,
+	})
 }
 
 // newTUIDeps は TUI が使う取得層とセッション開始の処理を組み立てる。
-// Services の各要素は、Web UI の同じ一覧のハンドラが使う internal/aws の関数をプロセス内で直接呼ぶ。
-func newTUIDeps() tui.Deps {
+// 各プロバイダーのサービスは、Web UI の同じ一覧のハンドラが使う取得層の関数をプロセス内で
+// 直接呼ぶ。Providers の並びは Web UI のトップバー (frontend/src/components/TopBar.tsx) と
+// 同じ AWS、Google Cloud、Datadog、TiDB の順にする。
+func newTUIDeps(cfg *config.Config) tui.Deps {
 	return tui.Deps{
-		ListProfiles: awsinternal.ListProfiles,
-		ListRegions:  awsinternal.ListRegions,
-		// 並びは Web UI のサイドバー (frontend/src/lib/serviceMeta.ts の SERVICES) と同じにする。
-		Services: []tui.Service{
-			tui.NewEC2Service(awsinternal.ListEC2Resources),
-			tui.NewLambdaService(awsinternal.ListLambdaResources),
-			tui.NewECRService(awsinternal.ListECRResources, awsinternal.ListECRImages),
-			tui.NewECSInteractiveService(awsinternal.ListECSResources, awsinternal.ListECSServices, awsinternal.ListECSTasks, awsinternal.ListECSContainerInstances),
-			tui.NewS3Service(awsinternal.ListS3Resources, awsinternal.ListS3Objects),
-			tui.NewRDSInteractiveService(awsinternal.ListRDSResources, awsinternal.ListRDSParameters, awsinternal.ListRDSClusterParameters),
-			tui.NewDynamoServiceWithTabs(awsinternal.ListDynamoResources, awsinternal.DescribeDynamoTable, awsinternal.QueryDynamoItems),
-			tui.NewCacheService(awsinternal.ListElastiCacheResources, awsinternal.ListElastiCacheParameters),
-			tui.NewELBServiceWithTabs(awsinternal.ListELBResources, awsinternal.ListELBListeners, awsinternal.ListELBRules, awsinternal.ListELBTargetGroups, awsinternal.DescribeELBTargetHealth),
-			tui.NewCloudFrontService(awsinternal.ListCloudFrontResources),
-			tui.NewAPIGatewayService(awsinternal.ListAPIGatewayResources),
-			tui.NewNATGatewayService(awsinternal.ListNATGatewayResources),
-			tui.NewKinesisService(awsinternal.ListKinesisResources),
-			tui.NewSQSService(awsinternal.ListSQSResources),
-			tui.NewIAMService(awsinternal.ListIAMResources),
-			tui.NewWAFServiceWithRules(awsinternal.ListWAFResources, awsinternal.ListWAFRules),
-			tui.NewSecretsService(awsinternal.ListSecretResources, awsinternal.GetSecretValue),
-			tui.NewSSMService(awsinternal.ListSSMParameters, awsinternal.GetSSMParameter),
-			tui.NewCFNServiceWithTabs(awsinternal.ListCFNStacks, awsinternal.DescribeCFNStackDetail, awsinternal.ListCFNStackEvents, awsinternal.ListCFNStackResources),
+		Providers: []tui.Provider{
+			tui.NewAWSProvider(awsinternal.ListProfiles, awsinternal.ListRegions, tuiAWSServices()),
+			tui.NewGCPProvider(func(ctx context.Context) ([]gcp.ProjectInfo, error) {
+				return listTUIProjects(ctx, cfg)
+			}, cfg.BigQuery.ProjectID, tuiGCPServices()),
+			tui.NewDatadogProvider(tui.DatadogProviderOptions{
+				Site:       cfg.Datadog.Site,
+				APIKey:     cfg.DatadogAPIKey(),
+				AppKey:     cfg.DatadogAppKey(),
+				StartMonth: cfg.Datadog.StartMonth,
+				EndMonth:   cfg.Datadog.EndMonth,
+				View:       cfg.Datadog.View,
+			}),
+			tui.NewTiDBProvider(
+				tidbclient.NewClient(cfg.TiDB.PublicKey, cfg.TiDBPrivateKey()),
+				cfg.TiDB.BilledMonth,
+			),
 		},
 		OpenEC2Session:     openTUIEC2Session,
 		ListECSTasks:       awsinternal.ListECSTasks,
 		ListECSContainers:  awsinternal.ListECSContainers,
 		OpenECSExecSession: openTUIECSExecSession,
 	}
+}
+
+// tuiAWSServices は AWS の TUI サービスを Web UI のサイドバーと同じ順で返す。
+func tuiAWSServices() []tui.Service {
+	return []tui.Service{
+		tui.NewEC2Service(awsinternal.ListEC2Resources),
+		tui.NewLambdaService(awsinternal.ListLambdaResources),
+		tui.NewECRService(awsinternal.ListECRResources, awsinternal.ListECRImages),
+		tui.NewECSInteractiveService(awsinternal.ListECSResources, awsinternal.ListECSServices, awsinternal.ListECSTasks, awsinternal.ListECSContainerInstances),
+		tui.NewS3Service(awsinternal.ListS3Resources, awsinternal.ListS3Objects),
+		tui.NewRDSInteractiveService(awsinternal.ListRDSResources, awsinternal.ListRDSParameters, awsinternal.ListRDSClusterParameters),
+		tui.NewDynamoServiceWithTabs(awsinternal.ListDynamoResources, awsinternal.DescribeDynamoTable, awsinternal.QueryDynamoItems),
+		tui.NewCacheService(awsinternal.ListElastiCacheResources, awsinternal.ListElastiCacheParameters),
+		tui.NewELBServiceWithTabs(awsinternal.ListELBResources, awsinternal.ListELBListeners, awsinternal.ListELBRules, awsinternal.ListELBTargetGroups, awsinternal.DescribeELBTargetHealth),
+		tui.NewCloudFrontService(awsinternal.ListCloudFrontResources),
+		tui.NewAPIGatewayService(awsinternal.ListAPIGatewayResources),
+		tui.NewNATGatewayService(awsinternal.ListNATGatewayResources),
+		tui.NewKinesisService(awsinternal.ListKinesisResources),
+		tui.NewSQSService(awsinternal.ListSQSResources),
+		tui.NewIAMService(awsinternal.ListIAMResources),
+		tui.NewWAFServiceWithRules(awsinternal.ListWAFResources, awsinternal.ListWAFRules),
+		tui.NewSecretsService(awsinternal.ListSecretResources, awsinternal.GetSecretValue),
+		tui.NewSSMService(awsinternal.ListSSMParameters, awsinternal.GetSSMParameter),
+		tui.NewCFNServiceWithTabs(awsinternal.ListCFNStacks, awsinternal.DescribeCFNStackDetail, awsinternal.ListCFNStackEvents, awsinternal.ListCFNStackResources),
+	}
+}
+
+// tuiGCPServices は Google Cloud の TUI サービスを Web UI のサイドバーと同じ順で返す。
+// BigQuery と Cloud Logging はクエリエディタ / ログビューアのため、AWS の Athena と
+// CloudWatch Logs と同じく TUI の一覧には含めない。
+func tuiGCPServices() []tui.Service {
+	return []tui.Service{
+		tui.NewGCPCloudRunService(gcp.ListCloudRun),
+		tui.NewGCSBucketService(gcp.ListBuckets, gcp.ListObjects),
+		tui.NewGCPIAMService(gcp.ListIAMBindings),
+		tui.NewGCPServiceAccountService(gcp.ListServiceAccounts),
+	}
+}
+
+// listTUIProjects は TUI のプロジェクト選択に出す一覧を返す。Web UI と CLI と同じく
+// ローカルのキャッシュ (~/.config/thief/gcp-projects.json) を優先し、無いときだけ
+// Cloud Resource Manager から取得する。
+func listTUIProjects(ctx context.Context, cfg *config.Config) ([]gcp.ProjectInfo, error) {
+	dir, err := config.Dir()
+	if err != nil {
+		return nil, err
+	}
+	projects, _, ok, err := gcp.LoadProjectsFromDisk(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || len(projects) == 0 {
+		// キャッシュが無いときと、キャッシュが空のときは取り直す。空のキャッシュを
+		// 返し続けると、プロジェクトを作った後に p を押しても選択肢が増えない。
+		return gcp.RefreshProjectsOnDisk(ctx, dir)
+	}
+	return projects, nil
 }
 
 // tuiDataChannel は TUI のセッションが使うデータチャネルの操作。テストで差し替える。

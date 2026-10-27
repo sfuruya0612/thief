@@ -8,32 +8,48 @@ import (
 	"testing"
 
 	awsinternal "github.com/sfuruya0612/thief/backend/internal/aws"
+	"github.com/sfuruya0612/thief/backend/internal/config"
 	"github.com/sfuruya0612/thief/backend/internal/session"
 	"github.com/sfuruya0612/thief/backend/internal/tui"
 )
 
-// TestNewTUIDeps_ServicesFollowWebUIOrder は TUI に載せるサービスの集合と並びを固定する。
-// 並びは Web UI のサイドバー (frontend/src/lib/serviceMeta.ts の SERVICES) と同じで、第 1 段階の 19 サービス
-// (docs/prd/thief.md の成功指標) が揃っている。サービスを足したら、ここの期待値も更新する。
+// TestNewTUIDeps_ServicesFollowWebUIOrder は TUI に載せるプロバイダーとサービスの集合、並びを
+// 固定する。並びは Web UI のトップバー (frontend/src/components/TopBar.tsx) とサイドバー
+// (frontend/src/lib/serviceMeta.ts) と同じにする。サービスを足したら、ここの期待値も更新する。
 func TestNewTUIDeps_ServicesFollowWebUIOrder(t *testing.T) {
-	deps := newTUIDeps()
+	deps := newTUIDeps(config.Defaults())
 
-	var got []string
-	seen := map[string]bool{}
-	for _, s := range deps.Services {
-		if seen[s.ID()] {
-			t.Errorf("service %q is registered twice", s.ID())
+	var providers []string
+	for _, p := range deps.Providers {
+		providers = append(providers, p.ID())
+	}
+	if want := []string{tui.ProviderAWS, tui.ProviderGCP, tui.ProviderDatadog, tui.ProviderTiDB}; !reflect.DeepEqual(providers, want) {
+		t.Errorf("provider IDs = %v, want %v", providers, want)
+	}
+
+	wantServices := map[string][]string{
+		tui.ProviderAWS:     {"ec2", "lambda", "ecr", "ecs", "s3", "rds", "dynamo", "cache", "elb", "cloudfront", "apigw", "natgw", "kinesis", "sqs", "iam", "waf", "secrets", "ssm", "cfn"},
+		tui.ProviderGCP:     {"cloudrun", "gcs", "gcpiam", "gcpserviceaccounts"},
+		tui.ProviderDatadog: {"datadog-dashboards", "datadog-cost-historical", "datadog-cost-estimated"},
+		tui.ProviderTiDB:    {"tidb-projects", "tidb-cost"},
+	}
+	for _, p := range deps.Providers {
+		var got []string
+		seen := map[string]bool{}
+		for _, s := range p.Services() {
+			if seen[s.ID()] {
+				t.Errorf("provider %s: service %q is registered twice", p.ID(), s.ID())
+			}
+			seen[s.ID()] = true
+			got = append(got, s.ID())
 		}
-		seen[s.ID()] = true
-		got = append(got, s.ID())
-	}
-	want := []string{"ec2", "lambda", "ecr", "ecs", "s3", "rds", "dynamo", "cache", "elb", "cloudfront", "apigw", "natgw", "kinesis", "sqs", "iam", "waf", "secrets", "ssm", "cfn"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("service IDs = %v, want %v", got, want)
+		if !reflect.DeepEqual(got, wantServices[p.ID()]) {
+			t.Errorf("%s service IDs = %v, want %v", p.ID(), got, wantServices[p.ID()])
+		}
 	}
 
-	if deps.ListProfiles == nil || deps.ListRegions == nil || deps.OpenEC2Session == nil || deps.OpenECSExecSession == nil {
-		t.Errorf("deps must wire ListProfiles, ListRegions, OpenEC2Session and OpenECSExecSession: %+v", deps)
+	if len(deps.Providers) == 0 || deps.OpenEC2Session == nil || deps.OpenECSExecSession == nil {
+		t.Errorf("deps must wire Providers, OpenEC2Session and OpenECSExecSession: %+v", deps)
 	}
 	// 同じシグネチャの別の関数を配線しても非 nil の確認では通るため、関数の同一性で固定する。
 	wired := map[string][2]uintptr{
@@ -85,18 +101,30 @@ func TestNewTUIDeps_TabsFollowWebUI(t *testing.T) {
 		"secrets":    {"Overview", "Value", "Tags"},
 		"ssm":        {"Overview", "Value", "Tags"},
 		"cfn":        {"Overview", "Events", "Resources", "Tags"},
+
+		"cloudrun":                {"Overview"},
+		"gcs":                     {"Overview", "Objects"},
+		"gcpiam":                  {"Overview"},
+		"gcpserviceaccounts":      {"Overview"},
+		"datadog-dashboards":      {"Overview", "Widgets"},
+		"datadog-cost-historical": {"Overview"},
+		"datadog-cost-estimated":  {"Overview"},
+		"tidb-projects":           {"Overview", "Clusters"},
+		"tidb-cost":               {"Overview"},
 	}
-	deps := newTUIDeps()
-	for _, svc := range deps.Services {
-		got := []string{"Overview", "Tags"}
-		if provider, ok := svc.(tui.TabProvider); ok {
-			got = nil
-			for _, tab := range provider.Tabs() {
-				got = append(got, tab.Title)
+	deps := newTUIDeps(config.Defaults())
+	for _, p := range deps.Providers {
+		for _, svc := range p.Services() {
+			got := []string{"Overview", "Tags"}
+			if provider, ok := svc.(tui.TabProvider); ok {
+				got = nil
+				for _, tab := range provider.Tabs() {
+					got = append(got, tab.Title)
+				}
 			}
-		}
-		if !reflect.DeepEqual(got, want[svc.ID()]) {
-			t.Errorf("%s tabs = %v, want %v", svc.ID(), got, want[svc.ID()])
+			if !reflect.DeepEqual(got, want[svc.ID()]) {
+				t.Errorf("%s tabs = %v, want %v", svc.ID(), got, want[svc.ID()])
+			}
 		}
 	}
 }

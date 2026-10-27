@@ -6,15 +6,19 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // pickerKind はピッカーが何を選ぶかを表す。選択後の処理の分岐に使う。
 type pickerKind int
 
 const (
-	pickerProfile pickerKind = iota
+	// pickerScope はプロバイダーの主スコープ (AWS のプロファイル、Google Cloud の
+	// プロジェクト、Datadog の組織) の選択。pickerRegion は副スコープ (AWS のリージョン)。
+	pickerScope pickerKind = iota
 	pickerRegion
 	pickerService
+	pickerProvider
 	// pickerECSTask と pickerECSContainer は ECS Exec の接続先 (タスク、コンテナ) の選択。
 	pickerECSTask
 	pickerECSContainer
@@ -34,10 +38,13 @@ type picker struct {
 	items  []pickerItem
 	input  textinput.Model
 	cursor int
+	// accent はタイトルと選択行の色。呼び出し側が選択中のプロバイダーのイメージカラーを渡す。
+	accent lipgloss.Color
 }
 
-// newPicker は selected に一致する項目へカーソルを置いたピッカーを返す。
-func newPicker(kind pickerKind, title string, items []pickerItem, selected string) picker {
+// newPicker は selected に一致する項目へカーソルを置いたピッカーを返す。accent を省略すると
+// 既定のアクセント色を使う (既存のテスト用)。
+func newPicker(kind pickerKind, title string, items []pickerItem, selected string, accent ...lipgloss.Color) picker {
 	ti := textinput.New()
 	ti.Prompt = "> "
 	ti.Placeholder = "type to filter"
@@ -46,7 +53,11 @@ func newPicker(kind pickerKind, title string, items []pickerItem, selected strin
 	ti.Width = 40
 	ti.Focus()
 
-	p := picker{kind: kind, title: title, items: items, input: ti}
+	color := accentColor
+	if len(accent) > 0 {
+		color = accent[0]
+	}
+	p := picker{kind: kind, title: title, items: items, input: ti, accent: color}
 	for i, it := range items {
 		if it.Value == selected {
 			p.cursor = i
@@ -124,7 +135,7 @@ func (p picker) update(msg tea.KeyMsg) (next picker, done bool, chosen *pickerIt
 func (p picker) view(height int) string {
 	var b strings.Builder
 	items := p.filtered()
-	b.WriteString(titleStyle.Render(p.title))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(p.accent).Render(p.title))
 	b.WriteString(mutedStyle.Render(fmt.Sprintf("  (%d/%d)", len(items), len(p.items))))
 	b.WriteString("\n")
 	b.WriteString(p.input.View())
@@ -167,7 +178,7 @@ func (p picker) view(height int) string {
 		it := items[i]
 		line := fmt.Sprintf("%-*s  %s", labelWidth, it.Label, it.Detail)
 		if i == p.cursor {
-			b.WriteString(selectedStyle.Render("> " + line))
+			b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(p.accent).Render("> " + line))
 		} else {
 			b.WriteString("  " + line)
 		}

@@ -132,7 +132,7 @@ func testRows() []Row {
 func newTestModel(t *testing.T, svc Service, deps Deps) Model {
 	t.Helper()
 	deps.Services = []Service{svc}
-	m, err := New(context.Background(), deps, "first", "ap-northeast-1")
+	m, err := New(context.Background(), deps, Target{Scope: "first", Region: "ap-northeast-1"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -239,7 +239,7 @@ func keyMsg(k string) tea.KeyMsg {
 }
 
 func TestNew_RequiresService(t *testing.T) {
-	if _, err := New(context.Background(), Deps{}, "p", "r"); err == nil {
+	if _, err := New(context.Background(), Deps{}, Target{}); err == nil {
 		t.Fatal("New with no services should fail")
 	}
 }
@@ -264,8 +264,8 @@ func TestModel_InitialLoadPopulatesTableAndDrawer(t *testing.T) {
 	if got := svc.calls; len(got) != 1 || got[0] != "first/ap-northeast-1" {
 		t.Errorf("Load calls = %v, want [first/ap-northeast-1]", got)
 	}
-	if len(m.profiles) != 1 {
-		t.Errorf("profiles = %d, want 1", len(m.profiles))
+	if len(m.scopes) != 1 {
+		t.Errorf("profiles = %d, want 1", len(m.scopes))
 	}
 	view := m.View()
 	for _, want := range []string{"web-1", "db-1", "Resource ID", "i-web", "profile: first", "region: ap-northeast-1"} {
@@ -441,13 +441,13 @@ func TestModel_OtherErrorsAreShownInPane(t *testing.T) {
 func TestModel_ProfilePickerReloadsWithChosenProfile(t *testing.T) {
 	svc := &fakeService{id: "ec2", rows: testRows()}
 	m := newTestModel(t, svc, Deps{})
-	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{
-		{Name: "first", AccountID: "111111111111", AuthType: aws.AuthTypeSSO, SSORoleName: "Admin", SSOStatus: aws.SSOStatusValid},
-		{Name: "second", AccountID: "222222222222", AuthType: aws.AuthTypeAccessKey},
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, scopes: []Scope{
+		{Label: "first", Detail: "111111111111  Admin  sso:VALID", Value: "first"},
+		{Label: "second", Detail: "222222222222", Value: "second"},
 	}})
 
 	m = keys(t, m, "p")
-	if m.picker == nil || m.picker.kind != pickerProfile {
+	if m.picker == nil || m.picker.kind != pickerScope {
 		t.Fatal("p should open the profile picker")
 	}
 	if !strings.Contains(m.View(), "Select a profile") || !strings.Contains(m.View(), "222222222222") {
@@ -473,7 +473,7 @@ func TestModel_ProfilePickerReloadsWithChosenProfile(t *testing.T) {
 
 func TestModel_ProfilePickerCancelKeepsProfile(t *testing.T) {
 	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{})
-	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{{Name: "first"}, {Name: "second"}}})
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, scopes: []Scope{{Label: "first", Value: "first"}, {Label: "second", Value: "second"}}})
 	m = keys(t, m, "p", "down", "esc")
 	if m.picker != nil || m.profile != "first" {
 		t.Errorf("esc should cancel: picker=%v profile=%q", m.picker, m.profile)
@@ -528,7 +528,7 @@ func TestModel_RegionListFailureSetsStatus(t *testing.T) {
 func TestModel_ServicePickerSwitchesService(t *testing.T) {
 	ec2 := &fakeService{id: "ec2", rows: testRows()}
 	rds := &fakeService{id: "rds"}
-	m, err := New(context.Background(), Deps{Services: []Service{ec2, rds}}, "first", "ap-northeast-1")
+	m, err := New(context.Background(), Deps{Services: []Service{ec2, rds}}, Target{Scope: "first", Region: "ap-northeast-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -699,7 +699,7 @@ func TestModel_SessionStartAfterChannelFailureUsesClosedError(t *testing.T) {
 }
 
 func TestModel_SmallTerminalDoesNotPanic(t *testing.T) {
-	m, err := New(context.Background(), Deps{Services: []Service{&fakeService{id: "ec2", rows: testRows()}}}, "first", "ap-northeast-1")
+	m, err := New(context.Background(), Deps{Services: []Service{&fakeService{id: "ec2", rows: testRows()}}}, Target{Scope: "first", Region: "ap-northeast-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,10 +804,10 @@ func TestModel_TableColumnsFollowContentAndBudget(t *testing.T) {
 func TestModel_PickerFiltersByTyping(t *testing.T) {
 	svc := &fakeService{id: "ec2"}
 	m := newTestModel(t, svc, Deps{})
-	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{
-		{Name: "prod-admin", AccountID: "111111111111"},
-		{Name: "stg-admin", AccountID: "222222222222"},
-		{Name: "dev-read", AccountID: "333333333333"},
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, scopes: []Scope{
+		{Label: "prod-admin", Detail: "111111111111", Value: "prod-admin"},
+		{Label: "stg-admin", Detail: "222222222222", Value: "stg-admin"},
+		{Label: "dev-read", Detail: "333333333333", Value: "dev-read"},
 	}})
 	m = keys(t, m, "p", "d", "e", "v")
 	if m.picker == nil {
@@ -832,7 +832,7 @@ func TestModel_PickerFiltersByTyping(t *testing.T) {
 
 func TestModel_PickerQKeyFiltersInsteadOfQuitting(t *testing.T) {
 	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{})
-	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{{Name: "first"}, {Name: "qa"}}})
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, scopes: []Scope{{Label: "first", Value: "first"}, {Label: "qa", Value: "qa"}}})
 	m, cmd := updateCmd(t, m, keyMsg("p"))
 	if cmd != nil {
 		t.Error("opening the picker needs no cmd")
@@ -915,7 +915,7 @@ func TestModel_SSOBannerShrinksPanes(t *testing.T) {
 
 func TestModel_CtrlCQuitsFromPicker(t *testing.T) {
 	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{})
-	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{{Name: "first"}}})
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, scopes: []Scope{{Label: "first", Value: "first"}}})
 	m = keys(t, m, "p")
 	_, cmd := updateCmd(t, m, keyMsg("ctrl+c"))
 	msgs := drain(t, cmd)
@@ -1049,7 +1049,7 @@ func TestModel_InitTicksSpinnerOnce(t *testing.T) {
 			ticks++
 		case rowsLoadedMsg:
 			loads++
-		case profilesLoadedMsg:
+		case scopesLoadedMsg:
 			profiles++
 		default:
 			t.Errorf("unexpected msg %#v", msg)
@@ -1068,7 +1068,7 @@ func TestModel_ProfileSwitchClearsRowsUntilReload(t *testing.T) {
 		return newFakeInteractiveSession(), nil
 	}})
 	m = update(t, m, rowsLoadedMsg{seq: 0, rows: testRows()})
-	m = update(t, m, profilesLoadedMsg{profiles: []aws.Profile{{Name: "first"}, {Name: "second"}}})
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, scopes: []Scope{{Label: "first", Value: "first"}, {Label: "second", Value: "second"}}})
 
 	m = keys(t, m, "p", "down")
 	m, cmd := updateCmd(t, m, keyMsg("enter"))
@@ -1209,9 +1209,9 @@ func TestModel_SessionKeyOnServiceWithoutSessions(t *testing.T) {
 
 func TestModel_ProfilesLoadFailureSetsStatus(t *testing.T) {
 	m := newTestModel(t, &fakeService{id: "ec2"}, Deps{})
-	m = update(t, m, profilesLoadedMsg{err: errors.New("boom")})
-	if m.status != "list profiles: boom" || len(m.profiles) != 0 {
-		t.Errorf("status=%q profiles=%v", m.status, m.profiles)
+	m = update(t, m, scopesLoadedMsg{provider: ProviderAWS, err: errors.New("boom")})
+	if m.status != "list profiles: boom" || len(m.scopes) != 0 {
+		t.Errorf("status=%q profiles=%v", m.status, m.scopes)
 	}
 }
 
@@ -1228,7 +1228,7 @@ func TestModel_ProfileKeyBeforeProfilesLoadedWaitsForList(t *testing.T) {
 		t.Errorf("status = %q", m.status)
 	}
 	m = apply(t, m, cmd)
-	if m.picker == nil || m.picker.kind != pickerProfile {
+	if m.picker == nil || m.picker.kind != pickerScope {
 		t.Fatal("the picker should open once the profiles arrive")
 	}
 	if m.status != "" {
@@ -1245,8 +1245,8 @@ func TestModel_ProfileKeyBeforeProfilesLoadedReportsFailure(t *testing.T) {
 	}})
 	m, cmd := updateCmd(t, m, keyMsg("p"))
 	m = apply(t, m, cmd)
-	if m.picker != nil || m.profilePickerPending {
-		t.Errorf("a failed list must not open the picker or keep it pending: picker=%v pending=%v", m.picker, m.profilePickerPending)
+	if m.picker != nil || m.scopePickerPending {
+		t.Errorf("a failed list must not open the picker or keep it pending: picker=%v pending=%v", m.picker, m.scopePickerPending)
 	}
 	if m.status != "list profiles: boom" {
 		t.Errorf("status = %q", m.status)
@@ -1283,7 +1283,7 @@ func TestModel_LongStatusFitsNarrowWidth(t *testing.T) {
 func TestModel_ServiceSwitchToFewerColumnsSelectsFirstRow(t *testing.T) {
 	wide := &fakeService{id: "wide", rows: testRows()}
 	narrow := &fakeService{id: "narrow", rows: testRows(), columns: []Column{{Title: "A"}, {Title: "B"}, {Title: "C"}}}
-	m, err := New(context.Background(), Deps{Services: []Service{wide, narrow}}, "first", "ap-northeast-1")
+	m, err := New(context.Background(), Deps{Services: []Service{wide, narrow}}, Target{Scope: "first", Region: "ap-northeast-1"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

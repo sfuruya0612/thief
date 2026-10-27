@@ -19,14 +19,21 @@ import (
 	"github.com/sfuruya0612/thief/backend/internal/aws"
 )
 
-// Deps は TUI が外部 (AWS、プロセス起動) と接する処理をまとめる。テストで差し替える。
+// Deps は TUI が外部 (AWS、Google Cloud、Datadog、TiDB、プロセス起動) と接する処理をまとめる。
+// テストで差し替える。
 type Deps struct {
+	// Providers は表示できるプロバイダー。先頭を初期表示にする。
+	Providers []Provider
+	// Services は Providers を省略したときの AWS サービスの一覧。既存のテストが
+	// Deps.Services だけで TUI を組み立てられるように残している。本番の
+	// プロバイダー構成は Providers を使う。
+	Services []Service
 	// ListProfiles は ~/.aws/config のプロファイルを返す (aws.ListProfiles)。
+	// Services から AWS プロバイダーを組み立てるときに使う。
 	ListProfiles func() ([]aws.Profile, error)
 	// ListRegions はプロファイルで有効なリージョンを返す (aws.ListRegions)。
+	// Services から AWS プロバイダーを組み立てるときに使う。
 	ListRegions func(ctx context.Context, profile string) ([]aws.RegionResource, error)
-	// Services は表示できるサービス。先頭を初期表示にする。
-	Services []Service
 	// OpenEC2Session は EC2 の Session Manager のセッションを開始し、TUI のフロートウィンドウが
 	// 使う InteractiveSession を返す。
 	OpenEC2Session func(ctx context.Context, profile, region, target string) (InteractiveSession, error)
@@ -55,6 +62,14 @@ const (
 	focusDrawer
 )
 
+// providerState はプロバイダーごとに最後に選んだスコープとサービス。プロバイダーを
+// 切り替えて戻ったときに、選び直さずに同じ一覧へ戻すために保持する。永続化はしない。
+type providerState struct {
+	Scope     string
+	Region    string
+	ServiceID string
+}
+
 // 画面の固定部分の行数。ヘッダ 1 行、フッタ 1 行、ペインの枠の上下 2 行。
 const (
 	headerLines = 1
@@ -73,11 +88,24 @@ type Model struct {
 	deps Deps
 	ctx  context.Context
 
-	service Service
+	providers []Provider
+	provider  Provider
+	service   Service
+
+	// profile と region は、選択中のプロバイダーの主スコープと副スコープの値。
+	// AWS ではプロファイルとリージョン、Google Cloud ではプロジェクト (region は使わない)、
+	// Datadog では組織 (親組織は空文字)、TiDB ではどちらも使わない。
 	profile string
 	region  string
 
-	profiles []aws.Profile
+	// scopes と regions は、選択中のプロバイダーで選べるスコープ。プロバイダーを
+	// 切り替えたら捨て、p / R を押したときに取り直す。
+	scopes  []Scope
+	regions []Scope
+
+	// providerStates はプロバイダーごとの選択状態。provider を切り替えるときに保存し、
+	// 戻ったときに復元する。
+	providerStates map[string]providerState
 
 	rows    []Row
 	visible []Row
@@ -134,38 +162,84 @@ type Model struct {
 	ecsExec ecsExecState
 	ecsSeq  int
 
-	// profilePickerPending はプロファイルの一覧が届く前に p を押したことを表す。
-	// 一覧が届いたら picker を開く。
-	profilePickerPending bool
+	// scopePickerPending と regionPickerPending は、一覧が届く前に p / R を押したことを
+	// 表す。一覧が届いたら picker を開く。scopeSeq はプロバイダーの切替で古い一覧の結果を
+	// 捨てるための世代。
+	scopePickerPending  bool
+	regionPickerPending bool
+	scopeSeq            int
 }
 
-// New は初期状態の Model を返す。deps.Services は 1 つ以上必要。
-func New(ctx context.Context, deps Deps, profile, region string) (Model, error) {
-	if len(deps.Services) == 0 {
-		return Model{}, errors.New("no services configured")
+// New は初期状態の Model を返す。deps.Providers か deps.Services のどちらかに 1 つ以上の
+// サービスが必要。target は起動時に選ぶプロバイダーとスコープで、空なら先頭のプロバイダーと
+// その既定値を使う。
+func New(ctx context.Context, deps Deps, target Target) (Model, error) {
+	providers := deps.Providers
+	if len(providers) == 0 {
+		if len(deps.Services) == 0 {
+			return Model{}, errors.New("no services configured")
+		}
+		providers = []Provider{newLegacyAWSProvider(deps)}
 	}
+
+	p, ok := selectProvider(providers, target.Provider)
+	if !ok {
+		return Model{}, fmt.Errorf("provider %q is not configured", target.Provider)
+	}
+	seenProvider := make(map[string]bool, len(providers))
+	for _, pr := range providers {
+		if seenProvider[pr.ID()] {
+			return Model{}, fmt.Errorf("provider %q is registered twice", pr.ID())
+		}
+		seenProvider[pr.ID()] = true
+		services := pr.Services()
+		if len(services) == 0 {
+			return Model{}, fmt.Errorf("provider %q has no services", pr.ID())
+		}
+		seenService := make(map[string]bool, len(services))
+		for _, svc := range services {
+			if seenService[svc.ID()] {
+				return Model{}, fmt.Errorf("provider %q has service %q registered twice", pr.ID(), svc.ID())
+			}
+			seenService[svc.ID()] = true
+		}
+	}
+
+	scope, region := p.DefaultScope(), p.DefaultRegion()
+	if target.Scope != "" || !p.RequiresScope() {
+		scope = target.Scope
+	}
+	if target.Region != "" {
+		region = target.Region
+	}
+
+	states := make(map[string]providerState, len(providers))
+	for _, pr := range providers {
+		id := ""
+		if services := pr.Services(); len(services) > 0 {
+			id = services[0].ID()
+		}
+		states[pr.ID()] = providerState{Scope: pr.DefaultScope(), Region: pr.DefaultRegion(), ServiceID: id}
+	}
+	states[p.ID()] = providerState{Scope: scope, Region: region, ServiceID: p.Services()[0].ID()}
 
 	ti := textinput.New()
 	ti.Prompt = "/ "
 	ti.Placeholder = "filter"
 	ti.CharLimit = 128
 
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	sp.Style = lipgloss.NewStyle().Foreground(accentColor)
-
-	styles := table.DefaultStyles()
-	styles.Header = styles.Header.Bold(true).Foreground(mutedColor).BorderStyle(lipgloss.NormalBorder()).BorderBottom(true).BorderForeground(mutedColor)
-	styles.Selected = styles.Selected.Foreground(lipgloss.Color("0")).Background(accentColor).Bold(false)
-
 	m := Model{
 		deps:             deps,
 		ctx:              ctx,
-		service:          deps.Services[0],
-		profile:          profile,
+		providers:        providers,
+		provider:         p,
+		service:          p.Services()[0],
+		profile:          scope,
 		region:           region,
+		providerStates:   states,
 		filter:           ti,
-		spinner:          sp,
-		table:            table.New(table.WithFocused(true), table.WithStyles(styles)),
+		spinner:          spinner.New(spinner.WithSpinner(spinner.Dot)),
+		table:            table.New(table.WithFocused(true)),
 		drawer:           viewport.New(0, 0),
 		tabID:            tabOverview,
 		loading:          true,
@@ -176,20 +250,79 @@ func New(ctx context.Context, deps Deps, profile, region string) (Model, error) 
 
 		statusTTL: defaultStatusTTL,
 	}
+	m = m.applyProviderTheme()
+	if m.provider.RequiresScope() && m.profile == "" {
+		// 主スコープが無いと一覧を取得できない。Init がスコープの一覧を取り、
+		// 届いたらピッカーを開く。
+		m.scopePickerPending = true
+	}
 	m.table.SetColumns(m.tableColumns(0))
 	return m, nil
 }
 
+// selectProvider は providers から id のプロバイダーを返す。id が空なら先頭を返す。
+func selectProvider(providers []Provider, id string) (Provider, bool) {
+	if len(providers) == 0 {
+		return nil, false
+	}
+	if id == "" {
+		return providers[0], true
+	}
+	for _, p := range providers {
+		if p.ID() == id {
+			return p, true
+		}
+	}
+	return nil, false
+}
+
+// newTableStyles はプロバイダーのアクセントカラーを選択行の背景に使う表のスタイルを返す。
+func newTableStyles(accent lipgloss.Color) table.Styles {
+	styles := table.DefaultStyles()
+	styles.Header = styles.Header.Bold(true).Foreground(mutedColor).BorderStyle(lipgloss.NormalBorder()).BorderBottom(true).BorderForeground(mutedColor)
+	styles.Selected = styles.Selected.Foreground(lipgloss.Color("0")).Background(accent).Bold(false)
+	return styles
+}
+
+// applyProviderTheme は選択中のプロバイダーのイメージカラーを、スピナーと一覧の選択行へ
+// 反映する。枠線とタイトルは描画のたびに provider の色を使う。
+func (m Model) applyProviderTheme() Model {
+	accent := m.provider.Accent()
+	m.spinner.Style = lipgloss.NewStyle().Foreground(accent)
+	m.table.SetStyles(newTableStyles(accent))
+	return m
+}
+
+// serviceByID は services から id のサービスを返す。見つからなければ先頭を返す。
+func serviceByID(services []Service, id string) Service {
+	if len(services) == 0 {
+		return nil
+	}
+	for _, s := range services {
+		if s.ID() == id {
+			return s
+		}
+	}
+	return services[0]
+}
+
 // --- メッセージ ---
 
-type profilesLoadedMsg struct {
-	profiles []aws.Profile
+// scopesLoadedMsg は主スコープの一覧の取得結果。provider と seq は、取得中にプロバイダーが
+// 切り替わった結果を捨てるために使う。
+type scopesLoadedMsg struct {
+	seq      int
+	provider string
+	scopes   []Scope
 	err      error
 }
 
+// regionsLoadedMsg は副スコープの一覧の取得結果。provider と seq は scopesLoadedMsg と同じ。
 type regionsLoadedMsg struct {
-	regions []aws.RegionResource
-	err     error
+	seq      int
+	provider string
+	regions  []Scope
+	err      error
 }
 
 type rowsLoadedMsg struct {
@@ -265,42 +398,63 @@ type statusExpiredMsg struct {
 	seq int
 }
 
-// Init は起動時にプロファイルと一覧の取得を始める。
+// Init は起動時にスコープの一覧と一覧の取得を始める。
 // Init は Model を変更できないため、New が loading を立て loadSeq を 0 に置いた状態を
 // そのまま使い、loadCmd が seq 0 の結果を返す。
 func (m Model) Init() tea.Cmd {
 	// spinner.Tick は loadCmd が含むため、ここでは重ねない。
-	return tea.Batch(m.loadProfilesCmd(), m.loadCmd())
+	scopes := tea.Cmd(nil)
+	if m.shouldLoadScopesAtStartup() {
+		scopes = m.loadScopesCmd()
+	}
+	return tea.Batch(scopes, m.loadCmd())
 }
 
-func (m Model) loadProfilesCmd() tea.Cmd {
-	list := m.deps.ListProfiles
-	if list == nil {
-		return nil
+// shouldLoadScopesAtStartup は起動直後に主スコープの一覧を取るかを返す。AWS は従来どおり
+// プロファイルの一覧を起動時に取る。ほかのプロバイダーは、主スコープが空で一覧が無いと
+// 何も表示できないときだけ取る (Google Cloud のプロジェクトが設定済みなら p を押したときに取る)。
+func (m Model) shouldLoadScopesAtStartup() bool {
+	if m.provider.ScopeLabel() == "" {
+		return false
 	}
+	if m.provider.ID() == ProviderAWS {
+		return true
+	}
+	return m.provider.RequiresScope() && m.profile == ""
+}
+
+func (m Model) loadScopesCmd() tea.Cmd {
+	load := m.provider.LoadScopes
+	seq, ctx, p := m.scopeSeq, m.ctx, m.provider
 	return func() tea.Msg {
-		profiles, err := list()
-		return profilesLoadedMsg{profiles: profiles, err: err}
+		scopes, err := load(ctx)
+		return scopesLoadedMsg{seq: seq, provider: p.ID(), scopes: scopes, err: err}
 	}
 }
 
 func (m Model) loadRegionsCmd() tea.Cmd {
-	list := m.deps.ListRegions
-	if list == nil {
-		return nil
-	}
-	ctx, profile := m.ctx, m.profile
+	load := m.provider.LoadRegions
+	seq, ctx, p, profile := m.scopeSeq, m.ctx, m.provider, m.profile
 	return func() tea.Msg {
-		regions, err := list(ctx, profile)
-		return regionsLoadedMsg{regions: regions, err: err}
+		regions, err := load(ctx, profile)
+		return regionsLoadedMsg{seq: seq, provider: p.ID(), regions: regions, err: err}
 	}
 }
 
 // startLoad は一覧の取得をやり直す。seq を進めるため、先に走っていた取得の結果は捨てられる。
+// 主スコープが必須のプロバイダーでスコープが未選択なら、一覧は取りに行かずに案内を出す。
 func (m Model) startLoad() (Model, tea.Cmd) {
 	m.loadSeq++
-	m.loading = true
 	m.err = nil
+	if m.provider.RequiresScope() && m.profile == "" {
+		m.loading = false
+		m.rows = nil
+		m.err = fmt.Errorf("no %s selected; press p to select a %s", m.provider.ScopeLabel(), m.provider.ScopeLabel())
+		m = m.resetActiveTab()
+		m = m.applyFilter()
+		return m, nil
+	}
+	m.loading = true
 	// 取得済みのタグは一覧と同じ世代のものなので捨てる。取得中の結果も seq が合わず捨てられる。
 	m.tags = map[string]tagsResult{}
 	m.tagsPending = map[string]bool{}
@@ -336,7 +490,7 @@ func (m Model) ensureTags() (Model, tea.Cmd) {
 	}
 }
 
-// loadCmd は現在のサービス、プロファイル、リージョンで一覧を取得する Cmd を返す。
+// loadCmd は現在のサービス、主スコープ、副スコープで一覧を取得する Cmd を返す。
 // 結果には現在の loadSeq を添え、Update は loadSeq が一致する結果だけを受け取る。
 func (m Model) loadCmd() tea.Cmd {
 	seq, ctx, svc, profile, region := m.loadSeq, m.ctx, m.service, m.profile, m.region
@@ -372,30 +526,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
-	case profilesLoadedMsg:
-		pending := m.profilePickerPending
-		m.profilePickerPending = false
+	case scopesLoadedMsg:
+		if msg.seq != m.scopeSeq || msg.provider != m.provider.ID() {
+			return m, nil
+		}
+		m.scopes = msg.scopes
+		pending := m.scopePickerPending
+		m.scopePickerPending = false
+		var statusCmd tea.Cmd
 		if msg.err != nil {
-			return m.setStatus(fmt.Sprintf("list profiles: %v", msg.err))
+			m, statusCmd = m.setStatus(fmt.Sprintf("list %ss: %v", m.provider.ScopeLabel(), msg.err))
 		}
-		m.profiles = msg.profiles
-		if pending {
+		if !pending {
+			return m, statusCmd
+		}
+		if len(m.scopes) == 0 {
+			if msg.err == nil {
+				m, statusCmd = m.setStatus(fmt.Sprintf("no %ss found", m.provider.ScopeLabel()))
+			}
+			return m, statusCmd
+		}
+		if msg.err == nil {
+			// 一覧が届いたら「loading ...」の通知は用済み。エラーのときはピッカーの下に残す。
 			m, _ = m.setStatus("")
-			return m.openProfilePicker()
+			statusCmd = nil
 		}
-		return m, nil
+		return m.openScopePicker(), statusCmd
 
 	case regionsLoadedMsg:
+		if msg.seq != m.scopeSeq || msg.provider != m.provider.ID() {
+			return m, nil
+		}
+		m.regions = msg.regions
+		pending := m.regionPickerPending
+		m.regionPickerPending = false
+		var statusCmd tea.Cmd
 		if msg.err != nil {
-			return m.setStatus(fmt.Sprintf("list regions: %v", msg.err))
+			m, statusCmd = m.setStatus(fmt.Sprintf("list regions: %v", msg.err))
 		}
-		items := make([]pickerItem, 0, len(msg.regions))
-		for _, r := range msg.regions {
-			items = append(items, pickerItem{Label: r.Code, Detail: r.Name, Value: r.Code})
+		if !pending {
+			return m, statusCmd
 		}
-		p := newPicker(pickerRegion, "Select a region", items, m.region)
-		m.picker = &p
-		return m.setStatus("")
+		if len(m.regions) == 0 {
+			if msg.err == nil {
+				m, statusCmd = m.setStatus("no regions found")
+			}
+			return m, statusCmd
+		}
+		if msg.err == nil {
+			m, _ = m.setStatus("")
+			statusCmd = nil
+		}
+		return m.openRegionPicker(), statusCmd
 
 	case rowsLoadedMsg:
 		if msg.seq != m.loadSeq {
@@ -406,7 +588,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 			// Web UI の writeAWSError と同じ順で判定する。aws.IsSSOTokenExpired は "not authorized" の
 			// 部分一致で IAM の権限不足にも当たるため、先に aws.IsAccessDenied で除く。
-			m.ssoExpired = !aws.IsAccessDenied(msg.err) && aws.IsSSOTokenExpired(msg.err)
+			// SSO は AWS だけの仕組みなので、ほかのプロバイダーの失敗ではバナーを出さない。
+			m.ssoExpired = m.provider.ID() == ProviderAWS &&
+				!aws.IsAccessDenied(msg.err) && aws.IsSSOTokenExpired(msg.err)
 			m.rows = nil
 		} else {
 			m.ssoExpired = false
@@ -454,7 +638,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			id := ecsTaskID(t.ARN)
 			items = append(items, pickerItem{Label: id, Detail: strings.TrimSpace(t.Group + "  " + t.LastStatus), Value: id})
 		}
-		p := newPicker(pickerECSTask, fmt.Sprintf("Select a task in %s", m.ecsExec.cluster), items, "")
+		p := newPicker(pickerECSTask, fmt.Sprintf("Select a task in %s", m.ecsExec.cluster), items, "", m.provider.Accent())
 		m.picker = &p
 		m, _ = m.setStatus("")
 		return m, nil
@@ -485,7 +669,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, c := range candidates {
 			items = append(items, pickerItem{Label: c.Name, Detail: c.LastStatus, Value: c.Name})
 		}
-		p := newPicker(pickerECSContainer, fmt.Sprintf("Select a container in %s", msg.task), items, "")
+		p := newPicker(pickerECSContainer, fmt.Sprintf("Select a container in %s", msg.task), items, "", m.provider.Accent())
 		m.picker = &p
 		m, _ = m.setStatus("")
 		return m, nil
@@ -546,7 +730,7 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.sessionStarting {
 		switch msg.String() {
-		case "/", "p", "R", "S", "r":
+		case "/", "p", "P", "R", "S", "r":
 			// セッションの開始中に別の画面や再取得を開くと、届いたウィンドウと
 			// 選択肢や読み込み表示が重なる。開始が終わるまで待つ。
 			return m, nil
@@ -595,14 +779,28 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		return m.startLoad()
 	case "p":
-		if len(m.profiles) == 0 && m.deps.ListProfiles != nil {
-			// 起動直後で一覧が届いていないか、取得に失敗した後。取り直し、届いたら picker を開く。
-			m.profilePickerPending = true
-			m, statusCmd := m.setStatus("loading profiles...")
-			return m, tea.Batch(statusCmd, m.loadProfilesCmd())
+		if m.provider.ScopeLabel() == "" {
+			return m.setStatus(fmt.Sprintf("%s has no selectable scope", m.provider.Title()))
 		}
-		return m.openProfilePicker()
+		if len(m.scopes) == 0 {
+			// 起動直後で一覧が届いていないか、取得に失敗した後。取り直し、届いたら picker を開く。
+			m.scopePickerPending = true
+			m, statusCmd := m.setStatus(fmt.Sprintf("loading %ss...", m.provider.ScopeLabel()))
+			return m, tea.Batch(statusCmd, m.loadScopesCmd())
+		}
+		m, _ = m.setStatus("")
+		return m.openScopePicker(), nil
+	case "P":
+		if len(m.providers) <= 1 {
+			return m.setStatus("no other providers configured")
+		}
+		m, _ = m.setStatus("")
+		return m.openProviderPicker()
 	case "R":
+		if m.provider.RegionLabel() == "" {
+			return m.setStatus(fmt.Sprintf("%s has no selectable region", m.provider.Title()))
+		}
+		m.regionPickerPending = true
 		m, statusCmd := m.setStatus("loading regions...")
 		return m, tea.Batch(statusCmd, m.loadRegionsCmd())
 	case "S":
@@ -645,9 +843,14 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	kind := m.picker.kind
 	m.picker = nil
 	if chosen == nil {
-		if kind == pickerECSTask || kind == pickerECSContainer {
+		switch kind {
+		case pickerECSTask, pickerECSContainer:
 			// 取り消しは ECS Exec の開始をやめる。sessionStarting を戻さないと s が効かなくなる。
 			m = m.cancelECSExec()
+		case pickerScope:
+			m.scopePickerPending = false
+		case pickerRegion:
+			m.regionPickerPending = false
 		}
 		return m, nil
 	}
@@ -656,36 +859,95 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.listECSContainers(chosen.Value)
 	case pickerECSContainer:
 		return m.startECSExecProcess(chosen.Value)
-	case pickerProfile:
+	case pickerScope:
 		if chosen.Value == m.profile {
 			return m, nil
 		}
 		m.profile = chosen.Value
+		m = m.saveProviderState()
 		return m.reloadForNewTarget()
 	case pickerRegion:
 		if chosen.Value == m.region {
 			return m, nil
 		}
 		m.region = chosen.Value
+		m = m.saveProviderState()
 		return m.reloadForNewTarget()
 	case pickerService:
 		if chosen.Value == m.service.ID() {
 			return m, nil
 		}
-		for _, svc := range m.deps.Services {
-			if svc.ID() == chosen.Value {
-				m.service = svc
-				break
-			}
-		}
+		m.service = serviceByID(m.provider.Services(), chosen.Value)
+		m = m.saveProviderState()
 		// サービスを変えるとタブの集合が変わるため、先頭の Overview に戻す。
 		m.tabID = tabOverview
 		return m.reloadForNewTarget()
+	case pickerProvider:
+		return m.switchProvider(chosen.Value)
 	}
 	return m, nil
 }
 
-// reloadForNewTarget はプロファイル、リージョン、サービスの切替後に一覧を取り直す。
+// saveProviderState は選択中のプロバイダーのスコープとサービスを providerStates へ保存する。
+func (m Model) saveProviderState() Model {
+	if m.providerStates == nil {
+		m.providerStates = map[string]providerState{}
+	}
+	m.providerStates[m.provider.ID()] = providerState{
+		Scope:     m.profile,
+		Region:    m.region,
+		ServiceID: m.service.ID(),
+	}
+	return m
+}
+
+// switchProvider はプロバイダーを切り替え、そのプロバイダーで最後に選んだスコープと
+// サービスを復元する。主スコープが必須で未選択なら、スコープの一覧を取りに行って
+// 届いたらピッカーを開く。
+func (m Model) switchProvider(id string) (tea.Model, tea.Cmd) {
+	next, ok := selectProvider(m.providers, id)
+	if !ok || next.ID() == m.provider.ID() {
+		return m, nil
+	}
+	m = m.saveProviderState()
+
+	state := m.providerStates[next.ID()]
+	if state.Scope == "" {
+		state.Scope = next.DefaultScope()
+	}
+	if state.Region == "" {
+		state.Region = next.DefaultRegion()
+	}
+	m.provider = next
+	m.profile, m.region = state.Scope, state.Region
+	m.service = serviceByID(next.Services(), state.ServiceID)
+	m.scopes, m.regions = nil, nil
+	m.scopeSeq++
+	// 旧いプロバイダーの取得結果を捨てる。主スコープが未選択で一覧を取りに行かない
+	// 経路でも、先に走っていた取得の結果が新しいサービスの行として表示されないようにする。
+	m.loadSeq++
+	m.scopePickerPending, m.regionPickerPending = false, false
+	m.tabID = tabOverview
+	m.filter.SetValue("")
+	m = m.applyProviderTheme()
+	m = m.resetActiveTab()
+	m.rows = nil
+	m.tags = map[string]tagsResult{}
+	m.tagsPending = map[string]bool{}
+	m.err = nil
+	m.ssoExpired = false
+	m = m.applyFilter()
+
+	if next.RequiresScope() && m.profile == "" {
+		m.loading = false
+		m.scopePickerPending = true
+		m, statusCmd := m.setStatus(fmt.Sprintf("loading %ss...", next.ScopeLabel()))
+		return m, tea.Batch(statusCmd, m.loadScopesCmd())
+	}
+	return m.startLoad()
+}
+
+// reloadForNewTarget はスコープ、リージョン、サービスの切替後に一覧を取り直す。
 // 旧い対象の行を先に消し、取得中に s を押しても旧い行 (別の対象のリソース ID) で
 // セッションを始めないようにする。r の再取得は同じ対象なので行を残す (startLoad)。
 func (m Model) reloadForNewTarget() (Model, tea.Cmd) {
@@ -752,26 +1014,46 @@ func sameRow(a, b Row) bool {
 	return a.ID() == b.ID()
 }
 
-func (m Model) openProfilePicker() (tea.Model, tea.Cmd) {
-	items := make([]pickerItem, 0, len(m.profiles))
-	for _, p := range m.profiles {
-		detail := p.AccountID
-		if p.AuthType == aws.AuthTypeSSO {
-			detail = fmt.Sprintf("%s  %s  sso:%s", p.AccountID, p.SSORoleName, p.SSOStatus)
-		}
-		items = append(items, pickerItem{Label: p.Name, Detail: detail, Value: p.Name})
+// openScopePicker は選択中のプロバイダーの主スコープのピッカーを開く。
+func (m Model) openScopePicker() Model {
+	items := make([]pickerItem, 0, len(m.scopes))
+	for _, s := range m.scopes {
+		items = append(items, pickerItem(s))
 	}
-	p := newPicker(pickerProfile, "Select a profile", items, m.profile)
+	p := newPicker(pickerScope, "Select a "+m.provider.ScopeLabel(), items, m.profile, m.provider.Accent())
+	m.picker = &p
+	return m
+}
+
+// openRegionPicker は副スコープのピッカーを開く。
+func (m Model) openRegionPicker() Model {
+	items := make([]pickerItem, 0, len(m.regions))
+	for _, r := range m.regions {
+		items = append(items, pickerItem(r))
+	}
+	p := newPicker(pickerRegion, "Select a "+m.provider.RegionLabel(), items, m.region, m.provider.Accent())
+	m.picker = &p
+	return m
+}
+
+// openProviderPicker はプロバイダーのピッカーを開く。
+func (m Model) openProviderPicker() (tea.Model, tea.Cmd) {
+	items := make([]pickerItem, 0, len(m.providers))
+	for _, p := range m.providers {
+		items = append(items, pickerItem{Label: p.Title(), Detail: p.ID(), Value: p.ID()})
+	}
+	p := newPicker(pickerProvider, "Select a provider", items, m.provider.ID(), m.provider.Accent())
 	m.picker = &p
 	return m, nil
 }
 
 func (m Model) openServicePicker() (tea.Model, tea.Cmd) {
-	items := make([]pickerItem, 0, len(m.deps.Services))
-	for _, svc := range m.deps.Services {
+	services := m.provider.Services()
+	items := make([]pickerItem, 0, len(services))
+	for _, svc := range services {
 		items = append(items, pickerItem{Label: svc.ID(), Detail: svc.Title(), Value: svc.ID()})
 	}
-	p := newPicker(pickerService, "Select a service", items, m.service.ID())
+	p := newPicker(pickerService, "Select a service", items, m.service.ID(), m.provider.Accent())
 	m.picker = &p
 	return m, nil
 }
@@ -936,7 +1218,7 @@ func (m Model) startSession() (tea.Model, tea.Cmd) {
 	if m.sessionStarting || m.session != nil {
 		return m, nil
 	}
-	if !m.service.SupportsSession() {
+	if m.provider.ID() != ProviderAWS || !m.service.SupportsSession() {
 		return m.setStatus(fmt.Sprintf("%s does not support sessions", m.service.Title()))
 	}
 	if m.service.ID() == ecsServiceID {
@@ -1394,7 +1676,9 @@ func (m Model) refreshDrawer() Model {
 		}
 		width := maxLen(keys)
 		fmt.Fprintf(&b, "%s  %s\n", mutedStyle.Render(padRight("Name", width)), row.Name())
-		fmt.Fprintf(&b, "%s  %s\n", mutedStyle.Render(padRight("State", width)), stateStyle(aws.NormalizeState(row.State())).Render(row.State()))
+		if state := row.State(); state != "" {
+			fmt.Fprintf(&b, "%s  %s\n", mutedStyle.Render(padRight("State", width)), stateStyle(aws.NormalizeState(state)).Render(state))
+		}
 		for _, e := range entries {
 			fmt.Fprintf(&b, "%s  %s\n", mutedStyle.Render(padRight(e.Key, width)), e.Value)
 		}
@@ -1524,7 +1808,7 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	}
 	if m.picker != nil {
-		b.WriteString(paneFocusedStyle.Width(m.width - borderLines).Height(m.bodyHeight()).Render(m.picker.view(m.bodyHeight())))
+		b.WriteString(m.paneStyleFor(true).Width(m.width - borderLines).Height(m.bodyHeight()).Render(m.picker.view(m.bodyHeight())))
 	} else if m.session != nil {
 		body := m.bodyView()
 		// bodyView のペインは外側に上下 1 行ずつの枠を持つ。重ね合わせの基準も枠を含めた
@@ -1542,13 +1826,33 @@ func (m Model) View() string {
 	return b.String()
 }
 
+// scopeDisplay はヘッダーに出す主スコープの表示名を返す。一覧を取得済みなら、値に対応する
+// ラベル (Datadog の組織名など) を使う。まだ一覧が無ければ生の値を使い、Datadog の
+// 親組織 (空文字) だけは parent と表示する。
+func (m Model) scopeDisplay() string {
+	for _, s := range m.scopes {
+		if s.Value == m.profile && s.Label != "" {
+			return s.Label
+		}
+	}
+	if m.profile == "" && m.provider.ID() == ProviderDatadog {
+		return "parent"
+	}
+	return m.profile
+}
+
 func (m Model) headerView() string {
-	left := fmt.Sprintf("%s  %s  %s  %s",
-		titleStyle.Render("thief"),
-		headerStyle.Render(m.service.Title()),
-		mutedStyle.Render("profile:")+" "+m.profile,
-		mutedStyle.Render("region:")+" "+m.region,
-	)
+	parts := []string{
+		m.accentStyle().Render("thief"),
+		headerStyle.Render(m.provider.Title() + " / " + m.service.Title()),
+	}
+	if label := m.provider.ScopeLabel(); label != "" {
+		parts = append(parts, mutedStyle.Render(label+":")+" "+m.scopeDisplay())
+	}
+	if label := m.provider.RegionLabel(); label != "" {
+		parts = append(parts, mutedStyle.Render(label+":")+" "+m.region)
+	}
+	left := strings.Join(parts, "  ")
 	right := ""
 	if m.loading {
 		right = m.spinner.View() + " loading"
@@ -1595,7 +1899,7 @@ func (m Model) bodyView() string {
 		plainLabels = append(plainLabels, label)
 		if tab.ID == m.tabID {
 			activeLabel = label
-			tabs = append(tabs, selectedStyle.Render(label))
+			tabs = append(tabs, m.selectedAccentStyle().Render(label))
 		} else {
 			tabs = append(tabs, mutedStyle.Render(label))
 		}
@@ -1622,11 +1926,11 @@ func (m Model) bodyView() string {
 		rightBody = m.activeTab.View(rightInner, bodyHeight-1)
 	}
 
-	leftStyle, rightStyle := paneStyle, paneStyle
+	leftStyle, rightStyle := m.paneStyleFor(false), m.paneStyleFor(false)
 	if m.focus == focusTable {
-		leftStyle = paneFocusedStyle
+		leftStyle = m.paneStyleFor(true)
 	} else {
-		rightStyle = paneFocusedStyle
+		rightStyle = m.paneStyleFor(true)
 	}
 	left := leftStyle.Width(leftInner).Height(bodyHeight).Render(leftTitle + "\n" + leftBody)
 	right := rightStyle.Width(rightInner).Height(bodyHeight).Render(rightTitle + "\n" + rightBody)
@@ -1634,6 +1938,7 @@ func (m Model) bodyView() string {
 }
 
 func (m Model) footerView() string {
+	keyStyle := lipgloss.NewStyle().Foreground(m.provider.Accent())
 	if m.session != nil {
 		parts := []string{
 			keyStyle.Render("ctrl+]") + " " + mutedStyle.Render("close"),
@@ -1645,17 +1950,26 @@ func (m Model) footerView() string {
 	tabHint := fmt.Sprintf("1-%d", len(m.drawerTabs()))
 	keys := []struct{ key, desc string }{
 		{"/", "filter"}, {"j/k", "move"}, {"tab", "focus"}, {tabHint, "tabs"}, {"[ ]", "tabs"},
-		{"s", "session"}, {"r", "reload"}, {"p", "profile"}, {"R", "region"},
+		{"s", "session"}, {"r", "reload"},
 	}
-	if len(m.deps.Services) > 1 {
+	if label := m.provider.ScopeLabel(); label != "" {
+		keys = append(keys, struct{ key, desc string }{"p", label})
+	}
+	if label := m.provider.RegionLabel(); label != "" {
+		keys = append(keys, struct{ key, desc string }{"R", label})
+	}
+	if len(m.provider.Services()) > 1 {
 		keys = append(keys, struct{ key, desc string }{"S", "service"})
+	}
+	if len(m.providers) > 1 {
+		keys = append(keys, struct{ key, desc string }{"P", "provider"})
 	}
 	keys = append(keys, struct{ key, desc string }{"q", "quit"})
 	if m.width < 100 {
 		// 狭い端末ではタブ以外の案内を削って、タブの番号と [ ] を残す。
 		keys = []struct{ key, desc string }{
-			{"/", "filter"}, {"j/k", "move"}, {"tab", "focus"}, {tabHint, "tabs"}, {"[ ]", "tabs"},
-			{"s", "session"}, {"r", "reload"}, {"q", "quit"},
+			{"/", "filter"}, {"tab", "focus"}, {tabHint, "tabs"}, {"[ ]", "tabs"},
+			{"s", "session"}, {"r", "reload"}, {"P", "provider"}, {"q", "quit"},
 		}
 	}
 	parts := make([]string, 0, len(keys))

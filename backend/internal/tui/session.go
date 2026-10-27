@@ -333,7 +333,7 @@ func (w *sessionWindow) View() string {
 
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
+		BorderForeground(awsAccent).
 		Width(innerWidth).
 		Height(w.height - 2)
 	return style.Render(content)

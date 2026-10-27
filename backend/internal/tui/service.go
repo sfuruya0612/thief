@@ -80,10 +80,12 @@ type Tab interface {
 }
 
 // TabSpec はタブの生成仕様。New が nil のタブは Model の組み込みタブ (Overview / Tags / Terminal)。
+// New の profile はプロバイダーの主スコープの値 (AWS のプロファイル、Google Cloud の
+// プロジェクト、Datadog の組織) で、region は副スコープの値 (AWS のリージョン) である。
 type TabSpec struct {
 	ID    string
 	Title string
-	New   func(ctx context.Context, profile, region string, row Row) Tab
+	New   func(ctx context.Context, scope, region string, row Row) Tab
 }
 
 // TabProvider は Drawer のタブを持つ Service が実装する。Tabs はそのサービスで現在実装済みの
@@ -132,7 +134,8 @@ type Service interface {
 	Title() string
 	// Columns は一覧の列。
 	Columns() []Column
-	// Load は一覧を取得する。
+	// Load は一覧を取得する。profile は主スコープの値 (AWS のプロファイル、Google Cloud の
+	// プロジェクト、Datadog の組織) で、region は副スコープの値 (AWS のリージョン) である。
 	Load(ctx context.Context, profile, region string) ([]Row, error)
 	// SupportsSession は行へ対話セッションを張れるかを返す。
 	SupportsSession() bool

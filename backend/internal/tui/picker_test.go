@@ -8,7 +8,7 @@ import (
 )
 
 func testPicker() picker {
-	return newPicker(pickerProfile, "Select", []pickerItem{
+	return newPicker(pickerScope, "Select", []pickerItem{
 		{Label: "a", Detail: "A", Value: "a"},
 		{Label: "b", Detail: "B", Value: "b"},
 		{Label: "c", Detail: "C", Value: "c"},
@@ -19,7 +19,7 @@ func TestNewPicker_CursorStartsOnSelected(t *testing.T) {
 	if p := testPicker(); p.cursor != 1 {
 		t.Errorf("cursor = %d, want 1", p.cursor)
 	}
-	if p := newPicker(pickerProfile, "Select", testPicker().items, "missing"); p.cursor != 0 {
+	if p := newPicker(pickerScope, "Select", testPicker().items, "missing"); p.cursor != 0 {
 		t.Errorf("cursor for unknown selection = %d, want 0", p.cursor)
 	}
 }
@@ -114,7 +114,7 @@ func TestPicker_ViewScrollsToCursor(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		items = append(items, pickerItem{Label: string(rune('a' + i)), Value: string(rune('a' + i))})
 	}
-	p := newPicker(pickerProfile, "Select", items, "j")
+	p := newPicker(pickerScope, "Select", items, "j")
 	view := p.view(5)
 	if !strings.Contains(view, "> j") {
 		t.Errorf("cursor row should be visible\n%s", view)

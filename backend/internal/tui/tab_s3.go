@@ -46,6 +46,10 @@ type s3ObjectsTab struct {
 	flat          bool
 	searching     bool
 	searchInput   textinput.Model
+	// keyTitle と updatedTitle は先頭列と更新日時の列見出し。S3 は Key / Last modified、
+	// GCS は Object / Updated を使う。
+	keyTitle     string
+	updatedTitle string
 
 	table     table.Model
 	items     []s3Item
@@ -67,14 +71,16 @@ func newS3ObjectsTab(
 	si.Placeholder = "reports/"
 	si.CharLimit = 256
 	t := &s3ObjectsTab{
-		ctx:         ctx,
-		profile:     profile,
-		region:      bucketRegion,
-		bucket:      bucket,
-		listObjects: listObjects,
-		searchInput: si,
-		table:       newTabList([]Column{{Title: "Key"}, {Title: "Size"}, {Title: "Last modified"}, {Title: "Storage class"}}, nil, 1, 1),
-		loading:     true,
+		ctx:          ctx,
+		profile:      profile,
+		region:       bucketRegion,
+		bucket:       bucket,
+		listObjects:  listObjects,
+		searchInput:  si,
+		keyTitle:     "Key",
+		updatedTitle: "Last modified",
+		table:        newTabList([]Column{{Title: "Key"}, {Title: "Size"}, {Title: "Last modified"}, {Title: "Storage class"}}, nil, 1, 1),
+		loading:      true,
 	}
 	return t
 }
@@ -298,7 +304,7 @@ func (t *s3ObjectsTab) itemRows(items []s3Item) []listRow {
 }
 
 func (t *s3ObjectsTab) columns() []Column {
-	return []Column{{Title: "Key"}, {Title: "Size", Align: AlignRight}, {Title: "Last modified"}, {Title: "Storage class"}}
+	return []Column{{Title: t.keyTitle}, {Title: "Size", Align: AlignRight}, {Title: t.updatedTitle}, {Title: "Storage class"}}
 }
 
 func (t *s3ObjectsTab) selected() *s3Item {
