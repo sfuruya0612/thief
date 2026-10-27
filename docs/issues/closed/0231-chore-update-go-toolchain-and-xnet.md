@@ -2,6 +2,7 @@
 
 Created: 2026-10-27
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-27
 
 ## 背景
 
@@ -42,3 +43,12 @@ GO-2026-6809 の修正版は go1.26.10、それ以外の標準ライブラリの
 - `CHANGES.md` の `## develop` の `### misc` に、Go ツールチェインと `golang.org/x/net` の更新を説明するエントリを 1 つ追加し、変更内容の次の行に 2 文字分インデントした担当者行 `  - @sfuruya0612` を置く。
 - `docs/issues/TODO.md` の該当行を `[x]` にし、`(docs/issues/closed/0231)` を追記する。
 - 扱わない範囲: go1.27 系への更新、`golang.org/x/net` 以外の依存の更新、`backend/go.mod` の `go` ディレクティブの変更、Linux の `CGO_ENABLED=1` 対応 (issue 0232)、CHANGES.md の既存エントリの並びの修正。
+
+## 解決方法
+
+- `mise.toml` の `[tools].go` を `1.26.6` から `1.26.10` に、`backend/go.mod` の `toolchain` 行を `go1.26.6` から `go1.26.10` に同時に更新した。
+- `backend` で `go get golang.org/x/net@v0.60.0` を実行し、`go mod tidy` で `go.mod` と `go.sum` を整理した。`golang.org/x/net` は `v0.60.0 // indirect` のままである。
+- `mise run backend:vuln` を実行し、影響する脆弱性が 0 件で終了コード 0 になることを確認した。モジュール単位の GO-2026-5932 (`Fixed: N/A`) は残る。
+- macOS 上で `mise run check` を実行し、通ることを確認した。
+- `AGENTS.md` の「backend (Go)」の「対象言語/バージョン」から「(現行最新は 1.26.x)」を削除した。
+- `CHANGES.md` の `## develop` の `### misc` にエントリを追加し、`docs/issues/TODO.md` の該当行を `[x]` にした。

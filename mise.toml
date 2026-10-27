@@ -10,7 +10,7 @@ CGO_ENABLED = "0"
 
 [tools]
 # backend/go.mod の toolchain 行と同一バージョンに揃える (AGENTS.md「backend ビルドと CI」参照)
-go = "1.26.6"
+go = "1.26.10"
 prek = "latest"
 node = "26.4.0"
 "go:golang.org/x/tools/cmd/goimports" = "latest"

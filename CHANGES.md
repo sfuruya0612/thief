@@ -469,6 +469,8 @@
 
 ### misc
 
+- Go のツールチェインを go1.26.6 から go1.26.10 に、`golang.org/x/net` を v0.59.0 から v0.60.0 に更新し、govulncheck が標準ライブラリと x/net に由来して報告していた 12 件の脆弱性を解消する (mise.toml の [tools].go と backend/go.mod の toolchain 行を同時に更新する。docs/issues/closed/0145 の運用。issue 0231)
+  - @sfuruya0612
 - TUI の ECS が件数の変換に使う `formatCount(int32)` を `formatInt32` に改名して `backend/internal/tui/format.go` へ移す (issue 0220 が足した `,` 区切りの `formatCount(int64)` と名前が衝突するため。ECS の表示は変えない。issue 0220)
   - @sfuruya0612
 - 全画面の TUI の要求 (FR-29、FR-30) と 2026-10-23 の決定を PRD (docs/prd/thief.md) に追加し、TUI を取得層のプロセス内呼び出しと bubbletea で作る決定を ADR 0033 に記録し、`AGENTS.md` の backend の「プロジェクト構造」に `internal/tui/` の節と TUI の規約を加える (docs/adr/README.md の索引と docs/issues/TODO.md の TUI の後続作業の 3 行を含む)
