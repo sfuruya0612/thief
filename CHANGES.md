@@ -66,6 +66,8 @@
   - @sfuruya0612
 - [FIX] TUI (`thief tui`) で、列数の少ないサービスへ切り替えると panic して終了する不具合と、プロファイル / リージョン / サービスの切替や空の一覧の後に行が届いても行が選ばれず Drawer が `No row selected` のままになる不具合を直す (`applyFilter` が列を入れ替える前に table の行を空にし、負のカーソルも先頭に戻す。issue 0219 の floci の確認で見つけた issue 0218 のプロトタイプの不具合)
   - @sfuruya0612
+- [FIX] TUI (`thief tui`) で WAF などのサービスを開くと、取得層の計測用ログが全画面の代替画面に表示される不具合を修正する (TUI の実行中だけ既定のロガーを `slog.DiscardHandler` に置き換え、終了時に元へ戻す。あわせて WAF、SQS、IAM、Kinesis、DynamoDB の計測用 `slog.Info` を `slog.Debug` に下げ、既定の Info レベルでは出さないようにする。issue 0233)
+  - @sfuruya0612
 
 - [UPDATE] CLI の全コマンドが Ctrl-C と SIGTERM でキャンセルされる context で AWS / Google Cloud / Datadog / TiDB を呼び出すようにする (main が `signal.NotifyContext` で作った context を cobra の `ExecuteContextC` 経由で各コマンドへ渡し、それまで各コマンドが個別に呼んでいた `context.Background()` 30 箇所を `commandContext(cmd)` に置き換える。これで一覧取得や BigQuery のクエリ、SSO デバイス認可の承認待ちを Ctrl-C で即座に打ち切れる。context を受け取る口が無かった TiDB Cloud のクライアントには第一引数として context を追加し、Digest 認証の 2 往復の両方に紐付ける。`sso generate-config` のアカウント選択とロール選択、`ssm param put` / `secretsmanager put` の標準入力からの値の読み取りも、読み取りを別の goroutine に出して context のキャンセルで待機を打ち切るようにする (`signal.NotifyContext` はシグナルの既定の動作を止めるため、context を見ない読み取りを残すと入力待ちの間 Ctrl-C が無反応になる)。ただし SSM セッションの切断と API サーバのシャットダウンは、中断で context がキャンセル済みでも完了させる必要があるため専用の短命 context を使う。`server` コマンドが自前で張っていた `signal.NotifyContext` は main の 1 箇所に集約する)
   - @sfuruya0612

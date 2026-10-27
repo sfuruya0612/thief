@@ -46,7 +46,7 @@ func ListKinesisResources(ctx context.Context, profile, region string) ([]Kinesi
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("kinesis client created",
+	slog.Debug("kinesis client created",
 		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
 	listStart := time.Now()
@@ -59,7 +59,7 @@ func ListKinesisResources(ctx context.Context, profile, region string) ([]Kinesi
 		}
 		names = append(names, page.StreamNames...)
 	}
-	slog.Info("kinesis list streams done",
+	slog.Debug("kinesis list streams done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(listStart).Milliseconds(), "count", len(names))
 
@@ -85,12 +85,12 @@ func ListKinesisResources(ctx context.Context, profile, region string) ([]Kinesi
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.Info("kinesis describe streams done",
+	slog.Debug("kinesis describe streams done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(detailStart).Milliseconds(),
 		"concurrency", kinesisStreamConcurrency, "count", len(resources))
 
-	slog.Info("kinesis list all done",
+	slog.Debug("kinesis list all done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil

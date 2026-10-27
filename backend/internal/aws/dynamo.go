@@ -57,7 +57,7 @@ func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoR
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("dynamodb client created",
+	slog.Debug("dynamodb client created",
 		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
 	listStart := time.Now()
@@ -70,7 +70,7 @@ func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoR
 		}
 		names = append(names, page.TableNames...)
 	}
-	slog.Info("dynamodb list tables done",
+	slog.Debug("dynamodb list tables done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(listStart).Milliseconds(), "count", len(names))
 
@@ -109,12 +109,12 @@ func ListDynamoResources(ctx context.Context, profile, region string) ([]DynamoR
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.Info("dynamodb describe tables done",
+	slog.Debug("dynamodb describe tables done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(detailStart).Milliseconds(),
 		"concurrency", dynamoTableConcurrency, "count", len(resources))
 
-	slog.Info("dynamodb list all done",
+	slog.Debug("dynamodb list all done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil

@@ -87,4 +87,4 @@ TUI の S3 のバケット行から Objects タブを開き、フォルダを辿
 - 一覧の取得はタブの context と `loadSeq` で世代管理し、フォルダ移動、検索、モード切替、`r` の後に届いた古い結果を捨てる。
 - `backend/internal/tui` の単体テストに、初期表示、フォルダ移動、`..` 行、親へ戻る、prefix 検索、`f` の初期値、検索入力中のグローバルキー隔離、`m` の切替、空、失敗、打ち切り、古い結果の破棄、バケットのリージョンと profile / bucket の引き渡し、prefix の正規化と親の計算を追加した。モデルレベルで検索入力中の `r`、`q`、`s`、`p`、`R`、`S`、`[`、`]`、`/`、`tab` が再取得やタブ切替を起こさず、`ctrl+c` だけが終了することを確認している。
 - `example/README.md` に floci の `thief-example-data` バケットでフォルダ移動、prefix 検索、階層 / フラット切替を確認する手順を追加し、`THIEF_S3_PATH_STYLE=true` を起動コマンドに含めた。`CHANGES.md` に [ADD] エントリを追加した。
-- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。
+- `mise run check` が通る。

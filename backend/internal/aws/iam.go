@@ -51,7 +51,7 @@ func ListIAMResources(ctx context.Context, profile, _ string) ([]IAMResource, er
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("iam client created",
+	slog.Debug("iam client created",
 		"profile", profile, "duration_ms", time.Since(clientStart).Milliseconds())
 
 	// 詳細取得を並列化するため、先にユーザーとロールの全件をページングで収集する
@@ -76,7 +76,7 @@ func ListIAMResources(ctx context.Context, profile, _ string) ([]IAMResource, er
 		}
 		roles = append(roles, page.Roles...)
 	}
-	slog.Info("iam list users and roles done",
+	slog.Debug("iam list users and roles done",
 		"profile", profile, "duration_ms", time.Since(listStart).Milliseconds(),
 		"users", len(users), "roles", len(roles))
 
@@ -111,11 +111,11 @@ func ListIAMResources(ctx context.Context, profile, _ string) ([]IAMResource, er
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.Info("iam get details done",
+	slog.Debug("iam get details done",
 		"profile", profile, "duration_ms", time.Since(detailStart).Milliseconds(),
 		"concurrency", iamDetailConcurrency, "count", len(resources))
 
-	slog.Info("iam list all done",
+	slog.Debug("iam list all done",
 		"profile", profile, "duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
 }

@@ -64,7 +64,7 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("sqs client created",
+	slog.Debug("sqs client created",
 		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
 	resources, err := listSQSResources(ctx, client, profile, region)
@@ -72,7 +72,7 @@ func ListSQSResources(ctx context.Context, profile, region string) ([]SQSResourc
 		return nil, err
 	}
 
-	slog.Info("sqs list all done",
+	slog.Debug("sqs list all done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
@@ -93,7 +93,7 @@ func listSQSResources(ctx context.Context, client sqsQueueListClient, profile, r
 		}
 		urls = append(urls, page.QueueUrls...)
 	}
-	slog.Info("sqs list queues done",
+	slog.Debug("sqs list queues done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(listStart).Milliseconds(), "count", len(urls))
 
@@ -125,7 +125,7 @@ func listSQSResources(ctx context.Context, client sqsQueueListClient, profile, r
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.Info("sqs get queue attributes done",
+	slog.Debug("sqs get queue attributes done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(detailStart).Milliseconds(),
 		"concurrency", sqsQueueConcurrency, "count", len(resources))

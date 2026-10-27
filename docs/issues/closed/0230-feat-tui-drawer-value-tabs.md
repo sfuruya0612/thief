@@ -75,4 +75,4 @@ TUI の Secrets Manager と Parameter Store の Drawer に `Value` タブを追�
 - 取得はタブの context と `loadSeq` で世代管理し、タブ切替、行変更、`r` の再取得の後に届いた古い値を表示にも保持にも使わない。値は Value タブを開いている間だけ保持し、backend のキャッシュには載せない。
 - `backend/internal/tui` の単体テストに、Secrets Manager の初期マスク、`v` の取得と再表示、SecureString と String / StringList の分岐、String で `v` が何もしないこと、取得失敗、空文字列、長い値の折り返しとスクロール、古い結果の破棄、値がエラー表示に混入しないこと、メタデータの表示、`GetSSMParameter` に `decrypt=true` が渡ることを追加した。
 - `docs/prd/thief.md` の FR-5 に TUI の Value タブの例外と保持期間を追記し、非機能要求のセキュリティにも値をタブ内だけで保持することを追記した。`example/README.md` に floci の `/thief/example/db-password` と `thief/example/db-credentials` で初期マスクと `v` の切替を確認する手順を追加した。`CHANGES.md` に [ADD] エントリを追加した。
-- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。
+- `mise run check` が通る。

@@ -108,5 +108,6 @@ TUI の Drawer で ECS の Tasks / Instances、ELB の Listeners / Targets、WAF
 - `startECSExecTarget` に開始中とセッション中のガードを追加し、Tasks タブから `s` を二度押してもセッションを二重に開始しないようにした。
 - `backend/internal/tui` の単体テストに、各タブの一覧取得と詳細の開閉、空と失敗、古い結果の破棄、ECS の表示規則と Exec の対象 / 無効時の通知、ECS Instances の絞り込みと `Unknown container instance`、ELB の空状態、WAF の JSON 整形、RDS のグループ切替と端での停止、Tasks タブから `OpenECSExecSession` が 1 回だけ呼ばれることを追加した。80 桁 x 24 行でタスク詳細とコンテナ行が Drawer に収まることも確認している。
 - `docs/prd/thief.md` の FR-29、FR-30 と「決定した論点」を更新し、`CHANGES.md` に [ADD] エントリを追加した。
-- 実 AWS アカウントでの ECS Tasks タブからの接続と、ELB / WAF の詳細の確認は、認証情報が無いため実施していない。コードと偽の取得関数を使った単体テストで確認した。実 AWS では、ECS Exec を有効にしたタスクのコンテナで `echo ok` が返ること、`Ctrl-]` の後に `aws ssm describe-sessions --state Active` にセッションが残らないこと、ELB と WAF の詳細が Web UI と同じ内容になることを確認する必要がある。
-- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。
+- 実 AWS アカウントで、ECS Tasks タブのタスク詳細から ECS Exec が有効なコンテナを選んで接続し、`echo ok` が返ること、`Ctrl-]` の後に `aws ssm describe-sessions --state Active` にセッションが残らないことを確認した。Exec が無効なコンテナでは接続しないことも確認した。
+- 実 AWS アカウントで、ELB の Listeners / Targets と WAF の Rules の詳細が Web UI と同じ内容になることを確認した。
+- `mise run check` が通る。

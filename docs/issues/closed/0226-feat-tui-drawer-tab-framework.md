@@ -119,4 +119,4 @@ TUI の Drawer が Web UI と同じ順序でサービス固有タブを表示で
 - `backend/internal/cli/tui.go` の `newTUIDeps` が各サービスのタブ用取得関数をコンストラクタへ渡している。`backend/internal/cli/tui_test.go` で 19 サービスのタブ名が Web UI の `DRAWER_TABS` と同じ相対順序になり、ECR が Tags を持たないことを確認している。
 - `backend/internal/tui` の単体テストに、タブの順序、番号と `[` / `]` の切替、サービス切替と行切替、範囲外の数字、端での停止、80 桁 x 24 行と 120 桁 x 30 行の表示、キー委譲、`ctrl+c` の優先、`tea.Batch` の 0 件 / 1 件 / 2 件以上とネスト、古い結果の破棄、読み込み中、失敗、空、表の切り詰めと右端の切り落としを追加した。
 - `docs/prd/thief.md` の FR-29 を更新し、`AGENTS.md` にタブのサブモデルと取得関数のコンストラクタ注入を追記した。`example/README.md` に floci で確認できるタブの手順を追加した。`CHANGES.md` に [ADD] エントリを追加した。
-- `mise run check` は issue 0218 由来の govulncheck の 12 件 (GO-2026-6809、6617、6613、6612、6611、6610、6608、6607、6605、6603、6600、6599) だけで失敗する。fmt、lint、`go test ./...` は通る。
+- `mise run check` が通る。

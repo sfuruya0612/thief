@@ -87,4 +87,4 @@ TUI の DynamoDB のテーブル行から Items タブを開き、既定のス�
 - 一覧の取得はタブの context と `loadSeq` で世代管理し、検索条件の変更、`r` の再取得の後に届いた古い結果を捨てる。表の高さは再取得のたびに縮まないよう、Drawer の高さから確保する。
 - `backend/internal/tui` の単体テストに、既定スキャン、PK / SK / 属性の検索、AttrName だけの検索、PK が空のときに SK を送らないこと、スキーマ失敗時とソートキーが無いときに SK を無効にすること、取得件数の切替と端での停止、フォーム入力中のグローバルキー隔離、JSON 詳細、空、失敗時のフォームと前回の一覧の保持、古い結果の破棄、列の和集合と順序、キーが無いセルと `nil` の区別、`[]byte` の引用符なし base64、HTML エスケープ無効、`r` の条件保持を追加した。
 - `example/README.md` に floci の `thief-example-users` テーブルで既定 10 件、`f` の検索、`l` の件数切替、項目の JSON 詳細を確認する手順を追加した。`CHANGES.md` に [ADD] エントリを追加した。
-- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。
+- `mise run check` が通る。

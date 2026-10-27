@@ -63,7 +63,7 @@ func ListWAFResources(ctx context.Context, profile, region string) ([]WAFResourc
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("waf clients created",
+	slog.Debug("waf clients created",
 		"profile", profile, "region", region, "duration_ms", time.Since(clientStart).Milliseconds())
 
 	// REGIONAL と CLOUDFRONT の 2 スコープは互いに独立しているため並列に取得する。
@@ -104,7 +104,7 @@ func ListWAFResources(ctx context.Context, profile, region string) ([]WAFResourc
 	resources = append(resources, regionalACLs...)
 	resources = append(resources, cfACLs...)
 
-	slog.Info("waf list all done",
+	slog.Debug("waf list all done",
 		"profile", profile, "region", region,
 		"duration_ms", time.Since(overallStart).Milliseconds(), "count", len(resources))
 	return resources, nil
@@ -128,7 +128,7 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 		}
 		nextMarker = out.NextMarker
 	}
-	slog.Info("waf list web acls done",
+	slog.Debug("waf list web acls done",
 		"scope", string(scope), "duration_ms", time.Since(listStart).Milliseconds(), "count", len(summaries))
 
 	// Web ACL ごとの詳細取得は互いに独立しているため並列実行する。各 goroutine は
@@ -159,7 +159,7 @@ func listWAFACLs(ctx context.Context, client *wafv2.Client, scope waftypes.Scope
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.Info("waf get web acl details done",
+	slog.Debug("waf get web acl details done",
 		"scope", string(scope), "duration_ms", time.Since(detailStart).Milliseconds(),
 		"concurrency", wafACLConcurrency, "count", len(resources))
 	return resources, nil

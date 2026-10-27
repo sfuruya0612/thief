@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,6 +15,11 @@ import (
 // TUI の Ctrl-C は raw モードのキー入力として Update に届き、SIGTERM は bubbletea 自身の
 // シグナル処理が QuitMsg に変換するため、外部の ctx が無くてもシグナルで終了できる。
 func Run(deps Deps, profile, region string) error {
+	// TUI は代替画面を占有するため、取得層や SDK のログが stderr に出ると画面が壊れる。
+	// TUI の実行中だけ既定のロガーを破棄し、終了後に元へ戻す。
+	restoreLogger := discardLogs()
+	defer restoreLogger()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -30,4 +36,11 @@ func Run(deps Deps, profile, region string) error {
 		return fmt.Errorf("run tui: %w", err)
 	}
 	return nil
+}
+
+// discardLogs は既定のロガーを破棄するハンドラへ置き換え、元に戻す関数を返す。
+func discardLogs() func() {
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.DiscardHandler))
+	return func() { slog.SetDefault(previous) }
 }
