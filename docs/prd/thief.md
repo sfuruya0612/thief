@@ -817,9 +817,10 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - ビルド、テスト、Lint、フォーマットは `mise run <task>` で実行する。
   `mise run check` が fmt、lint、vuln、test をまとめて実行する。
 - pre-commit フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt`、`mise run lint`、`mise run test` を実行する。
-- CI は GitHub Actions に置き、`mise run check` を実行する。
-  Linux では `go test -race` に cgo が要るため、CI では `CGO_ENABLED=1` でテストを実行する。
-  ワークフローは未作成である (`.github/workflows/` が無い。「決定した論点」)。
+- CI は `.github/workflows/ci.yml` に置き、`pull_request`、`main` への `push`、毎週月曜 0:00 UTC の `schedule` で実行する。
+  `mise run ci:setup` (`go mod download` と `npm ci`) の後に `mise run check` を実行し、最後に `git status --porcelain` で差分と未追跡ファイルが無いことを検証する。
+  Linux では `go test -race` に cgo が要るため、`mise run backend:test` が `go env GOOS` を見て `CGO_ENABLED=1` をコマンド単位で上書きする。
+  GitHub Actions の `uses` はタグではなくコミット SHA で固定する。
 - backend のログは `log/slog` の `slog.NewJSONHandler` で JSON として出す。
   現在の実装は既定のハンドラを使う (「規約と実装の差」)。
 - 実 AWS アカウントなしの動作確認に `example/` (floci) を使う (`mise run example:up`、docker compose で floci のコンテナを起動する)。
@@ -895,7 +896,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | CloudFront の invalidation | Drawer に作成の UI を足す (FR-3) | invalidation の UI の追加 |
 | Datadog の静的キーの名前 | `CHANGES.md` の `DD_API_KEY` と `DD_APP_KEY` を、実装の `DATADOG_API_KEY` と `DATADOG_APP_KEY` に直す | 無い (2026-10-02 に修正済み) |
 | Datadog のスコープ | `usage_read` のままとする (FR-21) | 無い |
-| CI | GitHub Actions で `mise run check` を実行する | ワークフローの追加 |
+| CI | GitHub Actions で `mise run check` を実行する | 無い (issue 0232 で追加) |
 | HTTP サーバのタイムアウト | `IdleTimeout` を足す。`AGENTS.md` は、`ReadTimeout` と `WriteTimeout` を設定しない記述に直す | `IdleTimeout` の追加 |
 | ミドルウェア | `AGENTS.md` を実装 (Host の検査、CORS、アクセスログ) に合わせる | 無い (2026-10-02 に修正済み) |
 | ログのハンドラ | `slog.NewJSONHandler` で JSON にする | JSON のハンドラへの切り替え |

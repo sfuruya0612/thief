@@ -5,6 +5,7 @@
 ## pre-commit
 
 - フック (`.pre-commit-config.yaml`、`prek` 経由) が `mise run fmt` / `mise run lint` / `mise run test` を実行する。まとめて確認するなら `mise run check` (フックが実行しない `mise run backend:vuln` の govulncheck も実行する)。
+- CI は `.github/workflows/ci.yml` で `mise run ci:setup` の後に `mise run check` を実行し、最後に `git status --porcelain` で差分と未追跡ファイルが無いことを検証する。GitHub Actions の `uses` はタグではなくコミット SHA で固定し、行末のコメントに更新時の目安となるバージョンを書く。
 
 ## リポジトリ概要
 
@@ -46,7 +47,8 @@ frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴ�
 | `mise run fmt` | backend / frontend 両方のフォーマッタを実行 |
 | `mise run lint` | 両方の Lint を実行 |
 | `mise run test` | 両方のテストを実行 (ユニット中心) |
-| `mise run check` | `fmt` + `lint` + `vuln` + `test` を順に実行 (PR 提出前の最終確認) |
+| `mise run check` | `fmt` の後に `lint`、`vuln`、`test` を並列で実行 (PR 提出前の最終確認) |
+| `mise run ci:setup` | CI 用の依存取得 (`go mod download` + `npm ci`。`go.mod` と `package-lock.json` を書き換えない) |
 
 ### backend タスク
 
@@ -54,7 +56,8 @@ frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴ�
 | --- | --- |
 | `mise run backend:build` | `go build ./...` |
 | `mise run backend:install` | `thief` CLI を `go install ./cmd/thief` で `$GOPATH/bin` に導入 |
-| `mise run backend:test` | `go test -race -cover -vet=off ./...` |
+| `mise run backend:test` | `go test -race -cover -vet=off ./...` (darwin 以外では `CGO_ENABLED=1` で実行) |
+| `mise run backend:ci` | `go mod download` (CI 用、`go.mod` と `go.sum` を書き換えない) |
 | `mise run backend:lint` | `go vet` + `staticcheck` |
 | `mise run backend:vuln` | `govulncheck ./...` |
 | `mise run backend:fmt` | `gofmt -w .` + `goimports -w .` |
@@ -66,6 +69,7 @@ frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴ�
 | タスク | 内容 |
 | --- | --- |
 | `mise run frontend:setup` | `npm install` |
+| `mise run frontend:ci` | `npm ci` (CI 用、`package-lock.json` どおりに導入する) |
 | `mise run frontend:build` | `npm run build` (`tsc -b && vite build`) |
 | `mise run frontend:test` | `npm run test` (vitest) |
 | `mise run frontend:lint` | `npm run lint` (eslint + `tsc --noEmit`) |
@@ -159,7 +163,7 @@ backend/
 - `sync.WaitGroup` を使う場合は `Add` → `go func() { defer wg.Done(); ... }()` のパターンを徹底する。
 - チャネルは送信側がクローズする。受信側はクローズしない。
 - 共有データの保護は `sync.Mutex` / `sync.RWMutex` を使い、ロックの取得順序を一貫させる。複雑なロック構造より、データオーナーシップを 1 goroutine に集約してチャネルでやり取りする方を優先する。
-- データ競合検出のため、テストおよび CI では `go test -race ./...` を必ず実行する。Linux では `-race` に cgo が要るため、`env CGO_ENABLED=1 go test -race ./...` を使う (「backend ビルドと CI」参照)。
+- データ競合検出のため、テストおよび CI では `go test -race ./...` を必ず実行する。Linux では `-race` に cgo が要るため、`mise run backend:test` が `go env GOOS` を見て `CGO_ENABLED=1` をコマンド単位で上書きする (「backend ビルドと CI」参照)。
 
 ### ロギング (`log/slog`)
 
@@ -243,8 +247,8 @@ backend/
 ### backend ビルドと CI
 
 - ローカルでの最低限のチェック: `go build ./...` / `go vet ./...` / `go test -race ./...` / `gofmt -l .`。
-- バイナリビルドは `CGO_ENABLED=0` を基本とする(static link で配布が容易)。`mise.toml` の `[env]` で `CGO_ENABLED = "0"` を固定しており、mise のタスクからでも、`mise activate` したシェルで `go build` / `go test` を直接叩いたときでも無効になる。依存の `github.com/DataDog/zstd` (C ソース同梱) が cgo でビルドされると Go のリンカが外部リンク (clang / dsymutil / strip) に切り替わり、リンク時間の大半を占めるためである (issue 0215)。cgo を有効にして試すときは `env CGO_ENABLED=1 go build ./...` のようにコマンド単位で上書きする (mise の `[env]` はシェルで先に設定した同名の変数より優先される)。
-- **Linux では `-race` に cgo が要る**: `go test -race` は darwin 以外で `-race requires cgo` として終了するため、`CGO_ENABLED=0` を固定したままでは `backend:test` を実行できない。Linux で実行するときは `backend/` で `env CGO_ENABLED=1 go test -race -cover ./...` を使う。
+- バイナリビルドは `CGO_ENABLED=0` を基本とする(static link で配布が容易)。`mise.toml` の `[env]` で `CGO_ENABLED = "0"` を固定しており、`mise activate` したシェルで `go build` / `go test` を直接叩いたときは無効になる。依存の `github.com/DataDog/zstd` (C ソース同梱) が cgo でビルドされると Go のリンカが外部リンク (clang / dsymutil / strip) に切り替わり、リンク時間の大半を占めるためである (issue 0215)。`backend:test` は Linux の `-race` のために `CGO_ENABLED=1` をコマンド単位で上書きする。cgo を有効にしてビルドを試すときは `env CGO_ENABLED=1 go build ./...` のようにコマンド単位で上書きする (mise の `[env]` はシェルで先に設定した同名の変数より優先される)。
+- **Linux では `-race` に cgo が要る**: `go test -race` は darwin 以外で `-race requires cgo` として終了する。`mise run backend:test` は `go env GOOS` が `darwin` 以外のとき `CGO_ENABLED=1` をコマンド単位で上書きする。mise を経由せずに実行するときは `backend/` で `env CGO_ENABLED=1 go test -race -cover ./...` を使う。
 - バージョン情報は `-ldflags` で `main.version` に注入する。
 - **Go ツールチェインのパッチ更新**: `mise.toml` の `[tools].go` と `backend/go.mod` の `toolchain` 行は、同一バージョンへ同時に更新する。mise を経由しないシェル (CI 等) では `GOTOOLCHAIN=auto` が `go.mod` の `toolchain` 行を基準にツールチェインを解決するため、`mise.toml` だけを上げても govulncheck は旧ツールチェインの標準ライブラリを検査し、修正済みの脆弱性が再検出される (issue 0144 で実測)。逆に `toolchain` 行だけを上げると、mise 経由のシェルでも `go` コマンドは `toolchain` 行のバージョンで動き、`mise.toml` の pin が実際に使われるバージョンを表さなくなる。更新後は `mise install` でツールチェインを導入し、`mise run check` の通過を確認する。
 

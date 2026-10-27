@@ -35,7 +35,8 @@ thief の設計判断の記録。
 | [0028](0028-issues-under-docs-tracked.md) | issue を docs/issues/ に移し、git で管理する | Accepted | 2026-09-26 |
 | [0029](0029-object-list-delimiter-hierarchy.md) | オブジェクトの階層は API の区切り文字で 1 階層ずつ取得し、フラットモードを残す | Accepted | 2026-09-28 |
 | [0030](0030-object-query-multiple-objects.md) | オブジェクトの SQL 検索は、同じ形式の複数のオブジェクトを読み取り関数のリスト引数で 1 つのビューにまとめる | Accepted | 2026-09-28 |
-| [0031](0031-vuln-check-in-check-task-not-precommit.md) | govulncheck は check タスクと backend:vuln で実行し、pre-commit フックでは実行しない | Accepted | 2026-09-29 |
+| [0031](0031-vuln-check-in-check-task-not-precommit.md) | govulncheck は check タスクと backend:vuln で実行し、pre-commit フックでは実行しない | Superseded by 0035 | 2026-09-29 |
 | [0032](0032-api-origin-and-host-checks.md) | API サーバは Origin と Host を検査し、利用者の認証は持たない | Accepted | 2026-10-02 |
 | [0033](0033-tui-in-process-bubbletea.md) | TUI は bubbletea で作り、取得層をプロセス内で直接呼ぶ | Superseded by 0034 | 2026-10-23 |
 | [0034](0034-tui-floating-terminal-window.md) | TUI の対話セッションはプロセス内の DataChannel と端末エミュレータでフロート表示する | Accepted | 2026-10-26 |
+| [0035](0035-ci-runs-mise-check.md) | CI で mise run check を実行する | Accepted | 2026-10-27 |

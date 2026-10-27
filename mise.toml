@@ -35,14 +35,26 @@ description = "backend + frontend テスト"
 depends = ["backend:test", "frontend:test"]
 
 [tasks.check]
-description = "PR 提出前の最終確認 (fmt + lint + vuln + test)"
-depends = ["fmt", "lint", "backend:vuln", "test"]
+description = "PR 提出前の最終確認 (fmt の後に lint + vuln + test を並列)"
+# fmt はファイルを書き換え、lint はファイルを読む。両者を並列にすると lint が書き換え前の
+# 内容を読む可能性があるため、fmt の完了後に lint / vuln / test を並列で実行する。
+depends = ["fmt"]
+depends_post = ["lint", "backend:vuln", "test"]
+
+[tasks."ci:setup"]
+description = "CI 用の依存取得 (lock ファイルどおりに導入し、go.mod と package-lock.json を書き換えない)"
+depends = ["backend:ci", "frontend:ci"]
 
 # === backend ===
 [tasks."backend:setup"]
 description = "backend 依存取得"
 dir = "backend"
 run = "go mod download && go mod tidy"
+
+[tasks."backend:ci"]
+description = "backend 依存取得 (CI 用、go.mod と go.sum を書き換えない)"
+dir = "backend"
+run = "go mod download"
 
 [tasks."backend:build"]
 description = "backend ビルド"
@@ -55,11 +67,23 @@ dir = "backend"
 run = "go install ./cmd/thief"
 
 [tasks."backend:test"]
-description = "backend ユニットテスト (race)"
+description = "backend ユニットテスト (race、darwin 以外では cgo を有効にする)"
 dir = "backend"
 # go test の自動 vet は backend:lint の go vet ./... (全 analyzer を実行) の部分集合で、
 # check / pre-commit では二重実行になるため止める。vet の結果が要るときは backend:lint を併用する。
-run = "go test -race -cover -vet=off ./..."
+run = """
+#!/bin/sh
+# Linux の -race は cgo を要求する。mise の [env] は CGO_ENABLED=0 をシェル環境より優先する
+# ため、コマンド単位で上書きする (AGENTS.md「backend ビルドと CI」)。
+case "$(go env GOOS)" in
+darwin)
+  go test -race -cover -vet=off ./...
+  ;;
+*)
+  CGO_ENABLED=1 go test -race -cover -vet=off ./...
+  ;;
+esac
+"""
 
 [tasks."backend:tools"]
 description = "go: 管理ツールのビルド時 Go バージョンを検査し、不一致なら再ビルド"
@@ -155,6 +179,11 @@ run = "thief server"
 description = "frontend 依存取得"
 dir = "frontend"
 run = "npm install"
+
+[tasks."frontend:ci"]
+description = "frontend 依存取得 (CI 用、package-lock.json どおりに導入する)"
+dir = "frontend"
+run = "npm ci"
 
 [tasks."frontend:fetch-aws-icons"]
 description = "AWS 公式アイコン (zip) を public/assets/aws-icons/ に展開する (引数: zip ファイルパス)"

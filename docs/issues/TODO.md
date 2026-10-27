@@ -146,7 +146,7 @@
 - [x] pre-commit の backend チェック (lint / test) が遅いので、govulncheck を専用タスクに分けて go test の自動 vet を止めたい (docs/issues/closed/0216)
 - [ ] Cost Explorer のコストの予測を Web の画面にも表示したい (docs/prd/thief.md の FR-11 と「決定した論点」。`frontend/src/api/queries.ts` の `useCostForecast` は画面から使う箇所が無く、予測は CLI の `thief cost forecast` でしか見られない)
 - [ ] CloudFront の Drawer から invalidation を作成できるようにしたい (docs/prd/thief.md の FR-3 と「決定した論点」。backend の `POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations` は実装済みだが frontend から呼ぶ箇所が無い)
-- [ ] GitHub Actions で `mise run check` を実行する CI を置きたい (docs/prd/thief.md の「運用」と「決定した論点」。`.github/workflows/` が無く、品質ゲートが各開発者の pre-commit フックに依存している。Linux では `go test -race` に cgo が要るため `CGO_ENABLED=1` でテストを実行する) (docs/issues/0232)
+- [x] GitHub Actions で `mise run check` を実行する CI を置きたい (docs/prd/thief.md の「運用」と「決定した論点」。`.github/workflows/` が無く、品質ゲートが各開発者の pre-commit フックに依存している。Linux では `go test -race` に cgo が要るため `CGO_ENABLED=1` でテストを実行する) (docs/issues/closed/0232)
 - [ ] API サーバの `http.Server` に `IdleTimeout` を設定したい (docs/prd/thief.md の「規約と実装の差」と「決定した論点」。`backend/internal/api/server.go` の `HTTPServer` は `ReadHeaderTimeout` だけを設定しており、AGENTS.md の「HTTP / Web API サーバ」と食い違う)
 - [ ] backend のログを `slog.NewJSONHandler` で JSON にしたい (docs/prd/thief.md の「規約と実装の差」と「決定した論点」。現在は `slog.SetDefault` も JSON のハンドラも無く、既定のハンドラで出している)
 - [ ] 読み取り専用の SQL 検査 (`backend/internal/sqlguard/sqlguard.go`) で、コメントと文字列リテラルを除いてから禁止語を検査したい (docs/prd/thief.md の FR-16 と「決定した論点」。現在は `SELECT 'drop' AS x` のような文字列リテラルやコメントの中の語でも拒否する)
