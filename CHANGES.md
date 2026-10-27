@@ -601,3 +601,5 @@
   - @sfuruya0612
 - issues/ を docs/issues/ へ移動して git で管理し、PRD (docs/prd/thief.md) と ADR (docs/adr/) を追加する
   - @sfuruya0612
+- npm audit が検出した frontend の依存パッケージの脆弱性 13 件を解消するため、vite を v8.3.0 から v8.3.5 に、vitest を v5.0.0 から v5.0.5 に、推移依存の source-map-js を v1.2.1 から v1.2.2 に、undici を v7.29.1 から v7.30.1 に、zod を v4.6.5 から v4.6.7 に更新する (vite の 6 件は GHSA-9jrq-w75r-8gcw / GHSA-rq7h-c2jc-7f22 / GHSA-vfpm-58rq-9qcg と、launch-editor 由来の GHSA-587h-7wmj-h5pm / GHSA-698v-4r3x-3vcv / GHSA-r825-w8mm-5pxw で、vite v8.3.5 が launch-editor への依存を外したため後者の 3 件は依存ツリーから消える。@vitest/mocker / vitest の 2 件は GHSA-qxg6-89mg-rqv8 / GHSA-xp26-3454-mjgp、source-map-js は GHSA-68fv-2mgg-jv7q、undici は GHSA-4qv8-2p9j-2685 / GHSA-f72v-6w45-q472 / GHSA-xjj6-f33q-929c、zod は GHSA-mrhx-c7xc-m3w5。vite と vitest は package.json の下限も修正版に合わせ、他の 3 パッケージは semver の範囲内での lockfile 更新のみ。いずれも開発用の依存で、更新後の npm audit は 0 件、npm ci・lint・ビルド・全 1,350 件のユニットテストが成功し、vite.config.ts の設定に変更は要らない)
+  - @sfuruya0612
