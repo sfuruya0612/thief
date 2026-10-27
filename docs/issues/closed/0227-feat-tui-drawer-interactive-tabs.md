@@ -2,6 +2,7 @@
 
 Created: 2026-10-26
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-27
 
 ## 背景
 
@@ -95,3 +96,17 @@ TUI の Drawer で ECS の Tasks / Instances、ELB の Listeners / Targets、WAF
 - `docs/issues/0225`、`docs/issues/0226`
 - `frontend/src/components/Drawer/DrawerECSTasks.tsx`、`DrawerECSContainerInstances.tsx`、`DrawerELBListeners.tsx`、`DrawerELBTargets.tsx`、`DrawerWAFRules.tsx`、`DrawerRDSInstanceParameters.tsx`
 - `backend/internal/aws/ecs_exec.go`、`elb.go`、`waf.go`、`rds.go`
+
+## 解決方法
+
+- `backend/internal/tui/tab_list.go` に一覧と詳細を持つ `listDetailTab` を追加した。`enter` で詳細を開き、`esc` で一覧へ戻る。詳細は即時作成と非同期取得の両方に対応し、`detailSeq` で古い結果を捨てる。Drawer の高さに収まるよう一覧を 1/4、詳細を 3/4 に配分し、選択可能な詳細では KV の行数を制限してコンテナ表のヘッダと 1 行以上が見えるようにした。
+- ECS の Tasks タブを追加した。タスクの詳細にコンテナの CPU、Memory、Exit code、Reason、ECS Exec の可否を表示し、Exec が有効なコンテナで `s` または `enter` を押すと `TabIntent{ECSExec}` を返す。Exec が無効なコンテナでは `container <name> does not support ECS Exec` を通知する。コンテナが 0 件なら `No containers` を表示する。
+- ECS の Instances タブを追加した。コンテナインスタンスごとにタスクをまとめ、`ContainerInstanceArn` が空の Fargate のタスクを除き、一致しないタスクを `Unknown container instance` にまとめた。タスクが無いインスタンスでは `No tasks` を表示する。詳細の Agent と ECS reported の表記を Web UI に合わせ、このタブからは Exec を開始しない。
+- ELB の Listeners タブと Targets タブを追加した。一覧が 0 件のときは `No listeners` と `No target groups`、詳細が 0 件のときは `No rules` と `No targets` を表示する。詳細の取得に失敗したときは理由を表示し、一覧は残す。
+- WAF の Rules タブを追加した。`RuleJSON` を `json.Indent` で整形し、整形できないときは元の文字列、空のときは `—` を表示する。
+- RDS の Instance Parameters タブを `rdsInstanceParametersTab` として追加した。`Group: <name>` と `(1/2)` の現在位置を表示し、`←` / `→` で切り替え、端で止まる。グループを切り替えたら取得をやり直し、古い結果を捨てる。グループが 0 個なら `No parameter groups.`、パラメータが 0 件なら `No parameters.` を表示する。
+- `startECSExecTarget` に開始中とセッション中のガードを追加し、Tasks タブから `s` を二度押してもセッションを二重に開始しないようにした。
+- `backend/internal/tui` の単体テストに、各タブの一覧取得と詳細の開閉、空と失敗、古い結果の破棄、ECS の表示規則と Exec の対象 / 無効時の通知、ECS Instances の絞り込みと `Unknown container instance`、ELB の空状態、WAF の JSON 整形、RDS のグループ切替と端での停止、Tasks タブから `OpenECSExecSession` が 1 回だけ呼ばれることを追加した。80 桁 x 24 行でタスク詳細とコンテナ行が Drawer に収まることも確認している。
+- `docs/prd/thief.md` の FR-29、FR-30 と「決定した論点」を更新し、`CHANGES.md` に [ADD] エントリを追加した。
+- 実 AWS アカウントでの ECS Tasks タブからの接続と、ELB / WAF の詳細の確認は、認証情報が無いため実施していない。コードと偽の取得関数を使った単体テストで確認した。実 AWS では、ECS Exec を有効にしたタスクのコンテナで `echo ok` が返ること、`Ctrl-]` の後に `aws ssm describe-sessions --state Active` にセッションが残らないこと、ELB と WAF の詳細が Web UI と同じ内容になることを確認する必要がある。
+- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。

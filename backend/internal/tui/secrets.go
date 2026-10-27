@@ -9,12 +9,17 @@ import (
 
 // secretsService は Secrets Manager のシークレットの一覧を提供する Service。
 type secretsService struct {
-	list func(ctx context.Context, profile, region string) ([]aws.SecretResource, error)
+	list     func(ctx context.Context, profile, region string) ([]aws.SecretResource, error)
+	getValue func(ctx context.Context, profile, region, name string) (string, error)
 }
 
 // NewSecretsService は Secrets Manager の Service を返す。list には aws.ListSecretResources を渡す。
-func NewSecretsService(list func(ctx context.Context, profile, region string) ([]aws.SecretResource, error)) Service {
-	return &secretsService{list: list}
+func NewSecretsService(list func(ctx context.Context, profile, region string) ([]aws.SecretResource, error), getValue ...func(ctx context.Context, profile, region, name string) (string, error)) Service {
+	s := &secretsService{list: list}
+	if len(getValue) > 0 {
+		s.getValue = getValue[0]
+	}
+	return s
 }
 
 func (s *secretsService) ID() string    { return "secrets" }
@@ -42,8 +47,30 @@ func (s *secretsService) Load(ctx context.Context, profile, region string) ([]Ro
 	return rows, nil
 }
 
-// SupportsSession は false を返す。Value のタブは第 1 段階では扱わない。
+// SupportsSession は false を返す。
 func (s *secretsService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Value、Tags を返す。
+func (s *secretsService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.getValue != nil {
+		tabs = append(tabs, TabSpec{
+			ID: "value", Title: "Value",
+			New: func(ctx context.Context, profile, region string, row Row) Tab {
+				secret := row.(secretsRow)
+				metadata := []KV{
+					{Key: "Name", Value: secret.res.Name},
+					{Key: "Description", Value: orDash(secret.res.Description)},
+				}
+				return newValueTab(ctx, metadata, true, func(ctx context.Context) (string, error) {
+					return s.getValue(ctx, profile, region, secret.res.Name)
+				})
+			},
+		})
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // secretsRow はシークレット 1 つの行。ID はシークレットの ARN。値は一覧に含めない。
 type secretsRow struct {

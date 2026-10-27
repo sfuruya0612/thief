@@ -9,13 +9,19 @@ import (
 
 // s3Service は S3 バケットの一覧を提供する Service。
 type s3Service struct {
-	list func(ctx context.Context, profile, region string) ([]aws.S3Resource, error)
+	list        func(ctx context.Context, profile, region string) ([]aws.S3Resource, error)
+	listObjects func(ctx context.Context, profile, region, bucket, prefix, delimiter string) ([]aws.S3ObjectResource, []string, bool, error)
 }
 
 // NewS3Service は S3 の Service を返す。list には aws.ListS3Resources を渡す。
 // aws.ListS3Resources はリージョンを無視して全バケットを返すが、他のサービスと同じく選択中のリージョンを渡す。
-func NewS3Service(list func(ctx context.Context, profile, region string) ([]aws.S3Resource, error)) Service {
-	return &s3Service{list: list}
+// listObjects を省略すると Objects タブを表示しない (既存のテスト用)。
+func NewS3Service(list func(ctx context.Context, profile, region string) ([]aws.S3Resource, error), listObjects ...func(ctx context.Context, profile, region, bucket, prefix, delimiter string) ([]aws.S3ObjectResource, []string, bool, error)) Service {
+	s := &s3Service{list: list}
+	if len(listObjects) > 0 {
+		s.listObjects = listObjects[0]
+	}
+	return s
 }
 
 func (s *s3Service) ID() string    { return "s3" }
@@ -47,6 +53,22 @@ func (s *s3Service) Load(ctx context.Context, profile, region string) ([]Row, er
 }
 
 func (s *s3Service) SupportsSession() bool { return false }
+
+// Tabs は Overview、Objects、Tags を返す。
+func (s *s3Service) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.listObjects != nil {
+		tabs = append(tabs, TabSpec{
+			ID: "objects", Title: "Objects",
+			New: func(ctx context.Context, profile, region string, row Row) Tab {
+				bucket := row.(s3Row)
+				return newS3ObjectsTab(ctx, profile, region, bucket.Name(), bucket.bucketRegion(), s.listObjects)
+			},
+		})
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // s3Row は S3 バケット 1 つの行。ID はバケット名。
 type s3Row struct {

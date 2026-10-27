@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/sfuruya0612/thief/backend/internal/aws"
@@ -46,8 +47,45 @@ func (s *cloudfrontService) Load(ctx context.Context, profile, region string) ([
 	return rows, nil
 }
 
-// SupportsSession は false を返す。Behaviors のタブは第 1 段階では扱わない。
+// SupportsSession は false を返す。
 func (s *cloudfrontService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Behaviors、Tags を返す。
+func (s *cloudfrontService) Tabs() []TabSpec {
+	return []TabSpec{
+		{ID: tabOverview, Title: "Overview"},
+		contentTabSpec("behaviors", "Behaviors", func(_ context.Context, _, _ string, row Row) (TabContent, error) {
+			distribution := row.(cloudfrontRow)
+			rows := make([][]string, 0, len(distribution.res.Behaviors))
+			for i, behavior := range distribution.res.Behaviors {
+				pathPattern := behavior.PathPattern
+				if behavior.IsDefault {
+					pathPattern = "Default (*)"
+				}
+				compress := dash
+				if behavior.Compress {
+					compress = check
+				}
+				rows = append(rows, []string{
+					strconv.Itoa(i + 1),
+					pathPattern,
+					behavior.TargetOriginID,
+					behavior.ViewerProtocolPolicy,
+					orDash(strings.Join(behavior.AllowedMethods, ", ")),
+					compress,
+				})
+			}
+			return TabContent{Blocks: []TabBlock{{
+				Title: fmt.Sprintf("Behaviors (%d)", len(rows)),
+				Table: &TabTable{
+					Columns: []Column{{Title: "Precedence", Align: AlignRight}, {Title: "Path pattern"}, {Title: "Target origin"}, {Title: "Viewer protocol"}, {Title: "Allowed methods"}, {Title: "Compress"}},
+					Rows:    rows,
+				},
+			}}}, nil
+		}),
+		{ID: tabTags, Title: "Tags"},
+	}
+}
 
 // cloudfrontRow はディストリビューション 1 つの行。ID はディストリビューション ID、
 // Name は Comment (無ければ ID) で、どちらも一覧関数が決める。

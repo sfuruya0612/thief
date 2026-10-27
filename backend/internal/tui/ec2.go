@@ -55,6 +55,15 @@ func (s *ec2Service) Load(ctx context.Context, profile, region string) ([]Row, e
 
 func (s *ec2Service) SupportsSession() bool { return true }
 
+// Tabs は Overview、Terminal、Tags を返す。
+func (s *ec2Service) Tabs() []TabSpec {
+	return []TabSpec{
+		{ID: tabOverview, Title: "Overview"},
+		{ID: tabTerminal, Title: "Terminal"},
+		{ID: tabTags, Title: "Tags"},
+	}
+}
+
 // ec2Row は EC2 インスタンス 1 台の行。
 type ec2Row struct {
 	res    aws.EC2Resource

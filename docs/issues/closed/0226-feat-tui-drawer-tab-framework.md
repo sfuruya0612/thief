@@ -2,6 +2,7 @@
 
 Created: 2026-10-26
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-27
 
 ## 背景
 
@@ -106,3 +107,16 @@ TUI の Drawer が Web UI と同じ順序でサービス固有タブを表示で
 - `docs/issues/0225`、`docs/issues/0227`、`docs/issues/0228`、`docs/issues/0229`、`docs/issues/0230`
 - `frontend/src/components/Drawer/Drawer.tsx` の `DRAWER_TABS`
 - `frontend/src/components/tables/columns.tsx` の `ecrImageColumns`、`ecsServiceColumns`、`cfnEventColumns`、`cfnResourceColumns`、`rdsParameterColumns`、`cacheParameterColumns`
+
+## 解決方法
+
+- `backend/internal/tui/service.go` に `Tab`、`TabSpec`、`TabIntent`、`TabProvider`、`TabContent`、`TabBlock`、`TabTable` を追加した。`Service` の任意実装として `TabProvider.Tabs()` を返せる。
+- `backend/internal/tui/model.go` から `drawerTab` と `drawerTabTitles` を削除し、選択中のサービスの `TabProvider.Tabs()` からタブの並びを得るようにした。`TabProvider` を実装しないサービスは Overview と Tags の 2 タブになる。
+- タブの `tea.Cmd` を `wrapTabCmd` で `tabScopedMsg` の世代付きにし、タブ切替、行変更、`r` の再取得の後に届いた古い結果を捨てる。`tabCancel` でタブの context もキャンセルする。`tea.Batch` の内側のコマンドも再帰的に包む。
+- `ctrl+c` はタブより先に TUI の終了として扱い、タブが処理しなかったキーだけをグローバル操作へ流す。`1` から `9` と `[` / `]` でタブを切り替え、範囲外の数字を無視し、端で止まる。サービス切替では Overview に戻り、行切替では同じタブを保つ。
+- `tab_content.go` の `contentTab` に読み取り専用の表とテキストのタブを実装し、読み込み中、失敗、空、成功を区別した。表は幅に収まらないとき右端の列を落として `…` を付ける。
+- ECR Images、ECS Services、CloudFront Behaviors、CloudFormation Events / Resources、RDS Cluster Parameters、ElastiCache Parameters、EC2 / ECS Terminal のタブを追加した。
+- `backend/internal/cli/tui.go` の `newTUIDeps` が各サービスのタブ用取得関数をコンストラクタへ渡している。`backend/internal/cli/tui_test.go` で 19 サービスのタブ名が Web UI の `DRAWER_TABS` と同じ相対順序になり、ECR が Tags を持たないことを確認している。
+- `backend/internal/tui` の単体テストに、タブの順序、番号と `[` / `]` の切替、サービス切替と行切替、範囲外の数字、端での停止、80 桁 x 24 行と 120 桁 x 30 行の表示、キー委譲、`ctrl+c` の優先、`tea.Batch` の 0 件 / 1 件 / 2 件以上とネスト、古い結果の破棄、読み込み中、失敗、空、表の切り詰めと右端の切り落としを追加した。
+- `docs/prd/thief.md` の FR-29 を更新し、`AGENTS.md` にタブのサブモデルと取得関数のコンストラクタ注入を追記した。`example/README.md` に floci で確認できるタブの手順を追加した。`CHANGES.md` に [ADD] エントリを追加した。
+- `mise run check` は issue 0218 由来の govulncheck の 12 件 (GO-2026-6809、6617、6613、6612、6611、6610、6608、6607、6605、6603、6600、6599) だけで失敗する。fmt、lint、`go test ./...` は通る。

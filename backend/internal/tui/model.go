@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/sfuruya0612/thief/backend/internal/aws"
 )
@@ -54,15 +55,6 @@ const (
 	focusDrawer
 )
 
-type drawerTab int
-
-const (
-	tabOverview drawerTab = iota
-	tabTags
-)
-
-var drawerTabTitles = []string{"Overview", "Tags"}
-
 // 画面の固定部分の行数。ヘッダ 1 行、フッタ 1 行、ペインの枠の上下 2 行。
 const (
 	headerLines = 1
@@ -94,8 +86,11 @@ type Model struct {
 	filter    textinput.Model
 	filtering bool
 
-	drawer viewport.Model
-	tab    drawerTab
+	drawer    viewport.Model
+	tabID     string
+	tabSeq    int
+	tabCancel context.CancelFunc
+	activeTab Tab
 
 	focus  focusArea
 	picker *picker
@@ -172,6 +167,7 @@ func New(ctx context.Context, deps Deps, profile, region string) (Model, error) 
 		spinner:          sp,
 		table:            table.New(table.WithFocused(true), table.WithStyles(styles)),
 		drawer:           viewport.New(0, 0),
+		tabID:            tabOverview,
 		loading:          true,
 		sessionStartSlot: newSessionStartSlot(),
 
@@ -257,6 +253,12 @@ type sessionCleanupMsg struct {
 	err error
 }
 
+// tabScopedMsg はタブの Cmd の結果をタブの世代とともに運ぶ。
+type tabScopedMsg struct {
+	instance int
+	msg      tea.Msg
+}
+
 // statusExpiredMsg はステータス行の自動消去のタイマー。seq が現在の statusSeq と
 // 一致するときだけ消す。
 type statusExpiredMsg struct {
@@ -303,6 +305,7 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	m.tags = map[string]tagsResult{}
 	m.tagsPending = map[string]bool{}
 	// 捨てた世代のタグを一覧が届くまで Drawer に残さない (Tags タブは取得中の表示に戻る)。
+	m = m.resetActiveTab()
 	m = m.refreshDrawer()
 	return m, m.loadCmd()
 }
@@ -411,8 +414,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// バナーの有無で本文の高さが変わるため、寸法を取り直してから行を流し込む。
 		m = m.resize()
+		m = m.resetActiveTab()
 		m = m.applyFilter()
-		return m.ensureTags()
+		m, tabCmd := m.ensureActiveTab()
+		m, tagsCmd := m.ensureTags()
+		return m, tea.Batch(tabCmd, tagsCmd)
 
 	case tagsFetchedMsg:
 		// r や対象の切替で世代が進んだ後に届いた結果は、旧い一覧のものなので表示も保持もしない。
@@ -505,6 +511,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.setStatus("")
 
+	case tabScopedMsg:
+		if msg.instance != m.tabSeq || m.activeTab == nil {
+			return m, nil
+		}
+		next, cmd, intent, handled := m.activeTab.Update(msg.msg)
+		if !handled {
+			return m, nil
+		}
+		m.activeTab = next
+		return m.applyTabIntent(intent, cmd)
+
 	case tea.KeyMsg:
 		return m.updateKey(msg)
 	}
@@ -536,8 +553,22 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// ctrl+c はタブより先に TUI の終了として扱う。
+	if msg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+
+	// タブが処理したキーだけを消費し、残りをグローバル操作へ流す。
+	if m.activeTab != nil && m.focus == focusDrawer {
+		next, cmd, intent, handled := m.activeTab.Update(msg)
+		if handled {
+			m.activeTab = next
+			return m.applyTabIntent(intent, cmd)
+		}
+	}
+
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "q":
 		return m, tea.Quit
 	case "/":
 		m.filtering = true
@@ -550,10 +581,17 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.focus = focusTable
 		}
 		return m, nil
-	case "1", "2":
-		m.tab = drawerTab(int(msg.String()[0] - '1'))
-		m = m.refreshDrawer()
-		return m.ensureTags()
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		index := int(msg.String()[0] - '1')
+		tabs := m.drawerTabs()
+		if index >= 0 && index < len(tabs) {
+			return m.switchTab(tabs[index].ID)
+		}
+		return m, nil
+	case "[":
+		return m.cycleTab(-1)
+	case "]":
+		return m.cycleTab(1)
 	case "r":
 		return m.startLoad()
 	case "p":
@@ -583,10 +621,12 @@ func (m Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.table, cmd = m.table.Update(msg)
 		if m.table.Cursor() != before {
+			m = m.resetActiveTab()
 			m = m.refreshDrawer()
+			m, tabCmd := m.ensureActiveTab()
 			var tagsCmd tea.Cmd
 			m, tagsCmd = m.ensureTags()
-			return m, tea.Batch(cmd, tagsCmd)
+			return m, tea.Batch(cmd, tabCmd, tagsCmd)
 		}
 		return m, cmd
 	}
@@ -638,6 +678,8 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		// サービスを変えるとタブの集合が変わるため、先頭の Overview に戻す。
+		m.tabID = tabOverview
 		return m.reloadForNewTarget()
 	}
 	return m, nil
@@ -658,19 +700,23 @@ func (m Model) reloadForNewTarget() (Model, tea.Cmd) {
 	}
 	m.sessionStarting = false
 	m.sessionSeq++
+	m = m.resetActiveTab()
 	m.rows = nil
 	m = m.applyFilter()
 	return m.startLoad()
 }
 
 func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	before := m.selectedRow()
 	switch msg.String() {
 	case "esc":
 		m.filter.SetValue("")
 		m.filtering = false
 		m.filter.Blur()
 		m = m.applyFilter()
-		return m.ensureTags()
+		m, tabCmd := m.syncActiveTab(before)
+		m, tagsCmd := m.ensureTags()
+		return m, tea.Batch(tabCmd, tagsCmd)
 	case "enter":
 		m.filtering = false
 		m.filter.Blur()
@@ -681,10 +727,29 @@ func (m Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.filter, cmd = m.filter.Update(msg)
 	m = m.applyFilter()
-	// 絞り込みで選択中の行が変わることがあるので、その行のタグの取得も始める。
+	// 絞り込みで選択中の行が変わったときだけ、タブを作り直す。同じ行なら
+	// サービス固有タブの検索条件や表示位置を保つ。
+	m, tabCmd := m.syncActiveTab(before)
 	var tagsCmd tea.Cmd
 	m, tagsCmd = m.ensureTags()
-	return m, tea.Batch(cmd, tagsCmd)
+	return m, tea.Batch(cmd, tabCmd, tagsCmd)
+}
+
+// syncActiveTab は絞り込みの前後で選択行が変わったときだけ、タブを作り直す。
+func (m Model) syncActiveTab(before Row) (Model, tea.Cmd) {
+	if sameRow(before, m.selectedRow()) {
+		return m, nil
+	}
+	m = m.resetActiveTab()
+	m = m.refreshDrawer()
+	return m.ensureActiveTab()
+}
+
+func sameRow(a, b Row) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.ID() == b.ID()
 }
 
 func (m Model) openProfilePicker() (tea.Model, tea.Cmd) {
@@ -709,6 +774,162 @@ func (m Model) openServicePicker() (tea.Model, tea.Cmd) {
 	p := newPicker(pickerService, "Select a service", items, m.service.ID())
 	m.picker = &p
 	return m, nil
+}
+
+// drawerTabs は選択中のサービスのタブを返す。TabProvider を実装しないサービスは
+// Web UI と同じく Overview と Tags の 2 タブにする。
+func (m Model) drawerTabs() []TabSpec {
+	if p, ok := m.service.(TabProvider); ok {
+		return p.Tabs()
+	}
+	return []TabSpec{
+		{ID: tabOverview, Title: "Overview"},
+		{ID: tabTags, Title: "Tags"},
+	}
+}
+
+// currentTabSpec は選択中のタブの仕様を返す。
+func (m Model) currentTabSpec() (TabSpec, bool) {
+	for _, tab := range m.drawerTabs() {
+		if tab.ID == m.tabID {
+			return tab, true
+		}
+	}
+	return TabSpec{}, false
+}
+
+// drawerInnerSize はタブの本文に使える幅と高さを返す。Drawer の枠とタブバーの 1 行を除く。
+func (m Model) drawerInnerSize() (width, height int) {
+	leftInner := m.tableInnerWidth()
+	width = m.width - leftInner - 2*borderLines
+	if width < 1 {
+		width = 1
+	}
+	height = m.bodyHeight() - 1
+	if height < 1 {
+		height = 1
+	}
+	return width, height
+}
+
+// resetActiveTab は現在のタブのサブモデルと、その Cmd を無効にする。
+func (m Model) resetActiveTab() Model {
+	if m.tabCancel != nil {
+		m.tabCancel()
+		m.tabCancel = nil
+	}
+	m.activeTab = nil
+	m.tabSeq++
+	return m
+}
+
+// ensureActiveTab は選択中のタブがサービス固有タブならサブモデルを作り、Init の Cmd を返す。
+func (m Model) ensureActiveTab() (Model, tea.Cmd) {
+	spec, ok := m.currentTabSpec()
+	if !ok || spec.New == nil {
+		m.activeTab = nil
+		return m, nil
+	}
+	row := m.selectedRow()
+	if row == nil {
+		m.activeTab = nil
+		return m, nil
+	}
+	if m.activeTab != nil {
+		return m, nil
+	}
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.tabCancel = cancel
+	m.tabSeq++
+	m.activeTab = spec.New(ctx, m.profile, m.region, row)
+	if m.activeTab == nil {
+		return m, nil
+	}
+	width, height := m.drawerInnerSize()
+	m.activeTab.SetSize(width, height)
+	return m, wrapTabCmd(m.tabSeq, m.activeTab.Init())
+}
+
+// switchTab は指定したタブへ切り替える。同じ ID なら何もしない。
+func (m Model) switchTab(id string) (Model, tea.Cmd) {
+	if id == m.tabID {
+		return m, nil
+	}
+	found := false
+	for _, tab := range m.drawerTabs() {
+		if tab.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return m, nil
+	}
+
+	m = m.resetActiveTab()
+	m.tabID = id
+	m = m.refreshDrawer()
+	m, tabCmd := m.ensureActiveTab()
+	if id == tabTags {
+		m, tagsCmd := m.ensureTags()
+		return m, tea.Batch(tabCmd, tagsCmd)
+	}
+	return m, tabCmd
+}
+
+// cycleTab は前後のタブへ移動する。端では止まる。
+func (m Model) cycleTab(delta int) (Model, tea.Cmd) {
+	tabs := m.drawerTabs()
+	if len(tabs) == 0 {
+		return m, nil
+	}
+	index := 0
+	for i, tab := range tabs {
+		if tab.ID == m.tabID {
+			index = i
+			break
+		}
+	}
+	index += delta
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(tabs) {
+		index = len(tabs) - 1
+	}
+	return m.switchTab(tabs[index].ID)
+}
+
+// wrapTabCmd はタブの Cmd の結果にタブの世代を付ける。tea.Batch の内側の Cmd も再帰的に包む。
+func wrapTabCmd(instance int, cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			cmds := make([]tea.Cmd, len(batch))
+			for i, inner := range batch {
+				cmds[i] = wrapTabCmd(instance, inner)
+			}
+			// tea.Batch ではなく BatchMsg を直接返し、Bubble Tea に内側の Cmd を
+			// 実行させる。Cmd を Msg として返すとイベントループが実行しない。
+			return tea.BatchMsg(cmds)
+		}
+		return tabScopedMsg{instance: instance, msg: msg}
+	}
+}
+
+// applyTabIntent はタブからの要求を Model の操作へ変換する。
+func (m Model) applyTabIntent(intent *TabIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	if intent != nil && intent.ECSExec != nil {
+		return m.startECSExecTarget(*intent.ECSExec)
+	}
+	var statusCmd tea.Cmd
+	if intent != nil && intent.Status != "" {
+		m, statusCmd = m.setStatus(intent.Status)
+	}
+	return m, tea.Batch(wrapTabCmd(m.tabSeq, cmd), statusCmd)
 }
 
 func (m Model) startSession() (tea.Model, tea.Cmd) {
@@ -794,17 +1015,35 @@ func (m Model) listECSContainers(task string) (tea.Model, tea.Cmd) {
 func (m Model) startECSExecProcess(container string) (tea.Model, tea.Cmd) {
 	st := m.ecsExec
 	m.ecsExec = ecsExecState{}
+	// 接続先の選択は終わったので、開始中のガードを一度外してから開始する。
+	m.sessionStarting = false
+	return m.startECSExecTarget(ECSExecTarget{Cluster: st.cluster, Task: st.task, Container: container})
+}
+
+// startECSExecTarget はタブや選択肢から渡された接続先で ECS Exec を開始する。
+func (m Model) startECSExecTarget(target ECSExecTarget) (tea.Model, tea.Cmd) {
+	if m.sessionStarting || m.session != nil {
+		return m, nil
+	}
+	if m.deps.OpenECSExecSession == nil {
+		return m.setStatus("sessions are not available")
+	}
+	areaWidth, areaHeight := m.sessionAreaSize()
+	if _, _, ok := sessionWindowSize(areaWidth, areaHeight); !ok {
+		return m.setStatus("terminal too small for a session window")
+	}
 	m.sessionSeq++
 	seq := m.sessionSeq
 	m.closedSessionSeq = 0
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.sessionStartCancel = cancel
-	m, statusCmd := m.setStatus(fmt.Sprintf("starting session to %s/%s/%s...", st.cluster, st.task, container))
+	m.sessionStarting = true
+	m, statusCmd := m.setStatus(fmt.Sprintf("starting session to %s/%s/%s...", target.Cluster, target.Task, target.Container))
 	open, profile, region := m.deps.OpenECSExecSession, m.profile, m.region
-	title := fmt.Sprintf("ECS  %s / %s / %s  %s / %s", st.cluster, st.task, container, m.profile, m.region)
+	title := fmt.Sprintf("ECS  %s / %s / %s  %s / %s", target.Cluster, target.Task, target.Container, m.profile, m.region)
 	slot := m.sessionStartSlot
 	return m, tea.Batch(statusCmd, func() tea.Msg {
-		session, err := open(ctx, profile, region, st.cluster, st.task, container, ecsExecDefaultCommand)
+		session, err := open(ctx, profile, region, target.Cluster, target.Task, target.Container, ecsExecDefaultCommand)
 		slot.set(session)
 		return sessionReadyMsg{seq: seq, title: title, session: session, err: err}
 	})
@@ -1081,6 +1320,9 @@ func (m Model) selectedRow() Row {
 
 // refreshDrawer は選択中の行とタブから Drawer の内容を組み直す。
 func (m Model) refreshDrawer() Model {
+	if m.activeTab != nil {
+		return m
+	}
 	row := m.selectedRow()
 	if row == nil {
 		m.drawer.SetContent(mutedStyle.Render("No row selected"))
@@ -1089,7 +1331,17 @@ func (m Model) refreshDrawer() Model {
 	}
 
 	var b strings.Builder
-	switch m.tab {
+	switch m.tabID {
+	case tabTerminal:
+		b.WriteString(headerStyle.Render("Terminal"))
+		b.WriteString("\n")
+		if m.service.ID() == ecsServiceID {
+			b.WriteString(wrap("Press s to select a running task and an ECS Exec enabled container, then open a floating terminal.", m.drawer.Width))
+		} else {
+			b.WriteString(wrap("Press s to open a Session Manager terminal to the selected instance in a floating window.", m.drawer.Width))
+		}
+		b.WriteString("\n\n")
+		b.WriteString(mutedStyle.Render("Ctrl-] closes the floating window. Ctrl-C and q are sent to the remote session."))
 	case tabTags:
 		tags := row.Tags()
 		// タグの取得に失敗した行は、Web UI の DrawerTags と同じく本文の先頭に見出しを出し、タグがあればその下に並べ、"No tags" は出さない。
@@ -1172,6 +1424,10 @@ func (m Model) resize() Model {
 
 	m.drawer.Width = rightInner
 	m.drawer.Height = bodyHeight - 1
+	if m.activeTab != nil {
+		width, height := m.drawerInnerSize()
+		m.activeTab.SetSize(width, height)
+	}
 	return m
 }
 
@@ -1330,15 +1586,41 @@ func (m Model) bodyView() string {
 		leftBody = m.table.View()
 	}
 
-	tabs := make([]string, 0, len(drawerTabTitles))
-	for i, t := range drawerTabTitles {
-		if drawerTab(i) == m.tab {
-			tabs = append(tabs, selectedStyle.Render(t))
+	tabSpecs := m.drawerTabs()
+	tabs := make([]string, 0, len(tabSpecs))
+	plainLabels := make([]string, 0, len(tabSpecs))
+	activeLabel := ""
+	for i, tab := range tabSpecs {
+		label := fmt.Sprintf("%d %s", i+1, tab.Title)
+		plainLabels = append(plainLabels, label)
+		if tab.ID == m.tabID {
+			activeLabel = label
+			tabs = append(tabs, selectedStyle.Render(label))
 		} else {
-			tabs = append(tabs, mutedStyle.Render(t))
+			tabs = append(tabs, mutedStyle.Render(label))
 		}
 	}
 	rightTitle := strings.Join(tabs, mutedStyle.Render(" | "))
+	if lipgloss.Width(rightTitle) > rightInner {
+		// 先頭から詰め、現在のタブが見えなくなる場合だけ … | <active> に置き換える。
+		plain := strings.Join(plainLabels, " | ")
+		truncatedPlain := ansi.Truncate(plain, rightInner, "…")
+		if !strings.Contains(truncatedPlain, activeLabel) {
+			prefix := mutedStyle.Render("… | ")
+			available := rightInner - lipgloss.Width(prefix)
+			if available < 1 {
+				available = 1
+			}
+			rightTitle = prefix + ansi.Truncate(activeLabel, available, "…")
+		} else {
+			rightTitle = ansi.Truncate(rightTitle, rightInner, "…")
+		}
+	}
+
+	rightBody := m.drawer.View()
+	if m.activeTab != nil {
+		rightBody = m.activeTab.View(rightInner, bodyHeight-1)
+	}
 
 	leftStyle, rightStyle := paneStyle, paneStyle
 	if m.focus == focusTable {
@@ -1347,7 +1629,7 @@ func (m Model) bodyView() string {
 		rightStyle = paneFocusedStyle
 	}
 	left := leftStyle.Width(leftInner).Height(bodyHeight).Render(leftTitle + "\n" + leftBody)
-	right := rightStyle.Width(rightInner).Height(bodyHeight).Render(rightTitle + "\n" + m.drawer.View())
+	right := rightStyle.Width(rightInner).Height(bodyHeight).Render(rightTitle + "\n" + rightBody)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
@@ -1360,14 +1642,22 @@ func (m Model) footerView() string {
 		return lipgloss.NewStyle().MaxWidth(m.width).Render(strings.Join(parts, "  "))
 	}
 
+	tabHint := fmt.Sprintf("1-%d", len(m.drawerTabs()))
 	keys := []struct{ key, desc string }{
-		{"/", "filter"}, {"j/k", "move"}, {"tab", "focus"}, {"1/2", "tabs"},
+		{"/", "filter"}, {"j/k", "move"}, {"tab", "focus"}, {tabHint, "tabs"}, {"[ ]", "tabs"},
 		{"s", "session"}, {"r", "reload"}, {"p", "profile"}, {"R", "region"},
 	}
 	if len(m.deps.Services) > 1 {
 		keys = append(keys, struct{ key, desc string }{"S", "service"})
 	}
 	keys = append(keys, struct{ key, desc string }{"q", "quit"})
+	if m.width < 100 {
+		// 狭い端末ではタブ以外の案内を削って、タブの番号と [ ] を残す。
+		keys = []struct{ key, desc string }{
+			{"/", "filter"}, {"j/k", "move"}, {"tab", "focus"}, {tabHint, "tabs"}, {"[ ]", "tabs"},
+			{"s", "session"}, {"r", "reload"}, {"q", "quit"},
+		}
+	}
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, keyStyle.Render(k.key)+" "+mutedStyle.Render(k.desc))
@@ -1380,11 +1670,10 @@ func (m Model) footerView() string {
 // fitCells はセル数を列数に揃える。bubbles の table は行のセル数が列数を超えると
 // 描画時に panic するため、Service の実装の不一致を描画の崩れに留める。
 func fitCells(cells []string, n int) []string {
-	if len(cells) == n {
-		return cells
-	}
 	out := make([]string, n)
-	copy(out, cells)
+	for i := 0; i < n && i < len(cells); i++ {
+		out[i] = sanitizeCell(cells[i])
+	}
 	return out
 }
 

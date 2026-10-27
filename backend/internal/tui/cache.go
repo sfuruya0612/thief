@@ -10,12 +10,18 @@ import (
 
 // cacheService は ElastiCache クラスタの一覧を提供する Service。
 type cacheService struct {
-	list func(ctx context.Context, profile, region string) ([]aws.ElastiCacheResource, error)
+	list       func(ctx context.Context, profile, region string) ([]aws.ElastiCacheResource, error)
+	parameters func(ctx context.Context, profile, region, group string) ([]aws.ElastiCacheParameter, error)
 }
 
 // NewCacheService は ElastiCache の Service を返す。list には aws.ListElastiCacheResources を渡す。
-func NewCacheService(list func(ctx context.Context, profile, region string) ([]aws.ElastiCacheResource, error)) Service {
-	return &cacheService{list: list}
+// parameters を省略すると Parameters タブを表示しない (既存のテスト用)。
+func NewCacheService(list func(ctx context.Context, profile, region string) ([]aws.ElastiCacheResource, error), parameters ...func(ctx context.Context, profile, region, group string) ([]aws.ElastiCacheParameter, error)) Service {
+	s := &cacheService{list: list}
+	if len(parameters) > 0 {
+		s.parameters = parameters[0]
+	}
+	return s
 }
 
 // ID は Web UI の serviceMeta.ts と PRD の FR-29 と同じ cache を返す。
@@ -53,6 +59,40 @@ func (s *cacheService) Load(ctx context.Context, profile, region string) ([]Row,
 }
 
 func (s *cacheService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Parameters、Tags を返す。
+func (s *cacheService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.parameters != nil {
+		tabs = append(tabs, contentTabSpec("parameters", "Parameters", func(ctx context.Context, profile, region string, row Row) (TabContent, error) {
+			cluster := row.(cacheRow)
+			if cluster.res.ParameterGroup == "" {
+				return TabContent{Blocks: []TabBlock{{Title: "Parameters", Text: "No parameter group."}}}, nil
+			}
+			params, err := s.parameters(ctx, profile, region, cluster.res.ParameterGroup)
+			if err != nil {
+				return TabContent{}, fmt.Errorf("list ElastiCache parameters: %w", err)
+			}
+			rows := make([][]string, 0, len(params))
+			for _, param := range params {
+				modifiable := dash
+				if param.IsModifiable {
+					modifiable = check
+				}
+				rows = append(rows, []string{param.Name, orDash(param.Value), param.ChangeType, param.DataType, modifiable, param.Source})
+			}
+			return TabContent{Blocks: []TabBlock{{
+				Title: fmt.Sprintf("%s (%d)", cluster.res.ParameterGroup, len(params)),
+				Table: &TabTable{
+					Columns: []Column{{Title: "Name"}, {Title: "Value"}, {Title: "Change type"}, {Title: "Data type"}, {Title: "Modifiable"}, {Title: "Source"}},
+					Rows:    rows,
+				},
+			}}}, nil
+		}))
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // cacheRow は ElastiCache クラスタ 1 つの行。ID はクラスタ ID。
 type cacheRow struct {

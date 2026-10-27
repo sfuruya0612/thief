@@ -1,6 +1,17 @@
 package tui
 
-import "context"
+import (
+	"context"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// Drawer の組み込みタブの ID。サービス固有タブは各サービスが ID を決める。
+const (
+	tabOverview = "overview"
+	tabTags     = "tags"
+	tabTerminal = "terminal"
+)
 
 // KV は Drawer の Overview の 1 行 (項目名と値)。
 type KV struct {
@@ -8,9 +19,77 @@ type KV struct {
 	Value string
 }
 
+// Align はタブの表のセルの寄せ。
+type Align int
+
+const (
+	// AlignLeft は左寄せ。
+	AlignLeft Align = iota
+	// AlignRight は右寄せ。
+	AlignRight
+)
+
 // Column は一覧の列。幅は表示中の行の内容から決めるため、ここには持たない。
 type Column struct {
 	Title string
+	// Align はタブの表を描くときの寄せ。既存の一覧を描く bubbles/table は参照しない。
+	Align Align
+}
+
+// TabTable はタブに表示する表。
+type TabTable struct {
+	Columns []Column
+	Rows    [][]string
+}
+
+// TabBlock はタブ本文の 1 ブロック。見出し、キーと値、表、テキストのいずれかを持つ。
+type TabBlock struct {
+	Title string
+	KV    []KV
+	Table *TabTable
+	Text  string
+}
+
+// TabContent はタブ本文のブロック列。
+type TabContent struct {
+	Blocks []TabBlock
+}
+
+// ECSExecTarget はタブから開始する ECS Exec の接続先。
+type ECSExecTarget struct {
+	Cluster   string
+	Task      string
+	Container string
+}
+
+// TabIntent はタブから Model への要求。
+type TabIntent struct {
+	// Status は通知行に表示する文字列。
+	Status string
+	// ECSExec は ECS Exec を開始する接続先。nil なら開始しない。
+	ECSExec *ECSExecTarget
+}
+
+// Tab は Drawer の中で動く 1 タブ。Update の handled は、そのキーまたはメッセージを
+// タブが消費したかどうかを返す。消費しなかったキーだけが Model のグローバル操作へ流れる。
+type Tab interface {
+	Init() tea.Cmd
+	Update(msg tea.Msg) (Tab, tea.Cmd, *TabIntent, bool)
+	View(width, height int) string
+	SetSize(width, height int)
+}
+
+// TabSpec はタブの生成仕様。New が nil のタブは Model の組み込みタブ (Overview / Tags / Terminal)。
+type TabSpec struct {
+	ID    string
+	Title string
+	New   func(ctx context.Context, profile, region string, row Row) Tab
+}
+
+// TabProvider は Drawer のタブを持つ Service が実装する。Tabs はそのサービスで現在実装済みの
+// タブを Web UI の DRAWER_TABS の相対順序で返す。
+type TabProvider interface {
+	Tabs() []TabSpec
 }
 
 // Row は一覧の 1 行。Drawer の Overview と Tags も行から導く。

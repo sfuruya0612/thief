@@ -2,6 +2,7 @@
 
 Created: 2026-10-26
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-27
 
 ## 背景
 
@@ -63,3 +64,15 @@ TUI の Secrets Manager と Parameter Store の Drawer に `Value` タブを追�
 - `docs/issues/0226`
 - `frontend/src/components/Drawer/DrawerSecretEdit.tsx`、`DrawerSSMEdit.tsx`、`DrawerValueEditor.tsx`
 - `backend/internal/aws/secretsmanager.go`、`backend/internal/aws/ssm.go`
+
+## 解決方法
+
+- `backend/internal/tui/secrets.go` と `ssm.go` の `Tabs()` に Value タブを追加し、`GetSecretValue` と `GetSSMParameter` の取得関数をコンストラクタで受け取るようにした。`backend/internal/cli/tui.go` の `newTUIDeps` が本番の関数を渡している。
+- `backend/internal/tui/tab_value.go` に `valueTab` を追加した。Secrets Manager は Name と Description、Parameter Store は Name、Type、Tier、Version を表示し、空の Description と Tier は `—` にする。
+- Secrets Manager と SecureString はタブを開いた時点で値を取得せず、`Press v to reveal` を表示する。`v` で取得して表示し、もう一度 `v` で `Hidden; press v to reveal` に戻す。再表示では API を呼び直さない。String と StringList はタブを開いたときに取得し、`v` では表示を変えない。Type の `SecureString` の比較は大文字と小文字を区別しない。
+- 値は `viewport` に幅で折り返して入れ、上下キー、`j` / `k`、PageUp / PageDown、Home / End でスクロールできる。メタデータと案内の行数を Drawer の高さから差し引き、値が Drawer の内側に収まるようにした。
+- 取得中、取得失敗、空文字列、表示中、非表示を区別して表示する。取得に失敗したときは値を受け取っていても保持せず、値がエラーメッセージに含まれないようにした。
+- 取得はタブの context と `loadSeq` で世代管理し、タブ切替、行変更、`r` の再取得の後に届いた古い値を表示にも保持にも使わない。値は Value タブを開いている間だけ保持し、backend のキャッシュには載せない。
+- `backend/internal/tui` の単体テストに、Secrets Manager の初期マスク、`v` の取得と再表示、SecureString と String / StringList の分岐、String で `v` が何もしないこと、取得失敗、空文字列、長い値の折り返しとスクロール、古い結果の破棄、値がエラー表示に混入しないこと、メタデータの表示、`GetSSMParameter` に `decrypt=true` が渡ることを追加した。
+- `docs/prd/thief.md` の FR-5 に TUI の Value タブの例外と保持期間を追記し、非機能要求のセキュリティにも値をタブ内だけで保持することを追記した。`example/README.md` に floci の `/thief/example/db-password` と `thief/example/db-credentials` で初期マスクと `v` の切替を確認する手順を追加した。`CHANGES.md` に [ADD] エントリを追加した。
+- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。

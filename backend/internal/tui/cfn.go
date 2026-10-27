@@ -10,8 +10,10 @@ import (
 
 // cfnService は CloudFormation のスタックの一覧を提供する Service。
 type cfnService struct {
-	list   func(ctx context.Context, profile, region string) ([]aws.CFNStackResource, error)
-	detail func(ctx context.Context, profile, region, stackName string) (*aws.CFNStackDetail, error)
+	list      func(ctx context.Context, profile, region string) ([]aws.CFNStackResource, error)
+	detail    func(ctx context.Context, profile, region, stackName string) (*aws.CFNStackDetail, error)
+	events    func(ctx context.Context, profile, region, stackName string) ([]aws.CFNStackEvent, error)
+	resources func(ctx context.Context, profile, region, stackName string) ([]aws.CFNStackResourceSummary, error)
 }
 
 // NewCFNService は CloudFormation の Service を返す。list には aws.ListCFNStacks を、
@@ -21,6 +23,16 @@ func NewCFNService(
 	detail func(ctx context.Context, profile, region, stackName string) (*aws.CFNStackDetail, error),
 ) Service {
 	return &cfnService{list: list, detail: detail}
+}
+
+// NewCFNServiceWithTabs は Events と Resources のタブを持つ CloudFormation の Service を返す。
+func NewCFNServiceWithTabs(
+	list func(ctx context.Context, profile, region string) ([]aws.CFNStackResource, error),
+	detail func(ctx context.Context, profile, region, stackName string) (*aws.CFNStackDetail, error),
+	events func(ctx context.Context, profile, region, stackName string) ([]aws.CFNStackEvent, error),
+	resources func(ctx context.Context, profile, region, stackName string) ([]aws.CFNStackResourceSummary, error),
+) Service {
+	return &cfnService{list: list, detail: detail, events: events, resources: resources}
 }
 
 func (s *cfnService) ID() string    { return "cfn" }
@@ -52,6 +64,65 @@ func (s *cfnService) Load(ctx context.Context, profile, region string) ([]Row, e
 
 // SupportsSession は false を返す。
 func (s *cfnService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Events、Resources、Tags を返す。
+func (s *cfnService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.events != nil {
+		tabs = append(tabs, contentTabSpec("events", "Events", func(ctx context.Context, profile, region string, row Row) (TabContent, error) {
+			stack := row.(cfnRow)
+			events, err := s.events(ctx, profile, region, stack.res.Name)
+			if err != nil {
+				return TabContent{}, fmt.Errorf("list CloudFormation events: %w", err)
+			}
+			rows := make([][]string, 0, len(events))
+			for _, event := range events {
+				rows = append(rows, []string{
+					orDash(event.Timestamp),
+					event.LogicalResourceID,
+					event.ResourceType,
+					event.ResourceStatus,
+					orDash(event.ResourceStatusReason),
+				})
+			}
+			return TabContent{Blocks: []TabBlock{{
+				Title: fmt.Sprintf("Events (%d)", len(rows)),
+				Table: &TabTable{
+					Columns: []Column{{Title: "Time"}, {Title: "Logical ID"}, {Title: "Type"}, {Title: "Status"}, {Title: "Reason"}},
+					Rows:    rows,
+				},
+			}}}, nil
+		}))
+	}
+	if s.resources != nil {
+		tabs = append(tabs, contentTabSpec("resources", "Resources", func(ctx context.Context, profile, region string, row Row) (TabContent, error) {
+			stack := row.(cfnRow)
+			resources, err := s.resources(ctx, profile, region, stack.res.Name)
+			if err != nil {
+				return TabContent{}, fmt.Errorf("list CloudFormation resources: %w", err)
+			}
+			rows := make([][]string, 0, len(resources))
+			for _, resource := range resources {
+				rows = append(rows, []string{
+					resource.LogicalResourceID,
+					orDash(resource.PhysicalResourceID),
+					resource.ResourceType,
+					resource.ResourceStatus,
+					orDash(resource.LastUpdatedTime),
+				})
+			}
+			return TabContent{Blocks: []TabBlock{{
+				Title: fmt.Sprintf("Resources (%d)", len(rows)),
+				Table: &TabTable{
+					Columns: []Column{{Title: "Logical ID"}, {Title: "Physical ID"}, {Title: "Type"}, {Title: "Status"}, {Title: "Updated"}},
+					Rows:    rows,
+				},
+			}}}, nil
+		}))
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // cfnRow はスタック 1 つの行。ID はスタック ID (ARN)。タグは一覧 (ListStacks) に含まれないため、
 // 行を選んだときに FetchTags が detail (DescribeStacks) で取る。

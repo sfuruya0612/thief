@@ -10,12 +10,23 @@ import (
 
 // dynamoService は DynamoDB テーブルの一覧を提供する Service。
 type dynamoService struct {
-	list func(ctx context.Context, profile, region string) ([]aws.DynamoResource, error)
+	list     func(ctx context.Context, profile, region string) ([]aws.DynamoResource, error)
+	describe func(ctx context.Context, profile, region, table string) (aws.DynamoTableSchema, error)
+	query    func(ctx context.Context, profile, region, table string, req aws.DynamoItemQuery) ([]map[string]any, error)
 }
 
 // NewDynamoService は DynamoDB の Service を返す。list には aws.ListDynamoResources を渡す。
 func NewDynamoService(list func(ctx context.Context, profile, region string) ([]aws.DynamoResource, error)) Service {
 	return &dynamoService{list: list}
+}
+
+// NewDynamoServiceWithTabs は Items タブを持つ DynamoDB の Service を返す。
+func NewDynamoServiceWithTabs(
+	list func(ctx context.Context, profile, region string) ([]aws.DynamoResource, error),
+	describe func(ctx context.Context, profile, region, table string) (aws.DynamoTableSchema, error),
+	query func(ctx context.Context, profile, region, table string, req aws.DynamoItemQuery) ([]map[string]any, error),
+) Service {
+	return &dynamoService{list: list, describe: describe, query: query}
 }
 
 func (s *dynamoService) ID() string    { return "dynamo" }
@@ -48,6 +59,22 @@ func (s *dynamoService) Load(ctx context.Context, profile, region string) ([]Row
 }
 
 func (s *dynamoService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Items、Tags を返す。
+func (s *dynamoService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.describe != nil && s.query != nil {
+		tabs = append(tabs, TabSpec{
+			ID: "items", Title: "Items",
+			New: func(ctx context.Context, profile, region string, row Row) Tab {
+				table := row.(dynamoRow)
+				return newDynamoItemsTab(ctx, profile, region, table.Name(), s.describe, s.query)
+			},
+		})
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // dynamoRow は DynamoDB テーブル 1 つの行。ID はテーブルの ARN。
 type dynamoRow struct {

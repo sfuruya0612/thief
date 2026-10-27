@@ -2,6 +2,7 @@
 
 Created: 2026-10-26
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-27
 
 ## 背景
 
@@ -73,3 +74,17 @@ TUI の DynamoDB のテーブル行から Items タブを開き、既定のス�
 - `docs/issues/0226`
 - `frontend/src/components/Drawer/DrawerDynamoItems.tsx`
 - `backend/internal/aws/dynamo.go` の `DescribeDynamoTable`、`QueryDynamoItems`、`DynamoItemQuery`
+
+## 解決方法
+
+- `backend/internal/tui/dynamo.go` の `dynamoService` に `DescribeDynamoTable` と `QueryDynamoItems` の取得関数を追加し、`Tabs()` に Items タブを追加した。
+- `backend/internal/tui/tab_dynamo.go` に `dynamoItemsTab` を追加した。タブを開くと `DescribeDynamoTable` と既定 10 件の `QueryDynamoItems` を呼び、属性名の和集合を辞書順に並べた列で表示する。
+- 値の表示は Web UI の `formatItemValue` に合わせ、キーが無いセルは空文字、存在する `nil` は `null`、map と slice は HTML エスケープを無効にしたコンパクトな JSON、数値と真偽値は `fmt.Sprint`、文字列はそのまま、`[]byte` は引用符なしの base64 にした。
+- `f` で PK、SK、属性名、属性値、取得件数の検索フォームを開く。`tab` / `shift+tab` で移動し、`enter` で検索し、`esc` で閉じる。検索中もフォームと前回の一覧を残し、取得に失敗したときは理由を表示する。`r` は現在の検索条件のまま取り直す。
+- `SKValue` は PK が空でなく、スキーマにソートキーがあるときだけ送る。スキーマにソートキーが無いときと、スキーマの取得に失敗したときは SK の入力欄を無効にし、フォーカスも飛ばす。スキーマ取得に失敗したときのラベルは `PK` に戻す。
+- 取得件数の入力欄にフォーカスがあるときは `l` と `←` / `→` で 10、50、100 を切り替え、端で止まる。フォームを閉じているときの `l` は取得件数を切り替えて現在の条件で再取得する。
+- 選択した項目の `enter` で項目全体のインデントした JSON を表示し、`esc` で一覧に戻る。取得中、取得失敗、空、成功を区別し、空のときは `No items` を表示する。
+- 一覧の取得はタブの context と `loadSeq` で世代管理し、検索条件の変更、`r` の再取得の後に届いた古い結果を捨てる。表の高さは再取得のたびに縮まないよう、Drawer の高さから確保する。
+- `backend/internal/tui` の単体テストに、既定スキャン、PK / SK / 属性の検索、AttrName だけの検索、PK が空のときに SK を送らないこと、スキーマ失敗時とソートキーが無いときに SK を無効にすること、取得件数の切替と端での停止、フォーム入力中のグローバルキー隔離、JSON 詳細、空、失敗時のフォームと前回の一覧の保持、古い結果の破棄、列の和集合と順序、キーが無いセルと `nil` の区別、`[]byte` の引用符なし base64、HTML エスケープ無効、`r` の条件保持を追加した。
+- `example/README.md` に floci の `thief-example-users` テーブルで既定 10 件、`f` の検索、`l` の件数切替、項目の JSON 詳細を確認する手順を追加した。`CHANGES.md` に [ADD] エントリを追加した。
+- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。

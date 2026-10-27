@@ -2,6 +2,7 @@
 
 Created: 2026-10-26
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-10-27
 
 ## 背景
 
@@ -74,3 +75,16 @@ TUI の S3 のバケット行から Objects タブを開き、フォルダを辿
 - `frontend/src/components/Drawer/DrawerS3Objects.tsx`、`DrawerObjectBrowser.tsx`
 - `backend/internal/aws/s3_object.go` の `ListS3Objects`
 - `docs/prd/thief.md` の「スコープ」にあるオブジェクトのプレビューと SQL 検索の扱い
+
+## 解決方法
+
+- `backend/internal/tui/s3.go` の `s3Service` に `ListS3Objects` の取得関数を追加し、`Tabs()` に Objects タブを追加した。取得には `s3Row.bucketRegion()` のリージョンを使い、選択中のリージョンと異なるバケットでも正しいリージョンで呼ぶ。
+- `backend/internal/tui/tab_s3.go` に `s3ObjectsTab` を追加した。階層モードは `delimiter="/"`、フラットモードは `delimiter=""` で取得し、`..` 行、フォルダ行、オブジェクト行を表示する。`enter` でフォルダへ移動し、`..` 行、`esc`、`backspace` で表示中の prefix の親へ戻る。prefix が空のときの `esc` と `backspace` は何もしない。
+- `f` で prefix 検索を開き、前後の空白を除いて先頭の `/` を取り除いた検索語を、今いるフォルダの prefix に連結して再取得する。`esc` は入力中の値を捨て、確定済みの prefix と一覧を変えない。`f` で開き直すと確定済みの prefix が初期値になる。
+- 検索入力中は `r`、`s`、`p`、`R`、`S`、`[`、`]`、`/`、`m`、`tab`、`backspace` を入力欄が消費し、タブ切替、モード切替、再取得を起こさない。`tab` は S3 の prefix にタブ文字を入れる用途が無いため、入力欄が消費するだけにした。
+- `m` で階層表示とフラット表示を切り替え、同じ prefix で `delimiter` を変えて再取得する。`r` は現在の prefix と表示モードのまま取り直す。
+- 読み込み中、取得失敗、空、1000 件での打ち切りを区別して表示する。サブフォルダで `..` 以外に表示するものが無いときも `No objects` を表示する。
+- 一覧の取得はタブの context と `loadSeq` で世代管理し、フォルダ移動、検索、モード切替、`r` の後に届いた古い結果を捨てる。
+- `backend/internal/tui` の単体テストに、初期表示、フォルダ移動、`..` 行、親へ戻る、prefix 検索、`f` の初期値、検索入力中のグローバルキー隔離、`m` の切替、空、失敗、打ち切り、古い結果の破棄、バケットのリージョンと profile / bucket の引き渡し、prefix の正規化と親の計算を追加した。モデルレベルで検索入力中の `r`、`q`、`s`、`p`、`R`、`S`、`[`、`]`、`/`、`tab` が再取得やタブ切替を起こさず、`ctrl+c` だけが終了することを確認している。
+- `example/README.md` に floci の `thief-example-data` バケットでフォルダ移動、prefix 検索、階層 / フラット切替を確認する手順を追加し、`THIEF_S3_PATH_STYLE=true` を起動コマンドに含めた。`CHANGES.md` に [ADD] エントリを追加した。
+- `mise run check` は issue 0218 由来の govulncheck の 12 件だけで失敗する。fmt、lint、`go test ./...` は通る。

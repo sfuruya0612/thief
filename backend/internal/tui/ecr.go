@@ -12,12 +12,18 @@ const check = "✓"
 
 // ecrService は ECR リポジトリの一覧を提供する Service。
 type ecrService struct {
-	list func(ctx context.Context, profile, region string) ([]aws.ECRRepoResource, error)
+	list   func(ctx context.Context, profile, region string) ([]aws.ECRRepoResource, error)
+	images func(ctx context.Context, profile, region, repo string) ([]aws.ECRImageResource, error)
 }
 
 // NewECRService は ECR の Service を返す。list には aws.ListECRResources を渡す。
-func NewECRService(list func(ctx context.Context, profile, region string) ([]aws.ECRRepoResource, error)) Service {
-	return &ecrService{list: list}
+// images を省略すると Images タブを表示しない (既存のテスト用)。
+func NewECRService(list func(ctx context.Context, profile, region string) ([]aws.ECRRepoResource, error), images ...func(ctx context.Context, profile, region, repo string) ([]aws.ECRImageResource, error)) Service {
+	s := &ecrService{list: list}
+	if len(images) > 0 {
+		s.images = images[0]
+	}
+	return s
 }
 
 func (s *ecrService) ID() string    { return "ecr" }
@@ -49,6 +55,43 @@ func (s *ecrService) Load(ctx context.Context, profile, region string) ([]Row, e
 }
 
 func (s *ecrService) SupportsSession() bool { return false }
+
+// Tabs は Web UI の DRAWER_TABS と同じく Overview と Images を返す。ECR は Tags を持たない。
+func (s *ecrService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.images != nil {
+		tabs = append(tabs, contentTabSpec("images", "Images", func(ctx context.Context, profile, region string, row Row) (TabContent, error) {
+			repo := row.(ecrRow)
+			images, err := s.images(ctx, profile, region, repo.Name())
+			if err != nil {
+				return TabContent{}, fmt.Errorf("list ECR images: %w", err)
+			}
+			rows := make([][]string, 0, len(images))
+			for _, image := range images {
+				digest := image.ImageDigest
+				if len(digest) > 19 {
+					digest = digest[:19]
+				}
+				digest += "…"
+				rows = append(rows, []string{
+					orDash(image.ImageTag),
+					digest,
+					formatBytes(image.ImageSizeBytes),
+					orDash(image.PushedAt),
+					orDash(image.LastPulledAt),
+				})
+			}
+			return TabContent{Blocks: []TabBlock{{
+				Title: fmt.Sprintf("Images (%d)", len(images)),
+				Table: &TabTable{
+					Columns: []Column{{Title: "Tag"}, {Title: "Digest"}, {Title: "Size", Align: AlignRight}, {Title: "Pushed"}, {Title: "Pulled"}},
+					Rows:    rows,
+				},
+			}}}, nil
+		}))
+	}
+	return tabs
+}
 
 // ecrRow は ECR リポジトリ 1 つの行。ID はリポジトリの ARN。
 type ecrRow struct {

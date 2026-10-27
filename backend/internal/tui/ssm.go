@@ -4,19 +4,25 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/sfuruya0612/thief/backend/internal/aws"
 )
 
 // ssmService は Parameter Store のパラメータの一覧を提供する Service。
 type ssmService struct {
-	list func(ctx context.Context, profile, region string) ([]aws.SSMParameterResource, error)
+	list     func(ctx context.Context, profile, region string) ([]aws.SSMParameterResource, error)
+	getValue func(ctx context.Context, profile, region, name string, decrypt bool) (string, error)
 }
 
 // NewSSMService は Parameter Store の Service を返す。list には aws.ListSSMParameters を渡す
 // (CLI だけが使う aws.ListSSMParameterInfos ではない)。
-func NewSSMService(list func(ctx context.Context, profile, region string) ([]aws.SSMParameterResource, error)) Service {
-	return &ssmService{list: list}
+func NewSSMService(list func(ctx context.Context, profile, region string) ([]aws.SSMParameterResource, error), getValue ...func(ctx context.Context, profile, region, name string, decrypt bool) (string, error)) Service {
+	s := &ssmService{list: list}
+	if len(getValue) > 0 {
+		s.getValue = getValue[0]
+	}
+	return s
 }
 
 func (s *ssmService) ID() string    { return "ssm" }
@@ -45,8 +51,33 @@ func (s *ssmService) Load(ctx context.Context, profile, region string) ([]Row, e
 	return rows, nil
 }
 
-// SupportsSession は false を返す。Value のタブは第 1 段階では扱わない。
+// SupportsSession は false を返す。
 func (s *ssmService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Value、Tags を返す。
+func (s *ssmService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.getValue != nil {
+		tabs = append(tabs, TabSpec{
+			ID: "value", Title: "Value",
+			New: func(ctx context.Context, profile, region string, row Row) Tab {
+				param := row.(ssmRow)
+				masked := strings.EqualFold(param.res.Type, "SecureString")
+				metadata := []KV{
+					{Key: "Name", Value: param.res.Name},
+					{Key: "Type", Value: orDash(param.res.Type)},
+					{Key: "Tier", Value: orDash(param.res.Tier)},
+					{Key: "Version", Value: strconv.FormatInt(param.res.Version, 10)},
+				}
+				return newValueTab(ctx, metadata, masked, func(ctx context.Context) (string, error) {
+					return s.getValue(ctx, profile, region, param.res.Name, true)
+				})
+			},
+		})
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // ssmRow はパラメータ 1 つの行。ID はパラメータの名前。値は一覧に含めない。
 type ssmRow struct {

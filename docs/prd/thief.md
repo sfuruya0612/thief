@@ -3,12 +3,12 @@
 Created: 2026-09-26
 Model: Claude Fable 5.1
 Status: Draft
-Updated: 2026-10-26
+Updated: 2026-10-27
 
 ## 概要
 
 thief は、AWS、Google Cloud、Datadog、TiDB Cloud のリソースとコストを、手元の端末から Web UI、CLI、全画面の TUI で閲覧する開発者向けツールである。
-TUI は Web UI に相当する操作を端末の中で行うことを目指し、第 1 段階では AWS のリソースの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッションを扱う。
+TUI は Web UI に相当する操作を端末の中で行うことを目指し、第 1 段階では AWS のリソースの一覧、Drawer (Overview、Tags、サービス固有タブ)、EC2 と ECS への対話セッションを扱う。
 1 つの Go バイナリ (`thief`) が API サーバ、TUI (`thief tui`)、CLI を兼ね、ブラウザで動く React の SPA がその API を使い、TUI は API サーバを経由せず CLI と同じ取得層をプロセス内で呼ぶ。
 
 ## 背景と課題
@@ -20,7 +20,7 @@ thief の要求はこれまで `docs/issues/TODO.md` の箇条書きと個々の
 本 PRD は、実装済みのコード、`docs/issues/` の issue 199 件 (closed 198 件と pending 1 件)、`docs/issues/TODO.md` から要求を逆算して書き起こしたものである。
   本 PRD の作成中に起票した issue 0200 (CORS の不具合) と issue 0217 (セッションのルートの Origin の検査) は材料に含めず、修正の結果だけを反映した。
 以下では、これら 3 つを**材料**と呼ぶ。
-TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-14、FR-10 の `thief tui` の行、FR-29、FR-30、スコープの TUI の項目、非機能要求の性能とセキュリティの TUI の行、制約、未確定論点の TUI の行、決定した論点の 2026-10-23 の表、関連資料の ADR 0033) は 2026-10-23 の改訂で加えたものであり、改訂前の材料の issue と TODO には無い。
+TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-14、FR-10 の `thief tui` の行、FR-29、FR-30、スコープの TUI の項目、非機能要求の性能とセキュリティの TUI の行、制約、未確定論点の TUI の行、決定した論点の 2026-10-23 以降の表、関連資料の ADR 0033) は 2026-10-23 の改訂で加えたものであり、改訂前の材料の issue と TODO には無い。
 `docs/issues/TODO.md` の TUI の後続作業の 3 行は、この改訂で PRD と同時に加えたものであり、改訂前の材料ではない。
 根拠は、同じ日に開発者が決めた TUI の追加 (「決定した論点」)、開発者が動作を確かめたプロトタイプ (`backend/internal/tui/`、`backend/internal/cli/tui.go`)、TUI が合わせる対象である Web UI の実装済みのコード (`frontend/src/lib/serviceMeta.ts`、`frontend/src/components/tables/columns.tsx`、`frontend/src/components/Drawer/overviewRows.tsx`) である。
 
@@ -63,7 +63,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 次は 2026-10-23 に開発者が TUI の追加を決めたときの課題である (ADR 0033 の「状況」)。
 
-- 端末の中だけで、プロファイル、リージョン、サービスを切り替えながら一覧と Drawer (Overview と Tags) を見比べる手段が無い。
+- 端末の中だけで、プロファイル、リージョン、サービスを切り替えながら一覧と Drawer (Overview、Tags、サービス固有タブ) を見比べる手段が無い。
   Web UI を使うには `thief server` で API サーバを起動し、ブラウザで frontend を開く必要がある。
   CLI の一覧コマンド (`thief ec2 ls` など) は 1 回の出力で終わる。
   thief は全画面の TUI (`thief tui`) で、API サーバとブラウザを起動せずに一覧、Drawer、対話セッションを行わせる (FR-29、FR-30)。
@@ -72,7 +72,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 - 利用者が Web UI から、4 つの外部サービス (AWS、Google Cloud、Datadog、TiDB Cloud) のリソース一覧、詳細、コストに到達できる。
 - 利用者がブラウザだけで EC2 と ECS のシェルに入れる。
-- 利用者がブラウザと API サーバを起動せずに、端末の中だけで AWS のリソースの一覧と Drawer (Overview と Tags) を確認し、EC2 と ECS のシェルに入れる (TUI の第 1 段階)。
+- 利用者がブラウザと API サーバを起動せずに、端末の中だけで AWS のリソースの一覧と Drawer (Overview、Tags、サービス固有タブ) を確認し、EC2 と ECS のシェルに入れる (TUI の第 1 段階)。
   TUI の最終的な目標は Web UI に相当する操作であり、第 2 段階以降の範囲と順序は「未確定論点」で決める。
 - 利用者が SSO トークンの期限切れを画面上で知り、画面を離れずに再ログインできる。
 - 利用者が CLI からも Web UI と同じ主要なリソースを一覧でき、結果をタブ区切りか CSV で受け取れる。
@@ -118,7 +118,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | UC-11 | 端末上での一覧と加工 | CLI でリソースを一覧し、CSV に出力して他のツールに渡す | FR-10 |
 | UC-12 | 表示の調整 | 2 つのサービスを並べて表示し、テーマ、言語、Drawer の位置を切り替える | FR-25、FR-26 |
 | UC-13 | backend の起動待ち | frontend だけが先に起動しているときに、接続待ちであることを知る | FR-27 |
-| UC-14 | 端末の中での一覧と接続 | ブラウザを開かずに `thief tui` を起動し、プロファイル、リージョン、サービスを切り替えながら AWS のリソースを一覧と Drawer (Overview と Tags) で確認し、EC2 インスタンスか ECS のタスクのシェルに入る | FR-29、FR-30 |
+| UC-14 | 端末の中での一覧と接続 | ブラウザを開かずに `thief tui` を起動し、プロファイル、リージョン、サービスを切り替えながら AWS のリソースを一覧と Drawer (Overview、Tags、サービス固有タブ) で確認し、EC2 インスタンスか ECS のタスクのシェルに入る | FR-29、FR-30 |
 
 ## スコープ
 
@@ -134,7 +134,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - AWS SSO のログインとログアウト、Datadog の OAuth のログインとログアウト
 - CLI (`thief <service> ...`) による一覧、参照、一部の書き込み
 - 利用者の端末上で動く API サーバ (`thief server`) と Web UI
-- 全画面の TUI (`thief tui`) による AWS のリソースの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッション (第 1 段階。FR-29、FR-30)
+- 全画面の TUI (`thief tui`) による AWS のリソースの一覧、Drawer (Overview、Tags、サービス固有タブ)、EC2 と ECS への対話セッション (第 1 段階。FR-29、FR-30)
 
 「機能要求」に挙げた機能は、すべて対象とする。
 
@@ -232,6 +232,10 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 - 一覧には値を載せない。
   値は Drawer の Value タブを開いたときに取得し、backend はキャッシュしない (issue 0068)。
+- TUI の Value タブは読み取り専用とする。
+  Secrets Manager と Parameter Store の SecureString は、タブを開いた時点では値を取得せず、`v` を押したときに取得する。
+  Parameter Store の String と StringList は、タブを開いたときに取得する。
+  取得した値は Value タブを開いている間だけ保持し、タブ切替、行変更、`r` の再取得で破棄する。backend のキャッシュには載せない。
 - 値の上書きは、確認ダイアログで承認したときだけ送る。
 - 同時更新の競合検出は行わない。
 
@@ -240,6 +244,8 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - `GET /api/aws/profiles/{profile}/secretsmanager` の応答に値のフィールドが無い。
 - 確認ダイアログでキャンセルすると、上書きのリクエストが送られない。
 - 上書きが成功した後に Value タブを開き直すと、新しい値が表示される。
+- TUI の Secrets Manager と SecureString の Value タブが `Press v to reveal` を表示し、`v` を押すと値を取得して表示し、もう一度 `v` を押すと `Hidden; press v to reveal` に戻る。取得済みの値は `v` で API を呼び直さずに再表示する。
+- TUI の String と StringList の Value タブはタブを開いたときに値を表示し、`v` を押しても表示が変わらない。
 
 **FR-6 S3 のオブジェクト操作** (Must)
 
@@ -382,11 +388,34 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - 一覧の列は、Web UI でそのサービスを選んだときに表示する一覧 (`frontend/src/views/AccountView.tsx` が `ServicePanel` に渡す `frontend/src/components/tables/columns.tsx` の列定義) と同じ項目とする。
   列の幅は見出しと表示中の値の最大幅から決め、端末の幅に収まらないときは広い列から縮める。
 - `/` で絞り込みの入力を開き、入力した文字列を含む行 (すべての列の値を対象とする。大文字と小文字を区別しない) だけを表示する。
-- 一覧で選んだ行の Drawer に、Overview と Tags を表示する。
+- 一覧で選んだ行の Drawer に、Web UI の Drawer と同じサービス固有タブを表示する。
+  タブの並びと名前は `frontend/src/components/Drawer/Drawer.tsx` の `DRAWER_TABS` と同じにし、Overview を先頭、Tags を末尾にする。ECR は Web UI と同じく Tags を持たない。
+  サービス固有タブの本文は、Web UI の同じタブが一覧とは別に取得するデータを、TUI が `backend/internal/aws` の同じ関数でプロセス内から取得して表示する。読み込み中、取得失敗、空、成功を区別する。
   Overview は、Name と State に続けて、Web UI の Drawer の Overview と同じ項目 (`frontend/src/components/Drawer/overviewRows.tsx`) を並べる。
   Tags は、Web UI の Drawer の Tags タブと同じキーと値を表示し、タグが無い行では `No tags` と表示する。
   Web UI が一覧とは別の取得でタグを得るサービス (CloudFormation は `frontend/src/components/Drawer/DrawerCFNTags.tsx` がスタックの詳細 `backend/internal/aws/cfn.go` `DescribeCFNStackDetail` から取る) では、TUI も行を選んだときに同じ取得関数でタグを取る。
-  Web UI のサービス固有のタブ (ECS の Services、Tasks など) を TUI の Drawer に置くかは、第 1 段階では決めない (「未確定論点」)。
+- Drawer のタブは `1` から `9` で直接選び、`[` と `]` で前後に移動する。タブ数より大きい数字は無視し、`[` は先頭、`]` は末尾で止める。
+  サービスを切り替えたときは Overview に戻る。行を切り替えたときは、同じサービスに現在のタブがあればそのタブを保ち、無ければ Overview に戻る。
+  タブの取得はサービス固有タブを選んだときに行い、取得した結果はタブを表示している間だけ保持する。タブ切替、行変更、一覧の再取得では破棄して取得し直す。
+  `ctrl+c` はタブより先に TUI の終了として扱う。タブが処理しなかったキーだけを、絞り込み、フォーカス、タブ、セッション、再取得などの全体の操作へ流す。
+- 対話型のサービス固有タブは、一覧と詳細を持ち、詳細の取得は行を選んで `enter` を押したときに行う。
+  - ECS の Tasks タブは、実行中のタスクとコンテナを表示する。タスクの詳細にはコンテナごとの CPU、Memory、Exit code、Reason、ECS Exec の可否を表示し、ECS Exec が有効なコンテナを選んで `s` または `enter` を押すと、クラスタ名、タスク ID、コンテナ名を持つ接続要求を Model に渡す。Exec が無効なコンテナでは接続せず、`container <name> does not support ECS Exec` を通知する。
+  - ECS の Instances タブは、コンテナインスタンスごとにタスクをまとめて表示する。`ContainerInstanceArn` が空の Fargate のタスクは表示せず、どのインスタンスにも一致しないタスクは `Unknown container instance` の行にまとめる。このタブからは Exec を開始しない。
+  - ELB の Listeners タブはリスナーと、選んだリスナーのルールを表示する。Targets タブはターゲットグループと、選んだグループのターゲットヘルスを表示する。
+  - WAF の Rules タブは、選んだルールの `RuleJSON` をインデントして表示する。整形できないときは元の文字列を表示する。
+  - RDS の Instance Parameters タブは、インスタンスに紐づくパラメータグループを `Group: <name>` の見出しで表示し、2 つ以上あるときは `(1/2)` のように現在位置を添える。`←` / `→` で切り替え、端では止まる。切り替えたら取得をやり直し、古い結果を捨てる。`r` は選択中のグループのまま取り直す。
+- S3 の Objects タブは、バケット内を prefix の階層として 1 階層ずつ取得し、フォルダ行と `..` 行で移動する。
+  `f` で prefix を検索し、`m` で階層表示とフラット表示を切り替える。`esc` と `backspace` で親フォルダへ戻る。`r` は現在の prefix と表示モードのまま取り直す。
+  1 回の一覧は 1000 件で打ち切り、打ち切ったことを表示する。
+  オブジェクトのプレビュー、アップロード、ダウンロード、DuckDB の SQL 検索は TUI では扱わない。
+- DynamoDB の Items タブは、既定で 10 件のスキャン結果を表示する。
+  `f` で PK、SK、属性名、属性値、取得件数の検索フォームを開き、`enter` で検索する。取得件数は 10、50、100 から選び、上限は 100 件とする。
+  スキーマにソートキーが無いとき、またはスキーマの取得に失敗したときは SK の入力欄を無効にし、`SKValue` を送らない。
+  `l` で取得件数を切り替え、選択した項目の `enter` で項目全体のインデントした JSON を表示する。`r` は現在の検索条件のまま取り直す。
+  列ごとのフィルタ、GSI の選択、項目の編集、追加、削除、ページングは扱わない。
+- Secrets Manager と Parameter Store の Value タブは、メタデータと値を読み取り専用で表示する。
+  値の取得とマスクの扱いは FR-5 のとおりとし、値はログと TUI が組み立てるエラーメッセージに含めない。
+- タブのフォーム入力中は、印刷可能なキーと `tab`、`backspace` を入力として扱い、`q`、数字、`r`、`s`、`p`、`R`、`S`、`[`、`]` などの全体の操作を起こさない。`ctrl+c` だけは常に TUI の終了にする。
 - プロファイル (`p`)、リージョン (`R`)、サービス (`S`) の選択肢は、文字を打つだけで名前と説明の部分一致で絞り込める。
   矢印キーか `ctrl+n` / `ctrl+p` で移動し、`enter` で決める。
   プロファイルの選択肢には、SSO のプロファイルではアカウント ID、ロール名、SSO の状態 (FR-1 と同じ `valid`、`expired`、`not_logged_in`) を名前に添えて表示する。
@@ -411,6 +440,20 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - `thief tui --help` の終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき `thief tui` で始まる。
 - 19 サービスそれぞれについて、`Service.Columns()` の見出しの並びが Web UI の列定義の `header` の並びと一致し、`Row.Overview()` のキーの並びが `overviewRows.tsx` の同じサービスの項目名から `Name` と `State` を除いた並びと一致し (`Name` と `State` は Drawer の描画 `refreshDrawer` が先頭に置く)、`Row.State()` と State の列が Web UI の `StatusBadge` が表示する値 (資源の `State` フィールドの生の値) と一致し、`Cells()` と `Overview()` の値が Web UI の同じセルと項目が描画する文字列と一致し (空の値を `—` にするのは Web UI が `Dash` か `dash` を描画する項目に限る。項目ごとの取得失敗 (IAM の MFA、Policies、Groups と WAF の Associated) は、Web UI の警告アイコンに代えて `fetch failed` の文字列を値に付ける)、`Row.Tags()` が Web UI の Drawer の Tags タブと同じキーと値を返す (CloudFormation は一覧でタグを取れないため、`Row.Tags()` ではなく行を選んだときに取得するタグが Web UI の Tags タブと一致する)。
 - 19 サービスそれぞれについて、`Service` を作る関数に偽の一覧関数を渡して `Load` を呼ぶとその関数が呼ばれることを単体テストで確認し、`tui.Deps` を組み立てる関数が各 `Service` に渡す一覧関数が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が呼ぶ `backend/internal/aws/` の関数と同じであることをコードの読み合わせで確認する。
+- 19 サービスそれぞれについて、`TabProvider` を実装するサービスの `Tabs()` が Web UI の `DRAWER_TABS` と同じタブ名を同じ相対順序で返し、ECR が Tags を返さないことを単体テストで確認する。`TabProvider` を実装しないサービスは Overview と Tags の 2 タブになる。
+- `1` から `9` と `[` / `]` でタブを切り替えられ、タブ数より大きい数字を無視し、`[` と `]` が端で止まることを単体テストで確認する。サービス切替で Overview に戻り、行切替で同じサービスに現在のタブがあればそのタブを保つことも確認する。
+- サービス固有タブの取得関数が読み込み中、失敗、空、成功を区別し、サービス切替、行切替、一覧の再取得の後に届いた古い結果を表示しないことを単体テストで確認する。
+- ECS の Tasks タブで、タスクの詳細にコンテナの CPU、Memory、Exit code、Reason、ECS Exec の可否が表示され、Exec が有効なコンテナで `s` または `enter` を押すとクラスタ名、タスク ID、コンテナ名を持つ接続要求が Model に渡る。Exec が無効なコンテナでは `container <name> does not support ECS Exec` を通知する。コンテナが 0 件のときは `No containers` を表示する。
+- ECS の Instances タブで、コンテナインスタンスごとにタスクが絞り込まれ、タスクが無いインスタンスでは `No tasks` が表示される。`ContainerInstanceArn` が空の Fargate のタスクは表示されず、どのインスタンスにも一致しないタスクは `Unknown container instance` の行に表示される。
+- ELB の Listeners タブと Targets タブで、一覧が 0 件のときは `No listeners` と `No target groups`、詳細が 0 件のときは `No rules` と `No targets` を表示する。詳細の取得に失敗したときは理由を表示し、一覧は残す。
+- WAF の Rules タブで `RuleJSON` がインデントされた JSON として表示され、整形できないときは元の文字列、空のときは `—` が表示される。
+- RDS の Instance Parameters タブで、1 グループのときは `Group: <name>`、2 グループ以上のときは `Group: <name> (1/2)` が表示され、`←` / `→` で切り替わり、先頭と末尾で止まる。切り替え後に届いた古い結果は表示しない。グループが 0 個のときは `No parameter groups.` を表示する。
+- S3 の Objects タブで、フォルダ行の `enter` と `..` 行、`esc`、`backspace` による階層移動ができ、prefix が空のときの `esc` と `backspace` は何もしない。`f` の検索は前後の空白を除いて先頭の `/` を取り除いた prefix を、今いるフォルダの prefix に連結する。`esc` で検索を取り消しても確定済みの prefix と一覧は変わらず、`f` で開き直すと確定済みの prefix が初期値になる。
+- S3 の Objects タブで、検索入力中の `r`、`s`、`p`、`R`、`S`、`[`、`]`、`/`、`tab`、`backspace` が入力欄で消費され、タブ切替、再取得、終了を起こさない。`m` で階層表示とフラット表示が切り替わり、同じ prefix で `delimiter` を変えて再取得する。1000 件で打ち切ったときは `Showing the first 1000 entries; narrow the prefix to see more` を表示する。
+- DynamoDB の Items タブで、既定の 10 件スキャン、PK / SK / 属性の検索、属性名だけの Scan + FilterExpression、PK が空のときに SK を送らないこと、スキーマにソートキーが無いときとスキーマ取得に失敗したときに SK の入力欄を無効にして `SKValue` を送らないことが単体テストで確認される。
+- DynamoDB の Items タブで、取得件数の入力欄にフォーカスがあるときの `l`、`←`、`→` が 10、50、100 の範囲で切り替わり、端で止まる。フォーム入力中の `l`、`c`、`f`、`r`、`q`、`j`、`k`、数字が入力として扱われ、TUI の終了、タブ切替、件数切替、再取得を起こさない。
+- DynamoDB の Items タブで、項目の取得に失敗したときは前回の一覧とフォームを残して理由を表示し、空の結果では `No items` を表示する。`enter` で項目全体のインデントした JSON が表示され、`esc` で一覧に戻る。
+- Secrets Manager と Parameter Store の Value タブで、初期マスク、`v` による取得 / 表示 / 非表示、String と StringList の即時表示、String での `v` の無効、取得中、取得失敗、空文字列の区別、値のスクロール、古い結果の破棄が単体テストで確認される。取得に失敗したときは値を受け取っていても保持せず、値がエラーメッセージに含まれない。
 - 改行を含む失敗の内容を通知に渡したとき、`View()` の出力で通知が 1 行であり、キー操作のヒントの行が最後の行に表示されることを単体テストで確認する。
 - `mise run backend:install` で `thief` を `$(go env GOPATH)/bin` に導入し (以下の `thief` はそのパスのもの)、`example/` の floci を起動し (`mise run example:up`)、`example/seed.sh` と同じダミーの認証情報とリージョン (`AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-northeast-1`) で `aws --endpoint-url http://localhost:4566 ec2 run-instances --image-id ami-12345678 --instance-type t3.micro --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=web-01}]'` と、Name を `batch-01` にした同じコマンドを実行して EC2 インスタンスを 2 台作ってから、リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動すると、一覧に `web-01` と `batch-01` の行が表示される (`example/seed.sh` は EC2 インスタンスを作らない。この手順は `example/README.md` の「確認手順」に記録している。`thief tui` の認証情報は `example/home/.aws/credentials` の `floci` を使う)。
   選んだ行の Drawer の Overview に Name、State、Resource ID、Type、AZ、Region、Private IP、Public IP、VPC、Uptime、Launched が表示される。
@@ -435,6 +478,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   既定のコマンドは FR-7 と同じ `/bin/sh` とする。
   タスクとコンテナは、クラスタ行で `s` を押した後に、絞り込み付きの選択肢で順に選ぶ (「決定した論点」の「TUI の ECS のタスクとコンテナの選び方」)。
   候補が 1 件のときは選択肢を出さずに自動で選ぶ。候補は実行中のタスクと、ECS Exec が有効なコンテナに限る。
+  クラスタ行の `s` に加え、Drawer の Tasks タブでタスクの詳細を開き、ECS Exec が有効なコンテナを選んで `s` または `enter` を押しても接続できる。
 - セッションは TUI のプロセスの中で `backend/internal/session` の DataChannel を使って行う。TUI は `session-manager-plugin` を起動しない。
   EC2 は `backend/internal/aws/ssm_session.go` の `StartSSMSession`、ECS は `backend/internal/aws/ecs_exec.go` の `ExecuteECSCommand` でセッションを開始し、`session.OpenDataChannel` でデータチャネルを開く。
 - セッションは TUI の本文の中央にフロートウィンドウとして表示する。TUI の一覧と Drawer はウィンドウの背後に残り、セッションの間も TUI の代替画面を離れない。
@@ -455,6 +499,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - リモートで `exit` を実行すると、最後の画面と `Session closed` が残り、通知行に `session closed` が表示される。`Ctrl-]` でウィンドウが閉じる。
 - 実 AWS アカウントの、ECS Exec を有効にしたタスクを持つクラスタの行を選んで `s` を押し、タスクとコンテナの選択肢で接続先を選ぶと、TUI のフロートウィンドウにシェルが表示され、`echo ok` を実行すると `ok` が返る (`example/` のエミュレータでは確認できない)。
   `Ctrl-]` の後、`aws ssm describe-sessions --state Active` の結果にそのセッションが残らない。
+- 実 AWS アカウントの、ECS Exec を有効にしたタスクを Drawer の Tasks タブで選び、詳細のコンテナ一覧で ECS Exec が有効なコンテナを選んで `s` または `enter` を押すと、TUI のフロートウィンドウにシェルが表示され、`echo ok` を実行すると `ok` が返る。Exec が無効なコンテナでは `container <name> does not support ECS Exec` が通知行に表示され、セッションは始まらない。
 - 端末の大きさを変えると、リモートの端末の桁数と行数が新しいウィンドウの内側の大きさに追従する。
 - 本文が 50 桁 x 18 行未満のとき、`s` を押してもセッションを開始せず、通知行に `terminal too small for a session window` が表示される。
 - `session-manager-plugin` を PATH から外した状態でも、TUI の EC2 Session Manager と ECS Exec のセッションが開始できる。CLI の `thief ec2 session` と `thief ecs exec` は引き続きプラグインを必要とする。
@@ -733,7 +778,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   EC2 Spot を除く料金 (FR-12) は、このメモリのキャッシュではなく、期限の無いファイルのキャッシュに置く (`backend/internal/pricecache/pricecache.go`)。
   EC2 Spot の料金はどちらのキャッシュにも置かず、表示のたびに取得する (`backend/internal/api/handlers_pricing.go`)。
 - frontend は取得結果を 60 秒間、新しいものとして扱う (`staleTime`)。
-- TUI はリソースの一覧の取得結果をキャッシュしない (FR-29)。
+- TUI はリソースの一覧とサービス固有タブの取得結果をキャッシュしない (FR-29)。
 - 外部 API の並列呼び出しは、同時実行数を上限付きにする。
   上限は既定 30、WAF と IAM は 10 とする。
 - Cloud Run の一覧は、ロケーションごとのジョブの取得を並列にする。
@@ -759,6 +804,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - WebSocket の接続は `THIEF_WEB_ORIGINS` の Origin だけを受け付ける (FR-7)。
 - AWS SSO のキャッシュ、Datadog のトークン、Google Cloud のプロジェクトのキャッシュは、権限 0600 のファイルに保存する。
 - Secrets Manager と Parameter Store の値は一覧に載せず、backend でキャッシュしない (FR-5)。
+  TUI の Value タブが取得した値はタブ内のメモリにだけ保持し、タブ切替、行変更、`r` の再取得で破棄する。ログとエラーメッセージには含めない。
 - Datadog の OAuth のコールバックの応答は、クエリの値を反映しない固定の文言にする (反射型 XSS の防止)。
 - HTTP の API は、`Origin` を WebSocket と同じ規則で `THIEF_WEB_ORIGINS` と照合し、許可した Origin にだけ CORS のヘッダを返す (`backend/internal/api/middleware.go` `corsMiddleware`、ADR 0032)。
   許可しない Origin からのリクエストのうち、メソッドが GET、HEAD、OPTIONS 以外のものは 403 `FORBIDDEN_ORIGIN` で拒否する。
@@ -829,7 +875,6 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | --- | --- | --- |
 | Fargate Spot の料金 | データ源が無い (`docs/issues/pending/0059-feat-pricing-fargate-spot-rates.md`) | 利用できるデータ源が見つかった時点で、開発者が対応を決める |
 | TUI の第 2 段階以降の範囲 | 第 2 段階以降で扱うと決めた Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作の、段階ごとの範囲と順序。材料に無いコストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化 (起草者の整理) を TUI で扱うか | 第 1 段階 (FR-29、FR-30) の完了後に開発者が決める |
-| TUI の Drawer のサービス固有のタブ | Web UI の Drawer にあるサービス固有のタブ (ECS の Services、Tasks、RDS の Instance Parameters、Cluster Parameters など) を TUI に置くか | サービスごとの要望が出た時点で、開発者がサービス単位で決める |
 | FR-29 と FR-30 の優先度 | 起草者が付けた Must で確定するか | 開発者が確認する |
 | TUI の中の SSO の再ログイン | FR-9 のデバイス認可を TUI の中で行うか、`thief sso login` の案内に留めるか | 第 1 段階の完了後に開発者が決める |
 
@@ -863,17 +908,18 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 | 論点 | 決定 | 後続の作業 |
 | --- | --- | --- |
-| TUI の追加 | Web UI に相当する操作を端末の中で行う全画面の TUI (`thief tui`) を追加する。第 1 段階は AWS の一覧、Drawer (Overview と Tags)、対話セッションとする (「TUI の第 1 段階の範囲」)。「やらないこと」の「ブラウザ以外の GUI のクライアント」から TUI を除く | FR-29 と FR-30 の実装 |
+| TUI の追加 | Web UI に相当する操作を端末の中で行う全画面の TUI (`thief tui`) を追加する。第 1 段階は AWS の一覧、Drawer (Overview、Tags、サービス固有タブ)、対話セッションとする (「TUI の第 1 段階の範囲」)。「やらないこと」の「ブラウザ以外の GUI のクライアント」から TUI を除く | FR-29 と FR-30 の実装 |
 | TUI の接続方式 | API サーバを経由せず、取得層をプロセス内で直接呼ぶ (ADR 0033) | 無い |
 | TUI のフレームワーク | bubbletea、bubbles、lipgloss を使う。tview は採らない (ADR 0033) | 無い |
-| TUI の第 1 段階の範囲 | AWS の 19 サービスの一覧、Drawer (Overview と Tags)、EC2 と ECS への対話セッション。Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は第 1 段階の完了後に決める (「未確定論点」)。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は材料に無く、第 1 段階では扱わない (「スコープ」) | `ec2` 以外の 18 サービスの追加、ECS Exec の追加 |
+| TUI の第 1 段階の範囲 | AWS の 19 サービスの一覧、Drawer (Overview、Tags、Web UI と同じサービス固有タブ)、EC2 と ECS への対話セッション。Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は第 1 段階の完了後に決める (「未確定論点」)。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は材料に無く、第 1 段階では扱わない (「スコープ」) | サービス固有タブは issue 0226 から 0230 で、フロート端末は issue 0225 で実装済み |
 | TUI の進め方 | `ec2` だけのプロトタイプを先に作って体験を確かめ、その後に PRD の改訂、ADR 0033、issue の起票、実装の順で正規の手順に戻す | PRD の改訂 (この改訂)、ADR 0033、`AGENTS.md`、`CHANGES.md`、`docs/issues/TODO.md` の TUI の記述は書き終えており、プロトタイプを issue として検証したうえで同じコミットで入れる。その後に残りの issue を実装する (プロトタイプの動作は 2026-10-23 に確認済み) |
 
-次の論点は、2026-10-26 に issue 0224 の実装で、issue の設計判断の第一候補のとおりに決めた。開発者の確認は実装の報告で得る。
+次の論点は、2026-10-26 に issue 0224、0226、0227 の実装で、issue の設計判断の第一候補のとおりに決めた。開発者の確認は実装の報告で得る。
 
 | 論点 | 決定 | 後続の作業 |
 | --- | --- | --- |
-| TUI の ECS のタスクとコンテナの選び方 | 選択肢で選ぶ。クラスタ行で `s` を押すと、実行中のタスク、次に ECS Exec が有効なコンテナを、サービスの切替と同じ絞り込み付きの選択肢で順に選ぶ。候補が 1 件なら自動で選ぶ (FR-30)。Drawer のタブで選ぶ案は、TUI の Drawer を Overview と Tags に固定しており、Web UI でも接続先の選択がタブではなく Terminal タブの中の選択であるため採らない | 開発者がこの方式を確認する (確認で方式が変わればこの行と FR-30 を直す)。FR-30 の ECS の受け入れ基準を実 AWS で確認する (issue 0224 では未確認) |
+| TUI の ECS のタスクとコンテナの選び方 | クラスタ行で `s` を押したときの選択肢と、Drawer の Tasks タブのタスク詳細の両方から選ぶ。クラスタ行の `s` では、実行中のタスク、次に ECS Exec が有効なコンテナを、サービスの切替と同じ絞り込み付きの選択肢で順に選び、候補が 1 件なら自動で選ぶ。Tasks タブではタスクの詳細にコンテナ一覧を出し、ECS Exec が有効なコンテナを選んで `s` または `enter` で接続する。Exec が無効なコンテナでは接続しない (FR-30) | 実 AWS で Tasks タブからの接続を確認する (issue 0227 では未確認)。FR-30 の ECS の受け入れ基準を実 AWS で確認する (issue 0224 では未確認) |
+| TUI の Drawer のサービス固有タブ | Web UI の `DRAWER_TABS` と同じタブを TUI の Drawer に置く。タブは `Tab` サブモデルとして実装し、`1` から `9` と `[` / `]` で切り替える。読み込み中、失敗、空、成功を区別し、ECR は Tags を持たない | issue 0226 から 0230 で 19 サービス分を実装済み。実 AWS での確認だけが残る |
 
 ## 関連資料
 

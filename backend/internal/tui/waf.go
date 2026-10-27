@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -10,12 +12,21 @@ import (
 
 // wafService は WAF の Web ACL の一覧を提供する Service。
 type wafService struct {
-	list func(ctx context.Context, profile, region string) ([]aws.WAFResource, error)
+	list  func(ctx context.Context, profile, region string) ([]aws.WAFResource, error)
+	rules func(ctx context.Context, profile, region, scope, name, id string) ([]aws.WAFRule, error)
 }
 
 // NewWAFService は WAF の Service を返す。list には aws.ListWAFResources を渡す。
 func NewWAFService(list func(ctx context.Context, profile, region string) ([]aws.WAFResource, error)) Service {
 	return &wafService{list: list}
+}
+
+// NewWAFServiceWithRules は Rules タブを持つ WAF の Service を返す。
+func NewWAFServiceWithRules(
+	list func(ctx context.Context, profile, region string) ([]aws.WAFResource, error),
+	rules func(ctx context.Context, profile, region, scope, name, id string) ([]aws.WAFRule, error),
+) Service {
+	return &wafService{list: list, rules: rules}
 }
 
 func (s *wafService) ID() string    { return "waf" }
@@ -47,8 +58,52 @@ func (s *wafService) Load(ctx context.Context, profile, region string) ([]Row, e
 	return rows, nil
 }
 
-// SupportsSession は false を返す。Rules のタブは第 1 段階では扱わない。
+// SupportsSession は false を返す。
 func (s *wafService) SupportsSession() bool { return false }
+
+// Tabs は Overview、Rules、Tags を返す。
+func (s *wafService) Tabs() []TabSpec {
+	tabs := []TabSpec{{ID: tabOverview, Title: "Overview"}}
+	if s.rules != nil {
+		tabs = append(tabs, TabSpec{
+			ID: "rules", Title: "Rules",
+			New: func(ctx context.Context, profile, region string, row Row) Tab {
+				acl := row.(wafRow)
+				return newListDetailTab(ctx,
+					[]Column{{Title: "Name"}, {Title: "Priority", Align: AlignRight}, {Title: "Action"}, {Title: "Statement"}},
+					func(ctx context.Context) ([]listRow, error) {
+						rules, err := s.rules(ctx, profile, region, acl.res.Scope, acl.res.Name, acl.res.ID)
+						if err != nil {
+							return nil, fmt.Errorf("list WAF rules: %w", err)
+						}
+						rows := make([]listRow, 0, len(rules))
+						for _, rule := range rules {
+							rows = append(rows, listRow{
+								cells: []string{rule.Name, strconv.FormatInt(int64(rule.Priority), 10), orDash(rule.Action), orDash(rule.Statement)},
+								value: rule,
+							})
+						}
+						return rows, nil
+					},
+					func(row listRow) *TabDetail {
+						rule := row.value.(aws.WAFRule)
+						text := orDash(rule.RuleJSON)
+						if rule.RuleJSON != "" {
+							var buf bytes.Buffer
+							if err := json.Indent(&buf, []byte(rule.RuleJSON), "", "  "); err == nil {
+								text = buf.String()
+							}
+						}
+						return &TabDetail{Title: "Rule detail", Text: text}
+					},
+					nil,
+				)
+			},
+		})
+	}
+	tabs = append(tabs, TabSpec{ID: tabTags, Title: "Tags"})
+	return tabs
+}
 
 // wafRow は Web ACL 1 つの行。Scope は REGIONAL か CLOUDFRONT で、CLOUDFRONT の行も Region は
 // 引数のリージョンのまま (Web UI の wafFromRaw と同じ)。

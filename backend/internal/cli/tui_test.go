@@ -64,6 +64,43 @@ func TestDefaultTUIAdapterDeps_UsesDataChannel(t *testing.T) {
 	}
 }
 
+func TestNewTUIDeps_TabsFollowWebUI(t *testing.T) {
+	want := map[string][]string{
+		"ec2":        {"Overview", "Terminal", "Tags"},
+		"lambda":     {"Overview", "Tags"},
+		"ecr":        {"Overview", "Images"},
+		"ecs":        {"Overview", "Services", "Tasks", "Instances", "Terminal", "Tags"},
+		"s3":         {"Overview", "Objects", "Tags"},
+		"rds":        {"Overview", "Instance Parameters", "Cluster Parameters", "Tags"},
+		"dynamo":     {"Overview", "Items", "Tags"},
+		"cache":      {"Overview", "Parameters", "Tags"},
+		"elb":        {"Overview", "Listeners", "Targets", "Tags"},
+		"cloudfront": {"Overview", "Behaviors", "Tags"},
+		"apigw":      {"Overview", "Tags"},
+		"natgw":      {"Overview", "Tags"},
+		"kinesis":    {"Overview", "Tags"},
+		"sqs":        {"Overview", "Tags"},
+		"iam":        {"Overview", "Tags"},
+		"waf":        {"Overview", "Rules", "Tags"},
+		"secrets":    {"Overview", "Value", "Tags"},
+		"ssm":        {"Overview", "Value", "Tags"},
+		"cfn":        {"Overview", "Events", "Resources", "Tags"},
+	}
+	deps := newTUIDeps()
+	for _, svc := range deps.Services {
+		got := []string{"Overview", "Tags"}
+		if provider, ok := svc.(tui.TabProvider); ok {
+			got = nil
+			for _, tab := range provider.Tabs() {
+				got = append(got, tab.Title)
+			}
+		}
+		if !reflect.DeepEqual(got, want[svc.ID()]) {
+			t.Errorf("%s tabs = %v, want %v", svc.ID(), got, want[svc.ID()])
+		}
+	}
+}
+
 // fakeTUIChannel は tuiDataChannel の偽物。
 type fakeTUIChannel struct {
 	readResult session.ReadResult
