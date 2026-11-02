@@ -99,14 +99,16 @@ interface SetupSourceProps {
 
 function SetupSource({ profile, source, mapping, onChange, workgroup }: SetupSourceProps) {
   const { t } = useTranslation('accesslogs');
-  if (!source.status.loggingEnabled) {
+  if (!source.status.destinationReadable || !source.status.loggingEnabled) {
     return (
       <section className="accesslogs-setup-card">
         <header>
           <strong>{source.name}</strong>
           <span className="accesslogs-setup-type">{destinationLabel(source)}</span>
         </header>
-        <p className="accesslogs-muted">{t('setup.loggingDisabled')}</p>
+        <p className="accesslogs-muted">
+          {!source.status.destinationReadable ? t('setup.cannotRead') : t('setup.loggingDisabled')}
+        </p>
         {source.status.issues.length > 0 ? (
           <ul className="accesslogs-setup-issues">
             {source.status.issues.map((issue) => (

@@ -79,7 +79,7 @@ function buildRange(preset: Preset) {
 }
 
 function isReady(source: AccessLogSource): boolean {
-  return source.status.loggingEnabled && source.engine !== '';
+  return source.status.destinationReadable && source.status.loggingEnabled && source.engine !== '';
 }
 
 // defaultSelection は選択可能なソースを、共有された出力先の attribution を考慮して選ぶ。

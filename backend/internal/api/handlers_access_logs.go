@@ -183,7 +183,7 @@ func (s *Server) handleAccessLogQueryStart(w http.ResponseWriter, r *http.Reques
 			writeAccessLogError(w, fmt.Errorf("%w: %s", accesslog.ErrInvalidSource, requested.ID))
 			return
 		}
-		if !source.Status.LoggingEnabled || source.Engine == "" {
+		if !source.Status.DestinationReadable || !source.Status.LoggingEnabled || source.Engine == "" {
 			writeAccessLogError(w, fmt.Errorf("%w: %s", accesslog.ErrSourceNotReady, source.Name))
 			return
 		}

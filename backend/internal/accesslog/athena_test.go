@@ -252,7 +252,7 @@ func TestBuildWAFInsightsQuery(t *testing.T) {
 		`stats count(*)`,
 		`limit 200`,
 		`httpRequest.clientIp = "203.0.113.9\""`,
-		`strcontains(httpRequest.uri, "\\admin")`,
+		`startsWith(httpRequest.uri, "\\admin")`,
 		`webaclId = "arn:a"`,
 	} {
 		if !strings.Contains(got.Query, want) {

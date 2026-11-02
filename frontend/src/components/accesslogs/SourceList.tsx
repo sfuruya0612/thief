@@ -42,7 +42,9 @@ function destinationLabel(source: AccessLogSource): string {
 
 function sourceBadges(source: AccessLogSource) {
   const badges: { label: string; tone: string }[] = [];
-  if (!source.status.loggingEnabled) {
+  if (!source.status.destinationReadable) {
+    badges.push({ label: 'Cannot read config', tone: 'warn' });
+  } else if (!source.status.loggingEnabled) {
     badges.push({ label: 'Logging disabled', tone: 'muted' });
   } else if (source.engine === '') {
     badges.push({ label: 'Unsupported', tone: 'warn' });
@@ -56,7 +58,7 @@ function sourceBadges(source: AccessLogSource) {
 }
 
 function canSelect(source: AccessLogSource): boolean {
-  return source.status.loggingEnabled && source.engine !== '';
+  return source.status.destinationReadable && source.status.loggingEnabled && source.engine !== '';
 }
 
 export function SourceList({

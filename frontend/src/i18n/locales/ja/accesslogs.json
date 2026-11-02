@@ -66,6 +66,7 @@
     "logsInsights": "CloudWatch Logs Insights のロググループ {{logGroup}} を使います。テーブルは不要です。",
     "notAvailable": "このソースは現在のバージョンでは集計できません。",
     "loggingDisabled": "このリソースはアクセスログが無効です。AWS のコンソールでログを有効にしてください。",
+    "cannotRead": "ログの設定を読み取れません。ELB、CloudFront、WAF の参照権限を確認してください。",
     "shared": "この出力先は {{names}} と共有されています。1 つのテーブルを共有します。",
     "legacyCloudFront": "CloudFront の legacy 標準ログは日付のパスにパーティションがないため、この DDL はパーティションを持ちません。スキャン量を抑えるには標準ログ v2 を使ってください。",
     "selectDatabase": "データベースを選択",

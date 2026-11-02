@@ -66,6 +66,7 @@
     "logsInsights": "This source uses the CloudWatch Logs Insights log group {{logGroup}}. No table is required.",
     "notAvailable": "This source cannot be aggregated in this version.",
     "loggingDisabled": "Access logging is disabled for this resource. Enable it in the AWS console.",
+    "cannotRead": "The logging configuration cannot be read. Check the ELB, CloudFront, and WAF permissions.",
     "shared": "This destination is shared with {{names}}. One table is shared by these sources.",
     "legacyCloudFront": "CloudFront legacy standard logs are not partitioned by a date path, so this DDL has no partition. Use standard logging v2 to reduce scanned bytes.",
     "selectDatabase": "Select a database",

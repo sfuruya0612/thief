@@ -17,7 +17,7 @@ const (
 	MaxLimit = 200
 )
 
-var identRe = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+var identRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // ValidateIdent は Athena のデータベース名、テーブル名、カタログ名に使える
 // 識別子かを返す。
@@ -257,7 +257,7 @@ func BuildWAFInsightsQuery(plan InsightsPlan) (InsightsQuery, error) {
 		filters = append(filters, fmt.Sprintf(`httpRequest.clientIp = "%s"`, escapeInsights(plan.Filter.IP)))
 	}
 	if plan.Filter.URIPrefix != "" {
-		filters = append(filters, fmt.Sprintf(`strcontains(httpRequest.uri, "%s")`, escapeInsights(plan.Filter.URIPrefix)))
+		filters = append(filters, fmt.Sprintf(`startsWith(httpRequest.uri, "%s")`, escapeInsights(plan.Filter.URIPrefix)))
 	}
 	if plan.Filter.OnlyBlocked {
 		filters = append(filters, `action = "BLOCK"`)
