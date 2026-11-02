@@ -5,6 +5,7 @@ import {
   useAccessLogResults,
   useAccessLogSources,
   useCancelAccessLogQuery,
+  useRecheckAccessLogSources,
   useStartAccessLogQuery,
 } from '../api/queries';
 import { DataTable } from '../components/DataTable';
@@ -179,6 +180,7 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
   }, [jobId, jobStorageKey]);
 
   const start = useStartAccessLogQuery(profile);
+  const recheck = useRecheckAccessLogSources(profile, region);
   const statusQuery = useAccessLogQuery(profile, jobId);
   const status = statusQuery.data;
   const terminal =
@@ -196,7 +198,8 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
     isSSOExpiredError(statusQuery.error) ||
     isSSOExpiredError(resultsQuery.error) ||
     isSSOExpiredError(start.error) ||
-    isSSOExpiredError(cancel.error);
+    isSSOExpiredError(cancel.error) ||
+    isSSOExpiredError(recheck.error);
   const sourceErrors = status?.sources.filter((source) => source.error) ?? [];
   const selectedSources = useMemo(
     () => sources.filter((source) => selected.has(source.id) && isReady(source)),
@@ -354,6 +357,9 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
       {resultsQuery.error && !isSSOExpiredError(resultsQuery.error) ? (
         <ErrorBanner error={resultsQuery.error} />
       ) : null}
+      {recheck.error && !isSSOExpiredError(recheck.error) ? (
+        <ErrorBanner error={recheck.error} />
+      ) : null}
 
       {(sourcesQuery.data?.warnings ?? []).map((warning) => (
         <p key={warning} className="accesslogs-warning">
@@ -372,8 +378,8 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
           selected={selected}
           onToggle={handleToggle}
           onSelectAll={handleSelectAll}
-          onRecheck={() => void sourcesQuery.refetch()}
-          isRefreshing={sourcesQuery.isFetching}
+          onRecheck={() => recheck.mutate()}
+          isRefreshing={recheck.isPending || sourcesQuery.isFetching}
         />
 
         <section className="accesslogs-content">

@@ -155,3 +155,88 @@ func TestAccessLogQueryCancel(t *testing.T) {
 		t.Errorf("state = %q, want cancelled", status.State)
 	}
 }
+
+func TestAccessLogSharedTableDoesNotDoubleCount(t *testing.T) {
+	s := newTestServer(t)
+	s.mux = http.NewServeMux()
+	deps := accessLogTestDeps(t)
+	sourceA := accesslog.Source{
+		ID:              "alb-a",
+		Type:            accesslog.SourceALB,
+		Name:            "alb-a",
+		Region:          "ap-northeast-1",
+		QueryRegion:     "ap-northeast-1",
+		Engine:          accesslog.EngineAthena,
+		SchemaProfile:   accesslog.SchemaALBLegacy,
+		SourceKeyValues: []string{"app/a/1"},
+		Status: accesslog.SourceStatus{
+			LoggingEnabled:      true,
+			DestinationType:     accesslog.DestinationS3,
+			DestinationReadable: true,
+			Attribution:         true,
+		},
+	}
+	sourceB := accesslog.Source{
+		ID:              "alb-b",
+		Type:            accesslog.SourceALB,
+		Name:            "alb-b",
+		Region:          "ap-northeast-1",
+		QueryRegion:     "ap-northeast-1",
+		Engine:          accesslog.EngineAthena,
+		SchemaProfile:   accesslog.SchemaALBLegacy,
+		SourceKeyValues: []string{"app/b/2"},
+		Status: accesslog.SourceStatus{
+			LoggingEnabled:      true,
+			DestinationType:     accesslog.DestinationS3,
+			DestinationReadable: true,
+			Attribution:         true,
+		},
+	}
+	deps.discover = func(context.Context, string, string) (awsinternal.AccessLogSources, error) {
+		return awsinternal.AccessLogSources{Sources: []accesslog.Source{sourceA, sourceB}}, nil
+	}
+	deps.resultsAthena = func(context.Context, string, string, string, int) (*awsinternal.AthenaResultPage, error) {
+		return &awsinternal.AthenaResultPage{
+			Columns: []awsinternal.AthenaResultColumn{
+				{Name: "source_key"}, {Name: "client_ip"}, {Name: "uri_path"},
+				{Name: "request_count"}, {Name: "blocked_count"}, {Name: "challenged_count"},
+				{Name: "count_matched"}, {Name: "client_error_count"}, {Name: "server_error_count"},
+				{Name: "first_seen_ms"}, {Name: "last_seen_ms"}, {Name: "sample_user_agent"},
+				{Name: "sample_rule_id"}, {Name: "has_query"}, {Name: "sample_query"},
+			},
+			Rows: [][]string{
+				{"app/a/1", "203.0.113.9", "/api", "10", "0", "0", "0", "0", "0", "1762000000000", "1762003600000", "", "", "0", ""},
+				{"app/b/2", "203.0.113.9", "/api", "5", "0", "0", "0", "0", "0", "1762000000000", "1762003600000", "", "", "0", ""},
+			},
+		}, nil
+	}
+	s.accessLogs = deps
+	s.registerRoutes()
+
+	start := postAccessLogJSON(t, s, "/api/aws/profiles/default/access-logs/query", AccessLogQueryRequest{
+		View: "pairs",
+		Sources: []AccessLogQuerySourceRequest{
+			{ID: sourceA.ID, Table: &accesslog.TableMapping{Catalog: "AwsDataCatalog", Database: "logs", Table: "shared_alb_logs"}},
+			{ID: sourceB.ID, Table: &accesslog.TableMapping{Catalog: "AwsDataCatalog", Database: "logs", Table: "shared_alb_logs"}},
+		},
+		From: "2026-11-02T00:00:00Z",
+		To:   "2026-11-02T01:00:00Z",
+	})
+	if start.Code != http.StatusOK {
+		t.Fatalf("start status = %d, body = %s", start.Code, start.Body.String())
+	}
+	var started AccessLogQueryStartResponse
+	decodeAccessLogResponse(t, start, &started)
+	resultsRec := getAccessLog(t, s, "/api/aws/profiles/default/access-logs/query/"+started.JobID+"/results")
+	var results AccessLogResultsResponse
+	decodeAccessLogResponse(t, resultsRec, &results)
+	if len(results.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1 merged row", len(results.Rows))
+	}
+	if results.Rows[0].RequestCount != 15 {
+		t.Errorf("request count = %d, want 15 (no double count)", results.Rows[0].RequestCount)
+	}
+	if len(results.Rows[0].SourceCounts) != 2 {
+		t.Errorf("source counts = %v, want both sources", results.Rows[0].SourceCounts)
+	}
+}

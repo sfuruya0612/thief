@@ -1059,8 +1059,12 @@ function accessLogsPath(profile: string, suffix: string): string {
 export function getAccessLogSources(
   profile: string,
   region: string,
+  refresh = false,
 ): Promise<AccessLogSourcesResponseRaw> {
-  return apiGet<AccessLogSourcesResponseRaw>(accessLogsPath(profile, 'sources'), { region });
+  return apiGet<AccessLogSourcesResponseRaw>(accessLogsPath(profile, 'sources'), {
+    region,
+    refresh: refresh ? 'true' : undefined,
+  });
 }
 
 export function validateAccessLogTable(

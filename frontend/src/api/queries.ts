@@ -1330,6 +1330,20 @@ export function useAccessLogSources(profile: string, region: string) {
   });
 }
 
+// useRecheckAccessLogSources はバックエンドの検出キャッシュを破棄して再検出する。
+// 通常の useAccessLogSources の refetch は 1 時間のキャッシュを読むため、ログを
+// 有効化した直後に一覧を更新するには refresh=true を付ける必要がある。
+export function useRecheckAccessLogSources(profile: string, region: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      accessLogSourcesFromRaw(await getAccessLogSources(profile, region, true)),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['aws', 'access-logs-sources', profile, region], data);
+    },
+  });
+}
+
 export function useValidateAccessLogTable(profile: string) {
   return useMutation({
     mutationFn: async (body: AccessLogTableValidateRequest) => {

@@ -514,8 +514,8 @@ func (s *Server) refreshAccessLogJob(ctx context.Context, job *accessLogJob) {
 					source.Err = err.Error()
 					continue
 				}
-				source.Rows = pairs
-				source.IPs = ips
+				source.Rows = filterAccessLogPairs(pairs, source.SourceID)
+				source.IPs = filterAccessLogIPs(ips, source.SourceID)
 				source.Loaded = true
 			}
 		case accesslog.EngineLogsInsights:
@@ -530,7 +530,10 @@ func (s *Server) refreshAccessLogJob(ctx context.Context, job *accessLogJob) {
 			source.RecordsScanned = result.RecordsScanned
 			source.RecordsMatched = result.RecordsMatched
 			if source.State == accesslog.QueryStateSucceeded && !source.Loaded {
-				source.Rows = accesslog.ParseInsightsRows(result.Results, source.SourceKeyToID, source.DefaultSourceID)
+				source.Rows = filterAccessLogPairs(
+					accesslog.ParseInsightsRows(result.Results, source.SourceKeyToID, source.DefaultSourceID),
+					source.SourceID,
+				)
 				source.Loaded = true
 			}
 		default:
@@ -694,4 +697,26 @@ func insightsQueryState(state string) accesslog.QueryState {
 	default:
 		return accesslog.QueryStateRunning
 	}
+}
+
+// filterAccessLogPairs は共有されたテーブルやロググループの結果から、指定したソースの行だけを返す。
+// 1 回のクエリで複数のソースを集計した場合、各行の SourceID で分割する。
+func filterAccessLogPairs(rows []accesslog.PairRow, sourceID string) []accesslog.PairRow {
+	out := make([]accesslog.PairRow, 0, len(rows))
+	for _, row := range rows {
+		if row.SourceID == sourceID {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func filterAccessLogIPs(rows []accesslog.IPSummary, sourceID string) []accesslog.IPSummary {
+	out := make([]accesslog.IPSummary, 0, len(rows))
+	for _, row := range rows {
+		if row.SourceID == sourceID {
+			out = append(out, row)
+		}
+	}
+	return out
 }
