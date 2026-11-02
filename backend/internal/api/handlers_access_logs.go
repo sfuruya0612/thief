@@ -170,8 +170,14 @@ func (s *Server) handleAccessLogQueryStart(w http.ResponseWriter, r *http.Reques
 	athenaGroups := make(map[string]*accessLogAthenaGroup)
 	insightsGroups := make(map[string]*accessLogInsightsGroup)
 	jobSources := make([]*accessLogJobSource, 0, len(req.Sources))
+	seenSources := make(map[string]bool, len(req.Sources))
 
 	for _, requested := range req.Sources {
+		if seenSources[requested.ID] {
+			writeAccessLogError(w, fmt.Errorf("%w: duplicate source %s", accesslog.ErrInvalidSource, requested.ID))
+			return
+		}
+		seenSources[requested.ID] = true
 		source, ok := byID[requested.ID]
 		if !ok {
 			writeAccessLogError(w, fmt.Errorf("%w: %s", accesslog.ErrInvalidSource, requested.ID))

@@ -114,6 +114,11 @@ func TestAccessLogQueryValidation(t *testing.T) {
 			want: http.StatusBadRequest,
 		},
 		{
+			name: "duplicate source",
+			body: AccessLogQueryRequest{View: "pairs", Sources: []AccessLogQuerySourceRequest{{ID: accessLogTestSourceID}, {ID: accessLogTestSourceID}}, From: "2026-11-02T00:00:00Z", To: "2026-11-02T01:00:00Z"},
+			want: http.StatusBadRequest,
+		},
+		{
 			name: "range too long",
 			body: AccessLogQueryRequest{View: "pairs", Sources: []AccessLogQuerySourceRequest{{ID: accessLogTestSourceID}}, From: "2026-11-01T00:00:00Z", To: "2026-11-03T01:00:00Z"},
 			want: http.StatusBadRequest,
