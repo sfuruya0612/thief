@@ -566,8 +566,9 @@ func disabledCloudFrontSource(id, name, domain string, aliases []string, region,
 		Destination:    accesslog.Destination{Type: accesslog.DestinationNone},
 		SuggestedTable: "cloudfront_legacy",
 		Status: accesslog.SourceStatus{
-			DestinationType: accesslog.DestinationNone,
-			Issues:          []string{"Access logging is not enabled"},
+			DestinationType:     accesslog.DestinationNone,
+			DestinationReadable: true,
+			Issues:              []string{"Access logging is not enabled"},
 		},
 	}
 	source.ID = accessLogSourceID(source.Type, arn, "none", string(source.SchemaProfile))
