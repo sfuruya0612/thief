@@ -40,3 +40,5 @@ thief の設計判断の記録。
 | [0033](0033-tui-in-process-bubbletea.md) | TUI は bubbletea で作り、取得層をプロセス内で直接呼ぶ | Superseded by 0034 | 2026-10-23 |
 | [0034](0034-tui-floating-terminal-window.md) | TUI の対話セッションはプロセス内の DataChannel と端末エミュレータでフロート表示する | Accepted | 2026-10-26 |
 | [0035](0035-ci-runs-mise-check.md) | CI で mise run check を実行する | Accepted | 2026-10-27 |
+| [0036](0036-tui-provider-abstraction.md) | TUI の一覧をプロバイダー抽象で切り替え、枠線にプロバイダーのイメージカラーを使う | Accepted | 2026-10-27 |
+| [0037](0037-access-logs-aggregation.md) | ALB / CloudFront / WAF のアクセスログを Athena と CloudWatch Logs Insights で集計する | Accepted | 2026-11-02 |
