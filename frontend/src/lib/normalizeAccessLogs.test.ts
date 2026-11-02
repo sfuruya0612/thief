@@ -16,6 +16,7 @@ const sourceRaw: AccessLogSourceRaw = {
   region: 'ap-northeast-1',
   query_region: 'ap-northeast-1',
   engine: 'athena',
+  schema_profile: 'alb_legacy',
   destination: { type: 's3', bucket: 'logs', prefix: 'alb' },
   status: {
     logging_enabled: true,
@@ -38,7 +39,7 @@ describe('normalizeAccessLogs', () => {
     expect(source.queryRegion).toBe('ap-northeast-1');
     expect(source.status.sharedBy).toEqual(['prod-alb-2']);
     expect(source.sourceKeyValues).toEqual(['app/prod-alb/abc']);
-    expect(accessLogDestinationKey(source)).toBe('s3://logs/alb');
+    expect(accessLogDestinationKey(source)).toBe('s3://logs/alb|alb_legacy');
   });
 
   it('converts a pair row with source labels', () => {

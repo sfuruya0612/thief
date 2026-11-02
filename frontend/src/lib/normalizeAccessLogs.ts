@@ -226,11 +226,12 @@ export function accessLogResultsFromRaw(
 // テーブルの対応付けを出力先の単位で保存するために使う。
 export function accessLogDestinationKey(source: AccessLogSource): string {
   const destination = source.destination;
+  const profile = source.schemaProfile ?? source.engine;
   switch (destination.type) {
     case 's3':
-      return `s3://${destination.bucket ?? ''}/${(destination.prefix ?? '').replace(/^\/+|\/+$/g, '')}`;
+      return `s3://${destination.bucket ?? ''}/${(destination.prefix ?? '').replace(/^\/+|\/+$/g, '')}|${profile}`;
     case 'cloudwatch_logs':
-      return `cwl:${destination.logGroup ?? ''}`;
+      return `cwl:${destination.logGroup ?? ''}|${profile}`;
     default:
       return `none:${source.id}`;
   }

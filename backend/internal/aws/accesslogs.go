@@ -775,7 +775,7 @@ func markSharedSources(sources []accesslog.Source) {
 		if source.Destination.Type == accesslog.DestinationNone {
 			continue
 		}
-		key := destinationKey(source.Destination)
+		key := destinationKey(source.Destination) + "|" + string(source.SchemaProfile)
 		if key == "" {
 			continue
 		}
