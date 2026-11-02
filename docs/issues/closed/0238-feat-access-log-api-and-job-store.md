@@ -2,6 +2,7 @@
 
 Created: 2026-11-02
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-11-02
 
 ## 背景
 
@@ -91,3 +92,16 @@ ADR 0037 は、API サーバのメモリでジョブを管理し、TTL と取り
 - issue 0235、0236、0237、0239、0240
 - `backend/internal/api/server.go`、`routes.go`、`errors.go`、`handlers_cache.go`、`sso_login_sessions.go`
 - `backend/internal/contract/contract.go`
+
+## 解決方法
+
+- `backend/internal/api` に Access Logs の 6 つのエンドポイントを追加した。
+- `accessLogJobStore` を追加し、ジョブの作成、取得、状態の更新、取り消し、TTL の期限切れによる清理を実装した。期限切れと取り消しでは実行中の Athena と Logs Insights のクエリを止める。
+- ソースの検出を 1 時間キャッシュし、TopBar の Refresh で破棄される `access-logs-sources` のキーを追加した。
+- ソースの ID、プロファイル、リージョン、テーブル名、期間、ソース数、結果行数を検証し、ログが無効なソースと `Attribution` が false のソースの同時選択を拒否するようにした。
+- 1 つのソースが失敗しても、ほかのソースの結果を 200 で返し、ソース別のエラーを含めるようにした。
+- SSO の期限切れ、権限不足、不正なソース、テーブル、期間、ジョブの不在と期限切れのエラーコードを追加した。
+- `accessLogJob` にミューテックスを追加し、状態の取得と取り消しの競合を防ぐようにした。
+- ハンドラのテストで、正常系、部分失敗、SSO の期限切れ、不正なソース、期間の上限、ジョブの不在を確認した。
+- contract に `AccessLogQueryStartResponse` と `AccessLogSourceError` を追加し、ゴールデン JSON を再生成した。
+- `mise run check` が通る。

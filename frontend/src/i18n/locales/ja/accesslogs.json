@@ -1,0 +1,83 @@
+{
+  "subtitle": "アクセスログの集計",
+  "timeRange": "期間",
+  "range": {
+    "1h": "1 時間",
+    "3h": "3 時間",
+    "24h": "24 時間",
+    "7d": "7 日"
+  },
+  "confirmLongRange": "7 日間のスキャンを許可する",
+  "run": "集計する",
+  "starting": "開始中",
+  "cancel": "取り消す",
+  "cancelling": "取り消し中",
+  "running": "集計中",
+  "sources": "ソース",
+  "selectReady": "選択可能をすべて選ぶ",
+  "recheck": "再検出",
+  "rechecking": "検出中",
+  "noSourcesFound": "ALB、CloudFront、WAF のソースが見つかりません。",
+  "sharedWith": "共有: {{names}}",
+  "filter": {
+    "onlyBlocked": "ブロックのみ",
+    "ip": "IP",
+    "uri": "URI の前方一致"
+  },
+  "tabs": {
+    "pairs": "IP x URI",
+    "ips": "Source IP",
+    "setup": "Setup"
+  },
+  "empty": {
+    "noRun": "期間とソースを選び、集計を実行してください。",
+    "noResults": "結果がありません。",
+    "title": "該当するリクエストがありません",
+    "noRows": "選択した期間とソースに一致するレコードがありません。",
+    "logging": "ログが無効なソースは集計されません。",
+    "delay": "ALB は約 5 分、CloudFront は 1 時間から 24 時間の配信遅延があります。",
+    "table": "Athena のテーブルが出力先と一致しているか確認してください。",
+    "permissions": "S3、Athena、CloudWatch Logs の権限が不足していないか確認してください。"
+  },
+  "summary": {
+    "records": "レコード",
+    "blocked": "ブロック",
+    "challenged": "チャレンジ",
+    "ips": "IP 数",
+    "uris": "URI 数",
+    "duplicateWarning": "複数のソースを集計しています。同じリクエストが複数のログに現れる場合があり、件数はログのレコード数です。",
+    "sourceRecords": "{{count}} 件",
+    "sourceScanned": "{{bytes}} をスキャン"
+  },
+  "run": {
+    "noSources": "集計するソースを 1 つ以上選んでください。",
+    "tableRequired": "{{name}} の Athena テーブルを Setup で選んでください。",
+    "confirmLongRange": "7 日間のスキャンを許可するチェックを入れてください。",
+    "insightsRange": "CloudWatch Logs のソースは 24 時間までです。"
+  },
+  "setup": {
+    "workgroup": "Athena ワークグループ",
+    "outputLocation": "クエリ結果の出力先",
+    "globalHint": "Athena のワークグループと出力先は、選択したすべての Athena ソースで使います。",
+    "logsInsights": "CloudWatch Logs Insights のロググループ {{logGroup}} を使います。テーブルは不要です。",
+    "notAvailable": "このソースは現在のバージョンでは集計できません。",
+    "loggingDisabled": "このリソースはアクセスログが無効です。AWS のコンソールでログを有効にしてください。",
+    "shared": "この出力先は {{names}} と共有されています。1 つのテーブルを共有します。",
+    "legacyCloudFront": "CloudFront の legacy 標準ログは日付のパスにパーティションがないため、この DDL はパーティションを持ちません。スキャン量を抑えるには標準ログ v2 を使ってください。",
+    "selectDatabase": "データベースを選択",
+    "selectTable": "テーブルを選択",
+    "validate": "検証",
+    "validating": "検証中",
+    "createTable": "新規テーブル",
+    "valid": "テーブルは使用できます",
+    "invalid": "テーブルを使用できません",
+    "profile": "スキーマ: {{profile}}",
+    "missingColumns": "不足している列: {{columns}}",
+    "noAttribution": "リソースを特定する列がないため、ほかのソースと同時に集計できません。",
+    "ddlTitle": "{{table}} を作成する DDL",
+    "copyDDL": "DDL をコピー",
+    "copied": "コピーしました",
+    "noDDL": "DDL を生成できません。出力先とスキーマを確認してください。",
+    "ddlHint": "DDL はパーティション投影を含みます。内容を確認して Athena で一度だけ実行してください。"
+  }
+}

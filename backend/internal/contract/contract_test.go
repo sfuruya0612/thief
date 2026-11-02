@@ -164,8 +164,8 @@ func TestRegistryNamesUnique(t *testing.T) {
 		}
 		seen[e.Name] = true
 	}
-	if len(Registry) != 65 {
-		t.Errorf("registry has %d entries, want 65", len(Registry))
+	if len(Registry) != 67 {
+		t.Errorf("registry has %d entries, want 67", len(Registry))
 	}
 }
 

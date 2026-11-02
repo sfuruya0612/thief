@@ -76,6 +76,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   TUI の最終的な目標は Web UI に相当する操作であり、第 2 段階以降の範囲と順序は「未確定論点」で決める。
 - 利用者が SSO トークンの期限切れを画面上で知り、画面を離れずに再ログインできる。
 - 利用者が CLI からも Web UI と同じ主要なリソースを一覧でき、結果をタブ区切りか CSV で受け取れる。
+- 利用者が ALB、CloudFront、WAF のアクセスログを、アクセス元の IP とリクエスト URI で集計し、不正なアクセスの初動調査を thief の中で行える (FR-32)。
 - 利用者の認証情報と、外部サービスから取得したデータを、利用者の端末の外に送らない。
   これらの送り先は各外部サービスの公式 API だけである。
 
@@ -89,7 +90,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | --- | --- | --- |
 | 品質ゲートの通過 | fmt、lint、vuln、test がすべて成功する | リポジトリのルートで `mise run check` を実行し、終了コードが 0 であることを確認する |
 | backend と frontend の型契約の一致 | 不一致 0 件 | `frontend/` で `npm run lint` を実行する。`frontend/src/types/contract.check.ts` の型検査が失敗しないことを確認する |
-| AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 23 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing) のどちらかを持つことをコードで確認する |
+| AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 24 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing、accesslogs) のどちらかを持つことをコードで確認する |
 | CLI の一覧コマンドの存在 | FR-10 の表の一覧コマンドが 27 個すべて存在する。Web にだけある機能 (Pricing、分割表示など) は対象外とする | 表の各コマンドに `--help` を付けて実行し、終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき表のコマンドで始まることを確認する |
 | TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-26 時点で 19 個すべてにある (issue 0219 から 0223) | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、AWS プロバイダーの `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-26 時点の期待値は 19 個すべてである)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
 | TUI の非 AWS プロバイダーの網羅 | FR-31 の 9 サービスすべてに TUI の一覧がある。2026-10-27 時点で 9 個すべてにある (issue 0234) | `newTUIDeps` の `Providers` の `Services` の各要素の `ID()` の集合が、Google Cloud の 4 個、Datadog の 3 個、TiDB Cloud の 2 個の ID の集合と一致することを `backend/internal/cli/tui_test.go` で確認する |
@@ -120,12 +121,14 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | UC-12 | 表示の調整 | 2 つのサービスを並べて表示し、テーマ、言語、Drawer の位置を切り替える | FR-25、FR-26 |
 | UC-13 | backend の起動待ち | frontend だけが先に起動しているときに、接続待ちであることを知る | FR-27 |
 | UC-14 | 端末の中での一覧と接続 | ブラウザを開かずに `thief tui` を起動し、プロファイル、リージョン、サービスを切り替えながら AWS のリソースを一覧と Drawer (Overview、Tags、サービス固有タブ) で確認し、EC2 インスタンスか ECS のタスクのシェルに入る | FR-29、FR-30 |
+| UC-15 | 不正なアクセスの初動調査 | AWS のプロファイルとリージョンを選び、ALB、CloudFront、WAF のアクセスログのソースと期間を選んで、アクセス元の IP と URI の集計を見る。WAF のブロック、4xx、5xx、センシティブパスで絞り込み、ソースごとの内訳を確認する | FR-32 |
 
 ## スコープ
 
 ### やること
 
-- AWS の 23 サービス (`frontend/src/lib/serviceMeta.ts` `SERVICES`) の一覧と詳細の閲覧
+- AWS の 24 サービス (`frontend/src/lib/serviceMeta.ts` `SERVICES`) の一覧と詳細の閲覧
+- ALB、CloudFront、WAF のアクセスログを、アクセス元の IP とリクエスト URI で集計する (FR-32)
 - Google Cloud の 6 サービス (`GCP_SERVICES`) の一覧と詳細の閲覧
 - Datadog のコスト、ダッシュボード、メトリクスの閲覧
 - TiDB Cloud のクラスタとコストの閲覧
@@ -144,6 +147,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - 外部サービスのリソースの作成、削除、設定変更 (FR-5、FR-6、FR-20 に挙げた値とオブジェクトの書き込み、および FR-3 の CloudFront の invalidation の作成を除く)。
   利用者の端末の中のファイルの作成と削除 (FR-18 のスニペット、`thief sso generate-config` による `~/.aws/config` の生成) は、この対象外に含めない。
 - 書き込みの SQL の実行 (Athena と BigQuery のクエリは、API サーバでも CLI でも読み取りだけを通す。FR-16)。
+- Access Logs からの WAF のルールの変更、IP のブロック、Athena のテーブルの自動作成、リアルタイムの検知、アラート、ソース間のリクエスト ID による重複排除 (FR-32)。
 - 複数人で共有するサーバとしての運用 (利用者の認証、認可、監査ログを持たない)。
 - thief 本体の Docker による起動 (2026-07-18 のコミット cb2da77 で削除した)。
   `example/` のエミュレータ (floci) は docker compose で起動し、これは対象外に含めない。
@@ -187,7 +191,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 **FR-2 AWS サービスのリソース一覧** (Must)
 
-- サイドバーに 23 サービスを 10 カテゴリで表示する (`AWS_SERVICE_GROUPS`)。
+- サイドバーに 24 サービスを 10 カテゴリで表示する (`AWS_SERVICE_GROUPS`)。
 - 従属するリソース (パラメータ、イメージ、ターゲット、イベントなど) は一覧に載せず、FR-3 の Drawer で取得する (`docs/adr/0016-list-free-fields-lazy-drawer.md`)。
 - 一覧の列のために項目ごとに追加の API を呼ぶサービス (WAF の Rules と Associated、IAM の MFA、グループ、ポリシー) は、呼び出しの同時実行数を 10 に制限する (`backend/internal/aws/waf.go` `wafACLConcurrency`、`backend/internal/aws/iam.go` `iamDetailConcurrency`)。
   S3 もバケットごとに Region、Public、Encryption の列のための API を呼ぶ (`backend/internal/aws/s3.go`、同時実行数 30)。
@@ -379,7 +383,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   共通のフラグ `-p/--profile` と `-r/--region` で、起動時のプロファイルとリージョンを指定できる。
 - TUI は API サーバ (`thief server`) を経由せず、CLI と同じ取得層 (`backend/internal/aws/`) をプロセス内で直接呼ぶ (ADR 0033)。
   利用者は TUI のために API サーバとブラウザを起動しなくてよい。
-- 第 1 段階の対象サービスは、Web UI の AWS のサイドバー (FR-2) にある 23 サービスのうち、一覧のビューを持つ 19 サービスとする。
+- 第 1 段階の対象サービスは、Web UI の AWS のサイドバー (FR-2) にある 24 サービスのうち、一覧のビューを持つ 19 サービスとする。
   ID と名前は、`ec2` (EC2)、`lambda` (Lambda)、`ecr` (ECR)、`ecs` (ECS)、`s3` (S3)、`rds` (RDS)、`dynamo` (DynamoDB)、`cache` (ElastiCache)、`elb` (ELB)、`cloudfront` (CloudFront)、`apigw` (API Gateway)、`natgw` (NAT Gateway)、`kinesis` (Kinesis)、`sqs` (SQS)、`iam` (IAM)、`waf` (WAF)、`secrets` (Secrets Manager)、`ssm` (Parameter Store)、`cfn` (CloudFormation) である (ID は `frontend/src/lib/serviceMeta.ts` の `SERVICE_TO_PATH` のキー、名前は同じファイルの `SERVICES` の `name`)。
   2026-10-23 時点のプロトタイプは `ec2` だけを持ち、残りの 18 サービスは issue 0219 から 0223 で足して 2026-10-26 時点で 19 サービスが揃っている (「決定した論点」)。
   専用のビューを持つ 4 サービス (Athena、CloudWatch Logs、Cost Explorer、Pricing) は対象に含めない (「スコープ」)。
@@ -542,6 +546,56 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - プロバイダーを切り替えて戻ると、最後に選んだスコープとサービスが復元される。
 - Google Cloud、Datadog、TiDB Cloud の一覧の取得に失敗したときは、AWS の SSO の期限切れのバナーを出さず、失敗の内容を一覧の領域に表示する。
 - `backend/internal/tui/` は `backend/internal/api` に依存しない (`go list -deps ./internal/tui/` の出力に `internal/api` が含まれない)。
+
+### アクセスログの集計
+
+**FR-32 ALB / CloudFront / WAF のアクセスログの集計** (Must)
+
+- AWS ビューの Security グループに `Access Logs` を置く。
+  一覧型のサービスではなく、`AccountView` から専用のビューを描画する。
+  サービスキーは `accesslogs` とする。
+- ALB と CloudFront の S3 のアクセスログは Athena で、WAF の CloudWatch Logs のログは CloudWatch Logs Insights で集計する。
+  WAF の S3 のログは、互換する Athena テーブルがある場合だけ集計する。
+  Firehose 宛先、ALB と CloudFront の vended logs、CloudFront 標準ログ v2 の Plain、W3C、Raw は対象外とし、その旨をソースに表示する。
+- ALB、CloudFront、WAF のリソースを検出し、出力先、ログの有効、テーブルの有効、配信の遅延、権限の状態を表示する。
+  ログが無効なリソースも一覧に残し、有効化の手順を表示する。
+  すべてのソースが無効な場合は、集計の実行ボタンを無効にする。
+- 同じ S3 のバケットとプレフィックス、または同じ CloudWatch Logs のロググループを複数のリソースが共有する場合に、`source_key` でリソースごとの内訳を保つ。
+  ALB は `elb`、CloudFront の標準ログ v2 は `distributionid`、CloudFront の legacy は `cs_host` または `x_host_header`、WAF は `webaclid` を使う。
+  リソースを特定する列が無い場合は、ほかのソースと同時に集計できないことを表示する。
+- 集計の単位はアクセス元の IP と URI のパスとする。
+  クエリ文字列は `sample_query` と `has_query` で表示し、パスのグルーピングには使わない。
+- CloudFront の origin になっている ALB は、CloudFront を同時に選んだときに IP の集計から外す。
+  WAF のブロックとチャレンジは、リクエスト件数に加算せず、同じ IP と URI の行に重ねて表示する。
+- 主シグナルは WAF の `BLOCK`、`CAPTCHA`、`CHALLENGE` とし、4xx と 5xx は補助情報として表示する。
+  「悪意がある」と断定するラベルは出さない。
+- Athena のテーブルは利用者が選ぶ。
+  thief は `CREATE TABLE` を実行しない。
+  検出した出力先からパーティション投影を含む DDL のテンプレートを生成し、コピーできるようにする。
+  既存のテーブルは、列、パーティション、スキーマプロファイルを検証してから使う。
+- Athena のクエリは `SELECT` だけを生成し、利用者の入力は実行パラメータに置く。
+  期間は既定を 24 時間とし、7 日はパーティションがあり、利用者が確認した場合だけ許可する。
+  CloudWatch Logs のソースは 24 時間を上限とする。
+  1 回に選べるソースは最大 5 つ、結果は最大 200 行とする。
+  スキャンしたバイト数とレコード数を表示し、結果はキャッシュしない。
+- 集計は API サーバのメモリのジョブで管理し、取り消しと TTL の期限切れで実行中のクエリを止める。
+  1 つのソースが失敗しても、ほかのソースの結果とソース別のエラーを返す。
+- リアルタイムの検知、Live Tail、WAF のルール変更、IP のブロック、アラート、保存ビュー、CSV のエクスポート、ベースラインとの比較、時系列グラフ、生ログの大量取得、CLI と TUI は対象に含めない。
+
+受け入れ基準:
+
+- サイドバーの Security グループに `Access Logs` が表示され、選ぶと専用ビューが開く。
+- ALB の legacy の S3 ログ、CloudFront の legacy または v2 の S3 標準ログ、WAF の CloudWatch Logs のログ、WAF の S3 ログのソースが検出され、出力先と状態が表示される。
+- ログが無効な ALB、CloudFront、WAF が一覧に残り、「Logging disabled」と表示される。すべてのソースが無効な場合は集計を実行できない。
+- 複数のリソースが同じ出力先を共有している場合に、共有するリソースの一覧が表示され、同じ Athena テーブルまたはロググループを 1 回だけ選べる。
+- 同じ Athena テーブルまたは同じ CloudWatch Logs のロググループを共有する複数のソースを選んでも、`source_key` ごとの内訳が表示され、選択していないリソースのレコードが混ざらない。
+- `IP x URI` の集計に、Source IP、URI、Requests、Blocked、Challenged、4xx、5xx、Sources、Last seen、Flags が表示される。
+- CloudFront の origin の ALB を CloudFront と同時に選ぶと、ALB の `client_ip` が IP の集計に加算されず、その旨が表示される。
+- 7 日間の集計は、確認のチェックが無いとき、または WAF の CloudWatch Logs のソースを含むときに実行できない。
+- Athena のテーブルを選び、検証の結果と、パーティション投影を含む DDL をコピーできる。
+- 集計の実行中に取り消すと、実行中の Athena と CloudWatch Logs Insights のクエリが停止する。
+- 1 つのソースが失敗しても、ほかのソースの結果が表示され、失敗したソースのエラーが表示される。
+- `mise run check` が成功する。
 
 ### 分析とコスト
 
@@ -968,6 +1022,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | TUI のプロバイダーの切り替え | `P` で AWS、Google Cloud、Datadog、TiDB Cloud を切り替える。プロバイダーごとにスコープ、リージョン、サービスを保持し、戻ったときに復元する (FR-31、ADR 0036) | issue 0234 で実装 |
 | TUI の非 AWS プロバイダーの対象 | 一覧を持つサービスに限る。Google Cloud は Cloud Run、Cloud Storage、IAM、Service Accounts、Datadog は Dashboards と Cost 2 種、TiDB Cloud は Projects と Cost を載せる。BigQuery、Cloud Logging、Datadog Metrics は分析のビューとして除く (FR-31) | issue 0234 で実装 |
 | TUI の枠線の色 | プロバイダーのイメージカラーを使い、フォーカスしていない側は同じ色を暗くする。色は ANSI 256 色で固定する (FR-31、ADR 0036) | issue 0234 で実装 |
+| Access Logs の集計 | S3 のログは Athena、CloudWatch Logs のログは Logs Insights で集計する。WAF の S3 のログは互換するテーブルがある場合だけ扱う。テーブルは利用者が選び、thief は DDL を実行しない。ソース間の重複は排除せず、`source_key` でリソースごとの内訳を保つ (FR-32、ADR 0037) | issue 0235 から 0240 で実装 |
 
 ## 関連資料
 
@@ -975,6 +1030,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - TUI の接続方式とフレームワーク: ADR 0033 (`docs/adr/0033-tui-in-process-bubbletea.md`)
 - TUI のフロート端末: ADR 0034 (`docs/adr/0034-tui-floating-terminal-window.md`)
 - TUI のプロバイダー抽象とイメージカラー: ADR 0036 (`docs/adr/0036-tui-provider-abstraction.md`)
+- Access Logs の集計: ADR 0037 (`docs/adr/0037-access-logs-aggregation.md`)
 - issue: `docs/issues/closed/`、`docs/issues/pending/`、`docs/issues/TODO.md`
 - CORS の不具合と修正の方針: `docs/issues/closed/0200-bug-cors-reflects-any-origin.md`、ADR 0032 (`docs/adr/0032-api-origin-and-host-checks.md`)
 - 変更履歴: `CHANGES.md`

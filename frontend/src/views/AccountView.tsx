@@ -86,6 +86,7 @@ import { FacetBar, type Filters } from '../components/FacetBar';
 import { DataTable } from '../components/DataTable';
 import { SSOExpiredBanner } from '../components/SSOExpiredBanner';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { AccessLogsView } from './AccessLogsView';
 import { AthenaView } from './AthenaView';
 import { CloudWatchLogsView } from './CloudWatchLogsView';
 import { CostExplorerPanel } from './CostExplorerPanel';
@@ -567,6 +568,9 @@ function AwsServicePane({
           contained={contained}
           closeOnEscape={closeOnEscape}
         />
+      )}
+      {service === 'accesslogs' && (
+        <AccessLogsView key={`${profile}:${region}`} profile={profile} region={region} />
       )}
       {service === 'athena' && <AthenaView profile={profile} region={region} />}
       {service === 'cloudwatchlogs' && <CloudWatchLogsView profile={profile} region={region} />}

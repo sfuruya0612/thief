@@ -87,6 +87,7 @@
   --svc-sqs: #de5d9c;
   --svc-kinesis: #4ea7fc;
   --svc-waf: #eb5757;
+  --svc-accesslogs: #bb6bd9;
   --svc-dynamo: #527fff;
   --svc-ecr: #f2994a;
   --svc-ssm: #de5d9c;

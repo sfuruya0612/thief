@@ -93,11 +93,28 @@ type AthenaResultPage struct {
 
 // StartAthenaQueryInput holds parameters for starting a query execution.
 type StartAthenaQueryInput struct {
-	SQL            string
-	Catalog        string
-	Database       string
-	Workgroup      string
-	OutputLocation string
+	SQL                 string
+	Catalog             string
+	Database            string
+	Workgroup           string
+	OutputLocation      string
+	ExecutionParameters []string
+}
+
+// AthenaTableMetadata は Athena のテーブルのメタデータを表す。
+type AthenaTableMetadata struct {
+	Name          string            `json:"name"`
+	Columns       []AthenaColumn    `json:"columns"`
+	PartitionKeys []AthenaColumn    `json:"partition_keys"`
+	Parameters    map[string]string `json:"parameters,omitempty"`
+}
+
+// AthenaWorkgroupConfig は Athena のワークグループの設定を表す。
+type AthenaWorkgroupConfig struct {
+	Name                       string `json:"name"`
+	BytesScannedCutoffPerQuery int64  `json:"bytes_scanned_cutoff_per_query"`
+	OutputLocation             string `json:"output_location,omitempty"`
+	EnforceWorkGroupConfig     bool   `json:"enforce_workgroup_config"`
 }
 
 // athenaAPI は Athena SDK クライアントのうち本パッケージが利用する操作の集合。
@@ -107,6 +124,8 @@ type athenaAPI interface {
 	ListDatabases(ctx context.Context, params *athena.ListDatabasesInput, optFns ...func(*athena.Options)) (*athena.ListDatabasesOutput, error)
 	ListWorkGroups(ctx context.Context, params *athena.ListWorkGroupsInput, optFns ...func(*athena.Options)) (*athena.ListWorkGroupsOutput, error)
 	ListTableMetadata(ctx context.Context, params *athena.ListTableMetadataInput, optFns ...func(*athena.Options)) (*athena.ListTableMetadataOutput, error)
+	GetTableMetadata(ctx context.Context, params *athena.GetTableMetadataInput, optFns ...func(*athena.Options)) (*athena.GetTableMetadataOutput, error)
+	GetWorkGroup(ctx context.Context, params *athena.GetWorkGroupInput, optFns ...func(*athena.Options)) (*athena.GetWorkGroupOutput, error)
 	StartQueryExecution(ctx context.Context, params *athena.StartQueryExecutionInput, optFns ...func(*athena.Options)) (*athena.StartQueryExecutionOutput, error)
 	GetQueryExecution(ctx context.Context, params *athena.GetQueryExecutionInput, optFns ...func(*athena.Options)) (*athena.GetQueryExecutionOutput, error)
 	StopQueryExecution(ctx context.Context, params *athena.StopQueryExecutionInput, optFns ...func(*athena.Options)) (*athena.StopQueryExecutionOutput, error)
@@ -150,6 +169,68 @@ func ListAthenaTables(ctx context.Context, profile, region, catalog, database st
 		return nil, err
 	}
 	return listAthenaTables(ctx, client, catalog, database)
+}
+
+// GetAthenaTableMetadata は Athena のテーブルの列とパーティションキーを返す。
+func GetAthenaTableMetadata(ctx context.Context, profile, region, catalog, database, table, workgroup string) (*AthenaTableMetadata, error) {
+	client, err := newAthenaClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getAthenaTableMetadata(ctx, client, catalog, database, table, workgroup)
+}
+
+func getAthenaTableMetadata(ctx context.Context, client athenaAPI, catalog, database, table, workgroup string) (*AthenaTableMetadata, error) {
+	if catalog == "" {
+		catalog = defaultAthenaCatalog
+	}
+	in := &athena.GetTableMetadataInput{
+		CatalogName:  aws.String(catalog),
+		DatabaseName: aws.String(database),
+		TableName:    aws.String(table),
+	}
+	if workgroup != "" {
+		in.WorkGroup = aws.String(workgroup)
+	}
+	out, err := client.GetTableMetadata(ctx, in)
+	if err != nil {
+		return nil, fmt.Errorf("get athena table metadata %s.%s: %w", database, table, err)
+	}
+	if out.TableMetadata == nil {
+		return nil, fmt.Errorf("get athena table metadata %s.%s: empty metadata", database, table)
+	}
+	meta := &AthenaTableMetadata{
+		Name:       ptrStr(out.TableMetadata.Name),
+		Parameters: out.TableMetadata.Parameters,
+	}
+	for _, c := range out.TableMetadata.Columns {
+		meta.Columns = append(meta.Columns, AthenaColumn{Name: ptrStr(c.Name), Type: ptrStr(c.Type)})
+	}
+	for _, c := range out.TableMetadata.PartitionKeys {
+		meta.PartitionKeys = append(meta.PartitionKeys, AthenaColumn{Name: ptrStr(c.Name), Type: ptrStr(c.Type)})
+	}
+	return meta, nil
+}
+
+// GetAthenaWorkgroupConfig は Athena のワークグループの設定を返す。
+func GetAthenaWorkgroupConfig(ctx context.Context, profile, region, name string) (*AthenaWorkgroupConfig, error) {
+	client, err := newAthenaClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	out, err := client.GetWorkGroup(ctx, &athena.GetWorkGroupInput{WorkGroup: aws.String(name)})
+	if err != nil {
+		return nil, fmt.Errorf("get athena workgroup %s: %w", name, err)
+	}
+	config := &AthenaWorkgroupConfig{Name: name}
+	if out.WorkGroup != nil && out.WorkGroup.Configuration != nil {
+		config.BytesScannedCutoffPerQuery = ptrInt64(out.WorkGroup.Configuration.BytesScannedCutoffPerQuery)
+		config.EnforceWorkGroupConfig = ptrBool(out.WorkGroup.Configuration.EnforceWorkGroupConfiguration)
+		if out.WorkGroup.Configuration.ResultConfiguration != nil {
+			config.OutputLocation = ptrStr(out.WorkGroup.Configuration.ResultConfiguration.OutputLocation)
+		}
+	}
+	return config, nil
 }
 
 // StartAthenaQuery starts a read-only query execution and returns its state.
@@ -327,7 +408,10 @@ func startAthenaQuery(ctx context.Context, client athenaAPI, in StartAthenaQuery
 	if err := sqlguard.ValidateReadOnly(in.SQL); err != nil {
 		return nil, err
 	}
-	input := &athena.StartQueryExecutionInput{QueryString: aws.String(in.SQL)}
+	input := &athena.StartQueryExecutionInput{
+		QueryString:         aws.String(in.SQL),
+		ExecutionParameters: in.ExecutionParameters,
+	}
 	if in.Catalog != "" || in.Database != "" {
 		qec := &athenatypes.QueryExecutionContext{}
 		if in.Catalog != "" {

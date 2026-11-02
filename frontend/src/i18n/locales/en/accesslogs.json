@@ -1,0 +1,83 @@
+{
+  "subtitle": "Access log aggregation",
+  "timeRange": "Range",
+  "range": {
+    "1h": "1 hour",
+    "3h": "3 hours",
+    "24h": "24 hours",
+    "7d": "7 days"
+  },
+  "confirmLongRange": "Allow a 7-day scan",
+  "run": "Run",
+  "starting": "Starting",
+  "cancel": "Cancel",
+  "cancelling": "Cancelling",
+  "running": "Running",
+  "sources": "Sources",
+  "selectReady": "Select all ready",
+  "recheck": "Recheck",
+  "rechecking": "Checking",
+  "noSourcesFound": "No ALB, CloudFront, or WAF sources were found.",
+  "sharedWith": "Shared with: {{names}}",
+  "filter": {
+    "onlyBlocked": "Blocked only",
+    "ip": "IP",
+    "uri": "URI prefix"
+  },
+  "tabs": {
+    "pairs": "IP x URI",
+    "ips": "Source IP",
+    "setup": "Setup"
+  },
+  "empty": {
+    "noRun": "Select a range and sources, then run the aggregation.",
+    "noResults": "No results.",
+    "title": "No matching requests",
+    "noRows": "No records match the selected range and sources.",
+    "logging": "Sources with logging disabled are not queried.",
+    "delay": "ALB logs are delayed by about 5 minutes; CloudFront logs can be delayed by 1 to 24 hours.",
+    "table": "Check that the Athena table points to the log destination.",
+    "permissions": "Check the S3, Athena, and CloudWatch Logs permissions."
+  },
+  "summary": {
+    "records": "Records",
+    "blocked": "Blocked",
+    "challenged": "Challenged",
+    "ips": "IPs",
+    "uris": "URIs",
+    "duplicateWarning": "Multiple sources are aggregated. The same request may appear in more than one log, so the counts are log records.",
+    "sourceRecords": "{{count}} records",
+    "sourceScanned": "{{bytes}} scanned"
+  },
+  "run": {
+    "noSources": "Select at least one source.",
+    "tableRequired": "Select an Athena table for {{name}} in Setup.",
+    "confirmLongRange": "Check the 7-day scan confirmation.",
+    "insightsRange": "CloudWatch Logs sources are limited to 24 hours."
+  },
+  "setup": {
+    "workgroup": "Athena workgroup",
+    "outputLocation": "Query result location",
+    "globalHint": "The workgroup and output location are used for every selected Athena source.",
+    "logsInsights": "This source uses the CloudWatch Logs Insights log group {{logGroup}}. No table is required.",
+    "notAvailable": "This source cannot be aggregated in this version.",
+    "loggingDisabled": "Access logging is disabled for this resource. Enable it in the AWS console.",
+    "shared": "This destination is shared with {{names}}. One table is shared by these sources.",
+    "legacyCloudFront": "CloudFront legacy standard logs are not partitioned by a date path, so this DDL has no partition. Use standard logging v2 to reduce scanned bytes.",
+    "selectDatabase": "Select a database",
+    "selectTable": "Select a table",
+    "validate": "Validate",
+    "validating": "Validating",
+    "createTable": "Create table",
+    "valid": "The table is ready",
+    "invalid": "The table cannot be used",
+    "profile": "Schema: {{profile}}",
+    "missingColumns": "Missing columns: {{columns}}",
+    "noAttribution": "The table has no column that identifies the resource, so it cannot be aggregated with other sources.",
+    "ddlTitle": "DDL to create {{table}}",
+    "copyDDL": "Copy DDL",
+    "copied": "Copied",
+    "noDDL": "The DDL could not be generated. Check the destination and schema.",
+    "ddlHint": "The DDL uses partition projection. Review it and run it once in Athena."
+  }
+}

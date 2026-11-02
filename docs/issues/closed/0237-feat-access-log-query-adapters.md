@@ -2,6 +2,7 @@
 
 Created: 2026-11-02
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-11-02
 
 ## 背景
 
@@ -80,3 +81,16 @@ ADR 0037 は、S3 のアクセスログを Athena、CloudWatch Logs のアクセ
 - issue 0235、0236、0238、0239、0240
 - `backend/internal/aws/athena.go`、`cloudwatchlogs.go`
 - `backend/internal/accesslog` (issue 0235)
+
+## 解決方法
+
+- `StartAthenaQueryInput` に `ExecutionParameters` を追加し、`StartQueryExecutionInput` に渡すようにした。
+- `athenaAPI` に `GetTableMetadata` と `GetWorkGroup` を追加し、テーブルの列、パーティションキー、ワークグループの設定を取得できるようにした。
+- `GetAthenaTableMetadata` と `GetAthenaWorkgroupConfig` を追加し、テーブルの検証とワークグループのスキャン量の確認に使えるようにした。
+- CloudWatch Logs に `StartLogsInsightsQuery`、`GetLogsInsightsQueryResults`、`StopLogsInsightsQuery` を追加し、WAF のログを Logs Insights で集計できるようにした。
+- 同じ Athena テーブルを共有する複数のソースを 1 回のクエリにまとめ、`source_key` で分割するようにした。
+- 同じ CloudWatch Logs のロググループを共有する複数の WAF を `webaclId` で絞り込み、1 回のクエリにまとめるようにした。
+- Athena と Logs Insights の結果を `accesslog.PairRow` と `accesslog.IPSummary` に変換するパーサーを追加した。
+- 期間、ソース数、結果行数の上限と、ログが無効なソース、`Attribution` が false のソースの拒否を取得層と API 層に追加した。
+- 手書きのフェイクで、共有されたテーブルとロググループ、状態の変換、結果の解析を確認するテストを追加した。
+- `mise run check` が通る。

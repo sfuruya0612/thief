@@ -87,7 +87,10 @@ import type {
 } from './query';
 
 import type { ClientConfigRaw } from './common';
+import type { AccessLogQueryStartResponseRaw, AccessLogSourceErrorRaw } from './accesslogs';
 
+import accessLogQueryStart from './__contract__/AccessLogQueryStartResponse.json';
+import accessLogSourceError from './__contract__/AccessLogSourceError.json';
 import apigw from './__contract__/APIGatewayResource.json';
 import athenaCatalog from './__contract__/AthenaCatalog.json';
 import athenaDatabase from './__contract__/AthenaDatabase.json';
@@ -279,4 +282,6 @@ export type ContractChecks = [
   Expect<Contract<typeof wafRule, WAFRuleRaw>>,
   Expect<Contract<typeof valueResponse, ValueRaw>>,
   Expect<Contract<typeof clientConfig, ClientConfigRaw>>,
+  Expect<Contract<typeof accessLogQueryStart, AccessLogQueryStartResponseRaw>>,
+  Expect<Contract<typeof accessLogSourceError, AccessLogSourceErrorRaw>>,
 ];

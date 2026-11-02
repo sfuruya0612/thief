@@ -2,6 +2,7 @@
 
 Created: 2026-11-02
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-11-02
 
 ## 背景
 
@@ -125,3 +126,13 @@ AWS SDK に依存しない純粋なパッケージ `backend/internal/accesslog` 
 - issue 0236、0237、0238、0239、0240
 - `backend/internal/sqlguard/sqlguard.go`
 - `backend/internal/aws/athena.go`、`backend/internal/aws/cloudwatchlogs.go`
+
+## 解決方法
+
+- `backend/internal/accesslog` を追加し、ソース、出力先、スキーマプロファイル、列の対応付け、期間、フィルタ、集計行、マージ、DDL、SQL ビルダー、Logs Insights のクエリ、結果のパーサー、センシティブパスの判定を実装した。
+- ALB の legacy、CloudFront の legacy と標準ログ v2 の JSON、WAF の JSON のスキーマプロファイルを追加し、列名からプロファイルを判定するようにした。
+- Athena の集計は `SELECT` だけを生成し、利用者の入力は実行パラメータに置き、テーブル名とデータベース名を検証し、`sqlguard.ValidateReadOnly` を通すようにした。
+- 同じテーブルを共有する複数のソースを `source_key` で絞り込み、`GROUP BY source_key` でリソースごとの行を返すようにした。
+- WAF のリクエスト数を加算せず、ブロックとチャレンジをオーバーレイし、CloudFront の origin の ALB を IP の集計から外すマージを実装した。
+- 複数のソースが同じ出力先を共有する場合と、リソースを特定する列が無い場合のテストを追加した。
+- `mise run check` が通る。

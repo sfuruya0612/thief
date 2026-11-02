@@ -91,6 +91,8 @@ var Registry = []Entry{
 	{Name: "WAFRule", Value: aws.WAFRule{}},
 	{Name: "ValueResponse", Value: api.ValueResponse{}},
 	{Name: "ClientConfigResponse", Value: api.ClientConfigResponse{}},
+	{Name: "AccessLogQueryStartResponse", Value: api.AccessLogQueryStartResponse{}},
+	{Name: "AccessLogSourceError", Value: api.AccessLogSourceError{}},
 }
 
 // Tags は v の型の各エクスポートフィールドのフィールド名と json タグの一覧を、定義順の

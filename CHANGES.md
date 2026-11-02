@@ -2,6 +2,8 @@
 
 ## develop
 
+- [ADD] Web の AWS ビューに Access Logs を追加し、ALB、CloudFront、WAF のアクセスログをアクセス元の IP と URI で集計できるようにする (S3 のログは Athena、WAF の CloudWatch Logs のログは Logs Insights で集計する。ソースの検出、ログの有効、テーブルの選択、パーティション投影を含む DDL のコピー、期間とコストの制限、ジョブの取り消し、ソース別の内訳、CloudFront の origin の ALB を IP 集計から外す処理を含む。thief は DDL を実行せず、ソース間の重複も排除しない。ADR 0037、FR-32。issue 0235、0236、0237、0238、0239、0240)
+  - @sfuruya0612
 - [ADD] TUI に Google Cloud、Datadog、TiDB Cloud のプロバイダーを追加し、`P` で AWS と切り替えられるようにする (Google Cloud は Cloud Run、Cloud Storage、IAM、Service Accounts、Datadog は Dashboards、Cost (Historical)、Cost (Estimated)、TiDB Cloud は Projects、Cost を載せる。プロジェクト、組織、プロファイルの選択はプロバイダーに応じて `p` のピッカーを切り替え、AWS のリージョンだけ `R` で選ぶ。プロバイダーごとに最後に選んだスコープ、リージョン、サービスを保持し、戻ったときに復元する。Cloud Storage は S3 と同じ Objects タブ、Datadog は Widgets タブ、TiDB Cloud は Clusters タブを持つ。Datadog の認証は API サーバと同じ OAuth トークンと静的キーを使い、期限切れのトークンはリフレッシュする。枠線、タイトル、選択中のタブ、一覧の選択行、キー操作のヒントをプロバイダーのイメージカラー (AWS はオレンジ、Google Cloud はブルー、Datadog はパープル、TiDB Cloud はレッド) に合わせ、フォーカスしていない側の枠線は同じ色を暗くする。BigQuery、Cloud Logging、Datadog Metrics などの分析のビューとリソースの変更操作は対象に含めない。ADR 0036、FR-31。issue 0234)
   - @sfuruya0612
 - [ADD] CLI に DynamoDB / API Gateway / NAT Gateway / SQS / WAF の一覧コマンド (`thief dynamo` / `apigw` / `natgw` / `sqs` / `waf`) を追加する (Web では表示できるが CLI に無かった 5 サービスの一覧を tab / CSV / `--group-by` で出力できるようにする。既存の `ListXxxResources` と `runList` を使い、`util.Row` を満たすため各 Resource 型に `ToRow()` を追加する。issue 0188)

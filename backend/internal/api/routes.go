@@ -76,6 +76,14 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cost/forecast", s.handleCostForecast)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/pricing", s.handlePricing)
 
+	// Access Logs (ALB / CloudFront / WAF の集計)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/access-logs/sources", s.handleAccessLogSources)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/access-logs/table/validate", s.handleAccessLogTableValidate)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/access-logs/query", s.handleAccessLogQueryStart)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/access-logs/query/{job}", s.handleAccessLogQueryGet)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/access-logs/query/{job}/results", s.handleAccessLogQueryResults)
+	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/access-logs/query/{job}/cancel", s.handleAccessLogQueryCancel)
+
 	// CloudWatch Logs (ログビューア)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/logs/groups", s.handleCWLogGroups)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/logs/events", s.handleCWLogEvents)

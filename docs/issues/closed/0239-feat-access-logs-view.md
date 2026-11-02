@@ -2,6 +2,7 @@
 
 Created: 2026-11-02
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-11-02
 
 ## 背景
 
@@ -103,3 +104,16 @@ ADR 0037 は、AWS ビューの Security グループに Access Logs を追加�
 - `frontend/src/views/AthenaView.tsx`、`views/CloudWatchLogsView.tsx`
 - `frontend/src/api/queries.ts`、`api/endpoints.ts`
 - `frontend/src/i18n/locales/{ja,en}/`
+
+## 解決方法
+
+- `SERVICES` に `accesslogs` (`Access Logs`、`Threat check`、Security グループ) を追加し、`AccountView` から専用ビューを描画するようにした。
+- `AccessLogsView` を追加し、ソースの選択、期間、フィルタ、集計の実行、取り消し、状態のポーリング、結果の表示を実装した。
+- ソースの一覧に、ログが無効なリソース、未対応のソース、共有された出力先、Global、CloudFront の origin、リソースを特定できないソースを区別して表示するようにした。
+- `Setup` タブに Athena のカタログ、データベース、テーブルの選択、検証、パーティション投影を含む DDL のコピー、ワークグループと出力先の入力を追加した。
+- `IP x URI` と `Source IP` の結果テーブル、ソース別の内訳、スキャン量、重複の注意、部分失敗の表示を追加した。
+- テーブルの対応付けを出力先の ID ごとに localStorage に保存し、同じ出力先を共有する複数のソースで再利用するようにした。
+- ジョブ ID を sessionStorage に保存し、再読み込みで状態を取得できるようにした。
+- `accesslogs` の i18n、CSS、汎用のシールドアイコンを追加した。
+- `normalizeAccessLogs` と `SourceList` のテスト、`serviceMeta` のテストを追加した。
+- `mise run check` が通る。

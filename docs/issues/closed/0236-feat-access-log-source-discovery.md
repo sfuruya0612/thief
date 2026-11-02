@@ -2,6 +2,7 @@
 
 Created: 2026-11-02
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-11-02
 
 ## 背景
 
@@ -120,3 +121,15 @@ CloudFront の origin のドメイン名と ALB の DNS 名を照合し、どち
 - issue 0235、0237、0238、0239、0240
 - `backend/internal/aws/elb.go`、`cloudfront.go`、`waf.go`、`cloudwatchlogs.go`
 - `backend/internal/api/cache_helpers.go`、`handlers_cache.go`
+
+## 解決方法
+
+- `backend/internal/aws/accesslogs.go` を追加し、ALB、CloudFront、WAF のアクセスログの出力先を検出するようにした。
+- ALB は legacy の S3 設定と vended logs の有無を検出し、ログが無効なリソースも `destination_type=none`、`logging_enabled=false` のソースとして返すようにした。
+- CloudFront は legacy の S3 設定と、CloudWatch Logs の配信 API から標準ログ v2 の S3、CloudWatch Logs、Firehose の宛先、レコードのフィールド、出力形式、サフィックスパスを取得するようにした。
+- WAF は `ListWebACLs` で全 Web ACL を列挙し、`ListLoggingConfigurations` と照合して CloudWatch Logs、S3、Firehose の宛先、ログフィルタ、redaction、Firewall Manager の管理を検出するようにした。
+- 同じ S3 のバケットとプレフィックス、または同じ CloudWatch Logs のロググループを共有する複数のリソースに `SharedBy` を付け、`SourceKey` と `Attribution` を持たせた。
+- CloudFront の origin のドメイン名と ALB の DNS 名を照合し、origin の ALB に `OriginOf` と注意書きを付けるようにした。
+- 1 つのサービスの失敗を警告にまとめ、ほかのサービスのソースを失わせないようにした。
+- 手書きのフェイクのクライアントで、ログが無効なリソース、共有された出力先、部分失敗、グローバル資源、origin の照合を確認するテストを追加した。
+- `mise run check` が通る。
