@@ -57,8 +57,9 @@ func (s *Server) handleAccessLogTableValidate(w http.ResponseWriter, r *http.Req
 		writeBadRequest(w, "source_id, database and table are required")
 		return
 	}
-	if !accesslog.ValidateIdent(req.Database) || !accesslog.ValidateIdent(req.Table) {
-		writeAccessLogError(w, fmt.Errorf("%w: invalid database or table", accesslog.ErrInvalidTable))
+	if (req.Catalog != "" && !accesslog.ValidateIdent(req.Catalog)) ||
+		!accesslog.ValidateIdent(req.Database) || !accesslog.ValidateIdent(req.Table) {
+		writeAccessLogError(w, fmt.Errorf("%w: invalid catalog, database or table", accesslog.ErrInvalidTable))
 		return
 	}
 	sources, err := s.accessLogSources(r.Context(), profile, region)
@@ -191,8 +192,9 @@ func (s *Server) handleAccessLogQueryStart(w http.ResponseWriter, r *http.Reques
 				writeBadRequest(w, "table is required for an Athena source")
 				return
 			}
-			if !accesslog.ValidateIdent(requested.Table.Database) || !accesslog.ValidateIdent(requested.Table.Table) {
-				writeAccessLogError(w, fmt.Errorf("%w: invalid database or table", accesslog.ErrInvalidTable))
+			if (requested.Table.Catalog != "" && !accesslog.ValidateIdent(requested.Table.Catalog)) ||
+				!accesslog.ValidateIdent(requested.Table.Database) || !accesslog.ValidateIdent(requested.Table.Table) {
+				writeAccessLogError(w, fmt.Errorf("%w: invalid catalog, database or table", accesslog.ErrInvalidTable))
 				return
 			}
 			meta, err := s.accessLogs.tableMetadata(r.Context(), profile, source.QueryRegion, requested.Table.Catalog, requested.Table.Database, requested.Table.Table, req.Workgroup)
@@ -600,25 +602,30 @@ func accessLogJobState(job *accessLogJob) accesslog.QueryState {
 	running := 0
 	succeeded := 0
 	failed := 0
+	cancelled := 0
 	for _, source := range job.Sources {
 		switch source.State {
 		case accesslog.QueryStateQueued, accesslog.QueryStateRunning:
 			running++
 		case accesslog.QueryStateSucceeded:
 			succeeded++
-		case accesslog.QueryStateFailed, accesslog.QueryStateCancelled:
+		case accesslog.QueryStateFailed:
 			failed++
+		case accesslog.QueryStateCancelled:
+			cancelled++
 		}
 	}
 	switch {
 	case running > 0:
 		return accesslog.QueryStateRunning
-	case failed == 0:
+	case succeeded == len(job.Sources):
 		return accesslog.QueryStateSucceeded
-	case succeeded == 0:
-		return accesslog.QueryStateFailed
-	default:
+	case succeeded > 0:
 		return accesslog.QueryStatePartial
+	case cancelled > 0 && failed == 0:
+		return accesslog.QueryStateCancelled
+	default:
+		return accesslog.QueryStateFailed
 	}
 }
 

@@ -2,63 +2,13 @@
 import type { AccessLogIPRow, AccessLogPairRow } from '../../types/accesslogs';
 import type { ColumnDef } from './columns';
 import { Dash, monoStyle } from './cells';
+import { AccessLogFlags, AccessLogSources } from './accessLogCells';
 
 function formatTime(value?: string): string {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
-}
-
-function flagClass(flag: string): string {
-  switch (flag) {
-    case 'blocked':
-      return 'status err';
-    case 'challenged':
-      return 'status warn';
-    case 'client_error':
-    case 'server_error':
-      return 'status info';
-    default:
-      return 'status muted';
-  }
-}
-
-function flagLabel(flag: string): string {
-  switch (flag) {
-    case 'client_error':
-      return '4xx';
-    case 'server_error':
-      return '5xx';
-    case 'sensitive_path':
-      return 'sensitive path';
-    case 'has_query':
-      return 'query';
-    case 'many_uris':
-      return 'many URIs';
-    case 'count_matched':
-      return 'COUNT';
-    default:
-      return flag;
-  }
-}
-
-function Flags({ flags }: { flags: string[] }) {
-  if (flags.length === 0) return <Dash />;
-  return (
-    <span className="accesslogs-flags">
-      {flags.map((flag) => (
-        <span key={flag} className={flagClass(flag)}>
-          {flagLabel(flag)}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function Sources({ labels }: { labels: string[] }) {
-  if (labels.length === 0) return <Dash />;
-  return <span title={labels.join(', ')}>{labels.join(', ')}</span>;
 }
 
 export const accessLogPairColumns: ColumnDef<AccessLogPairRow>[] = [
@@ -123,7 +73,7 @@ export const accessLogPairColumns: ColumnDef<AccessLogPairRow>[] = [
     header: 'Sources',
     width: '130px',
     filterValue: (row) => row.sourceLabels.join(' '),
-    cell: (row) => <Sources labels={row.sourceLabels} />,
+    cell: (row) => <AccessLogSources labels={row.sourceLabels} />,
   },
   {
     key: 'lastSeen',
@@ -136,7 +86,7 @@ export const accessLogPairColumns: ColumnDef<AccessLogPairRow>[] = [
     header: 'Flags',
     width: '200px',
     filterValue: (row) => row.flags.join(' '),
-    cell: (row) => <Flags flags={row.flags} />,
+    cell: (row) => <AccessLogFlags flags={row.flags} />,
   },
 ];
 
@@ -195,7 +145,7 @@ export const accessLogIPColumns: ColumnDef<AccessLogIPRow>[] = [
     header: 'Sources',
     width: '140px',
     filterValue: (row) => row.sourceLabels.join(' '),
-    cell: (row) => <Sources labels={row.sourceLabels} />,
+    cell: (row) => <AccessLogSources labels={row.sourceLabels} />,
   },
   {
     key: 'lastSeen',
@@ -208,6 +158,6 @@ export const accessLogIPColumns: ColumnDef<AccessLogIPRow>[] = [
     header: 'Flags',
     width: '210px',
     filterValue: (row) => row.flags.join(' '),
-    cell: (row) => <Flags flags={row.flags} />,
+    cell: (row) => <AccessLogFlags flags={row.flags} />,
   },
 ];

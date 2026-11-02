@@ -32,6 +32,9 @@
   "empty": {
     "noRun": "Select a range and sources, then run the aggregation.",
     "noResults": "No results.",
+    "runView": "This view has not been aggregated yet. Run the aggregation.",
+    "cancelled": "The aggregation was cancelled.",
+    "failed": "The aggregation failed. Check the per-source errors.",
     "title": "No matching requests",
     "noRows": "No records match the selected range and sources.",
     "logging": "Sources with logging disabled are not queried.",
@@ -46,6 +49,7 @@
     "ips": "IPs",
     "uris": "URIs",
     "duplicateWarning": "Multiple sources are aggregated. The same request may appear in more than one log, so the counts are log records.",
+    "topNote": "The IP and URI counts are based on the top 200 rows shown.",
     "sourceRecords": "{{count}} records",
     "sourceScanned": "{{bytes}} scanned"
   },

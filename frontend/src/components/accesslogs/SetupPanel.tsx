@@ -227,6 +227,13 @@ function SetupAthenaSource({ profile, source, mapping, onChange, workgroup }: Se
       {source.schemaProfile === 'cloudfront_legacy' ? (
         <p className="accesslogs-warning">{t('setup.legacyCloudFront')}</p>
       ) : null}
+      {source.status.issues.length > 0 ? (
+        <ul className="accesslogs-setup-issues">
+          {source.status.issues.map((issue) => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
+      ) : null}
       <div className="accesslogs-setup-fields">
         <label>
           <span>Catalog</span>

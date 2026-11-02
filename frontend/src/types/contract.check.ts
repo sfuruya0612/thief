@@ -215,7 +215,7 @@ type Expect<T extends true> = T;
 type PriceRateRawWidened = Omit<PriceRateRaw, 'model'> & { model: string };
 type PriceTableRawWidened = Omit<PriceTableRaw, 'rates'> & { rates: PriceRateRawWidened[] };
 
-// 契約対象 65 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
+// 契約対象 67 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
 export type ContractChecks = [
   Expect<Contract<typeof apigw, APIGWRaw>>,
   Expect<Contract<typeof athenaCatalog, AthenaCatalogRaw>>,

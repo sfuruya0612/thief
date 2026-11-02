@@ -246,7 +246,7 @@ func discoverALBSources(ctx context.Context, client accessLogELBAPI, profile, re
 					source.Status.Attribution = false
 				}
 			}
-			source.ID = accessLogSourceID(source.Type, arn, destinationKey(source.Destination))
+			source.ID = accessLogSourceID(source.Type, arn, destinationKey(source.Destination), string(source.SchemaProfile))
 			attachSetupSQL(&source)
 			sources[i] = source
 			return nil
@@ -299,7 +299,7 @@ func discoverCloudFrontSources(ctx context.Context, client accessLogCloudFrontAP
 			bucket, prefix := "", ""
 			if config.DistributionConfig != nil && config.DistributionConfig.Logging != nil {
 				legacyEnabled = ptrBool(config.DistributionConfig.Logging.Enabled)
-				bucket = ptrStr(config.DistributionConfig.Logging.Bucket)
+				bucket = normalizeS3Bucket(ptrStr(config.DistributionConfig.Logging.Bucket))
 				prefix = ptrStr(config.DistributionConfig.Logging.Prefix)
 			}
 			var out []accesslog.Source
@@ -378,7 +378,7 @@ func discoverWAFSources(ctx context.Context, client accessLogWAFAPI, profile, re
 			source.Destination = accesslog.Destination{Type: accesslog.DestinationNone}
 			source.Status.DestinationType = accesslog.DestinationNone
 			source.Status.Issues = append(source.Status.Issues, "Access logging is not enabled")
-			source.ID = accessLogSourceID(source.Type, arn, "none")
+			source.ID = accessLogSourceID(source.Type, arn, "none", string(source.SchemaProfile))
 			sources = append(sources, source)
 			continue
 		}
@@ -412,7 +412,7 @@ func discoverWAFSources(ctx context.Context, client accessLogWAFAPI, profile, re
 			source.Engine = ""
 			source.Status.Issues = append(source.Status.Issues, "URI path is redacted in the WAF logs")
 		}
-		source.ID = accessLogSourceID(source.Type, arn, destinationKey(source.Destination))
+		source.ID = accessLogSourceID(source.Type, arn, destinationKey(source.Destination), string(source.SchemaProfile))
 		attachSetupSQL(&source)
 		sources = append(sources, source)
 	}
@@ -546,7 +546,7 @@ func cloudFrontSource(id, name, domain string, aliases []string, region, account
 			SourceKey:           domain,
 		},
 	}
-	source.ID = accessLogSourceID(source.Type, arn, destinationKey(destination))
+	source.ID = accessLogSourceID(source.Type, arn, destinationKey(destination), string(source.SchemaProfile))
 	attachSetupSQL(&source)
 	return source
 }
@@ -570,7 +570,7 @@ func disabledCloudFrontSource(id, name, domain string, aliases []string, region,
 			Issues:          []string{"Access logging is not enabled"},
 		},
 	}
-	source.ID = accessLogSourceID(source.Type, arn, "none")
+	source.ID = accessLogSourceID(source.Type, arn, "none", string(source.SchemaProfile))
 	return source
 }
 
@@ -604,8 +604,11 @@ func cloudFrontV2Source(id, name, domain string, aliases []string, region, accou
 		source.Status.Attribution = false
 		source.Status.Issues = append(source.Status.Issues, "unsupported CloudFront standard logging destination")
 	}
-	source.ID = accessLogSourceID(source.Type, arn, destinationKey(source.Destination))
+	source.ID = accessLogSourceID(source.Type, arn, destinationKey(source.Destination), string(source.SchemaProfile))
 	attachSetupSQL(&source)
+	if strings.EqualFold(delivery.OutputFormat, string(cwltypes.OutputFormatParquet)) {
+		source.SetupSQL = ""
+	}
 	return source
 }
 
@@ -845,8 +848,8 @@ func dedupeWarnings(warnings []string) []string {
 	return out
 }
 
-func accessLogSourceID(sourceType accesslog.SourceType, resource, destination string) string {
-	raw := string(sourceType) + "|" + resource + "|" + destination
+func accessLogSourceID(sourceType accesslog.SourceType, resource, destination, profile string) string {
+	raw := string(sourceType) + "|" + resource + "|" + destination + "|" + profile
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -912,4 +915,13 @@ func hasRecordField(fields []string, name string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeS3Bucket(bucket string) string {
+	bucket = strings.TrimSpace(bucket)
+	bucket = strings.TrimSuffix(bucket, ".s3.amazonaws.com")
+	if i := strings.Index(bucket, ".s3."); i > 0 && strings.HasSuffix(bucket, ".amazonaws.com") {
+		return bucket[:i]
+	}
+	return bucket
 }

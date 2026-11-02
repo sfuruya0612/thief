@@ -59,6 +59,16 @@
   white-space: nowrap;
 }
 
+.accesslogs-inline-warning {
+  color: var(--warn-ink, var(--text-2));
+  font-size: 11px;
+}
+
+.accesslogs-top-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+
 .accesslogs-layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);

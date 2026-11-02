@@ -81,6 +81,28 @@ function isReady(source: AccessLogSource): boolean {
   return source.status.loggingEnabled && source.engine !== '';
 }
 
+// defaultSelection は選択可能なソースを、共有された出力先の attribution を考慮して選ぶ。
+// リソースを特定できないソースがある出力先では、その出力先から 1 つだけ選ぶ。
+function defaultSelection(sources: AccessLogSource[]): Set<string> {
+  const byDestination = new Map<string, AccessLogSource[]>();
+  for (const source of sources.filter(isReady)) {
+    const key = accessLogDestinationKey(source);
+    const group = byDestination.get(key) ?? [];
+    group.push(source);
+    byDestination.set(key, group);
+  }
+  const selected = new Set<string>();
+  for (const group of byDestination.values()) {
+    if (group.some((source) => !source.status.attribution)) {
+      const chosen = group.find((source) => source.status.attribution) ?? group[0];
+      selected.add(chosen.id);
+      continue;
+    }
+    for (const source of group) selected.add(source.id);
+  }
+  return selected;
+}
+
 function stateClass(state: string): string {
   switch (state) {
     case 'succeeded':
@@ -115,7 +137,7 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
     const readyIDs = sourcesQuery.data.sources.filter(isReady).map((source) => source.id);
     if (!initializedSelection.current) {
       initializedSelection.current = true;
-      setSelected(new Set(readyIDs));
+      setSelected(defaultSelection(sourcesQuery.data.sources));
       return;
     }
     setSelected((current) => {
@@ -134,6 +156,7 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
   }, [tableStorageKey, mappings]);
 
   const [tab, setTab] = useState<Tab>('pairs');
+  const [lastRunView, setLastRunView] = useState<Exclude<Tab, 'setup'>>('pairs');
   const [preset, setPreset] = useState<Preset>('24h');
   const [confirmLongRange, setConfirmLongRange] = useState(false);
   const [onlyBlocked, setOnlyBlocked] = useState(false);
@@ -187,16 +210,28 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
     !start.isPending;
 
   const handleToggle = (id: string) => {
+    const source = sources.find((item) => item.id === id);
+    if (!source) return;
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        return next;
+      }
+      const key = accessLogDestinationKey(source);
+      // リソースを特定できないソースは、同じ出力先を共有するほかのソースと
+      // 同時に選べない。片方を選ぶともう片方を外す。
+      for (const other of sources) {
+        if (other.id === id || accessLogDestinationKey(other) !== key) continue;
+        if (!source.status.attribution || !other.status.attribution) next.delete(other.id);
+      }
+      next.add(id);
       return next;
     });
   };
 
   const handleSelectAll = () => {
-    setSelected(new Set(sources.filter(isReady).map((source) => source.id)));
+    setSelected(defaultSelection(sources));
   };
 
   const handleRun = () => {
@@ -249,6 +284,7 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
       {
         onSuccess: (id) => {
           setJobID(id);
+          setLastRunView(tab === 'setup' ? 'pairs' : tab);
           setTab(tab === 'setup' ? 'pairs' : tab);
         },
         onError: (error) =>
@@ -292,6 +328,9 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
               <span>{t('confirmLongRange')}</span>
             </label>
           ) : null}
+          {longRange && insightsSelected ? (
+            <span className="accesslogs-inline-warning">{t('run.insightsRange')}</span>
+          ) : null}
           <Button variant="primary" onClick={handleRun} disabled={!canRun}>
             {start.isPending ? t('starting') : t('run')}
           </Button>
@@ -315,6 +354,17 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
       {resultsQuery.error && !isSSOExpiredError(resultsQuery.error) ? (
         <ErrorBanner error={resultsQuery.error} />
       ) : null}
+
+      {(sourcesQuery.data?.warnings ?? []).map((warning) => (
+        <p key={warning} className="accesslogs-warning">
+          {warning}
+        </p>
+      ))}
+      {(status?.warnings ?? []).map((warning) => (
+        <p key={warning} className="accesslogs-warning">
+          {warning}
+        </p>
+      ))}
 
       <div className="accesslogs-layout">
         <SourceList
@@ -413,6 +463,7 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
               status={status}
               results={results}
               sourceNames={sourceNames}
+              lastRunView={lastRunView}
               isLoading={statusQuery.isLoading || (terminal === true && resultsQuery.isLoading)}
               running={running}
               sourceErrors={sourceErrors}
@@ -429,6 +480,7 @@ interface ResultsPanelProps {
   status?: AccessLogQuery;
   results?: AccessLogResults;
   sourceNames: Record<string, string>;
+  lastRunView: Exclude<Tab, 'setup'>;
   isLoading: boolean;
   running: boolean;
   sourceErrors: AccessLogQuery['sources'];
@@ -439,6 +491,7 @@ function ResultsPanel({
   status,
   results,
   sourceNames,
+  lastRunView,
   isLoading,
   running,
   sourceErrors,
@@ -447,6 +500,12 @@ function ResultsPanel({
   if (isLoading) return <Loading />;
   if (!status) {
     return <p className="accesslogs-empty-hint">{t('empty.noRun')}</p>;
+  }
+  if (status.state === 'cancelled') {
+    return <p className="accesslogs-empty-hint">{t('empty.cancelled')}</p>;
+  }
+  if (status.state === 'failed' && sourceErrors.length === 0) {
+    return <p className="accesslogs-empty-hint">{t('empty.failed')}</p>;
   }
   if (running) {
     return (
@@ -466,6 +525,9 @@ function ResultsPanel({
   if (!results) return <p className="accesslogs-empty-hint">{t('empty.noResults')}</p>;
   const rows = tab === 'ips' ? results.ips : results.rows;
   if (rows.length === 0) {
+    if (tab !== lastRunView) {
+      return <p className="accesslogs-empty-hint">{t('empty.runView')}</p>;
+    }
     return (
       <div className="accesslogs-empty">
         <h3>{t('empty.title')}</h3>
@@ -538,6 +600,7 @@ function SummaryPanel({
         <Stat label={t('summary.ips')} value={summary.distinctIps.toLocaleString()} />
         <Stat label={t('summary.uris')} value={summary.distinctUris.toLocaleString()} />
       </div>
+      <p className="accesslogs-muted accesslogs-top-note">{t('summary.topNote')}</p>
       {summary.duplicateWarning ? (
         <p className="accesslogs-warning">{t('summary.duplicateWarning')}</p>
       ) : null}

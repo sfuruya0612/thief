@@ -114,7 +114,7 @@ func TestFillDeterministic(t *testing.T) {
 }
 
 // TestFillUnsupportedKind はフィラーが対応しない型のフィールドで、フィールド経路を含む
-// エラーを返すことを検証する。レジストリの現行 65 型はこの分岐に到達しないため、将来
+// エラーを返すことを検証する。レジストリの現行 67 型はこの分岐に到達しないため、将来
 // 対応しない型のフィールドが追加された場合の挙動をローカル定義の型で保証する。
 func TestFillUnsupportedKind(t *testing.T) {
 	type chanField struct {
