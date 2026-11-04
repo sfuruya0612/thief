@@ -19,6 +19,7 @@ import { accessLogIPColumns, accessLogPairColumns } from '../components/tables/a
 import { formatBytes } from '../components/tables/columns';
 import { accessLogDestinationKey } from '../lib/normalizeAccessLogs';
 import { isSSOExpiredError } from '../lib/ssoError';
+import { ApiError } from '../types/common';
 import type {
   AccessLogQuery,
   AccessLogResults,
@@ -102,6 +103,10 @@ function defaultSelection(sources: AccessLogSource[]): Set<string> {
     for (const source of group) selected.add(source.id);
   }
   return selected;
+}
+
+function isOutputLocationError(err: unknown): boolean {
+  return err instanceof ApiError && err.code === 'ACCESS_LOGS_OUTPUT_LOCATION_REQUIRED';
 }
 
 function stateClass(state: string): string {
@@ -347,7 +352,9 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
 
       {ssoExpired ? <SSOExpiredBanner profile={profile} /> : null}
       {actionError ? <ErrorBanner error={actionError} /> : null}
-      {start.error && !isSSOExpiredError(start.error) ? <ErrorBanner error={start.error} /> : null}
+      {start.error && !isSSOExpiredError(start.error) && !isOutputLocationError(start.error) ? (
+        <ErrorBanner error={start.error} />
+      ) : null}
       {sourcesQuery.error && !isSSOExpiredError(sourcesQuery.error) ? (
         <ErrorBanner error={sourcesQuery.error} />
       ) : null}

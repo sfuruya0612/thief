@@ -8,7 +8,13 @@
     "7d": "7 日"
   },
   "confirmLongRange": "7 日間のスキャンを許可する",
-  "run": "集計する",
+  "run": {
+    "noSources": "集計するソースを 1 つ以上選んでください。",
+    "tableRequired": "{{name}} の Athena テーブルを Setup で選んでください。",
+    "confirmLongRange": "7 日間のスキャンを許可するチェックを入れてください。",
+    "insightsRange": "CloudWatch Logs のソースは 24 時間までです。",
+    "outputLocationRequired": "Athena のクエリ結果の出力先がありません。Setup で出力先を指定するか、ワークグループの管理されたクエリ結果を有効にしてください。"
+  },
   "starting": "開始中",
   "cancel": "取り消す",
   "cancelling": "取り消し中",
@@ -53,16 +59,10 @@
     "sourceRecords": "{{count}} 件",
     "sourceScanned": "{{bytes}} をスキャン"
   },
-  "run": {
-    "noSources": "集計するソースを 1 つ以上選んでください。",
-    "tableRequired": "{{name}} の Athena テーブルを Setup で選んでください。",
-    "confirmLongRange": "7 日間のスキャンを許可するチェックを入れてください。",
-    "insightsRange": "CloudWatch Logs のソースは 24 時間までです。"
-  },
   "setup": {
     "workgroup": "Athena ワークグループ",
     "outputLocation": "クエリ結果の出力先",
-    "globalHint": "Athena のワークグループと出力先は、選択したすべての Athena ソースで使います。",
+    "globalHint": "Athena のワークグループと出力先は、選択したすべての Athena ソースで使います。 ワークグループに出力先が無い場合は、ここで指定してください。",
     "logsInsights": "CloudWatch Logs Insights のロググループ {{logGroup}} を使います。テーブルは不要です。",
     "notAvailable": "このソースは現在のバージョンでは集計できません。",
     "loggingDisabled": "このリソースはアクセスログが無効です。AWS のコンソールでログを有効にしてください。",

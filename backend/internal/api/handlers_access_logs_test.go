@@ -191,11 +191,14 @@ func accessLogTestDeps(t *testing.T) *accessLogDeps {
 			}, nil
 		},
 		workgroup: func(context.Context, string, string, string) (*awsinternal.AthenaWorkgroupConfig, error) {
-			return &awsinternal.AthenaWorkgroupConfig{Name: "primary"}, nil
+			return &awsinternal.AthenaWorkgroupConfig{Name: "primary", OutputLocation: "s3://athena-results/"}, nil
 		},
 		startAthena: func(_ context.Context, _, _ string, in awsinternal.StartAthenaQueryInput) (*awsinternal.AthenaQueryExecution, error) {
 			if len(in.ExecutionParameters) == 0 {
 				t.Error("execution parameters are empty")
+			}
+			if in.OutputLocation != "s3://athena-results/" {
+				t.Errorf("output location = %q, want the workgroup output location", in.OutputLocation)
 			}
 			return &awsinternal.AthenaQueryExecution{ID: "exec-1", State: "SUCCEEDED"}, nil
 		},

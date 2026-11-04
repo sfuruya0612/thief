@@ -43,6 +43,18 @@ func TestWriteAccessLogError(t *testing.T) {
 			wantCode:   "ACCESS_LOGS_ATTRIBUTION_REQUIRED",
 		},
 		{
+			name:       "output location required",
+			err:        accesslog.ErrOutputLocationRequired,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "ACCESS_LOGS_OUTPUT_LOCATION_REQUIRED",
+		},
+		{
+			name:       "athena no output location",
+			err:        errors.New("start athena query execution: InvalidRequestException: No output location provided"),
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "ACCESS_LOGS_OUTPUT_LOCATION_REQUIRED",
+		},
+		{
 			name:       "range too long",
 			err:        accesslog.ErrRangeTooLong,
 			wantStatus: http.StatusBadRequest,

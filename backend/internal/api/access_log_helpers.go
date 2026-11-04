@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sfuruya0612/thief/backend/internal/accesslog"
@@ -48,6 +49,10 @@ func accessLogTableError(err error) error {
 	return fmt.Errorf("%w: %v", accesslog.ErrInvalidTable, err)
 }
 
+func isAthenaNoOutputLocation(err error) bool {
+	return strings.Contains(err.Error(), "No output location provided")
+}
+
 func writeAccessLogError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, accesslog.ErrInvalidSource):
@@ -62,6 +67,12 @@ func writeAccessLogError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "ACCESS_LOGS_INVALID_RANGE", err.Error())
 	case errors.Is(err, accesslog.ErrRangeTooLong):
 		writeError(w, http.StatusBadRequest, "ACCESS_LOGS_RANGE_TOO_LONG", err.Error())
+	case errors.Is(err, accesslog.ErrOutputLocationRequired):
+		writeError(w, http.StatusBadRequest, "ACCESS_LOGS_OUTPUT_LOCATION_REQUIRED",
+			"set the Athena query result location in Setup or enable Athena managed query results")
+	case isAthenaNoOutputLocation(err):
+		writeError(w, http.StatusBadRequest, "ACCESS_LOGS_OUTPUT_LOCATION_REQUIRED",
+			"set the Athena query result location in Setup or enable Athena managed query results")
 	case awsinternal.IsAccessDenied(err):
 		writeError(w, http.StatusForbidden, "ACCESS_DENIED", err.Error())
 	case awsinternal.IsSSOTokenExpired(err):

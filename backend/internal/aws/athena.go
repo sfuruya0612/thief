@@ -114,6 +114,7 @@ type AthenaWorkgroupConfig struct {
 	Name                       string `json:"name"`
 	BytesScannedCutoffPerQuery int64  `json:"bytes_scanned_cutoff_per_query"`
 	OutputLocation             string `json:"output_location,omitempty"`
+	ManagedQueryResults        bool   `json:"managed_query_results"`
 	EnforceWorkGroupConfig     bool   `json:"enforce_workgroup_config"`
 }
 
@@ -228,6 +229,9 @@ func GetAthenaWorkgroupConfig(ctx context.Context, profile, region, name string)
 		config.EnforceWorkGroupConfig = ptrBool(out.WorkGroup.Configuration.EnforceWorkGroupConfiguration)
 		if out.WorkGroup.Configuration.ResultConfiguration != nil {
 			config.OutputLocation = ptrStr(out.WorkGroup.Configuration.ResultConfiguration.OutputLocation)
+		}
+		if managed := out.WorkGroup.Configuration.ManagedQueryResultsConfiguration; managed != nil {
+			config.ManagedQueryResults = managed.Enabled
 		}
 	}
 	return config, nil

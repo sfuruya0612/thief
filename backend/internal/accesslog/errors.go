@@ -19,4 +19,6 @@ var (
 	ErrUnsupportedProfile = errors.New("unsupported athena schema profile")
 	// ErrInvalidFilter はフィルタの指定が不正であることを表す。
 	ErrInvalidFilter = errors.New("invalid access log filter")
+	// ErrOutputLocationRequired は Athena のクエリ結果の出力先が無いことを表す。
+	ErrOutputLocationRequired = errors.New("athena query results output location is required")
 )

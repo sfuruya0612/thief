@@ -278,18 +278,38 @@ func (s *Server) handleAccessLogQueryStart(w http.ResponseWriter, r *http.Reques
 		Sources:   jobSources,
 		Warnings:  discovered.Warnings,
 	}
-	if req.Workgroup != "" && len(athenaGroups) > 0 {
-		for _, group := range athenaGroups {
-			workgroup, err := s.accessLogs.workgroup(r.Context(), profile, group.region, req.Workgroup)
-			if err != nil {
-				job.Warnings = append(job.Warnings, fmt.Sprintf("read Athena workgroup %s: %v", req.Workgroup, err))
-				continue
-			}
-			if workgroup.BytesScannedCutoffPerQuery == 0 {
-				job.Warnings = append(job.Warnings, fmt.Sprintf("Athena workgroup %s has no bytes-scanned cutoff", req.Workgroup))
-			}
+	outputLocation := strings.TrimSpace(req.OutputLocation)
+	managedResults := false
+	checkedWorkgroups := make(map[string]bool)
+	for _, group := range athenaGroups {
+		if checkedWorkgroups[group.region] {
+			continue
+		}
+		checkedWorkgroups[group.region] = true
+		workgroupName := req.Workgroup
+		if workgroupName == "" {
+			workgroupName = "primary"
+		}
+		workgroup, err := s.accessLogs.workgroup(r.Context(), profile, group.region, workgroupName)
+		if err != nil {
+			job.Warnings = append(job.Warnings, fmt.Sprintf("read Athena workgroup %s: %v", workgroupName, err))
+			continue
+		}
+		if outputLocation == "" && workgroup.OutputLocation != "" {
+			outputLocation = workgroup.OutputLocation
+		}
+		if workgroup.ManagedQueryResults {
+			managedResults = true
+		}
+		if workgroup.BytesScannedCutoffPerQuery == 0 {
+			job.Warnings = append(job.Warnings, fmt.Sprintf("Athena workgroup %s has no bytes-scanned cutoff", workgroupName))
 		}
 	}
+	if len(athenaGroups) > 0 && outputLocation == "" && !managedResults {
+		writeAccessLogError(w, accesslog.ErrOutputLocationRequired)
+		return
+	}
+	req.OutputLocation = outputLocation
 	for _, expired := range s.accessLogJobs.cleanup() {
 		s.stopAccessLogJob(context.Background(), expired)
 	}

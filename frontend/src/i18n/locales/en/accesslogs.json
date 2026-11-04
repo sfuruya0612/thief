@@ -8,7 +8,13 @@
     "7d": "7 days"
   },
   "confirmLongRange": "Allow a 7-day scan",
-  "run": "Run",
+  "run": {
+    "noSources": "Select at least one source.",
+    "tableRequired": "Select an Athena table for {{name}} in Setup.",
+    "confirmLongRange": "Check the 7-day scan confirmation.",
+    "insightsRange": "CloudWatch Logs sources are limited to 24 hours.",
+    "outputLocationRequired": "The Athena query result location is missing. Set it in Setup or enable Athena managed query results for the workgroup."
+  },
   "starting": "Starting",
   "cancel": "Cancel",
   "cancelling": "Cancelling",
@@ -53,16 +59,10 @@
     "sourceRecords": "{{count}} records",
     "sourceScanned": "{{bytes}} scanned"
   },
-  "run": {
-    "noSources": "Select at least one source.",
-    "tableRequired": "Select an Athena table for {{name}} in Setup.",
-    "confirmLongRange": "Check the 7-day scan confirmation.",
-    "insightsRange": "CloudWatch Logs sources are limited to 24 hours."
-  },
   "setup": {
     "workgroup": "Athena workgroup",
     "outputLocation": "Query result location",
-    "globalHint": "The workgroup and output location are used for every selected Athena source.",
+    "globalHint": "The workgroup and output location are used for every selected Athena source. If the workgroup has no result location, set one here.",
     "logsInsights": "This source uses the CloudWatch Logs Insights log group {{logGroup}}. No table is required.",
     "notAvailable": "This source cannot be aggregated in this version.",
     "loggingDisabled": "Access logging is disabled for this resource. Enable it in the AWS console.",
