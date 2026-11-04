@@ -132,3 +132,41 @@ func TestBuildDDLInvalidTable(t *testing.T) {
 		t.Fatalf("err = %v, want ErrInvalidTable", err)
 	}
 }
+
+func TestBuildDDLCloudFrontV2Unpartitioned(t *testing.T) {
+	got, err := BuildDDL(DDLInput{
+		Source: Source{
+			SchemaProfile: SchemaCloudFrontV2JSON,
+			ResourceID:    "E25AX9Y9W0V1XF",
+			AccountID:     "471112915927",
+			Destination: Destination{
+				Type:         DestinationS3,
+				Bucket:       "log.example.jp",
+				Prefix:       "",
+				RecordFields: []string{"date", "time", "c-ip", "cs-uri-stem", "sc-status", "cs(User-Agent)"},
+				SuffixPath:   "AWSLogs/{account-id}/CloudFront/",
+			},
+		},
+		Database: "logs",
+		Table:    "cloudfront_v2_unpartitioned",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`LOCATION 's3://log.example.jp/AWSLogs/471112915927/CloudFront/'`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("DDL does not contain %q:\n%s", want, got)
+		}
+	}
+	for _, unexpected := range []string{
+		"PARTITIONED BY",
+		"storage.location.template",
+		"projection.enabled",
+	} {
+		if strings.Contains(got, unexpected) {
+			t.Errorf("DDL unexpectedly contains %q:\n%s", unexpected, got)
+		}
+	}
+}

@@ -151,62 +151,131 @@ func buildCloudFrontV2DDL(in DDLInput) (string, error) {
 	account := placeholder(in.Source.AccountID, "{account_id}")
 	suffix := in.Source.Destination.SuffixPath
 	if suffix == "" {
-		suffix = "AWSLogs/" + account + "/CloudFront/{DistributionId}/{yyyy}/{MM}/{dd}/{HH}/"
+		// CloudFront が S3 に自動で付ける既定のパス。日付のパーティションは無い。
+		suffix = "AWSLogs/{account-id}/CloudFront/"
 	}
-	location := s3Location(in.Source.Destination, "")
-	template := suffix
-	replacements := []struct{ from, to string }{
-		{"{DistributionId}", "${distributionid}"},
-		{"{distributionid}", "${distributionid}"},
-		{"{yyyy}", "${year}"},
-		{"{MM}", "${month}"},
-		{"{dd}", "${day}"},
-		{"{HH}", "${hour}"},
-		{"{accountid}", "${accountid}"},
-		{"{account-id}", "${accountid}"},
+	pathSuffix := strings.ReplaceAll(suffix, "{account-id}", account)
+	pathSuffix = strings.ReplaceAll(pathSuffix, "{accountid}", account)
+
+	hasDistribution := strings.Contains(pathSuffix, "{DistributionId}") || strings.Contains(pathSuffix, "{distributionid}")
+	hasYear := strings.Contains(pathSuffix, "{yyyy}")
+	hasMonth := strings.Contains(pathSuffix, "{MM}")
+	hasDay := strings.Contains(pathSuffix, "{dd}")
+	hasHour := strings.Contains(pathSuffix, "{HH}")
+	hasPartitions := hasDistribution || hasYear || hasMonth || hasDay || hasHour
+
+	baseLocation := s3Location(in.Source.Destination, "")
+	locationSuffix := pathSuffix
+	template := ""
+	if hasPartitions {
+		idx := firstPlaceholderIndex(pathSuffix, []string{"{DistributionId}", "{distributionid}", "{yyyy}", "{MM}", "{dd}", "{HH}"})
+		locationSuffix = pathSuffix[:idx]
+		template = pathSuffix
+		replacements := []struct{ from, to string }{
+			{"{DistributionId}", "${distributionid}"},
+			{"{distributionid}", "${distributionid}"},
+			{"{yyyy}", "${year}"},
+			{"{MM}", "${month}"},
+			{"{dd}", "${day}"},
+			{"{HH}", "${hour}"},
+		}
+		for _, r := range replacements {
+			template = strings.ReplaceAll(template, r.from, r.to)
+		}
 	}
-	for _, r := range replacements {
-		template = strings.ReplaceAll(template, r.from, r.to)
+	location := ensureTrailingSlash(joinS3(baseLocation, locationSuffix))
+	templateLocation := ensureTrailingSlash(joinS3(baseLocation, template))
+
+	partitionColumns := make([]string, 0, 5)
+	properties := make([]string, 0, 16)
+	if hasPartitions {
+		properties = append(properties, `"projection.enabled" = "true"`)
 	}
-	hasDistribution := strings.Contains(template, "${distributionid}")
-	partitionColumns := []string{"year int", "month int", "day int", "hour int"}
 	if hasDistribution {
-		partitionColumns = append([]string{"distributionid string"}, partitionColumns...)
-	}
-	properties := []string{
-		`"projection.enabled" = "true"`,
-		`"projection.year.type" = "integer"`,
-		`"projection.year.range" = "2026,2030"`,
-		`"projection.month.type" = "integer"`,
-		`"projection.month.range" = "1,12"`,
-		`"projection.month.digits" = "2"`,
-		`"projection.day.type" = "integer"`,
-		`"projection.day.range" = "1,31"`,
-		`"projection.day.digits" = "2"`,
-		`"projection.hour.type" = "integer"`,
-		`"projection.hour.range" = "0,23"`,
-		`"projection.hour.digits" = "2"`,
-	}
-	if hasDistribution {
+		partitionColumns = append(partitionColumns, "distributionid string")
 		distributionID := placeholder(in.Source.ResourceID, "{distribution_id}")
 		properties = append(properties,
 			`"projection.distributionid.type" = "enum"`,
 			fmt.Sprintf(`"projection.distributionid.values" = %s`, sqlString(distributionID)),
 		)
 	}
-	template = strings.TrimSuffix(template, "/") + "/"
-	properties = append(properties, fmt.Sprintf(`"storage.location.template" = %s`, sqlString(location+template)))
-	return fmt.Sprintf(`CREATE EXTERNAL TABLE IF NOT EXISTS %s.%s (
-%s
-)
-PARTITIONED BY (%s)
-ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
-STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
-OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-LOCATION '%s'
-TBLPROPERTIES (
-  %s
-);`, quoteIdent(in.Database), quoteIdent(in.Table), strings.Join(columns, ",\n"), strings.Join(partitionColumns, ", "), escapeSQL(location), strings.Join(properties, ",\n  ")), nil
+	if hasYear {
+		partitionColumns = append(partitionColumns, "year int")
+		properties = append(properties,
+			`"projection.year.type" = "integer"`,
+			`"projection.year.range" = "2026,2030"`,
+		)
+	}
+	if hasMonth {
+		partitionColumns = append(partitionColumns, "month int")
+		properties = append(properties,
+			`"projection.month.type" = "integer"`,
+			`"projection.month.range" = "1,12"`,
+			`"projection.month.digits" = "2"`,
+		)
+	}
+	if hasDay {
+		partitionColumns = append(partitionColumns, "day int")
+		properties = append(properties,
+			`"projection.day.type" = "integer"`,
+			`"projection.day.range" = "1,31"`,
+			`"projection.day.digits" = "2"`,
+		)
+	}
+	if hasHour {
+		partitionColumns = append(partitionColumns, "hour int")
+		properties = append(properties,
+			`"projection.hour.type" = "integer"`,
+			`"projection.hour.range" = "0,23"`,
+			`"projection.hour.digits" = "2"`,
+		)
+	}
+	if hasPartitions {
+		properties = append(properties, fmt.Sprintf(`"storage.location.template" = %s`, sqlString(templateLocation)))
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "CREATE EXTERNAL TABLE IF NOT EXISTS %s.%s (\n%s\n)\n", quoteIdent(in.Database), quoteIdent(in.Table), strings.Join(columns, ",\n"))
+	if len(partitionColumns) > 0 {
+		fmt.Fprintf(&b, "PARTITIONED BY (%s)\n", strings.Join(partitionColumns, ", "))
+	}
+	b.WriteString("ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'\n")
+	b.WriteString("STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'\n")
+	b.WriteString("OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'\n")
+	fmt.Fprintf(&b, "LOCATION '%s'\n", escapeSQL(location))
+	if len(properties) > 0 {
+		fmt.Fprintf(&b, "TBLPROPERTIES (\n  %s\n);", strings.Join(properties, ",\n  "))
+	} else {
+		b.WriteString(";")
+	}
+	return b.String(), nil
+}
+
+func firstPlaceholderIndex(s string, placeholders []string) int {
+	first := -1
+	for _, placeholder := range placeholders {
+		if index := strings.Index(s, placeholder); index >= 0 && (first < 0 || index < first) {
+			first = index
+		}
+	}
+	if first < 0 {
+		return len(s)
+	}
+	return first
+}
+
+func joinS3(base, path string) string {
+	if path == "" {
+		return strings.TrimSuffix(base, "/") + "/"
+	}
+	return strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(path, "/")
+}
+
+func ensureTrailingSlash(s string) string {
+	if strings.HasSuffix(s, "/") {
+		return s
+	}
+	return s + "/"
 }
 
 func buildWAFDDL(in DDLInput) (string, error) {
