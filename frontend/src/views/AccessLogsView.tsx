@@ -43,7 +43,13 @@ const PRESETS: { key: Preset; hours: number }[] = [
 ];
 
 const TABLE_STORAGE_PREFIX = 'cloudlens:accesslogs:v1:';
+const SETTINGS_STORAGE_PREFIX = 'cloudlens:accesslogs:settings:v1:';
 const JOB_STORAGE_PREFIX = 'cloudlens:accesslogs:job:';
+
+interface AccessLogSettings {
+  workgroup: string;
+  outputLocation: string;
+}
 
 function loadMappings(key: string): Record<string, AccessLogTableMapping> {
   try {
@@ -59,6 +65,29 @@ function loadMappings(key: string): Record<string, AccessLogTableMapping> {
 function saveMappings(key: string, mappings: Record<string, AccessLogTableMapping>) {
   try {
     localStorage.setItem(key, JSON.stringify(mappings));
+  } catch {
+    // localStorage が使えない環境では保存しない。
+  }
+}
+
+function loadSettings(key: string): AccessLogSettings {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { workgroup: 'primary', outputLocation: '' };
+    const parsed = JSON.parse(raw) as Partial<AccessLogSettings>;
+    return {
+      workgroup:
+        typeof parsed.workgroup === 'string' && parsed.workgroup ? parsed.workgroup : 'primary',
+      outputLocation: typeof parsed.outputLocation === 'string' ? parsed.outputLocation : '',
+    };
+  } catch {
+    return { workgroup: 'primary', outputLocation: '' };
+  }
+}
+
+function saveSettings(key: string, settings: AccessLogSettings) {
+  try {
+    localStorage.setItem(key, JSON.stringify(settings));
   } catch {
     // localStorage が使えない環境では保存しない。
   }
@@ -153,7 +182,9 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
   }, [sourcesQuery.data]);
 
   const tableStorageKey = `${TABLE_STORAGE_PREFIX}${profile}:${region}`;
+  const settingsStorageKey = `${SETTINGS_STORAGE_PREFIX}${profile}:${region}`;
   const jobStorageKey = `${JOB_STORAGE_PREFIX}${profile}:${region}`;
+  const initialSettings = useMemo(() => loadSettings(settingsStorageKey), [settingsStorageKey]);
   const [mappings, setMappings] = useState<Record<string, AccessLogTableMapping>>(() =>
     loadMappings(tableStorageKey),
   );
@@ -170,9 +201,13 @@ export function AccessLogsView({ profile, region }: AccessLogsViewProps) {
   const [status5xx, setStatus5xx] = useState(false);
   const [ipFilter, setIPFilter] = useState('');
   const [uriFilter, setURIFilter] = useState('');
-  const [workgroup, setWorkgroup] = useState('primary');
-  const [outputLocation, setOutputLocation] = useState('');
+  const [workgroup, setWorkgroup] = useState(initialSettings.workgroup);
+  const [outputLocation, setOutputLocation] = useState(initialSettings.outputLocation);
   const [actionError, setActionError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    saveSettings(settingsStorageKey, { workgroup, outputLocation });
+  }, [settingsStorageKey, workgroup, outputLocation]);
 
   const [jobId, setJobID] = useState<string | null>(() => loadJobID(jobStorageKey));
   useEffect(() => {
