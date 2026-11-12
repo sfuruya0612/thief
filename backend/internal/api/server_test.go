@@ -72,6 +72,8 @@ func newTestServer(t *testing.T) *Server {
 		terminateSSMSession: func(context.Context, string, string, string) error {
 			return errors.New("terminate ssm session is not configured in newTestServer")
 		},
+		accessLogs:    unconfiguredAccessLogDeps(),
+		accessLogJobs: newAccessLogJobStore(),
 	}
 }
 

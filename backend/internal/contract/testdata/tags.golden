@@ -476,3 +476,8 @@ RuleJSON "rule_json"
 Value "value"
 == ClientConfigResponse
 ObjectQueryMaxBytes "object_query_max_bytes"
+== AccessLogQueryStartResponse
+JobID "job_id"
+== AccessLogSourceError
+Code "code"
+Message "message"

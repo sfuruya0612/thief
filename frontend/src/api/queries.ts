@@ -26,6 +26,16 @@ import {
   bqJobStatusFromRaw,
   snippetFromRaw,
 } from '../lib/normalizeQuery';
+import {
+  accessLogQueryFromRaw,
+  accessLogResultsFromRaw,
+  accessLogSourcesFromRaw,
+  accessLogTableValidationFromRaw,
+} from '../lib/normalizeAccessLogs';
+import type {
+  AccessLogQueryStartRequest,
+  AccessLogTableValidateRequest,
+} from '../types/accesslogs';
 import type { QueryEditorService } from '../lib/queryEditorStorage';
 import type { MetricsWindow } from '../lib/timeseries';
 import {
@@ -92,6 +102,10 @@ import {
   getCFNStackDetail,
   getCFNStackEvents,
   getCFNStackResources,
+  cancelAccessLogQuery,
+  getAccessLogQuery,
+  getAccessLogQueryResults,
+  getAccessLogSources,
   getClientConfig,
   getCost,
   getCostForecast,
@@ -141,6 +155,8 @@ import {
   getWAFRules,
   postAthenaQueryStart,
   postBQDryRun,
+  startAccessLogQuery,
+  validateAccessLogTable,
   postBQQueryStart,
   postSnippet,
   postCacheInvalidate,
@@ -1297,5 +1313,96 @@ export function useCWLogEvents(
     getNextPageParam: (last) => last.next_page_token || undefined,
     enabled: enabled && !!profile && query.groups.length > 0 && runToken > 0,
     staleTime: Infinity,
+  });
+}
+
+// ============================================================
+// Access Logs (ALB / CloudFront / WAF のアクセスログ集計)
+// ============================================================
+
+// ソースの検出結果。ログの有効化や出力先の変更は頻繁ではないため 1 時間保持する。
+export function useAccessLogSources(profile: string, region: string) {
+  return useQuery({
+    queryKey: ['aws', 'access-logs-sources', profile, region],
+    queryFn: async () => accessLogSourcesFromRaw(await getAccessLogSources(profile, region)),
+    staleTime: 60 * 60 * 1000,
+    enabled: !!profile,
+  });
+}
+
+// useRecheckAccessLogSources はバックエンドの検出キャッシュを破棄して再検出する。
+// 通常の useAccessLogSources の refetch は 1 時間のキャッシュを読むため、ログを
+// 有効化した直後に一覧を更新するには refresh=true を付ける必要がある。
+export function useRecheckAccessLogSources(profile: string, region: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      accessLogSourcesFromRaw(await getAccessLogSources(profile, region, true)),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['aws', 'access-logs-sources', profile, region], data);
+    },
+  });
+}
+
+export function useValidateAccessLogTable(profile: string) {
+  return useMutation({
+    mutationFn: async (body: AccessLogTableValidateRequest) => {
+      const raw = await validateAccessLogTable(profile, body);
+      return {
+        validation: accessLogTableValidationFromRaw(raw.validation),
+        setupSql: raw.setup_sql,
+      };
+    },
+  });
+}
+
+export function useStartAccessLogQuery(profile: string) {
+  return useMutation({
+    mutationFn: async (body: AccessLogQueryStartRequest) => {
+      const raw = await startAccessLogQuery(profile, body);
+      return raw.job_id;
+    },
+  });
+}
+
+export function useAccessLogQuery(profile: string, jobId: string | null) {
+  return useQuery({
+    queryKey: ['aws', 'access-logs-query', profile, jobId],
+    queryFn: async () => accessLogQueryFromRaw(await getAccessLogQuery(profile, jobId!)),
+    enabled: !!profile && !!jobId,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      return state === 'queued' || state === 'running' ? 1000 : false;
+    },
+  });
+}
+
+export function useAccessLogResults(
+  profile: string,
+  jobId: string | null,
+  sourceNames: Record<string, string>,
+  enabled: boolean,
+) {
+  const namesKey = useMemo(() => JSON.stringify(sourceNames), [sourceNames]);
+  return useQuery({
+    queryKey: ['aws', 'access-logs-results', profile, jobId, namesKey],
+    queryFn: async () =>
+      accessLogResultsFromRaw(await getAccessLogQueryResults(profile, jobId!), sourceNames),
+    enabled: !!profile && !!jobId && enabled,
+    staleTime: Infinity,
+  });
+}
+
+export function useCancelAccessLogQuery(profile: string, jobId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!jobId) throw new Error('no access log job');
+      return accessLogQueryFromRaw(await cancelAccessLogQuery(profile, jobId));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['aws', 'access-logs-query', profile, jobId] });
+    },
   });
 }

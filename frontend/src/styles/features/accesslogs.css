@@ -1,0 +1,421 @@
+/* Access Logs ビュー。左にソース、右に期間・フィルタ・集計結果を置く。 */
+.main.accesslogs-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.accesslogs-toolbar {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.accesslogs-title-mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--svc-accesslogs);
+}
+
+.accesslogs-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.accesslogs-controls label,
+.accesslogs-filterbar label,
+.accesslogs-setup-global label,
+.accesslogs-setup-fields label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.accesslogs-controls select,
+.accesslogs-filterbar input,
+.accesslogs-setup-global input,
+.accesslogs-setup-fields select {
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+  color: var(--text);
+  font: inherit;
+}
+
+.accesslogs-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.accesslogs-inline-warning {
+  color: var(--warn);
+  font-size: 11px;
+}
+
+.accesslogs-top-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+
+.accesslogs-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.accesslogs-sources {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line-1);
+  background: var(--bg-2);
+}
+
+.accesslogs-source-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.accesslogs-source-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.accesslogs-source-group h3 {
+  margin: 10px 12px 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.accesslogs-source {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+  cursor: pointer;
+}
+
+.accesslogs-source:hover {
+  background: var(--bg-1);
+}
+
+.accesslogs-source.selected {
+  background: color-mix(in srgb, var(--svc-accesslogs) 12%, transparent);
+}
+
+.accesslogs-source.disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.accesslogs-source input[type='checkbox'] {
+  margin-top: 3px;
+}
+
+.accesslogs-source-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.accesslogs-source-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.accesslogs-source-region,
+.accesslogs-source-destination,
+.accesslogs-source-shared,
+.accesslogs-source-issues {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accesslogs-source-issues {
+  color: var(--warn);
+}
+
+.accesslogs-source-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.accesslogs-source-badges .status {
+  font-size: 10px;
+}
+
+.accesslogs-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.accesslogs-filterbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.accesslogs-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.accesslogs-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.accesslogs-summary {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.accesslogs-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.accesslogs-warning {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--warn, #d98b00);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.accesslogs-source-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.accesslogs-source-summary-item {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.accesslogs-table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.accesslogs-empty,
+.accesslogs-running,
+.accesslogs-errors {
+  padding: 24px;
+  overflow: auto;
+}
+
+.accesslogs-empty h3 {
+  margin: 0 0 8px;
+}
+
+.accesslogs-empty ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--text-2);
+}
+
+.accesslogs-empty-hint {
+  margin: 0;
+  padding: 24px;
+  color: var(--text-3);
+}
+
+.accesslogs-error,
+.accesslogs-error-cell {
+  color: var(--err-ink);
+  font-size: 12px;
+}
+
+.accesslogs-setup {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+
+.accesslogs-setup-global {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+
+.accesslogs-setup-global label {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.accesslogs-setup-global p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.accesslogs-setup-card {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+}
+
+.accesslogs-setup-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.accesslogs-setup-type {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.accesslogs-setup-fields {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.accesslogs-setup-fields label {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.accesslogs-validation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.accesslogs-validation.valid {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.accesslogs-validation.invalid {
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+}
+
+.accesslogs-ddl {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+
+.accesslogs-ddl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.accesslogs-ddl pre {
+  max-height: 360px;
+  margin: 8px 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: pre;
+}
+
+.accesslogs-status-table {
+  width: 100%;
+  font-size: 12px;
+}
+
+.accesslogs-status-table th,
+.accesslogs-status-table td {
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.accesslogs-flags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.accesslogs-flags .status {
+  font-size: 10px;
+}
+
+.accesslogs-query-mark {
+  margin-left: 3px;
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .accesslogs-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 32%) minmax(0, 1fr);
+  }
+
+  .accesslogs-sources {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-1);
+  }
+}

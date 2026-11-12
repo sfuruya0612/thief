@@ -73,6 +73,15 @@ import type {
   GcsObjectRaw,
   LogEntryPageRaw,
 } from '../types/gcp';
+import type {
+  AccessLogQueryResponseRaw,
+  AccessLogQueryStartRequest,
+  AccessLogQueryStartResponseRaw,
+  AccessLogResultsResponseRaw,
+  AccessLogSourcesResponseRaw,
+  AccessLogTableValidateRequest,
+  AccessLogTableValidateResponseRaw,
+} from '../types/accesslogs';
 import { GCP_SERVICE_TO_PATH, SERVICE_TO_PATH } from '../lib/serviceMeta';
 import { apiBaseUrl, apiDelete, apiGet, apiGetList, apiPost, apiPostForm } from './client';
 
@@ -1038,4 +1047,66 @@ export function getCWLogEvents(
     page_token: opts.pageToken || undefined,
     limit: opts.limit !== undefined ? String(opts.limit) : undefined,
   });
+}
+
+// ============================================================
+// Access Logs (ALB / CloudFront / WAF のアクセスログ集計)
+// ============================================================
+function accessLogsPath(profile: string, suffix: string): string {
+  return `/api/aws/profiles/${encodeURIComponent(profile)}/access-logs/${suffix}`;
+}
+
+export function getAccessLogSources(
+  profile: string,
+  region: string,
+  refresh = false,
+): Promise<AccessLogSourcesResponseRaw> {
+  return apiGet<AccessLogSourcesResponseRaw>(accessLogsPath(profile, 'sources'), {
+    region,
+    refresh: refresh ? 'true' : undefined,
+  });
+}
+
+export function validateAccessLogTable(
+  profile: string,
+  body: AccessLogTableValidateRequest,
+): Promise<AccessLogTableValidateResponseRaw> {
+  return apiPost<AccessLogTableValidateResponseRaw>(
+    accessLogsPath(profile, 'table/validate'),
+    body,
+  );
+}
+
+export function startAccessLogQuery(
+  profile: string,
+  body: AccessLogQueryStartRequest,
+): Promise<AccessLogQueryStartResponseRaw> {
+  return apiPost<AccessLogQueryStartResponseRaw>(accessLogsPath(profile, 'query'), body);
+}
+
+export function getAccessLogQuery(
+  profile: string,
+  jobId: string,
+): Promise<AccessLogQueryResponseRaw> {
+  return apiGet<AccessLogQueryResponseRaw>(
+    accessLogsPath(profile, `query/${encodeURIComponent(jobId)}`),
+  );
+}
+
+export function getAccessLogQueryResults(
+  profile: string,
+  jobId: string,
+): Promise<AccessLogResultsResponseRaw> {
+  return apiGet<AccessLogResultsResponseRaw>(
+    accessLogsPath(profile, `query/${encodeURIComponent(jobId)}/results`),
+  );
+}
+
+export function cancelAccessLogQuery(
+  profile: string,
+  jobId: string,
+): Promise<AccessLogQueryResponseRaw> {
+  return apiPost<AccessLogQueryResponseRaw>(
+    accessLogsPath(profile, `query/${encodeURIComponent(jobId)}/cancel`),
+  );
 }

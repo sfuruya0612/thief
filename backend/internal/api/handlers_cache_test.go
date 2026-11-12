@@ -16,6 +16,7 @@ var knownCacheKeySegments = []struct {
 	seg   string
 	owner string
 }{
+	{seg: "access-logs-sources", owner: "aws"},
 	{seg: "apigw", owner: "aws"},
 	{seg: "athena-catalogs", owner: "aws"},
 	{seg: "athena-databases", owner: "aws"},
@@ -81,8 +82,8 @@ var knownCacheKeySegments = []struct {
 
 // TestViewOwnsCacheKey は既知のキャッシュキー第 1 セグメント全種の分類を固定する。
 func TestViewOwnsCacheKey(t *testing.T) {
-	// 抽出コマンドの結果 (61 種) とテーブルのケース数が一致することを固定する。
-	const wantSegments = 61
+	// 抽出コマンドの結果 (62 種) とテーブルのケース数が一致することを固定する。
+	const wantSegments = 62
 	if len(knownCacheKeySegments) != wantSegments {
 		t.Fatalf("known segments = %d, want %d (update the table when cacheKey segments change)",
 			len(knownCacheKeySegments), wantSegments)

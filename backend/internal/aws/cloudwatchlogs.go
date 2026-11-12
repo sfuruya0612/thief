@@ -425,3 +425,96 @@ func newCWLogsClient(ctx context.Context, profile, region string) (*cloudwatchlo
 		return cloudwatchlogs.NewFromConfig(cfg)
 	})
 }
+
+// LogsInsightsQueryResult は Logs Insights のクエリの状態と結果を表す。
+type LogsInsightsQueryResult struct {
+	Status         string              `json:"status"`
+	Results        []map[string]string `json:"results,omitempty"`
+	BytesScanned   int64               `json:"bytes_scanned"`
+	RecordsScanned int64               `json:"records_scanned"`
+	RecordsMatched int64               `json:"records_matched"`
+	NextToken      string              `json:"next_token,omitempty"`
+}
+
+// StartLogsInsightsQuery は CloudWatch Logs Insights のクエリを開始し、クエリ ID を返す。
+func StartLogsInsightsQuery(ctx context.Context, profile, region string, logGroups []string, query string, start, end time.Time, limit int) (string, error) {
+	client, err := newCWLogsClient(ctx, profile, region)
+	if err != nil {
+		return "", err
+	}
+	return startLogsInsightsQuery(ctx, client, logGroups, query, start, end, limit)
+}
+
+func startLogsInsightsQuery(ctx context.Context, client *cloudwatchlogs.Client, logGroups []string, query string, start, end time.Time, limit int) (string, error) {
+	if len(logGroups) == 0 {
+		return "", fmt.Errorf("start logs insights query: no log group")
+	}
+	in := &cloudwatchlogs.StartQueryInput{
+		LogGroupIdentifiers: logGroups,
+		QueryString:         aws.String(query),
+		StartTime:           aws.Int64(start.Unix()),
+		EndTime:             aws.Int64(end.Unix()),
+	}
+	if limit > 0 {
+		in.Limit = aws.Int32(int32(limit))
+	}
+	out, err := client.StartQuery(ctx, in)
+	if err != nil {
+		return "", fmt.Errorf("start logs insights query: %w", err)
+	}
+	return ptrStr(out.QueryId), nil
+}
+
+// GetLogsInsightsQueryResults は Logs Insights のクエリの状態と結果を返す。
+// 結果は stats の集計行なので、必要なら複数ページをまとめる。
+func GetLogsInsightsQueryResults(ctx context.Context, profile, region, queryID string) (*LogsInsightsQueryResult, error) {
+	client, err := newCWLogsClient(ctx, profile, region)
+	if err != nil {
+		return nil, err
+	}
+	return getLogsInsightsQueryResults(ctx, client, queryID)
+}
+
+func getLogsInsightsQueryResults(ctx context.Context, client *cloudwatchlogs.Client, queryID string) (*LogsInsightsQueryResult, error) {
+	var token *string
+	result := &LogsInsightsQueryResult{}
+	for {
+		out, err := client.GetQueryResults(ctx, &cloudwatchlogs.GetQueryResultsInput{
+			QueryId:   aws.String(queryID),
+			NextToken: token,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get logs insights query results %s: %w", queryID, err)
+		}
+		result.Status = string(out.Status)
+		if out.Statistics != nil {
+			result.BytesScanned = int64(out.Statistics.BytesScanned)
+			result.RecordsScanned = int64(out.Statistics.RecordsScanned)
+			result.RecordsMatched = int64(out.Statistics.RecordsMatched)
+		}
+		for _, fields := range out.Results {
+			row := make(map[string]string, len(fields))
+			for _, field := range fields {
+				row[ptrStr(field.Field)] = ptrStr(field.Value)
+			}
+			result.Results = append(result.Results, row)
+		}
+		if out.NextToken == nil || *out.NextToken == "" {
+			break
+		}
+		token = out.NextToken
+	}
+	return result, nil
+}
+
+// StopLogsInsightsQuery は Logs Insights のクエリを取り消す。
+func StopLogsInsightsQuery(ctx context.Context, profile, region, queryID string) error {
+	client, err := newCWLogsClient(ctx, profile, region)
+	if err != nil {
+		return err
+	}
+	if _, err := client.StopQuery(ctx, &cloudwatchlogs.StopQueryInput{QueryId: aws.String(queryID)}); err != nil {
+		return fmt.Errorf("stop logs insights query %s: %w", queryID, err)
+	}
+	return nil
+}

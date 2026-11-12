@@ -28,7 +28,7 @@ describe('AWS_SERVICE_GROUPS / SERVICES', () => {
       { key: 'networking', services: ['elb', 'cloudfront', 'apigw', 'natgw'] },
       { key: 'analytics', services: ['athena', 'kinesis'] },
       { key: 'integration', services: ['sqs'] },
-      { key: 'security', services: ['iam', 'waf', 'secrets'] },
+      { key: 'security', services: ['iam', 'waf', 'accesslogs', 'secrets'] },
       { key: 'management', services: ['ssm', 'cfn', 'cloudwatchlogs'] },
       { key: 'cost', services: ['costexplorer', 'pricing'] },
     ]);

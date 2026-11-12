@@ -206,6 +206,18 @@ export const Icons: Record<string, IconComponent> = {
       }
     />
   ),
+  accesslogs: (p = {}) => (
+    <Icon
+      {...p}
+      d={
+        <>
+          <path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6z" />
+          <circle cx="12" cy="11" r="2.5" />
+          <path d="M12 13.5V17M9.8 12.8L6.5 15M14.2 12.8L17.5 15" />
+        </>
+      }
+    />
+  ),
   search: (p = {}) => (
     <Icon
       {...p}

@@ -79,6 +79,13 @@ export const SERVICES: ServiceMeta[] = [
   { key: 'iam', name: 'IAM', sub: 'Users&Roles', color: 'var(--svc-iam)', group: 'security' },
   { key: 'waf', name: 'WAF', sub: 'Web ACLs', color: 'var(--svc-waf)', group: 'security' },
   {
+    key: 'accesslogs',
+    name: 'Access Logs',
+    sub: 'Threat check',
+    color: 'var(--svc-accesslogs)',
+    group: 'security',
+  },
+  {
     key: 'secrets',
     name: 'Secrets Manager',
     sub: 'Secrets',

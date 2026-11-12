@@ -87,7 +87,10 @@ import type {
 } from './query';
 
 import type { ClientConfigRaw } from './common';
+import type { AccessLogQueryStartResponseRaw, AccessLogSourceErrorRaw } from './accesslogs';
 
+import accessLogQueryStart from './__contract__/AccessLogQueryStartResponse.json';
+import accessLogSourceError from './__contract__/AccessLogSourceError.json';
 import apigw from './__contract__/APIGatewayResource.json';
 import athenaCatalog from './__contract__/AthenaCatalog.json';
 import athenaDatabase from './__contract__/AthenaDatabase.json';
@@ -212,7 +215,7 @@ type Expect<T extends true> = T;
 type PriceRateRawWidened = Omit<PriceRateRaw, 'model'> & { model: string };
 type PriceTableRawWidened = Omit<PriceTableRaw, 'rates'> & { rates: PriceRateRawWidened[] };
 
-// 契約対象 65 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
+// 契約対象 67 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
 export type ContractChecks = [
   Expect<Contract<typeof apigw, APIGWRaw>>,
   Expect<Contract<typeof athenaCatalog, AthenaCatalogRaw>>,
@@ -279,4 +282,6 @@ export type ContractChecks = [
   Expect<Contract<typeof wafRule, WAFRuleRaw>>,
   Expect<Contract<typeof valueResponse, ValueRaw>>,
   Expect<Contract<typeof clientConfig, ClientConfigRaw>>,
+  Expect<Contract<typeof accessLogQueryStart, AccessLogQueryStartResponseRaw>>,
+  Expect<Contract<typeof accessLogSourceError, AccessLogSourceErrorRaw>>,
 ];

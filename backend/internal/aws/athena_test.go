@@ -20,6 +20,8 @@ type fakeAthena struct {
 	listDatabases          func(*athena.ListDatabasesInput) (*athena.ListDatabasesOutput, error)
 	listWorkGroups         func(*athena.ListWorkGroupsInput) (*athena.ListWorkGroupsOutput, error)
 	listTableMetadata      func(*athena.ListTableMetadataInput) (*athena.ListTableMetadataOutput, error)
+	getTableMetadata       func(*athena.GetTableMetadataInput) (*athena.GetTableMetadataOutput, error)
+	getWorkGroup           func(*athena.GetWorkGroupInput) (*athena.GetWorkGroupOutput, error)
 	startQueryExecution    func(*athena.StartQueryExecutionInput) (*athena.StartQueryExecutionOutput, error)
 	getQueryExecution      func(*athena.GetQueryExecutionInput) (*athena.GetQueryExecutionOutput, error)
 	stopQueryExecution     func(*athena.StopQueryExecutionInput) (*athena.StopQueryExecutionOutput, error)
@@ -39,6 +41,18 @@ func (f *fakeAthena) ListWorkGroups(_ context.Context, p *athena.ListWorkGroupsI
 }
 func (f *fakeAthena) ListTableMetadata(_ context.Context, p *athena.ListTableMetadataInput, _ ...func(*athena.Options)) (*athena.ListTableMetadataOutput, error) {
 	return f.listTableMetadata(p)
+}
+func (f *fakeAthena) GetTableMetadata(_ context.Context, p *athena.GetTableMetadataInput, _ ...func(*athena.Options)) (*athena.GetTableMetadataOutput, error) {
+	if f.getTableMetadata == nil {
+		return nil, errors.New("get table metadata is not configured")
+	}
+	return f.getTableMetadata(p)
+}
+func (f *fakeAthena) GetWorkGroup(_ context.Context, p *athena.GetWorkGroupInput, _ ...func(*athena.Options)) (*athena.GetWorkGroupOutput, error) {
+	if f.getWorkGroup == nil {
+		return nil, errors.New("get workgroup is not configured")
+	}
+	return f.getWorkGroup(p)
 }
 func (f *fakeAthena) StartQueryExecution(_ context.Context, p *athena.StartQueryExecutionInput, _ ...func(*athena.Options)) (*athena.StartQueryExecutionOutput, error) {
 	return f.startQueryExecution(p)

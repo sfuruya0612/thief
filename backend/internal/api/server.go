@@ -75,6 +75,10 @@ type Server struct {
 	ddAuth          datadogAuthDeps
 	// ddRefresh は同一プロセス内で重なったトークンのリフレッシュを 1 回に集約する。
 	ddRefresh singleflight.Group
+
+	// Access Logs のソース検出、クエリ、ジョブの管理。
+	accessLogs    *accessLogDeps
+	accessLogJobs *accessLogJobStore
 }
 
 // NewServer initialises the API server. The BigQuery client is optional:
@@ -96,6 +100,8 @@ func NewServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		executeECSCommand:   awsinternal.ExecuteECSCommand,
 		openDataChannel:     session.OpenDataChannel,
 		terminateSSMSession: awsinternal.TerminateSSMSession,
+		accessLogs:          defaultAccessLogDeps(),
+		accessLogJobs:       newAccessLogJobStore(),
 	}
 
 	// BigQuery: try to initialise but don't fail server startup.
