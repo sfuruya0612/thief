@@ -2,10 +2,10 @@
 // アンマウントされないこと (= 接続が維持されること) を DOM 上の .terminal-container の
 // 残存で確認する。
 //
-// 表示状態は getComputedStyle で判定しない。jsdom 29.1.1 の getComputedStyle は author の
-// display: flex を持つ要素に hidden を付けた場合でも display を none と返し、ブラウザと
-// 結果が異なるため。ここでは hidden 属性の有無だけを確認し、styles/features/terminal.css の規則そのものと
-// 実際の表示は手動確認で見る (issue 0174 の設計判断 2)。
+// 表示状態は getComputedStyle で判定しない。vitest は CSS の import を空文字列に差し替える
+// (vite.config.ts の `css.include` は `?raw` だけを通す) ため、jsdom には terminal.css の規則が
+// 無く、display の値はブラウザの描画と一致しない。ここでは hidden 属性の有無だけを確認し、
+// styles/features/terminal.css の規則そのものと実際の表示は手動確認で見る (issue 0174 の設計判断 2)。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render } from '@testing-library/react';
 import { TerminalDock } from './TerminalDock';

@@ -1,4 +1,5 @@
 // Google Cloud 公式アイコン (public/assets/gcp-icons/*.svg) を表示するアイコンコンポーネント
+import type { JSX } from 'react';
 import { AssetIcon } from './AssetIcon';
 
 export interface GcpIconProps {

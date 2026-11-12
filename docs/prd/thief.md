@@ -870,13 +870,13 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 ### 技術の制約
 
-- backend は Go 1.26 系とする。
+- backend は Go 1.27 系とする。
   `mise.toml` の Go と `backend/go.mod` の `toolchain` 行は同じバージョンに揃える (issue 0144)。
 - `AGENTS.md` は backend のバイナリを `CGO_ENABLED=0` でビルドすることを基本とする。
   CGO を要するライブラリはこれに反する (issue 0196 では、この理由で Go の DuckDB を採らなかった)。
 - 依存の追加は `AGENTS.md` の「依存関係の方針」の優先順に従う。
   標準ライブラリを第一とする。
-- frontend は Vite、React 18、TypeScript (strict)、TanStack Query で作る。
+- frontend は Vite、React 19、TypeScript (strict)、TanStack Query で作る。
   状態管理ライブラリとルーターは導入しない。
 - TUI は `github.com/charmbracelet/bubbletea`、`bubbles`、`lipgloss` で作り、他の TUI フレームワークは導入しない (ADR 0033)。
   bubbletea は CLI の対話の選択 (`backend/internal/util/selecter.go` `Select`) で既に直接依存であり、`bubbles` と `lipgloss` を直接依存に加える。

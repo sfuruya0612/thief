@@ -28,7 +28,7 @@ export interface LogListProps<T> {
   onCopy: () => void;
   footer?: ReactNode;
   emptyMessage: string;
-  bodyRef?: React.RefObject<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   onScroll?: () => void;
 }
 

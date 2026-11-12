@@ -1,5 +1,5 @@
 // icons.jsx 汎用アイコンを TSX 化
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, JSX, ReactNode } from 'react';
 
 export interface IconProps {
   size?: number;

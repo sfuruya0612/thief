@@ -65,8 +65,10 @@ describe('DrawerCFNEvents', () => {
     const rollbackCell = findCell('ROLLBACK_IN_PROGRESS');
     const completeCell = findCell('CREATE_COMPLETE');
 
-    expect(failedCell?.querySelector('span')).toHaveStyle({ color: 'var(--err)' });
-    expect(rollbackCell?.querySelector('span')).toHaveStyle({ color: 'var(--err)' });
+    // jsdom は color: var(--err) をカスタムプロパティの値に解決できないため、インライン style の
+    // 値を直接見る。色を当てる契約はコンポーネントの出力であり、実際の色は CSS が決める。
+    expect(failedCell?.querySelector('span')?.getAttribute('style')).toContain('var(--err)');
+    expect(rollbackCell?.querySelector('span')?.getAttribute('style')).toContain('var(--err)');
     expect(completeCell?.querySelector('span')?.getAttribute('style') ?? '').not.toContain(
       'var(--err)',
     );
