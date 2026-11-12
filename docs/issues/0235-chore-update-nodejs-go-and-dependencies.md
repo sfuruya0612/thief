@@ -23,6 +23,7 @@ docs/issues/closed/0231 は、go1.27 系への更新を別の判断として本 
 - `mise.toml` の `[tools].go` を `1.27.4` に、`backend/go.mod` の `toolchain` 行を `go1.27.4` に同時に更新する (docs/issues/closed/0145 の運用)。
 - `backend/go.mod` の `go` ディレクティブを `go 1.27.0` に上げ、言語バージョンを toolchain と揃える。
 - `AGENTS.md` の「対象言語/バージョン」が定める Go 1.26 系の前提を 1.27 系に書き換える。
+- `AGENTS.md` の「frontend (React)」の対象スタックと `docs/prd/thief.md` の「制約と前提」にある Go と React のバージョンを、更新後の値に揃える。
 - backend は `go get -u ./...` で直接依存と間接依存を同じメジャーバージョンの中で最新に上げ、`go mod tidy` で `go.mod` と `go.sum` を整理する。
 - frontend は `npm update` で `package.json` の範囲内の更新を当てたうえで、メジャー更新を `package.json` に反映する。対象は `react` と `react-dom` の 19、`@types/react` と `@types/react-dom` の 19、`@testing-library/jest-dom` の 7、`@xterm/xterm` の 6 と `@xterm/addon-fit` の 0.11、`apache-arrow` の 21、`i18next` の 27 と `react-i18next` の 18、`jsdom` の 31、`typescript` の 7 である。
 - `@duckdb/duckdb-wasm` は `1.32.0` に固定したままにする。npm の `latest` は `1.33.1-dev57.0` であり、安定版が無いため。
@@ -39,5 +40,6 @@ docs/issues/closed/0231 は、go1.27 系への更新を別の判断として本 
 - `mise run check` が通る。fmt の実行後に `git status --porcelain` が空か、差分が生じたファイルを整形済みにして残す。
 - `mise run backend:vuln` が終了コード 0 で、影響する脆弱性が 0 件と報告される。
 - `AGENTS.md` の「backend (Go)」の「対象言語/バージョン」が Go 1.27 系を前提とする記述になっている。
+- `AGENTS.md` の「frontend (React)」の対象スタックと `docs/prd/thief.md` の「制約と前提」が、Go 1.27 系と React 19 を指している。
 - `CHANGES.md` の `## develop` の `### misc` に、Node.js、Go、backend、frontend の更新を説明するエントリを追加し、担当者行 `  - @sfuruya0612` を持つ。
 - 扱わない範囲: `@duckdb/duckdb-wasm` の開発ビルドへの更新、Go の `go` ディレクティブが要求する言語バージョンを超える書き換え、CI のジョブ構成の変更。

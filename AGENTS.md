@@ -268,7 +268,7 @@ backend/
 
 ### 基本方針
 
-- **対象スタック**: Vite + React 18 + TypeScript (strict)。ビルド対象は **Web ブラウザのみ**(Flutter 時代の macOS Desktop 対応は廃止済み)。
+- **対象スタック**: Vite + React 19 + TypeScript (strict)。ビルド対象は **Web ブラウザのみ**(Flutter 時代の macOS Desktop 対応は廃止済み)。
 - **状態管理**: サーバ状態は **TanStack Query (`@tanstack/react-query`)**、UI 状態は `useState`/`useReducer` + カスタムフック。Redux/Zustand/Riverpod 相当のライブラリは導入しない(YAGNI)。
 - **ルーティング**: react-router 等は導入しない。profile タブ・サービス選択・トップレベルビュー (`AppView`: `aws`/`gcp`/`datadog`/`tidb`) は React state + `localStorage`(`cloudlens:v1` キー、`lib/storage.ts`)で管理する。
 - **多言語対応**: react-i18next 導入済み。翻訳リソースは `src/i18n/locales/ja/` と `src/i18n/locales/en/` にそれぞれ 14 ネームスペース (account / app / cost / drawerAws / drawerStorage / errors / gcp / logviewer / pricing / query / session / sidebar / topbar / tweaks)。Drawer のタブ名や AWS 由来の英語メッセージを表示する部品 (`DrawerError` 等) は英語ハードコードとし i18n に載せない (docs/issues/closed/0066 の方針)。
