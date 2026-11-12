@@ -25,7 +25,9 @@ docs/issues/closed/0231 は、go1.27 系への更新を別の判断として本 
 - `AGENTS.md` の「対象言語/バージョン」が定める Go 1.26 系の前提を 1.27 系に書き換える。
 - `AGENTS.md` の「frontend (React)」の対象スタックと `docs/prd/thief.md` の「制約と前提」にある Go と React のバージョンを、更新後の値に揃える。
 - backend は `go get -u ./...` で直接依存と間接依存を同じメジャーバージョンの中で最新に上げ、`go mod tidy` で `go.mod` と `go.sum` を整理する。
-- frontend は `npm update` で `package.json` の範囲内の更新を当てたうえで、メジャー更新を `package.json` に反映する。対象は `react` と `react-dom` の 19、`@types/react` と `@types/react-dom` の 19、`@testing-library/jest-dom` の 7、`@xterm/xterm` の 6 と `@xterm/addon-fit` の 0.11、`apache-arrow` の 21、`i18next` の 27 と `react-i18next` の 18、`jsdom` の 31、`typescript` の 7 である。
+- frontend は `npm update` で `package.json` の範囲内の更新を当てたうえで、メジャー更新を `package.json` に反映する。対象は `react` と `react-dom` の 19、`@types/react` と `@types/react-dom` の 19、`@testing-library/jest-dom` の 7、`@xterm/xterm` の 6 と `@xterm/addon-fit` の 0.11、`i18next` の 27 と `react-i18next` の 18、`jsdom` の 31、`typescript` の 6 である。
+- `apache-arrow` は duckdb-wasm が `^17.0.0` を要求するため 17 系に留める。21 系に上げると duckdb-wasm が同梱する arrow と実体が分かれ、`lib/duckdb.ts` と `lib/duckdbResult.ts` の型が合わなくなる。
+- `typescript` は typescript-eslint 8 の peer 範囲 `>=4.8.4 <6.1.0` に合わせて `~6.0.3` に留める。7 系には typescript-eslint が利用する JavaScript API が無く、ESLint が起動時に停止する。
 - `@duckdb/duckdb-wasm` は `1.32.0` に固定したままにする。npm の `latest` は `1.33.1-dev57.0` であり、安定版が無いため。
 - メジャー更新で API の差異が出た箇所は、呼び出し側を追随させる。追随の結果、画面の見た目と振る舞いを変える修正が要る場合は、その場で直さずに選択肢を報告する。
 - 依存の更新で `mise run check` が落ちた場合、落ちた原因を直してから完了とする。テストの削除、skip、lint 規則の緩和では通さない。
@@ -34,7 +36,7 @@ docs/issues/closed/0231 は、go1.27 系への更新を別の判断として本 
 
 - `mise.toml` の `[tools].node` が `26.13.1` で、`node --version` が `v26.13.1` を返す。
 - `mise.toml` の `[tools].go` が `1.27.4`、`backend/go.mod` の `toolchain` 行が `go1.27.4`、`go` ディレクティブが `go 1.27.0` であり、`go version` が `go1.27.4` を返す。
-- `frontend/package.json` と `frontend/package-lock.json` が上記のメジャー更新を反映し、`npm ls` が依存の不整合を報告しない。
+- `frontend/package.json` と `frontend/package-lock.json` が上記の更新を反映し、`apache-arrow` が `^17.0.0`、`typescript` が `~6.0.3` で、`npm ls` が依存の不整合を報告しない。
 - `npm audit --omit=dev` の既知の脆弱性が 0 件である。
 - `backend/go.mod` と `backend/go.sum` が `go mod tidy` の結果と一致する。
 - `mise run check` が通る。fmt の実行後に `git status --porcelain` が空か、差分が生じたファイルを整形済みにして残す。
