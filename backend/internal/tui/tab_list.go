@@ -426,6 +426,12 @@ func newTabList(columns []Column, rows []listRow, width, height int) table.Model
 	t.SetRows(nil)
 	t.SetColumns(tableCols)
 	t.SetRows(tableRows)
+	// SetRows は直前の行数より大きいカーソルだけを丸める。上の SetRows(nil) でカーソルが
+	// -1 になったあとに行を入れても -1 のまま残り、選択行が無い状態で描画される。
+	// 行が無いときの SetCursor も -1 に丸められるため、負のカーソルも先頭に戻す。
+	if c := t.Cursor(); c < 0 || c >= len(tableRows) {
+		t.SetCursor(0)
+	}
 	t.SetWidth(width)
 	// bubbles の table は View がヘッダの次の行に viewport を足すため、SetHeight に
 	// height-1 を渡すと描画がちょうど height 行になる。ヘッダ 2 行と 1 行は確保する。

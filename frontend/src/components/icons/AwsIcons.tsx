@@ -1,4 +1,5 @@
 // AWS 公式 Architecture Icons (public/assets/aws-icons/*.svg) を表示するアイコンコンポーネント
+import type { JSX } from 'react';
 import { AssetIcon } from './AssetIcon';
 
 export interface AwsIconProps {
