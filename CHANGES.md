@@ -616,3 +616,5 @@
 - Node.js を 26.4.0 から 26.13.1 に、Go を 1.26.10 から 1.27.4 に更新し、backend と frontend の依存パッケージを更新する
   - frontend は react 19、i18next 27、xterm 6、jsdom 31、TypeScript 6 へメジャー更新し、`@duckdb/duckdb-wasm` は 1.32.0、`apache-arrow` は 17 系、TypeScript は 6.0 系に留める
   - @sfuruya0612
+- 開発用の依存が使う `minimatch` を `^11.0.8` に固定し、`npm audit` が報告していた moderate 10 件を解消する
+  - @sfuruya0612
