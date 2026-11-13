@@ -1,6 +1,6 @@
 # AGENTS
 
-原則・レビュー・コミット・issues・変更履歴などの汎用規約はグローバル `~/.codex/AGENTS.md` に集約されている。本ファイルはこのリポジトリ固有の規約のみを記載する。
+原則・レビュー・コミット・issues・変更履歴などの汎用規約はグローバル `~/.pi/agent/AGENTS.md` に集約されている。本ファイルはこのリポジトリ固有の規約のみを記載する。
 
 ## pre-commit
 
@@ -23,21 +23,22 @@
 | `docs/adr/` | ADR (アーキテクチャ決定記録)。`NNNN-<kebab-case>.md` で連番を振る | 対象 |
 | `docs/issues/` | issue (`closed/`、`pending/`、`SEQUENCE`、`TODO.md` を含む) | 対象 |
 
-- グローバル規約 (`~/.codex/AGENTS.md`) とスキル (`todo-to-issue`、`implement-issues`、`write-prd` など) が `issues/` と書いている箇所は、このリポジトリでは `docs/issues/` と読み替える。`issues/closed/` と `issues/pending/` も同様に `docs/issues/closed/` と `docs/issues/pending/` と読み替える。
-- コミットメッセージ末尾の issue 参照は `(docs/issues/closed/NNNN)` とする。
+- グローバル規約 (`~/.pi/agent/AGENTS.md`) とスキル (`issue-style`、`prd-style`、`review-integration` など) が `issues/` と書いている箇所は、このリポジトリでは `docs/issues/` と読み替える。`issues/closed/` と `issues/pending/` も同様に `docs/issues/closed/` と `docs/issues/pending/` と読み替える。
+- コミットメッセージ末尾の issue 参照は、作業中の issue が `(docs/issues/NNNN)`、完了した issue が `(docs/issues/closed/NNNN)` とする。
 - issue には組織を特定できる記述 (AWS のプロファイル名、Google Cloud のプロジェクト ID、社内のホスト名など) を書かない。実環境で確認した結果は `example-common` のような仮の名前に置き換えて書く (docs/adr/0028)。
 
 ### issue の形式
 
-グローバルの `~/.pi/agent/AGENTS.md` と `issue-style` スキルが定める形式より、この節を優先する。
+グローバルの `~/.pi/agent/AGENTS.md`、`~/.pi/agent/skills/issue-style`、`~/.pi/agent/agents/` のレビューと実装の定義が定める形式より、この節を優先する。
 
 - ファイル名は `docs/issues/<NNNN>-<category>-<kebab-case-title>.md` とする。`category` は `bug`、`chore`、`docs`、`feat`、`perf`、`refactor` から選ぶ。
 - タイトルの後に `Created`、`Model` を置き、完了時に `Completed` を足す。作業ブランチを書くときは `Branch` も置く。
-- 節は `背景`、`対応方針`、`完了条件` を基本とし、完了時に `解決方法` を足す。issue の性質に応じて `目的`、`設計判断`、`関連` を足してよい。
-- 要件 ID と優先度は、PRD の要求に紐づく issue でだけ書く。
+- `Requirements` と `Priority` の欄は設けない。PRD の要求を扱う issue は、本文で `FR-N` を引用する。
+- 節は `背景` と `完了条件` を置き、完了時に `解決方法` を足す。残りの節は issue の種類で決める。バグは `再現手順`、`原因`、`修正方針`、機能は `目的`、`設計判断`、`関連` を足す。
+- pending の issue は、止める理由と再開条件を書く。Draft の issue は、確認したい点と未確定の判断を書く。
 - `docs/issues/SEQUENCE` は次に使う番号を持ち、issue を作ったら 1 を足す。
-- open の issue の参照は `(docs/issues/NNNN)`、完了した issue の参照は `(docs/issues/closed/NNNN)` と書く。
-- `docs/issues/TODO.md` の完了行も、完了した issue を `(docs/issues/closed/NNNN)` で参照する。
+- 参照は `(docs/issues/NNNN)` または `(docs/issues/closed/NNNN)` と書き、本文中では `issue NNNN` と書いてよい。
+- `docs/issues/TODO.md` の完了行は `(docs/issues/closed/NNNN)` で参照する。
 
 ## backend / frontend の型契約 (golden JSON)
 
@@ -360,7 +361,7 @@ frontend/
 - テストランナーは **Vitest**(`environment: 'jsdom'`、`src/setupTests.ts` で `@testing-library/jest-dom` を読み込む)。
 - コンポーネントテストは `@testing-library/react` を使う。
 - テストファイルは対象ファイルと同じディレクトリに `<対象>.test.ts(x)` として置く(例: `lib/format.ts` → `lib/format.test.ts`)。
-- PBT やユニットテストの厳密な役割分担(グローバル `~/.codex/AGENTS.md` の「テストについて」節)は Rust プロジェクト向けの規約であり、frontend の TypeScript コードには適用しない。frontend では純関数(`normalize.ts`/`format.ts` 等)のユニットテストと、複雑な分岐を持つコンポーネントのテストを中心に書く。
+- PBT やユニットテストの厳密な役割分担(グローバル `~/.pi/agent/AGENTS.md` の「テスト」節)は Rust プロジェクト向けの規約であり、frontend の TypeScript コードには適用しない。frontend では純関数(`normalize.ts`/`format.ts` 等)のユニットテストと、複雑な分岐を持つコンポーネントのテストを中心に書く。
 
 ### Lint / Format
 

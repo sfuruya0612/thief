@@ -6,33 +6,42 @@ Branch: feature/chore-align-issue-format-rule
 
 ## 背景
 
-レビューで、issue の形式がグローバルの規約と合っていないという指摘が 2 回続いた (docs/issues/closed/0241、docs/issues/closed/0242)。
+docs/issues/closed/0242 の解決方法に、issue の節構成がグローバルの規約と合っていないため、テンプレートの整合をリポジトリ全体の判断として別に扱う記録がある。
+
 グローバルの `~/.pi/agent/AGENTS.md` の「文書」は、issue に目的、現状、設計方針、完了条件、解決方法を書くことと、作成日、完了日、優先度、作成したモデル、ブランチ名をタイトルの後に置くことを定めている。
 `issue-style` スキルも同じ節構成を Open の形式として定め、カテゴリを `bug`、`feature`、`other` に限っている。
+`reviewer` の定義も `Requirements` を常時の観点として固定している。
 
 このリポジトリの `docs/issues/closed/` の 241 件は別の形式で書かれている。
 `Requirements` と `Priority` を持つ issue は 0 件、`Created` と `Model` を持つ issue は 241 件、`Completed` を持つ issue は 239 件である。
-節は `背景`、`対応方針`、`完了条件`、`解決方法` が基本で、`目的`、`設計判断`、`関連` を足す issue もある。
+節は `背景` が 183 件、`完了条件` が 193 件、`解決方法` が 236 件で、`目的`、`関連`、`設計判断`、`再現手順`、`原因`、`修正方針` を種類に応じて足している。
 カテゴリは `feat` 109 件、`bug` 53 件、`chore` 45 件、`refactor` 22 件、`perf` 11 件、`docs` 1 件で、スキルが定める値と一致しない。
+
+PRD の要求 ID は `FR-N` (32 種) で、グローバルの「仕様駆動」が定める `REQ-<領域>-<3桁>` は 0 件である。PRD の優先度は `Must`、`Should`、`Could` で、`issue-style` の `High`、`Medium`、`Low` と尺度が違う。
+PRD の要求を本文で引く issue は 17 件あるが、`Requirements` を持つものは 0 件である。
 
 規約と実務が食い違ったままでは、レビューが毎回同じ指摘を出し、issue を書く人がどちらに従うかを毎回判断することになる。既存の issue を規約の形式へ書き換えると、241 件の履歴を書き換えることになり、得られる情報は増えない。
 
 ## 対応方針
 
-- `AGENTS.md` の「ドキュメントの配置」に、このリポジトリの issue の形式を節として書く。グローバルの `AGENTS.md` と `issue-style` スキルが定める形式より、この節を優先する。
+- `AGENTS.md` の「ドキュメントの配置」に、このリポジトリの issue の形式を節として書く。グローバルの `AGENTS.md`、`issue-style` スキル、`reviewer` と `worker` の定義が定める形式より、この節を優先する。
 - メタデータは、タイトルの後に `Created`、`Model` を置き、完了時に `Completed` を足す。作業ブランチを書く場合は `Branch` も置く。
-- 節は `背景`、`対応方針`、`完了条件` を基本とし、完了時に `解決方法` を足す。issue の性質に応じて `目的`、`設計判断`、`関連` を足してよい。
-- カテゴリは `bug`、`chore`、`docs`、`feat`、`perf`、`refactor` から選ぶ。
-- 要件 ID と優先度は、PRD の要求に紐づく issue でだけ書く。
+- `Requirements` と `Priority` の欄は設けない。PRD の要求を扱う issue は、本文で `FR-N` を引用する。`FR-N` と PRD の `Must`、`Should`、`Could` の対応は PRD 側で持つ。
+- 節は `背景` と `完了条件` を置き、完了時に `解決方法` を足す。残りの節は issue の種類で決め、バグは `再現手順`、`原因`、`修正方針`、機能は `目的`、`設計判断`、`関連` を足す。
+- pending の issue は止める理由と再開条件を、Draft の issue は確認したい点と未確定の判断を書く。
 - `docs/issues/SEQUENCE` は次に使う番号を持つ。
-- 完了した issue の参照は `(docs/issues/closed/NNNN)` と書き、open の間は `(docs/issues/NNNN)` と書く。
+- 参照は `(docs/issues/NNNN)` または `(docs/issues/closed/NNNN)` と書き、本文中では `issue NNNN` と書いてよい。コミットメッセージは、作業中の issue が `(docs/issues/NNNN)`、完了した issue が `(docs/issues/closed/NNNN)` とする。
+- `AGENTS.md` が指すグローバルのパス (`~/.codex/AGENTS.md`) とスキル名 (`todo-to-issue`、`implement-issues`、`write-prd`) を、現行の `~/.pi/agent/AGENTS.md` と `issue-style`、`prd-style`、`review-integration` に直す。
+- グローバルの `issue-style` に、プロジェクトが別の形式を定めるときはそちらを優先する一文と、Open 判定基準とレビューチェックリストをプロジェクトの形式へ置き換える注記を足す。
+- グローバルの `reviewer` の定義で、`Requirements` を常時の観点に固定する 2 項目を、プロジェクトの形式に従う観点へ書き換える。
 - 既存の `docs/issues/closed/` の 241 件は書き換えない。形式の統一による便益が、履歴の書き換えの費用に見合わないため。
-- グローバルの `issue-style` スキルに、プロジェクトが別の形式を定めるときはそちらを優先する一文を足す。スキルはリポジトリの外にあり、このリポジトリのコミットには含まれない。
 
 ## 完了条件
 
-- `AGENTS.md` に、issue の形式 (メタデータ、節、カテゴリ、要件 ID と優先度の扱い、`SEQUENCE` の意味、完了した issue の参照) が書かれている。
-- `AGENTS.md` の記述が、docs/issues/closed/0241 と docs/issues/closed/0242 の実物と一致する。
-- グローバルの `issue-style` に、プロジェクトが別の形式を定めるときの優先順位が書かれている。
+- `AGENTS.md` に、issue の形式 (メタデータ、節、カテゴリ、PRD の要求の引き方、`SEQUENCE` の意味、参照、pending と Draft の書き方) が書かれている。
+- `AGENTS.md` の記述どおりに書いた issue が、docs/issues/closed/0241 と docs/issues/closed/0242 と同じメタデータと節を持つ。
+- `AGENTS.md` が指すグローバルのパスとスキル名が、現在の `~/.pi/agent/` の構成と一致する。
+- グローバルの `issue-style` に、プロジェクトが別の形式を定めるときの優先順位と、Open 判定基準とレビューチェックリストの置き換えが書かれている。
+- グローバルの `reviewer` の定義に、プロジェクトの形式に従う観点が書かれている。
 - 既存の issue ファイルを書き換えていない。
 - `mise run check` が通る。
