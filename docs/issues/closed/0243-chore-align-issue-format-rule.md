@@ -2,6 +2,7 @@
 
 Created: 2026-11-13
 Model: DeepSeek V4.1 Flash 1017
+Completed: 2026-11-13
 Branch: feature/chore-align-issue-format-rule
 
 ## 背景
@@ -46,3 +47,16 @@ PRD の要求を本文で引く issue は 17 件あるが、`Requirements` を�
 - グローバルの `reviewer` の定義に、プロジェクトの形式に従う観点が書かれている。
 - 既存の issue ファイルを書き換えていない。
 - `mise run check` が通る。
+
+## 解決方法
+
+- `AGENTS.md` の「ドキュメントの配置」に「issue の形式」節を追加した。ファイル名、メタデータ (`Created`、`Model`、`Completed`、`Branch`)、`Requirements` と `Priority` を設けないこと、`FR-N` の引用と受け入れ基準の対応、節構成、pending と Draft、`docs/issues/SEQUENCE`、参照方法、完了行の参照を書いた。
+- PRD の要求 ID は `FR-N`、優先度は `Must`、`Should`、`Could` を PRD が持つことを明記し、グローバルの `REQ-<領域>-<3桁>` に代えて使うことを書いた。PRD の 32 個の要求を `REQ-...` へ移行する案は採らない。PRD と 17 件の issue の参照を書き換える割に、得られる情報が増えないため。
+- 節は `背景`、`対応方針`、`完了条件` を置き、完了時に `解決方法` を足す形にした。chore 45 件、refactor 22 件、perf 11 件、docs 1 件のうち `対応方針` を持つのは 50 件であり、種類を問わず置く節にした。
+- `AGENTS.md` が指していたグローバルのパス `~/.codex/AGENTS.md` を `~/.pi/agent/AGENTS.md` に、スキル名 `todo-to-issue`、`implement-issues`、`write-prd` を現行の `issue-style`、`prd-style`、`review-integration` に直した (3 箇所のパスとテスト節の見出し名)。
+- グローバルの `issue-style` に、プロジェクトの `AGENTS.md` またはプロジェクトのスキルが形式を定めるときはそちらを優先する一文と、Open 判定基準とレビューチェックリストをプロジェクトの形式に置き換える注記 (`Branch` の要否を含む) を足した。リポジトリの外にあるため、コミットには含まれない。
+- グローバルの `reviewer` の定義で `Requirements` を固定していた 2 項目を、プロジェクトの形式に従い、PRD の要求を扱うときに要求 ID と受入基準を対応づける観点に書き換えた。同じくリポジトリの外にある。
+- `review-integration` と `delegation` は書き換えず、`AGENTS.md` の優先宣言の対象に加えた。どちらも全プロジェクトで使うスキルであり、リポジトリ固有の形式を書き込むと他のプロジェクトの前提を変えるため。
+- 既存の `docs/issues/closed/` の 241 件は書き換えていない。`Completed` を持たない 2 件 (0045、0232) は既存の欠落として残した。
+- `mise run check` が通った。
+- 扱わなかった範囲: グローバルの「仕様駆動」が定める「テストは守る要求 ID をテスト名か module doc に書く」と、このリポジトリの実装の乖離 (`FR-` を含むコードは 1 件)。要求 ID とテストの対応は PRD とテストの設計に関わるため、別の判断とする。`docs/issues/TODO.md` に積んだ。
