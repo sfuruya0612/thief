@@ -166,3 +166,4 @@
 - [x] TUI の Drawer の Secrets Manager / Parameter Store の Value タブで、値を読み取り専用で表示し、Secrets Manager と SecureString は初期マスクして `v` で取得 / 表示できるようにしたい (docs/prd/thief.md の FR-29。`backend/internal/aws` の `GetSecretValue` と `GetSSMParameter` を使う。値の更新は TUI のスコープ外とする) (docs/issues/closed/0230)
 - [x] Node.js を security release の修正版 (26.13.1) に、Go を 1.27.4 に更新し、backend と frontend の依存パッケージも更新したい (docs/issues/closed/0241)
 - [ ] `eslint` と `typescript-eslint` が `minimatch` 11 系を要求するようになったら、`frontend/package.json` の `overrides` から `minimatch` を外し、lock を更新して `npm ls minimatch` と `npm audit` を再確認したい (docs/issues/closed/0242)
+- [ ] テストが守る要求 ID をテスト名か module doc に書く取り決めと、`FR-N` を引用するテストが 1 件しかない実装の乖離を解消したい (要求 ID とテストの対応をどの層で担保するかを決める必要がある)
