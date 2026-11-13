@@ -165,3 +165,4 @@
 - [x] TUI の Drawer の DynamoDB Items タブで、既定のスキャン結果、PK / SK / 属性の検索フォーム、取得件数の切替、選択した項目の JSON 詳細を表示できるようにしたい (docs/prd/thief.md の FR-29。`backend/internal/aws` の `DescribeDynamoTable` と `QueryDynamoItems` を使う。列ごとのフィルタは扱わない) (docs/issues/closed/0229)
 - [x] TUI の Drawer の Secrets Manager / Parameter Store の Value タブで、値を読み取り専用で表示し、Secrets Manager と SecureString は初期マスクして `v` で取得 / 表示できるようにしたい (docs/prd/thief.md の FR-29。`backend/internal/aws` の `GetSecretValue` と `GetSSMParameter` を使う。値の更新は TUI のスコープ外とする) (docs/issues/closed/0230)
 - [x] Node.js を security release の修正版 (26.13.1) に、Go を 1.27.4 に更新し、backend と frontend の依存パッケージも更新したい (docs/issues/closed/0241)
+- [ ] `eslint` と `typescript-eslint` が `minimatch` 11 系を要求するようになったら、`frontend/package.json` の `overrides` から `minimatch` を外したい (docs/issues/closed/0242)
