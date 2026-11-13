@@ -27,6 +27,18 @@
 - コミットメッセージ末尾の issue 参照は `(docs/issues/closed/NNNN)` とする。
 - issue には組織を特定できる記述 (AWS のプロファイル名、Google Cloud のプロジェクト ID、社内のホスト名など) を書かない。実環境で確認した結果は `example-common` のような仮の名前に置き換えて書く (docs/adr/0028)。
 
+### issue の形式
+
+グローバルの `~/.pi/agent/AGENTS.md` と `issue-style` スキルが定める形式より、この節を優先する。
+
+- ファイル名は `docs/issues/<NNNN>-<category>-<kebab-case-title>.md` とする。`category` は `bug`、`chore`、`docs`、`feat`、`perf`、`refactor` から選ぶ。
+- タイトルの後に `Created`、`Model` を置き、完了時に `Completed` を足す。作業ブランチを書くときは `Branch` も置く。
+- 節は `背景`、`対応方針`、`完了条件` を基本とし、完了時に `解決方法` を足す。issue の性質に応じて `目的`、`設計判断`、`関連` を足してよい。
+- 要件 ID と優先度は、PRD の要求に紐づく issue でだけ書く。
+- `docs/issues/SEQUENCE` は次に使う番号を持ち、issue を作ったら 1 を足す。
+- open の issue の参照は `(docs/issues/NNNN)`、完了した issue の参照は `(docs/issues/closed/NNNN)` と書く。
+- `docs/issues/TODO.md` の完了行も、完了した issue を `(docs/issues/closed/NNNN)` で参照する。
+
 ## backend / frontend の型契約 (golden JSON)
 
 frontend の Raw 型 (`frontend/src/types/*.ts`) は backend が生成したゴールデン JSON と型レベルで突き合わせている。backend の型や JSON タグを変えたら必ず再生成する。
