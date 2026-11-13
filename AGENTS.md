@@ -1,6 +1,6 @@
 # AGENTS
 
-原則・レビュー・コミット・issues・変更履歴などの汎用規約はグローバル `~/.pi/agent/AGENTS.md` に集約されている。本ファイルはこのリポジトリ固有の規約のみを記載する。
+原則、レビュー、コミット、issue、変更履歴などの汎用規約はグローバル `~/.pi/agent/AGENTS.md` に集約されている。本ファイルはこのリポジトリ固有の規約のみを記載する。
 
 ## pre-commit
 
@@ -29,12 +29,13 @@
 
 ### issue の形式
 
-グローバルの `~/.pi/agent/AGENTS.md`、`~/.pi/agent/skills/issue-style`、`~/.pi/agent/agents/` のレビューと実装の定義が定める形式より、この節を優先する。
+グローバルの `~/.pi/agent/AGENTS.md` と、`~/.pi/agent/skills/` の `issue-style`、`prd-style`、`review-integration`、`delegation`、`~/.pi/agent/agents/reviewer.md` が定める形式より、この節を優先する。
 
 - ファイル名は `docs/issues/<NNNN>-<category>-<kebab-case-title>.md` とする。`category` は `bug`、`chore`、`docs`、`feat`、`perf`、`refactor` から選ぶ。
 - タイトルの後に `Created`、`Model` を置き、完了時に `Completed` を足す。作業ブランチを書くときは `Branch` も置く。
-- `Requirements` と `Priority` の欄は設けない。PRD の要求を扱う issue は、本文で `FR-N` を引用する。
-- 節は `背景` と `完了条件` を置き、完了時に `解決方法` を足す。残りの節は issue の種類で決める。バグは `再現手順`、`原因`、`修正方針`、機能は `目的`、`設計判断`、`関連` を足す。
+- `Requirements` と `Priority` の欄は設けない。
+- PRD の要求 ID は `FR-N` とし、グローバルの `REQ-<領域>-<3桁>` に代えて使う。優先度は PRD が `Must`、`Should`、`Could` で持つ。PRD の要求を扱う issue は本文で `FR-N` を引用し、完了条件をその要求の受け入れ基準に対応させる。
+- 節は `背景`、`対応方針`、`完了条件` を置き、完了時に `解決方法` を足す。残りの節は issue の種類で決め、バグは `再現手順`、`原因`、`修正方針`、機能は `目的`、`設計判断`、`関連` を足す。
 - pending の issue は、止める理由と再開条件を書く。Draft の issue は、確認したい点と未確定の判断を書く。
 - `docs/issues/SEQUENCE` は次に使う番号を持ち、issue を作ったら 1 を足す。
 - 参照は `(docs/issues/NNNN)` または `(docs/issues/closed/NNNN)` と書き、本文中では `issue NNNN` と書いてよい。
