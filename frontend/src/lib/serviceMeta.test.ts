@@ -26,7 +26,7 @@ describe('AWS_SERVICE_GROUPS / SERVICES', () => {
       { key: 'storage', services: ['s3'] },
       { key: 'database', services: ['rds', 'dynamo', 'cache'] },
       { key: 'networking', services: ['elb', 'cloudfront', 'apigw', 'natgw'] },
-      { key: 'analytics', services: ['athena', 'kinesis'] },
+      { key: 'analytics', services: ['athena', 'kinesis', 'opensearch'] },
       { key: 'integration', services: ['sqs'] },
       { key: 'security', services: ['iam', 'waf', 'accesslogs', 'secrets'] },
       { key: 'management', services: ['ssm', 'cfn', 'cloudwatchlogs'] },

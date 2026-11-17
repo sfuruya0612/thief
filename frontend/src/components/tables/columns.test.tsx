@@ -26,6 +26,7 @@ import {
   kinesisColumns,
   lambdaColumns,
   natgwColumns,
+  openSearchColumns,
   rdsColumns,
   rdsParameterColumns,
   s3Columns,
@@ -41,6 +42,7 @@ import type {
   CloudFrontBehaviorRow,
   CloudFrontRow,
   IAMRow,
+  OpenSearchRow,
   WAFRow,
 } from '../../types/aws';
 
@@ -356,6 +358,63 @@ describe('kinesisColumns', () => {
       encryptionType: '13%',
       region: '21%',
     });
+  });
+});
+
+const openSearchBaseRow: OpenSearchRow = {
+  region: 'ap-northeast-1',
+  id: 'arn:aws:es:ap-northeast-1:123:domain/products',
+  name: 'products',
+  state: 'active',
+  engineVersion: 'OpenSearch_2.19',
+  dataNodeType: 'm5.large.search',
+  dataNodeCount: 3,
+  dedicatedMasterEnabled: true,
+  dedicatedMasterType: 'm5.large.search',
+  dedicatedMasterCount: 3,
+  ebsVolumeSizeGB: 100,
+  ebsVolumeType: 'gp3',
+  endpoint: 'search-products.ap-northeast-1.es.amazonaws.com',
+  vpcId: 'vpc-0123456789abcdef0',
+  encryptionAtRest: true,
+  nodeToNodeEncryption: true,
+  enforceHTTPS: true,
+  tags: {},
+  tagsFetchFailed: false,
+};
+
+describe('openSearchColumns', () => {
+  it('列の並びが Domain, State, Version, Instance, Nodes, Endpoint, Region の順になる', () => {
+    expect(openSearchColumns.map((c) => c.key)).toEqual([
+      'name',
+      'state',
+      'engineVersion',
+      'dataNodeType',
+      'dataNodeCount',
+      'endpoint',
+      'region',
+    ]);
+    expect(openSearchColumns.map((c) => c.header)).toEqual([
+      'Domain',
+      'State',
+      'Version',
+      'Instance',
+      'Nodes',
+      'Endpoint',
+      'Region',
+    ]);
+  });
+
+  it('列幅の合計が 100% になる', () => {
+    const total = openSearchColumns.reduce((sum, c) => sum + Number.parseFloat(c.width), 0);
+    expect(total).toBe(100);
+  });
+
+  it('endpoint が空の行はダッシュ表示になる', () => {
+    const col = openSearchColumns.find((c) => c.key === 'endpoint');
+    if (!col) throw new Error('endpoint column not found');
+    const { container } = render(<>{col.cell({ ...openSearchBaseRow, endpoint: '' })}</>);
+    expect(container).toHaveTextContent('—');
   });
 });
 

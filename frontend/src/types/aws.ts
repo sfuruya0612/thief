@@ -812,6 +812,53 @@ export interface KinesisRow {
 }
 
 // ============================================================
+// OpenSearch
+// ============================================================
+export interface OpenSearchRaw {
+  id: string;
+  name: string;
+  state: string;
+  engine_version: string;
+  data_node_type: string;
+  data_node_count: number;
+  dedicated_master_enabled: boolean;
+  dedicated_master_type: string;
+  dedicated_master_count: number;
+  ebs_volume_size_gb: number;
+  ebs_volume_type: string;
+  endpoint: string;
+  vpc_id: string;
+  encryption_at_rest: boolean;
+  node_to_node_encryption: boolean;
+  enforce_https: boolean;
+  tags: Record<string, string>;
+  tags_fetch_failed?: boolean;
+  cost_monthly: number;
+}
+
+export interface OpenSearchRow {
+  region: string;
+  id: string;
+  name: string;
+  state: string;
+  engineVersion: string;
+  dataNodeType: string;
+  dataNodeCount: number;
+  dedicatedMasterEnabled: boolean;
+  dedicatedMasterType: string;
+  dedicatedMasterCount: number;
+  ebsVolumeSizeGB: number;
+  ebsVolumeType: string;
+  endpoint: string;
+  vpcId: string;
+  encryptionAtRest: boolean;
+  nodeToNodeEncryption: boolean;
+  enforceHTTPS: boolean;
+  tags: Record<string, string>;
+  tagsFetchFailed: boolean;
+}
+
+// ============================================================
 // WAF
 // ============================================================
 export interface WAFRaw {

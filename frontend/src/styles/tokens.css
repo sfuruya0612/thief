@@ -86,6 +86,7 @@
   --svc-natgw: #4cb782;
   --svc-sqs: #de5d9c;
   --svc-kinesis: #4ea7fc;
+  --svc-opensearch: #2dd4bf;
   --svc-waf: #eb5757;
   --svc-accesslogs: #bb6bd9;
   --svc-dynamo: #527fff;

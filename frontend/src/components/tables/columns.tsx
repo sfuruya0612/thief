@@ -28,6 +28,7 @@ import type {
   KinesisRow,
   LambdaRow,
   NATGWRow,
+  OpenSearchRow,
   RDSParameterRow,
   RDSRow,
   S3ObjectRow,
@@ -1316,6 +1317,60 @@ export const kinesisColumns: ColumnDef<KinesisRow>[] = [
     key: 'region',
     header: 'Region',
     width: '21%',
+    cell: (r) => <span style={mutedMono}>{r.region}</span>,
+  },
+];
+
+// ============================================================
+// OpenSearch
+// ============================================================
+export const openSearchColumns: ColumnDef<OpenSearchRow>[] = [
+  {
+    key: 'name',
+    header: 'Domain',
+    width: '18%',
+    cell: (r) => <span className="primary truncate">{r.name}</span>,
+  },
+  { key: 'state', header: 'State', width: '10%', cell: (r) => <StatusBadge state={r.state} /> },
+  {
+    key: 'engineVersion',
+    header: 'Version',
+    width: '13%',
+    cell: (r) => <span style={mutedMono}>{r.engineVersion}</span>,
+  },
+  {
+    key: 'dataNodeType',
+    header: 'Instance',
+    width: '15%',
+    cell: (r) => <span style={mutedMono}>{r.dataNodeType}</span>,
+  },
+  {
+    key: 'dataNodeCount',
+    header: 'Nodes',
+    width: '8%',
+    align: 'right',
+    cell: (r) => <span style={monoStyle}>{r.dataNodeCount}</span>,
+  },
+  {
+    key: 'endpoint',
+    header: 'Endpoint',
+    width: '24%',
+    cell: (r) =>
+      r.endpoint ? (
+        <span
+          className="truncate"
+          style={{ ...dimMono, display: 'inline-block', maxWidth: '100%' }}
+        >
+          {r.endpoint}
+        </span>
+      ) : (
+        <Dash />
+      ),
+  },
+  {
+    key: 'region',
+    header: 'Region',
+    width: '12%',
     cell: (r) => <span style={mutedMono}>{r.region}</span>,
   },
 ];

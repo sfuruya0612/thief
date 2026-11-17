@@ -14,6 +14,7 @@ import type {
   KinesisRow,
   LambdaRow,
   NATGWRow,
+  OpenSearchRow,
   RDSRow,
   S3Row,
   SecretRow,
@@ -259,6 +260,28 @@ export function kinesisOverviewRows(r: KinesisRow): OverviewEntry[] {
     ['Shards', r.shardCount],
     ['Retention', `${r.retentionHours}h`],
     ['Encryption', r.encryptionType],
+    ['Region', r.region],
+  ];
+}
+
+export function openSearchOverviewRows(r: OpenSearchRow): OverviewEntry[] {
+  const storage =
+    r.ebsVolumeSizeGB > 0
+      ? `${r.ebsVolumeSizeGB} GiB${r.ebsVolumeType ? ` ${r.ebsVolumeType}` : ''}`
+      : dash;
+  return [
+    ['Resource ID', r.id],
+    ['Engine version', r.engineVersion],
+    ['Data node type', r.dataNodeType || dash],
+    ['Data nodes', r.dataNodeCount],
+    ['Dedicated master type', r.dedicatedMasterEnabled ? r.dedicatedMasterType || dash : dash],
+    ['Dedicated masters', r.dedicatedMasterEnabled ? r.dedicatedMasterCount : dash],
+    ['EBS storage', storage],
+    ['Endpoint', r.endpoint || dash],
+    ['VPC', r.vpcId || dash],
+    ['Encryption at rest', r.encryptionAtRest ? 'enabled' : 'disabled'],
+    ['Node-to-node encryption', r.nodeToNodeEncryption ? 'enabled' : 'disabled'],
+    ['HTTPS enforcement', r.enforceHTTPS ? 'enabled' : 'disabled'],
     ['Region', r.region],
   ];
 }

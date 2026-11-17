@@ -31,6 +31,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iam v1.65.0
 	github.com/aws/aws-sdk-go-v2/service/kinesis v1.56.13
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.114.4
+	github.com/aws/aws-sdk-go-v2/service/opensearch v1.88.1
 	github.com/aws/aws-sdk-go-v2/service/pricing v1.51.6
 	github.com/aws/aws-sdk-go-v2/service/rds v1.133.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.10

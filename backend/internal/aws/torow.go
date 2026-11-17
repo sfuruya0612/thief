@@ -20,6 +20,17 @@ func (r KinesisResource) ToRow() []string {
 	return []string{r.Name, r.State, r.Mode, fmt.Sprintf("%d", r.ShardCount), fmt.Sprintf("%d", r.RetentionHours), r.EncryptionType}
 }
 
+func (r OpenSearchResource) ToRow() []string {
+	return []string{
+		r.Name,
+		r.State,
+		r.EngineVersion,
+		r.DataNodeType,
+		fmt.Sprintf("%d", r.DataNodeCount),
+		r.Endpoint,
+	}
+}
+
 func (r CloudFrontResource) ToRow() []string {
 	return []string{r.ID, r.Name, r.State, r.DomainName, strings.Join(r.Origins, ","), fmt.Sprintf("%v", r.Enabled)}
 }

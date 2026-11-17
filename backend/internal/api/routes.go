@@ -57,6 +57,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cfn/stacks/{stack}/events", s.handleCFNStackEvents)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cfn/stacks/{stack}/resources", s.handleCFNStackResources)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/kinesis", s.handleKinesis)
+	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/opensearch", s.handleOpenSearch)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/cloudfront", s.handleCloudFront)
 	s.mux.HandleFunc("POST /api/aws/profiles/{profile}/cloudfront/{id}/invalidations", s.handleCloudFrontInvalidation)
 	s.mux.HandleFunc("GET /api/aws/profiles/{profile}/elb", s.handleELB)

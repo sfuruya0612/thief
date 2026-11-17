@@ -59,6 +59,7 @@ import type {
   KinesisRaw,
   LambdaRaw,
   NATGWRaw,
+  OpenSearchRaw,
   PriceTableRaw,
   PriceRateRaw,
   PriceTermRaw,
@@ -140,6 +141,7 @@ import iam from './__contract__/IAMResource.json';
 import kinesis from './__contract__/KinesisResource.json';
 import lambda from './__contract__/LambdaResource.json';
 import natgw from './__contract__/NATGatewayResource.json';
+import openSearch from './__contract__/OpenSearchResource.json';
 import priceTable from './__contract__/PriceTable.json';
 import priceRate from './__contract__/PriceRate.json';
 import priceTerm from './__contract__/PriceTerm.json';
@@ -215,7 +217,7 @@ type Expect<T extends true> = T;
 type PriceRateRawWidened = Omit<PriceRateRaw, 'model'> & { model: string };
 type PriceTableRawWidened = Omit<PriceTableRaw, 'rates'> & { rates: PriceRateRawWidened[] };
 
-// 契約対象 67 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
+// 契約対象 68 対の検査。並びは backend/internal/contract/contract.go の Registry と同じ。
 export type ContractChecks = [
   Expect<Contract<typeof apigw, APIGWRaw>>,
   Expect<Contract<typeof athenaCatalog, AthenaCatalogRaw>>,
@@ -266,6 +268,7 @@ export type ContractChecks = [
   Expect<Contract<typeof kinesis, KinesisRaw>>,
   Expect<Contract<typeof lambda, LambdaRaw>>,
   Expect<Contract<typeof natgw, NATGWRaw>>,
+  Expect<Contract<typeof openSearch, OpenSearchRaw>>,
   Expect<Contract<typeof priceTable, PriceTableRawWidened>>,
   Expect<Contract<typeof priceRate, PriceRateRawWidened>>,
   Expect<Contract<typeof priceTerm, PriceTermRaw>>,

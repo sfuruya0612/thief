@@ -1,6 +1,6 @@
 // app.jsx AccountView の移植
 // サービスごとに useResources<TRaw,TRow> の型引数が異なるため、汎用 ServicePanel を用意し
-// service に応じて 19 分岐で呼び分ける (各分岐は normalizer/columns/overviewRows を渡すだけ)。
+// service に応じて 20 分岐で呼び分ける (各分岐は normalizer/columns/overviewRows を渡すだけ)。
 // 分割表示 (issue 0175) ではペインごとに AwsServicePane を 1 つ描画し、選択リソース
 // (Drawer で開く対象) もペインごとに持つ。
 import { useEffect, useMemo, useState } from 'react';
@@ -20,6 +20,7 @@ import {
   kinesisFromRaw,
   lambdaFromRaw,
   natgwFromRaw,
+  openSearchFromRaw,
   rdsFromRaw,
   s3FromRaw,
   secretFromRaw,
@@ -41,6 +42,7 @@ import {
   kinesisColumns,
   lambdaColumns,
   natgwColumns,
+  openSearchColumns,
   rdsColumns,
   s3Columns,
   secretColumns,
@@ -63,6 +65,7 @@ import {
   kinesisOverviewRows,
   lambdaOverviewRows,
   natgwOverviewRows,
+  openSearchOverviewRows,
   rdsOverviewRows,
   s3OverviewRows,
   secretOverviewRows,
@@ -517,6 +520,21 @@ function AwsServicePane({
           normalizer={kinesisFromRaw}
           columns={kinesisColumns}
           overviewRows={kinesisOverviewRows}
+          drawerPos={drawerPos}
+          selectedId={selectedId}
+          onSelectId={setSelectedId}
+          contained={contained}
+          closeOnEscape={closeOnEscape}
+        />
+      )}
+      {service === 'opensearch' && (
+        <ServicePanel
+          service="opensearch"
+          profile={profile}
+          region={region}
+          normalizer={openSearchFromRaw}
+          columns={openSearchColumns}
+          overviewRows={openSearchOverviewRows}
           drawerPos={drawerPos}
           selectedId={selectedId}
           onSelectId={setSelectedId}

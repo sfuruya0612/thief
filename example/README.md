@@ -123,7 +123,7 @@ mise run example:seed
 
 1. 上の EC2 一覧の 1 と 2 と同じく `thief` を導入し、`mise run example:up` を動かしておく
 2. `mise run example:seed`
-3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢に `ELB`、`CloudFront`、`API Gateway`、`NAT Gateway`、`Kinesis`、`SQS` が `ElastiCache` の後にこの順に出る
+3. リポジトリのルートで `HOME="$(pwd)/example/home" thief tui -p floci` を起動し、`S` で開く選択肢に `ELB`、`CloudFront`、`API Gateway`、`NAT Gateway`、`Kinesis`、`OpenSearch`、`SQS` が `ElastiCache` の後にこの順に出る (seed は OpenSearch のドメインを投入しない)
 4. `sqs` と打って Enter を押すと、一覧に `thief-example-queue`、`thief-example-dlq`、`thief-example-fifo.fifo` の行 (State `active`、Available `0`、In flight `0`、Retention `4d`、Region `ap-northeast-1`) が出て、Type は `thief-example-fifo.fifo` だけ `FIFO`、他は `Standard` になる (Web UI の SQS 一覧と同じ表記)。Drawer の Overview は Resource ID (キューの ARN)、Type、Messages available、Messages in flight、Retention (`4 days`)、Region の順で、`2` の Tags は `No tags` になる (seed のキューにタグが無いため)
 5. `S`、`elb`、Enter で `thief-example-alb` の行 (State `active`。作成の直後は `provisioning` で、数分後に `active` になる。Type `application`、Scheme `internet-facing`、AZs `ap-northeast-1a, ap-northeast-1c`) が出る。Drawer の Overview は Resource ID (ロードバランサの ARN)、Type、Scheme、DNS name、VPC (`vpc-default-ap-northeast-1`)、AZs、Region の順で、`2` の Listeners と `3` の Targets は空、`4` の Tags は `No tags` (Web UI と同じく ELB はタグを取得しない)
 6. `S`、`cloudfront`、Enter で、ディストリビューション ID の行 (State `deployed`、Domain `<ID>.cloudfront.net`、Alternate domains `—`、Origins `thief-example-data.s3.amazonaws.com`) が出る。Drawer の見出しの Name はコメントの `thief example` で、Overview は Resource ID、Domain、Alternate domains、Origins、Enabled (`yes`)、Price class (`PriceClass_All`) の順。`3` の Tags は `No tags`

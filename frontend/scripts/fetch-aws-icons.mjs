@@ -34,6 +34,7 @@ const ICON_FILENAMES = {
   cloudfront: 'Arch_Amazon-CloudFront_32.svg',
   sqs: 'Arch_Amazon-Simple-Queue-Service_32.svg',
   kinesis: 'Arch_Amazon-Kinesis_32.svg',
+  opensearch: 'Arch_Amazon-OpenSearch-Service_32.svg',
   waf: 'Arch_AWS-WAF_32.svg',
   ssm: 'Arch_AWS-Systems-Manager_32.svg',
   secrets: 'Arch_AWS-Secrets-Manager_32.svg',

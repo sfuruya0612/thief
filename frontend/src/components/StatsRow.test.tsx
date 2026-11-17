@@ -95,6 +95,22 @@ describe('StatsRow', () => {
     expect(valueOf(container, 'Pending')).toBe('1');
   });
 
+  it('opensearch は Resources と cost 2 種のみ表示する', () => {
+    const { container } = render(
+      <StatsRow
+        service="opensearch"
+        resources={[{ state: 'active' }, { state: 'updating' }]}
+        cost={[]}
+      />,
+    );
+    expect(labelsOf(container)).toEqual([
+      'Resources',
+      'Monthly cost (Unblended)',
+      'Monthly cost (Net Amortized)',
+    ]);
+    expect(valueOf(container, 'Resources')).toBe('2');
+  });
+
   it('lambda は Active / Inactive をそれぞれカウントする', () => {
     const { container } = render(
       <StatsRow

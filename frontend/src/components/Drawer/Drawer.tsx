@@ -50,6 +50,7 @@ const DRAWER_TABS: Record<string, string[]> = {
   natgw: ['Overview', 'Tags'],
   sqs: ['Overview', 'Tags'],
   kinesis: ['Overview', 'Tags'],
+  opensearch: ['Overview', 'Tags'],
   waf: ['Overview', 'Rules', 'Tags'],
   dynamo: ['Overview', 'Items', 'Tags'],
   ssm: ['Overview', 'Value', 'Tags'],

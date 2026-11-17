@@ -86,6 +86,7 @@ func tuiAWSServices() []tui.Service {
 		tui.NewAPIGatewayService(awsinternal.ListAPIGatewayResources),
 		tui.NewNATGatewayService(awsinternal.ListNATGatewayResources),
 		tui.NewKinesisService(awsinternal.ListKinesisResources),
+		tui.NewOpenSearchService(awsinternal.ListOpenSearchResources),
 		tui.NewSQSService(awsinternal.ListSQSResources),
 		tui.NewIAMService(awsinternal.ListIAMResources),
 		tui.NewWAFServiceWithRules(awsinternal.ListWAFResources, awsinternal.ListWAFRules),

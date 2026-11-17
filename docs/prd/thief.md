@@ -90,7 +90,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | --- | --- | --- |
 | 品質ゲートの通過 | fmt、lint、vuln、test がすべて成功する | リポジトリのルートで `mise run check` を実行し、終了コードが 0 であることを確認する |
 | backend と frontend の型契約の一致 | 不一致 0 件 | `frontend/` で `npm run lint` を実行する。`frontend/src/types/contract.check.ts` の型検査が失敗しないことを確認する |
-| AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 24 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing、accesslogs) のどちらかを持つことをコードで確認する |
+| AWS サービスの網羅 | `frontend/src/lib/serviceMeta.ts` の `SERVICES` にある 25 サービスすべてに、一覧の表示先がある | `SERVICES` の各 key が、`SERVICE_TO_PATH` の対応先か、専用ビュー (athena、cloudwatchlogs、costexplorer、pricing、accesslogs) のどちらかを持つことをコードで確認する |
 | CLI の一覧コマンドの存在 | FR-10 の表の一覧コマンドが 27 個すべて存在する。Web にだけある機能 (Pricing、分割表示など) は対象外とする | 表の各コマンドに `--help` を付けて実行し、終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき表のコマンドで始まることを確認する |
 | TUI の AWS サービスの網羅 | TUI の第 1 段階の完了時に、FR-29 の対象サービス 19 個の ID すべてに TUI の一覧がある。2026-10-26 時点で 19 個すべてにある (issue 0219 から 0223) | `backend/internal/cli/tui.go` で `tui.Deps` を組み立てる処理を関数に切り出し、AWS プロバイダーの `Services` の各要素の `ID()` の集合が FR-29 に挙げた 19 個の ID の集合と一致することをテストで確認する (`newTUIDeps` と `backend/internal/cli/tui_test.go`。2026-10-26 時点の期待値は 19 個すべてである)。各要素の `Load` が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が使う `backend/internal/aws/` の関数 (`ListEC2Resources`、`ListSSMParameters`、`ListCFNStacks`、`ListSecretResources` など。名前はサービスごとに異なり、CLI だけが使う `ListSSMParameterInfos` や `ListCfnStackSummaries` ではない) を呼ぶことと、列、Overview、Tags の一致は、FR-29 の受け入れ基準の一覧関数の項目と列の項目で確認する |
 | TUI の非 AWS プロバイダーの網羅 | FR-31 の 9 サービスすべてに TUI の一覧がある。2026-10-27 時点で 9 個すべてにある (issue 0234) | `newTUIDeps` の `Providers` の `Services` の各要素の `ID()` の集合が、Google Cloud の 4 個、Datadog の 3 個、TiDB Cloud の 2 個の ID の集合と一致することを `backend/internal/cli/tui_test.go` で確認する |
@@ -127,7 +127,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 ### やること
 
-- AWS の 24 サービス (`frontend/src/lib/serviceMeta.ts` `SERVICES`) の一覧と詳細の閲覧
+- AWS の 25 サービス (`frontend/src/lib/serviceMeta.ts` `SERVICES`) の一覧と詳細の閲覧
 - ALB、CloudFront、WAF のアクセスログを、アクセス元の IP とリクエスト URI で集計する (FR-32)
 - Google Cloud の 6 サービス (`GCP_SERVICES`) の一覧と詳細の閲覧
 - Datadog のコスト、ダッシュボード、メトリクスの閲覧
@@ -191,7 +191,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 **FR-2 AWS サービスのリソース一覧** (Must)
 
-- サイドバーに 24 サービスを 10 カテゴリで表示する (`AWS_SERVICE_GROUPS`)。
+- サイドバーに 25 サービスを 10 カテゴリで表示する (`AWS_SERVICE_GROUPS`)。
 - 従属するリソース (パラメータ、イメージ、ターゲット、イベントなど) は一覧に載せず、FR-3 の Drawer で取得する (`docs/adr/0016-list-free-fields-lazy-drawer.md`)。
 - 一覧の列のために項目ごとに追加の API を呼ぶサービス (WAF の Rules と Associated、IAM の MFA、グループ、ポリシー) は、呼び出しの同時実行数を 10 に制限する (`backend/internal/aws/waf.go` `wafACLConcurrency`、`backend/internal/aws/iam.go` `iamDetailConcurrency`)。
   S3 もバケットごとに Region、Public、Encryption の列のための API を呼ぶ (`backend/internal/aws/s3.go`、同時実行数 30)。
@@ -203,7 +203,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 
 受け入れ基準:
 
-- サイドバーに表示されるサービスの数が 23 である。
+- サイドバーに表示されるサービスの数が 25 である。
 - 一覧を開いていないサービスのバッジは、件数を表示しない。
 - ECS の一覧を開くと、クラスタごとの稼働タスク数のグラフ (Tasks per cluster) が表示される。
 
@@ -345,6 +345,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   | sqs | `thief sqs` |
   | waf | `thief waf` |
   | kinesis | `thief kinesis` |
+  | opensearch | `thief opensearch` |
   | cloudfront | `thief cloudfront` |
   | elb | `thief elb` |
   | logs | `thief logs ls` |
@@ -362,7 +363,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 - 書き込みのコマンドとして `s3 upload`、`gcp gcs upload`、`ssm param put`、`secretsmanager put`、`ecs exec`、`ec2 session`、`sso login`、`sso logout`、`datadog auth login`、`datadog auth logout`、`datadog auth refresh`、`sso generate-config` を持つ。
 - 参照のコマンドとして `athena query`、`bq query`、`bq table info`、`logs events`、`s3 objects`、`s3 download`、`gcp gcs download`、`ssm param get`、`secretsmanager get`、`ecr images`、`rds parameters`、`elasticache parameters`、`ecs services`、`ecs tasks`、`rds cluster`、`rds cluster-parameters`、`athena catalogs`、`athena databases`、`athena tables`、`gcp run ls`、`gcp iam ls`、`gcp serviceaccounts ls`、`gcp logging ls`、`gcp gcs ls`、`gcp gcs objects`、`gcp projects refresh`、`bq table ls`、`tidb project`、`tidb cost`、`datadog estimated`、`cost service`、`cost account`、`cost usage-type`、`cost overview`、`elb listeners`、`elb rules`、`elb target-groups`、`elb target-health`、`cfn describe`、`cfn changeset`、`cost forecast` を持つ。
 - `thief server` で API サーバを起動する。
-- 上記の列挙は 2026-09-26 時点の `backend/internal/cli/` のコマンド (テスト用のものを除く) をすべて挙げたものである。
+- 上記の列挙は 2026-11-17 時点の `backend/internal/cli/` のコマンド (テスト用のものを除く) をすべて挙げたものである。
 - 2026-10-23 に、全画面の TUI を起動する `thief tui` を加えた (FR-29)。
 - SIGINT か SIGTERM を受けたら処理を取り消し、終了コード 130 で終わる (`backend/internal/cli/run.go` `interruptExitCode`)。
   `thief tui` は、`q`、画面で押した Ctrl-C、SIGTERM では終了コード 0 で終わり、プロセスの外から送られた SIGINT (`kill -INT`) だけが 130 になる (FR-29)。
@@ -383,9 +384,10 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
   共通のフラグ `-p/--profile` と `-r/--region` で、起動時のプロファイルとリージョンを指定できる。
 - TUI は API サーバ (`thief server`) を経由せず、CLI と同じ取得層 (`backend/internal/aws/`) をプロセス内で直接呼ぶ (ADR 0033)。
   利用者は TUI のために API サーバとブラウザを起動しなくてよい。
-- 第 1 段階の対象サービスは、Web UI の AWS のサイドバー (FR-2) にある 24 サービスのうち、一覧のビューを持つ 19 サービスとする。
-  ID と名前は、`ec2` (EC2)、`lambda` (Lambda)、`ecr` (ECR)、`ecs` (ECS)、`s3` (S3)、`rds` (RDS)、`dynamo` (DynamoDB)、`cache` (ElastiCache)、`elb` (ELB)、`cloudfront` (CloudFront)、`apigw` (API Gateway)、`natgw` (NAT Gateway)、`kinesis` (Kinesis)、`sqs` (SQS)、`iam` (IAM)、`waf` (WAF)、`secrets` (Secrets Manager)、`ssm` (Parameter Store)、`cfn` (CloudFormation) である (ID は `frontend/src/lib/serviceMeta.ts` の `SERVICE_TO_PATH` のキー、名前は同じファイルの `SERVICES` の `name`)。
+- 第 1 段階の対象サービスは、Web UI の AWS のサイドバー (FR-2) にある 25 サービスのうち、一覧のビューを持つ 20 サービスとする。
+  ID と名前は、`ec2` (EC2)、`lambda` (Lambda)、`ecr` (ECR)、`ecs` (ECS)、`s3` (S3)、`rds` (RDS)、`dynamo` (DynamoDB)、`cache` (ElastiCache)、`elb` (ELB)、`cloudfront` (CloudFront)、`apigw` (API Gateway)、`natgw` (NAT Gateway)、`kinesis` (Kinesis)、`opensearch` (OpenSearch)、`sqs` (SQS)、`iam` (IAM)、`waf` (WAF)、`secrets` (Secrets Manager)、`ssm` (Parameter Store)、`cfn` (CloudFormation) である (ID は `frontend/src/lib/serviceMeta.ts` の `SERVICE_TO_PATH` のキー、名前は同じファイルの `SERVICES` の `name`)。
   2026-10-23 時点のプロトタイプは `ec2` だけを持ち、残りの 18 サービスは issue 0219 から 0223 で足して 2026-10-26 時点で 19 サービスが揃っている (「決定した論点」)。
+  2026-11-17 に Amazon OpenSearch Service を加えて 20 サービスになった。
   専用のビューを持つ 4 サービス (Athena、CloudWatch Logs、Cost Explorer、Pricing) は対象に含めない (「スコープ」)。
   サービスは `S` のキーで開く選択肢から切り替える。
 - 画面は、ヘッダ (サービス名、プロファイル、リージョン、取得中の表示)、一覧、Drawer、通知行、キー操作のヒントの行からなる。
@@ -443,9 +445,9 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 受け入れ基準:
 
 - `thief tui --help` の終了コードが 0 で、出力の `Usage:` の次の行が、前後の空白を除いたとき `thief tui` で始まる。
-- 19 サービスそれぞれについて、`Service.Columns()` の見出しの並びが Web UI の列定義の `header` の並びと一致し、`Row.Overview()` のキーの並びが `overviewRows.tsx` の同じサービスの項目名から `Name` と `State` を除いた並びと一致し (`Name` と `State` は Drawer の描画 `refreshDrawer` が先頭に置く)、`Row.State()` と State の列が Web UI の `StatusBadge` が表示する値 (資源の `State` フィールドの生の値) と一致し、`Cells()` と `Overview()` の値が Web UI の同じセルと項目が描画する文字列と一致し (空の値を `—` にするのは Web UI が `Dash` か `dash` を描画する項目に限る。項目ごとの取得失敗 (IAM の MFA、Policies、Groups と WAF の Associated) は、Web UI の警告アイコンに代えて `fetch failed` の文字列を値に付ける)、`Row.Tags()` が Web UI の Drawer の Tags タブと同じキーと値を返す (CloudFormation は一覧でタグを取れないため、`Row.Tags()` ではなく行を選んだときに取得するタグが Web UI の Tags タブと一致する)。
-- 19 サービスそれぞれについて、`Service` を作る関数に偽の一覧関数を渡して `Load` を呼ぶとその関数が呼ばれることを単体テストで確認し、`tui.Deps` を組み立てる関数が各 `Service` に渡す一覧関数が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が呼ぶ `backend/internal/aws/` の関数と同じであることをコードの読み合わせで確認する。
-- 19 サービスそれぞれについて、`TabProvider` を実装するサービスの `Tabs()` が Web UI の `DRAWER_TABS` と同じタブ名を同じ相対順序で返し、ECR が Tags を返さないことを単体テストで確認する。`TabProvider` を実装しないサービスは Overview と Tags の 2 タブになる。
+- 20 サービスそれぞれについて、`Service.Columns()` の見出しの並びが Web UI の列定義の `header` の並びと一致し、`Row.Overview()` のキーの並びが `overviewRows.tsx` の同じサービスの項目名から `Name` と `State` を除いた並びと一致し (`Name` と `State` は Drawer の描画 `refreshDrawer` が先頭に置く)、`Row.State()` と State の列が Web UI の `StatusBadge` が表示する値 (資源の `State` フィールドの生の値) と一致し、`Cells()` と `Overview()` の値が Web UI の同じセルと項目が描画する文字列と一致し (空の値を `—` にするのは Web UI が `Dash` か `dash` を描画する項目に限る。項目ごとの取得失敗 (IAM の MFA、Policies、Groups と WAF の Associated) は、Web UI の警告アイコンに代えて `fetch failed` の文字列を値に付ける)、`Row.Tags()` が Web UI の Drawer の Tags タブと同じキーと値を返す (CloudFormation は一覧でタグを取れないため、`Row.Tags()` ではなく行を選んだときに取得するタグが Web UI の Tags タブと一致する)。
+- 20 サービスそれぞれについて、`Service` を作る関数に偽の一覧関数を渡して `Load` を呼ぶとその関数が呼ばれることを単体テストで確認し、`tui.Deps` を組み立てる関数が各 `Service` に渡す一覧関数が、Web UI の同じ一覧のハンドラ (`backend/internal/api/handlers_aws.go`) が呼ぶ `backend/internal/aws/` の関数と同じであることをコードの読み合わせで確認する。
+- 20 サービスそれぞれについて、`TabProvider` を実装するサービスの `Tabs()` が Web UI の `DRAWER_TABS` と同じタブ名を同じ相対順序で返し、ECR が Tags を返さないことを単体テストで確認する。`TabProvider` を実装しないサービスは Overview と Tags の 2 タブになる。
 - `1` から `9` と `[` / `]` でタブを切り替えられ、タブ数より大きい数字を無視し、`[` と `]` が端で止まることを単体テストで確認する。サービス切替で Overview に戻り、行切替で同じサービスに現在のタブがあればそのタブを保つことも確認する。
 - サービス固有タブの取得関数が読み込み中、失敗、空、成功を区別し、サービス切替、行切替、一覧の再取得の後に届いた古い結果を表示しないことを単体テストで確認する。
 - ECS の Tasks タブで、タスクの詳細にコンテナの CPU、Memory、Exit code、Reason、ECS Exec の可否が表示され、Exec が有効なコンテナで `s` または `enter` を押すとクラスタ名、タスク ID、コンテナ名を持つ接続要求が Model に渡る。Exec が無効なコンテナでは `container <name> does not support ECS Exec` を通知する。コンテナが 0 件のときは `No containers` を表示する。
@@ -1005,7 +1007,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | TUI の追加 | Web UI に相当する操作を端末の中で行う全画面の TUI (`thief tui`) を追加する。第 1 段階は AWS の一覧、Drawer (Overview、Tags、サービス固有タブ)、対話セッションとする (「TUI の第 1 段階の範囲」)。「やらないこと」の「ブラウザ以外の GUI のクライアント」から TUI を除く | FR-29 と FR-30 の実装 |
 | TUI の接続方式 | API サーバを経由せず、取得層をプロセス内で直接呼ぶ (ADR 0033) | 無い |
 | TUI のフレームワーク | bubbletea、bubbles、lipgloss を使う。tview は採らない (ADR 0033) | 無い |
-| TUI の第 1 段階の範囲 | AWS の 19 サービスの一覧、Drawer (Overview、Tags、Web UI と同じサービス固有タブ)、EC2 と ECS への対話セッション。Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は第 1 段階の完了後に決める (「未確定論点」)。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は材料に無く、第 1 段階では扱わない (「スコープ」) | サービス固有タブは issue 0226 から 0230 で、フロート端末は issue 0225 で実装済み |
+| TUI の第 1 段階の範囲 | AWS の 20 サービスの一覧、Drawer (Overview、Tags、Web UI と同じサービス固有タブ)、EC2 と ECS への対話セッション。Google Cloud、Datadog、TiDB Cloud のビュー、分析のビュー、リソースの変更操作は第 2 段階以降で扱い、段階ごとの範囲と順序は第 1 段階の完了後に決める (「未確定論点」)。コストと料金のビュー、オブジェクトのプレビューと SQL 検索、分割表示、TUI の状態の永続化は材料に無く、第 1 段階では扱わない (「スコープ」) | サービス固有タブは issue 0226 から 0230 で、フロート端末は issue 0225 で実装済み |
 | TUI の進め方 | `ec2` だけのプロトタイプを先に作って体験を確かめ、その後に PRD の改訂、ADR 0033、issue の起票、実装の順で正規の手順に戻す | PRD の改訂 (この改訂)、ADR 0033、`AGENTS.md`、`CHANGES.md`、`docs/issues/TODO.md` の TUI の記述は書き終えており、プロトタイプを issue として検証したうえで同じコミットで入れる。その後に残りの issue を実装する (プロトタイプの動作は 2026-10-23 に確認済み) |
 
 次の論点は、2026-10-26 に issue 0224、0226、0227 の実装で、issue の設計判断の第一候補のとおりに決めた。開発者の確認は実装の報告で得る。
@@ -1013,7 +1015,7 @@ TUI の記述 (概要と目的の TUI の文、成功指標の TUI の行、UC-1
 | 論点 | 決定 | 後続の作業 |
 | --- | --- | --- |
 | TUI の ECS のタスクとコンテナの選び方 | クラスタ行で `s` を押したときの選択肢と、Drawer の Tasks タブのタスク詳細の両方から選ぶ。クラスタ行の `s` では、実行中のタスク、次に ECS Exec が有効なコンテナを、サービスの切替と同じ絞り込み付きの選択肢で順に選び、候補が 1 件なら自動で選ぶ。Tasks タブではタスクの詳細にコンテナ一覧を出し、ECS Exec が有効なコンテナを選んで `s` または `enter` で接続する。Exec が無効なコンテナでは接続しない (FR-30) | 実 AWS で Tasks タブからの接続と FR-30 の ECS の受け入れ基準を確認済み (2026-10-27) |
-| TUI の Drawer のサービス固有タブ | Web UI の `DRAWER_TABS` と同じタブを TUI の Drawer に置く。タブは `Tab` サブモデルとして実装し、`1` から `9` と `[` / `]` で切り替える。読み込み中、失敗、空、成功を区別し、ECR は Tags を持たない | issue 0226 から 0230 で 19 サービス分を実装済み。実 AWS での確認も済み (2026-10-27) |
+| TUI の Drawer のサービス固有タブ | Web UI の `DRAWER_TABS` と同じタブを TUI の Drawer に置く。タブは `Tab` サブモデルとして実装し、`1` から `9` と `[` / `]` で切り替える。読み込み中、失敗、空、成功を区別し、ECR は Tags を持たない | issue 0226 から 0230 で 19 サービス分を実装済み。実 AWS での確認も済み (2026-10-27)。2026-11-17 に OpenSearch を加えて 20 サービスになった (OpenSearch の実 AWS での一覧取得は未確認) |
 
 次の論点は、2026-10-27 に開発者が決めた。TUI の第 2 段階の最初の範囲である。
 

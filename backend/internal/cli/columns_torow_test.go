@@ -37,6 +37,8 @@ import (
 // issue 0195 で ELB のリスナー・ルール・ターゲットグループ・ターゲットヘルスの一覧
 // コマンドを追加したため、ELBListenerResource / ELBRuleResource / ELBTargetGroupResource /
 // ELBTargetHealthResource の 4 型を対象に加える (経路 1)。
+//
+// OpenSearch の一覧コマンドを追加したため、OpenSearchResource を対象に加える (経路 1)。
 
 // colValue は 1 列分の期待値 (列ヘッダと ToRow() の値) の組。
 type colValue struct {
@@ -231,6 +233,26 @@ func TestColumnsToRowOrder(t *testing.T) {
 				{"Shards", "4"},
 				{"Retention(h)", "24"},
 				{"Encryption", "KMS"},
+			},
+		},
+		{
+			name:    "openSearchColumns / OpenSearchResource",
+			columns: openSearchColumns,
+			row: awsinternal.OpenSearchResource{
+				Name:          "products",
+				State:         "active",
+				EngineVersion: "OpenSearch_2.19",
+				DataNodeType:  "m5.large.search",
+				DataNodeCount: 3,
+				Endpoint:      "search-products.ap-northeast-1.es.amazonaws.com",
+			}.ToRow(),
+			want: []colValue{
+				{"Domain", "products"},
+				{"State", "active"},
+				{"Version", "OpenSearch_2.19"},
+				{"Instance", "m5.large.search"},
+				{"Nodes", "3"},
+				{"Endpoint", "search-products.ap-northeast-1.es.amazonaws.com"},
 			},
 		},
 		{

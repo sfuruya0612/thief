@@ -1,0 +1,23 @@
+{
+  "id": "s1",
+  "name": "s2",
+  "state": "s3",
+  "engine_version": "s4",
+  "data_node_type": "s5",
+  "data_node_count": 6,
+  "dedicated_master_enabled": true,
+  "dedicated_master_type": "s7",
+  "dedicated_master_count": 8,
+  "ebs_volume_size_gb": 9,
+  "ebs_volume_type": "s10",
+  "endpoint": "s11",
+  "vpc_id": "s12",
+  "encryption_at_rest": true,
+  "node_to_node_encryption": true,
+  "enforce_https": true,
+  "tags": {
+    "s13": "s14"
+  },
+  "tags_fetch_failed": true,
+  "cost_monthly": 15.5
+}

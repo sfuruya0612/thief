@@ -276,6 +276,13 @@ func (s *Server) handleKinesis(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
+	profile, region := s.profileAndRegion(r)
+	s.serveCached(w, r, cacheKey("opensearch", profile, region), cacheTTL, writeAWSError, func() (any, error) {
+		return awsinternal.ListOpenSearchResources(r.Context(), profile, region)
+	})
+}
+
 func (s *Server) handleCloudFront(w http.ResponseWriter, r *http.Request) {
 	profile, region := s.profileAndRegion(r)
 	s.serveCached(w, r, cacheKey("cloudfront", profile, region), cacheTTL, writeAWSError, func() (any, error) {

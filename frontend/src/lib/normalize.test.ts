@@ -18,6 +18,7 @@ import {
   iamFromRaw,
   kinesisFromRaw,
   objectPreviewFromRaw,
+  openSearchFromRaw,
   profileFromRaw,
   rdsFromRaw,
   rdsClusterParameterGroupFromRaw,
@@ -1084,6 +1085,85 @@ describe('cloudfrontFromRaw', () => {
     expect(row.behaviors[0].id).toBe('1');
     expect(row.behaviors[1].order).toBe(2);
     expect(row.behaviors[1].id).toBe('2');
+  });
+});
+
+describe('openSearchFromRaw', () => {
+  it('ドメインの全フィールドを camelCase の Row に変換する', () => {
+    const row = openSearchFromRaw(
+      {
+        id: 'arn:aws:es:ap-northeast-1:123:domain/products',
+        name: 'products',
+        state: 'active',
+        engine_version: 'OpenSearch_2.19',
+        data_node_type: 'm5.large.search',
+        data_node_count: 3,
+        dedicated_master_enabled: true,
+        dedicated_master_type: 'm5.large.search',
+        dedicated_master_count: 3,
+        ebs_volume_size_gb: 100,
+        ebs_volume_type: 'gp3',
+        endpoint: 'search-products.ap-northeast-1.es.amazonaws.com',
+        vpc_id: 'vpc-0123456789abcdef0',
+        encryption_at_rest: true,
+        node_to_node_encryption: true,
+        enforce_https: true,
+        tags: { Env: 'prod' },
+        tags_fetch_failed: true,
+        cost_monthly: 0,
+      },
+      'ap-northeast-1',
+    );
+    expect(row).toEqual({
+      region: 'ap-northeast-1',
+      id: 'arn:aws:es:ap-northeast-1:123:domain/products',
+      name: 'products',
+      state: 'active',
+      engineVersion: 'OpenSearch_2.19',
+      dataNodeType: 'm5.large.search',
+      dataNodeCount: 3,
+      dedicatedMasterEnabled: true,
+      dedicatedMasterType: 'm5.large.search',
+      dedicatedMasterCount: 3,
+      ebsVolumeSizeGB: 100,
+      ebsVolumeType: 'gp3',
+      endpoint: 'search-products.ap-northeast-1.es.amazonaws.com',
+      vpcId: 'vpc-0123456789abcdef0',
+      encryptionAtRest: true,
+      nodeToNodeEncryption: true,
+      enforceHTTPS: true,
+      tags: { Env: 'prod' },
+      tagsFetchFailed: true,
+    });
+  });
+
+  it('tags と tags_fetch_failed が省略された応答を空の map と false に正規化する', () => {
+    const row = openSearchFromRaw(
+      {
+        id: 'arn:aws:es:ap-northeast-1:123:domain/legacy',
+        name: 'legacy',
+        state: 'active',
+        engine_version: 'Elasticsearch_7.10',
+        data_node_type: 't3.small.search',
+        data_node_count: 1,
+        dedicated_master_enabled: false,
+        dedicated_master_type: '',
+        dedicated_master_count: 0,
+        ebs_volume_size_gb: 10,
+        ebs_volume_type: 'gp2',
+        endpoint: '',
+        vpc_id: '',
+        encryption_at_rest: false,
+        node_to_node_encryption: false,
+        enforce_https: false,
+        // backend は tags を常に返すが、省略された場合の既定値を固定する
+        tags: undefined as unknown as Record<string, string>,
+        cost_monthly: 0,
+      },
+      'us-east-1',
+    );
+    expect(row.tags).toEqual({});
+    expect(row.tagsFetchFailed).toBe(false);
   });
 });
 

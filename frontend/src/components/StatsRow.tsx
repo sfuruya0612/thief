@@ -44,6 +44,7 @@ const SERVICE_COST_MATCH: Record<string, string[]> = {
   natgw: ['Amazon Virtual Private Cloud', 'EC2 - Other'],
   sqs: ['Amazon Simple Queue Service'],
   kinesis: ['Amazon Kinesis'],
+  opensearch: ['Amazon OpenSearch Service'],
   waf: ['AWS WAF'],
   iam: ['AWS Identity and Access Management'],
 };
@@ -76,7 +77,15 @@ function costStats(service: string, cost: CostRow[]): StatItem[] {
   ];
 }
 
-const SIMPLE_COST_ONLY = new Set(['apigw', 'natgw', 'sqs', 'kinesis', 'waf', 'dynamo']);
+const SIMPLE_COST_ONLY = new Set([
+  'apigw',
+  'natgw',
+  'sqs',
+  'kinesis',
+  'opensearch',
+  'waf',
+  'dynamo',
+]);
 
 // state を持たず Cost Explorer の対応もないサービスは Resources のみ表示する
 const RESOURCES_ONLY = new Set(['ecr', 'ssm', 'secrets']);

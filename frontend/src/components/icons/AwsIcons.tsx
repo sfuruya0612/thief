@@ -26,6 +26,7 @@ const AWS_ICON_FILES: Record<string, string> = {
   natgw: 'natgw.svg',
   sqs: 'sqs.svg',
   kinesis: 'kinesis.svg',
+  opensearch: 'opensearch.svg',
   waf: 'waf.svg',
   ssm: 'ssm.svg',
   secrets: 'secrets.svg',

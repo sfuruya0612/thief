@@ -73,6 +73,8 @@ import type {
   LambdaRow,
   NATGWRaw,
   NATGWRow,
+  OpenSearchRaw,
+  OpenSearchRow,
   RDSClusterParameterGroupRaw,
   RDSClusterParameterGroupRow,
   RDSParameterRaw,
@@ -684,6 +686,30 @@ export function kinesisFromRaw(raw: KinesisRaw, region: string): KinesisRow {
     retentionHours: raw.retention_hours,
     encryptionType: raw.encryption_type,
     tags: raw.tags ?? {},
+  };
+}
+
+export function openSearchFromRaw(raw: OpenSearchRaw, region: string): OpenSearchRow {
+  return {
+    region,
+    id: raw.id,
+    name: raw.name,
+    state: raw.state,
+    engineVersion: raw.engine_version,
+    dataNodeType: raw.data_node_type,
+    dataNodeCount: raw.data_node_count,
+    dedicatedMasterEnabled: raw.dedicated_master_enabled,
+    dedicatedMasterType: raw.dedicated_master_type,
+    dedicatedMasterCount: raw.dedicated_master_count,
+    ebsVolumeSizeGB: raw.ebs_volume_size_gb,
+    ebsVolumeType: raw.ebs_volume_type,
+    endpoint: raw.endpoint,
+    vpcId: raw.vpc_id,
+    encryptionAtRest: raw.encryption_at_rest,
+    nodeToNodeEncryption: raw.node_to_node_encryption,
+    enforceHTTPS: raw.enforce_https,
+    tags: raw.tags ?? {},
+    tagsFetchFailed: raw.tags_fetch_failed ?? false,
   };
 }
 

@@ -28,7 +28,7 @@ func TestNewTUIDeps_ServicesFollowWebUIOrder(t *testing.T) {
 	}
 
 	wantServices := map[string][]string{
-		tui.ProviderAWS:     {"ec2", "lambda", "ecr", "ecs", "s3", "rds", "dynamo", "cache", "elb", "cloudfront", "apigw", "natgw", "kinesis", "sqs", "iam", "waf", "secrets", "ssm", "cfn"},
+		tui.ProviderAWS:     {"ec2", "lambda", "ecr", "ecs", "s3", "rds", "dynamo", "cache", "elb", "cloudfront", "apigw", "natgw", "kinesis", "opensearch", "sqs", "iam", "waf", "secrets", "ssm", "cfn"},
 		tui.ProviderGCP:     {"cloudrun", "gcs", "gcpiam", "gcpserviceaccounts"},
 		tui.ProviderDatadog: {"datadog-dashboards", "datadog-cost-historical", "datadog-cost-estimated"},
 		tui.ProviderTiDB:    {"tidb-projects", "tidb-cost"},
@@ -95,6 +95,7 @@ func TestNewTUIDeps_TabsFollowWebUI(t *testing.T) {
 		"apigw":      {"Overview", "Tags"},
 		"natgw":      {"Overview", "Tags"},
 		"kinesis":    {"Overview", "Tags"},
+		"opensearch": {"Overview", "Tags"},
 		"sqs":        {"Overview", "Tags"},
 		"iam":        {"Overview", "Tags"},
 		"waf":        {"Overview", "Rules", "Tags"},

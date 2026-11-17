@@ -22,7 +22,7 @@ type Entry struct {
 	Value any
 }
 
-// Registry は契約対象 67 型の一覧である。docs/issues/closed/0099 の対応表 (62 行) のうち
+// Registry は契約対象 68 型の一覧である。docs/issues/closed/0099 の対応表 (62 行) のうち
 // frontend に Raw の対応を持つ 60 行を転記し、その後に追加した型を加えた。frontend に消費者が無い
 // SSOAccountResource と SSMValueResponse は含めない。
 var Registry = []Entry{
@@ -75,6 +75,7 @@ var Registry = []Entry{
 	{Name: "KinesisResource", Value: aws.KinesisResource{}},
 	{Name: "LambdaResource", Value: aws.LambdaResource{}},
 	{Name: "NATGatewayResource", Value: aws.NATGatewayResource{}},
+	{Name: "OpenSearchResource", Value: aws.OpenSearchResource{}},
 	{Name: "PriceTable", Value: aws.PriceTable{}},
 	{Name: "PriceRate", Value: aws.PriceRate{}},
 	{Name: "PriceTerm", Value: aws.PriceTerm{}},

@@ -6,9 +6,17 @@ import {
   cloudfrontOverviewRows,
   iamOverviewRows,
   kinesisOverviewRows,
+  openSearchOverviewRows,
   wafOverviewRows,
 } from './overviewRows';
-import type { CacheRow, CloudFrontRow, IAMRow, KinesisRow, WAFRow } from '../../types/aws';
+import type {
+  CacheRow,
+  CloudFrontRow,
+  IAMRow,
+  KinesisRow,
+  OpenSearchRow,
+  WAFRow,
+} from '../../types/aws';
 
 const baseRow: WAFRow = {
   region: 'ap-northeast-1',
@@ -179,7 +187,101 @@ describe('kinesisOverviewRows', () => {
   });
 });
 
-// cacheOverviewRows の AZs 行の検証 (issue 0103)。
+// openSearchOverviewRows の Overview 項目の検証。
+const openSearchBaseRow: OpenSearchRow = {
+  region: 'ap-northeast-1',
+  id: 'arn:aws:es:ap-northeast-1:123:domain/products',
+  name: 'products',
+  state: 'active',
+  engineVersion: 'OpenSearch_2.19',
+  dataNodeType: 'm5.large.search',
+  dataNodeCount: 3,
+  dedicatedMasterEnabled: true,
+  dedicatedMasterType: 'm5.large.search',
+  dedicatedMasterCount: 3,
+  ebsVolumeSizeGB: 100,
+  ebsVolumeType: 'gp3',
+  endpoint: 'search-products.ap-northeast-1.es.amazonaws.com',
+  vpcId: 'vpc-0123456789abcdef0',
+  encryptionAtRest: true,
+  nodeToNodeEncryption: true,
+  enforceHTTPS: true,
+  tags: {},
+  tagsFetchFailed: false,
+};
+
+describe('openSearchOverviewRows', () => {
+  it('Overview の項目が Web UI の並びと同じになる', () => {
+    const rows = openSearchOverviewRows(openSearchBaseRow);
+    expect(rows.map(([label]) => label)).toEqual([
+      'Resource ID',
+      'Engine version',
+      'Data node type',
+      'Data nodes',
+      'Dedicated master type',
+      'Dedicated masters',
+      'EBS storage',
+      'Endpoint',
+      'VPC',
+      'Encryption at rest',
+      'Node-to-node encryption',
+      'HTTPS enforcement',
+      'Region',
+    ]);
+  });
+
+  it('EBS storage はサイズとボリュームタイプを 1 行にまとめる', () => {
+    const rows = openSearchOverviewRows(openSearchBaseRow);
+    expect(rows.find(([label]) => label === 'EBS storage')?.[1]).toBe('100 GiB gp3');
+  });
+
+  it('EBS ボリュームが無いドメインはストレージと空の接続先をダッシュで表示する', () => {
+    const rows = openSearchOverviewRows({
+      ...openSearchBaseRow,
+      ebsVolumeSizeGB: 0,
+      ebsVolumeType: '',
+      endpoint: '',
+      vpcId: '',
+      dataNodeType: '',
+    });
+    expect(rows.find(([label]) => label === 'EBS storage')?.[1]).toBe('—');
+    expect(rows.find(([label]) => label === 'Endpoint')?.[1]).toBe('—');
+    expect(rows.find(([label]) => label === 'VPC')?.[1]).toBe('—');
+    expect(rows.find(([label]) => label === 'Data node type')?.[1]).toBe('—');
+  });
+
+  it('データノードとマスターノードのインスタンスタイプとノード数を別々に表示する', () => {
+    const rows = openSearchOverviewRows(openSearchBaseRow);
+    expect(rows.find(([label]) => label === 'Data node type')?.[1]).toBe('m5.large.search');
+    expect(rows.find(([label]) => label === 'Data nodes')?.[1]).toBe(3);
+    expect(rows.find(([label]) => label === 'Dedicated master type')?.[1]).toBe('m5.large.search');
+    expect(rows.find(([label]) => label === 'Dedicated masters')?.[1]).toBe(3);
+  });
+
+  it('dedicated master が無効ならマスターノードの行はダッシュ表示になる', () => {
+    const rows = openSearchOverviewRows({
+      ...openSearchBaseRow,
+      dedicatedMasterEnabled: false,
+      dedicatedMasterType: 'm5.large.search',
+      dedicatedMasterCount: 3,
+    });
+    expect(rows.find(([label]) => label === 'Dedicated master type')?.[1]).toBe('—');
+    expect(rows.find(([label]) => label === 'Dedicated masters')?.[1]).toBe('—');
+  });
+
+  it('暗号化と HTTPS は enabled / disabled で表示する', () => {
+    const rows = openSearchOverviewRows({
+      ...openSearchBaseRow,
+      encryptionAtRest: false,
+      nodeToNodeEncryption: false,
+      enforceHTTPS: false,
+    });
+    expect(rows.find(([label]) => label === 'Encryption at rest')?.[1]).toBe('disabled');
+    expect(rows.find(([label]) => label === 'Node-to-node encryption')?.[1]).toBe('disabled');
+    expect(rows.find(([label]) => label === 'HTTPS enforcement')?.[1]).toBe('disabled');
+  });
+});
+
 const cacheBaseRow: CacheRow = {
   region: 'ap-northeast-1',
   id: 'my-redis-001',
